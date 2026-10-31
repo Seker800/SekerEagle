@@ -21,8 +21,12 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] }),
   owners = [];
-let queries = 0;
-db.$on('query', () => queries++);
+let queries = 0,
+  transactions = 0;
+db.$on('query', (event) => {
+  queries++;
+  if (event.query === 'BEGIN') transactions++;
+});
 afterEach(async () => {
   for (const id of owners.splice(0)) {
     await db.eagleAssetOperation.deleteMany({ where: { ownerId: id } });
@@ -110,6 +114,18 @@ async function fixture(mode) {
       },
     });
   };
+  const original = async (asset, bytes) => {
+    payloads.set(asset.originalObjectKey, bytes);
+    await db.eagleAsset.update({
+      where: { id: asset.id },
+      data: {
+        sha256: hash(bytes),
+        byteSize: BigInt(bytes.length),
+        format: 'png',
+        mimeType: 'image/png',
+      },
+    });
+  };
   const drain = async (id) => {
     for (let i = 0; i < 1000; i++) {
       await executor.tick();
@@ -118,7 +134,17 @@ async function fixture(mode) {
     }
     throw new Error('executor did not drain');
   };
-  return { ownerId, principal, duplicate, executor, add, preview, drain, reads: () => reads };
+  return {
+    ownerId,
+    principal,
+    duplicate,
+    executor,
+    add,
+    preview,
+    original,
+    drain,
+    reads: () => reads,
+  };
 }
 for (const mode of ['MATERIAL', 'PHOTO']) {
   test(`${mode}: grouped exact review, ignored decisions, idempotent cleanup, metadata union and restore`, async () => {
@@ -245,10 +271,12 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       .toBuffer();
     await f.preview(a, png);
     await f.preview(b, png);
+    await f.original(a, png);
+    await f.original(b, await sharp(png).withMetadata({ density: 144 }).png().toBuffer());
     const scan = await f.duplicate.scan(f.principal, randomUUID());
     assert.equal(f.reads(), 0);
     assert.equal((await f.drain(scan.operationId)).failed, 0);
-    assert.equal(f.reads(), 2);
+    assert.equal(f.reads(), 4);
     const page = await f.duplicate.list(f.ownerId, false, {});
     assert.equal(page.coverage.indexed, 2);
     assert.equal(page.similarGroups, 1);
@@ -258,7 +286,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.ok(members.items.every((row) => !('originalObjectKey' in row)));
     const next = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(next.operationId);
-    assert.equal(f.reads(), 2, 'repeat checks reuse versioned fingerprints');
+    assert.equal(f.reads(), 4, 'repeat checks reuse versioned preview and original proofs');
     await db.eagleDuplicateGroup.updateMany({
       where: { ownerId: f.ownerId },
       data: { algorithmVersion: 'legacy' },
@@ -268,7 +296,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal(obsolete.outdatedGroups, 1);
     const rebuild = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(rebuild.operationId);
-    assert.equal(f.reads(), 2, 'algorithm-only rebuild reuses all existing current fingerprints');
+    assert.equal(f.reads(), 4, 'algorithm-only rebuild reuses all existing current fingerprints');
     const renewed = await f.duplicate.list(f.ownerId, false, {});
     assert.equal(renewed.outdatedGroups, 0);
     assert.equal(renewed.similarGroups, 1);
@@ -561,6 +589,9 @@ test('visual cleanup removes only explicitly unchecked members, including partia
       hash: '0123456789abcdef',
       colors: Array(48).fill(100),
       contrast: 30,
+      pixelHash: hash('verified-identical-original-pixels'),
+      pixelProcessorVersion: 'oriented-srgb-rgba8-v1',
+      pixelStatus: 'VERIFIED',
     })),
   });
   const scan = await f.duplicate.scan(f.principal, randomUUID());
@@ -575,4 +606,142 @@ test('visual cleanup removes only explicitly unchecked members, including partia
   assert.equal((await db.eagleAsset.findUnique({ where: { id: rows[0].id } })).deletedAt, null);
   assert.equal((await db.eagleAsset.findUnique({ where: { id: rows[2].id } })).deletedAt, null);
   assert.ok((await db.eagleAsset.findUnique({ where: { id: rows[1].id } })).deletedAt);
+});
+
+test('backup copies are proven from originals, burst frames are excluded, and all groups clean in one request', async () => {
+  const f = await fixture('PHOTO');
+  const source = sharp({ create: { width: 96, height: 64, channels: 3, background: '#476a9f' } });
+  const preview = await source.clone().png().toBuffer();
+  const backups = [];
+  for (let i = 0; i < 5; i++) {
+    const row = await f.add();
+    backups.push(row);
+    await f.preview(row, preview);
+    await f.original(
+      row,
+      await source
+        .clone()
+        .withMetadata({ density: 72 + i })
+        .png()
+        .toBuffer(),
+    );
+  }
+  const burst = await f.add();
+  await f.preview(burst, preview);
+  await f.original(
+    burst,
+    await source
+      .clone()
+      .composite([
+        {
+          input: Buffer.from([70, 106, 159]),
+          raw: { width: 1, height: 1, channels: 3 },
+          left: 0,
+          top: 0,
+        },
+      ])
+      .png()
+      .toBuffer(),
+  );
+  await flushQueryEvents();
+  queries = 0;
+  transactions = 0;
+  const started = performance.now();
+  const scan = await f.duplicate.scan(f.principal, randomUUID());
+  await flushQueryEvents();
+  const admissionSql = queries,
+    admissionTransactions = transactions;
+  assert.equal((await f.drain(scan.operationId)).failed, 0);
+  await flushQueryEvents();
+  console.log(
+    JSON.stringify({
+      case: 'six-originals-five-backups-one-burst',
+      admissionSql,
+      admissionTransactions,
+      scanSqlIncludingClaimsAndProgress: queries,
+      scanTransactionsIncludingClaimsAndProgress: transactions,
+      s3Gets: f.reads(),
+      scanMs: performance.now() - started,
+    }),
+  );
+  const page = await f.duplicate.list(f.ownerId, false, {});
+  assert.equal(page.verifiedGroups, 1);
+  assert.equal(page.verifiedItems, 4);
+  assert.equal(page.originalCheckCompleted, true);
+  assert.equal(page.groups[0].count, 5);
+  const members = await f.duplicate.members(f.ownerId, false, page.groups[0].signature);
+  assert.ok(!members.items.some((row) => row.id === burst.id));
+  await assert.rejects(
+    f.duplicate.cleanup(f.principal, { operationId: randomUUID(), allVerified: true }),
+  );
+  await assert.rejects(
+    f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      allVerified: true,
+      revision: '0'.repeat(64),
+    }),
+  );
+  const operation = await f.duplicate.cleanup(f.principal, {
+    operationId: randomUUID(),
+    allVerified: true,
+    revision: page.revision,
+  });
+  assert.equal((await f.drain(operation.operationId)).completed, 4);
+  assert.equal(await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: null } }), 2);
+  assert.equal((await db.eagleAsset.findUnique({ where: { id: burst.id } })).deletedAt, null);
+});
+
+test('pixel budget skips are visible and retryable after resource configuration changes', async () => {
+  const f = await fixture('PHOTO');
+  const source = sharp({ create: { width: 96, height: 64, channels: 3, background: '#476a9f' } });
+  const preview = await source.clone().png().toBuffer();
+  for (let i = 0; i < 2; i++) {
+    const row = await f.add();
+    await f.preview(row, preview);
+    await f.original(
+      row,
+      await source
+        .clone()
+        .withMetadata({ density: 72 + i })
+        .png()
+        .toBuffer(),
+    );
+  }
+  process.env.EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS = '1';
+  try {
+    const scan = await f.duplicate.scan(f.principal, randomUUID());
+    assert.equal((await f.drain(scan.operationId)).failed, 0);
+    const result = await f.duplicate.list(f.ownerId, false, {});
+    assert.equal(result.similarGroups, 0);
+    assert.equal(result.coverage.unsupportedOriginals, 2);
+  } finally {
+    delete process.env.EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS;
+  }
+  const next = await f.duplicate.scan(f.principal, randomUUID());
+  assert.equal((await f.drain(next.operationId)).failed, 0);
+  assert.equal((await f.duplicate.list(f.ownerId, false, {})).similarGroups, 1);
+});
+
+test('legacy cleanup request identities remain replayable after the pixel-proof upgrade', async () => {
+  const f = await fixture('PHOTO');
+  const input = {
+    operationId: randomUUID(),
+    groups: [{ signature: hash('old-group'), keepIds: [randomUUID()] }],
+  };
+  await db.eagleAssetOperation.create({
+    data: {
+      id: input.operationId,
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      kind: 'DUPLICATE_CLEANUP',
+      inputIds: [
+        hash(JSON.stringify({ allExact: false, revision: undefined, groups: input.groups })),
+      ],
+      authVersion: 0,
+    },
+  });
+  assert.deepEqual(await f.duplicate.cleanup(f.principal, input), {
+    operationId: input.operationId,
+    assetIds: [],
+  });
 });

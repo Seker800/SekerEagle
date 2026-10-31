@@ -1,5 +1,5 @@
 import { Prisma, type LibraryMode } from '@prisma/client';
-import { DUPLICATE_GROUPING_VERSION } from '@sekereagle/library-core';
+import { DUPLICATE_GROUPING_VERSION, DUPLICATE_PIXEL_VERSION } from '@sekereagle/library-core';
 import type { DuplicateGroup } from '@sekereagle/library-core';
 import { digest, signature, dismissalSignature, type Snapshot } from './eagle-duplicate-model';
 import { DUPLICATE_FINGERPRINT_VERSION } from './eagle-duplicate-fingerprint';
@@ -53,10 +53,24 @@ export async function readDuplicateReview(
       select: { signature: true },
     }),
     tx.$queryRaw<
-      Array<{ total: number; indexed: number; waiting: number; outdatedGroups: number }>
+      Array<{
+        total: number;
+        indexed: number;
+        waiting: number;
+        outdatedGroups: number;
+        originalsVerified: number;
+        unsupportedOriginals: number;
+        originalCheckCompleted: boolean;
+      }>
     >`SELECT count(*)::int AS total,
+        EXISTS(SELECT 1 FROM "EagleAssetOperation" o JOIN "EagleAssetOperationItem" i ON i."operationId"=o.id AND i."ownerId"=o."ownerId" AND i."libraryMode"=o."libraryMode"
+          WHERE o."ownerId"=${ownerId} AND o."libraryMode"=${libraryMode}::"LibraryMode" AND o.kind='DUPLICATE_SCAN' AND o."isPrivate"=${includePrivate}
+          AND i.status='COMPLETED' AND i.snapshots->>'kind'='publish' AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION}
+          AND NOT EXISTS(SELECT 1 FROM "EagleAssetOperationItem" other WHERE other."operationId"=o.id AND other.status<>'COMPLETED')) AS "originalCheckCompleted",
         count(*) FILTER (WHERE f."mediaRevision"=a."mediaRevision" AND f."processorVersion"=${DUPLICATE_FINGERPRINT_VERSION})::int AS indexed,
         count(*) FILTER (WHERE a."lifecycleStatus"<>'READY')::int AS waiting,
+        count(*) FILTER (WHERE f."mediaRevision"=a."mediaRevision" AND f."pixelProcessorVersion"=${DUPLICATE_PIXEL_VERSION} AND f."pixelStatus"='VERIFIED')::int AS "originalsVerified",
+        count(*) FILTER (WHERE f."mediaRevision"=a."mediaRevision" AND f."pixelProcessorVersion"=${DUPLICATE_PIXEL_VERSION} AND f."pixelStatus"<>'VERIFIED')::int AS "unsupportedOriginals",
         (SELECT count(*)::int FROM "EagleDuplicateGroup" g WHERE g."ownerId"=${ownerId} AND g."libraryMode"=${libraryMode}::"LibraryMode" AND g."algorithmVersion"<>${DUPLICATE_GROUPING_VERSION} AND (${includePrivate} OR NOT g."isPrivate")) AS "outdatedGroups"
         FROM "EagleAsset" a LEFT JOIN "EagleDuplicateFingerprint" f ON f."assetId"=a.id AND f."ownerId"=a."ownerId" AND f."libraryMode"=a."libraryMode"
         WHERE a."ownerId"=${ownerId} AND a."libraryMode"=${libraryMode}::"LibraryMode" AND a."deletedAt" IS NULL
@@ -73,7 +87,10 @@ export async function readDuplicateReview(
         isPrivate: row.isPrivate,
       }),
     );
-  for (const row of exact) {
+  const pixelIds = new Set(similar.flatMap((row) => row.assetIds));
+  for (const original of exact) {
+    const row = { ...original, assetIds: original.assetIds.filter((id) => !pixelIds.has(id)) };
+    if (row.assetIds.length < 2) continue;
     const group: DuplicateGroup = {
       kind: 'EXACT',
       assetIds: row.assetIds,
@@ -122,6 +139,7 @@ export async function readDuplicateReview(
     ]),
     outdatedGroups: counts[0]?.outdatedGroups ?? 0,
     algorithmVersion: DUPLICATE_GROUPING_VERSION,
+    originalCheckCompleted: counts[0]?.originalCheckCompleted ?? false,
     coverage: counts[0] ?? { total: 0, indexed: 0, waiting: 0 },
   };
 }

@@ -2,6 +2,7 @@ import { Prisma, type LibraryMode } from '@prisma/client';
 import type { DuplicateCandidate } from '@sekereagle/library-core';
 import type { Snapshot } from './eagle-duplicate-model';
 import { DUPLICATE_FINGERPRINT_VERSION } from './eagle-duplicate-fingerprint';
+import { DUPLICATE_PIXEL_VERSION } from '@sekereagle/library-core';
 
 /** Full-library reads must join in SQL, not expand composite relations into ID parameters. */
 function scope(ownerId: string, libraryMode: LibraryMode, includePrivate: boolean) {
@@ -40,6 +41,8 @@ export async function readDuplicateCandidates(
     >
   >`SELECT a.id,a.sha256,a."byteSize",a."rowVersion",a."mediaRevision",a."isPrivate",
     a.format,a.width,a.height,a.rating,a."libraryAddedAt",
+    (a."livePhotoIdentifier" IS NOT NULL) AS "isLivePhoto",
+    CASE WHEN f."pixelProcessorVersion"=${DUPLICATE_PIXEL_VERSION} AND f."pixelStatus"='VERIFIED' THEN f."pixelHash" ELSE NULL END AS "pixelHash",
     EXISTS(SELECT 1 FROM "EagleAssetEditRecipe" e WHERE e."assetId"=a.id AND e."ownerId"=a."ownerId" AND e."libraryMode"=a."libraryMode" AND e."baseAssetId" IS NOT NULL) AS "isEdited",
     CASE WHEN f."assetId" IS NULL THEN NULL ELSE
       jsonb_build_object('hash',f.hash,'colors',f.colors,'contrast',f.contrast) END AS fingerprint

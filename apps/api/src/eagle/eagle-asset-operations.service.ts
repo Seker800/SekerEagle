@@ -702,7 +702,10 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             ownerId: principal.sub,
             libraryMode: this.libraryMode,
             status: 'COMPLETED',
-            snapshots: { path: ['kind'], equals: 'build' },
+            OR: [
+              { snapshots: { path: ['kind'], equals: 'build' } },
+              { snapshots: { path: ['kind'], equals: 'publish' } },
+            ],
           },
           data: { status: 'PENDING', errorCode: null, leaseUntil: null },
         });
@@ -1115,8 +1118,18 @@ export class EagleAssetOperationService implements OnModuleDestroy {
   private async failItems(items: ClaimedItem[], error: unknown) {
     const { operation } = items[0]!;
     const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
+    const duplicateCode =
+      error instanceof Error &&
+      [
+        'DUPLICATE_ORIGINAL_TOO_LARGE',
+        'DUPLICATE_ORIGINAL_HASH_MISMATCH',
+        'INVALID_DUPLICATE_ORIGINAL_BUDGET',
+      ].includes(error.message)
+        ? error.message
+        : null;
     const code =
-      error instanceof OperationAccessError
+      duplicateCode ??
+      (error instanceof OperationAccessError
         ? error.code
         : error instanceof NotFoundException
           ? 'ASSET_UNAVAILABLE'
@@ -1124,7 +1137,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             ? 'ASSET_CHANGED'
             : error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028'
               ? 'TRANSACTION_TIMEOUT'
-              : 'OPERATION_FAILED';
+              : 'OPERATION_FAILED');
     this.logger.error({
       event: 'ASSET_OPERATION_FAILED',
       operationId: operation.id,

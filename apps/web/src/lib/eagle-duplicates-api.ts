@@ -12,12 +12,19 @@ export interface DuplicateGroupSummary {
 export interface DuplicateResults {
   outdatedGroups?: number;
   algorithmVersion?: string;
+  originalCheckCompleted?: boolean;
   revision: string;
   exactRevision: string;
   exactItems: number;
   verifiedItems?: number;
   verifiedGroups?: number;
-  coverage: { total: number; indexed: number; waiting: number; originalsVerified?: number; unsupportedOriginals?: number };
+  coverage: {
+    total: number;
+    indexed: number;
+    waiting: number;
+    originalsVerified?: number;
+    unsupportedOriginals?: number;
+  };
   totalGroups: number;
   exactGroups: number;
   similarGroups: number;

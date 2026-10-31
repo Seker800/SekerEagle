@@ -1,6 +1,7 @@
 import { readMissingDuplicateFingerprints } from './eagle-duplicate-candidates';
 import { readDuplicateReview } from './eagle-duplicate-read';
-import { executeDuplicateIndex, completeDuplicateItem } from './eagle-duplicate-index';
+import { executeDuplicateIndex } from './eagle-duplicate-index';
+import { completeDuplicateItem } from './eagle-duplicate-item';
 import {
   digest,
   dismissalSignature,
@@ -83,9 +84,14 @@ export class EagleDuplicateService {
           exactItems: state.groups
             .filter((g) => g.kind === 'EXACT' && !state.ignored.has(g.signature))
             .reduce((n, g) => n + g.assetIds.length - 1, 0),
+          verifiedGroups: state.groups.filter((g) => !state.ignored.has(g.signature)).length,
+          verifiedItems: state.groups
+            .filter((g) => !state.ignored.has(g.signature))
+            .reduce((n, g) => n + g.assetIds.length - 1, 0),
           coverage: state.coverage,
           outdatedGroups: state.outdatedGroups,
           algorithmVersion: state.algorithmVersion,
+          originalCheckCompleted: state.originalCheckCompleted,
           totalGroups: visible.length,
           exactGroups: state.groups.filter(
             (g) => g.kind === 'EXACT' && !state.ignored.has(g.signature),
@@ -317,8 +323,20 @@ export class EagleDuplicateService {
     );
   }
   async cleanup(principal: AuthPrincipal, input: DuplicateActionDto) {
+    if ((input.allExact || input.allVerified || input.signatures?.length) && !input.revision)
+      throw new BadRequestException('请先确认当前查重结果。');
     const request = [
-      digest({ allExact: input.allExact ?? false, revision: input.revision, groups: input.groups }),
+      digest(
+        input.allVerified || input.signatures
+          ? {
+              allExact: input.allExact ?? false,
+              allVerified: input.allVerified ?? false,
+              revision: input.revision,
+              groups: input.groups,
+              signatures: input.signatures,
+            }
+          : { allExact: input.allExact ?? false, revision: input.revision, groups: input.groups },
+      ),
     ];
     return this.prisma.$transaction(
       async (tx) => {
@@ -337,16 +355,27 @@ export class EagleDuplicateService {
           (input.allExact ? state.exactRevision : state.revision) !== input.revision
         )
           throw new ConflictException('图库已变化，请刷新后确认。');
-        const choices: DuplicateSelectionDto[] = input.allExact
-          ? state.groups
-              .filter((g) => g.kind === 'EXACT' && !state.ignored.has(g.signature))
-              .map((g) => ({ signature: g.signature, keepIds: [g.recommendedId] }))
-          : input.groups!;
+        const groupBySignature = new Map(state.groups.map((g) => [g.signature, g]));
+        const choices: DuplicateSelectionDto[] =
+          input.allExact || input.allVerified
+            ? state.groups
+                .filter(
+                  (g) =>
+                    (input.allVerified || g.kind === 'EXACT') && !state.ignored.has(g.signature),
+                )
+                .map((g) => ({ signature: g.signature, keepIds: [g.recommendedId] }))
+            : input.signatures
+              ? input.signatures.map((signature) => {
+                  const group = groupBySignature.get(signature);
+                  if (!group) throw new NotFoundException('查重结果已变化。');
+                  return { signature, keepIds: [group.recommendedId] };
+                })
+              : input.groups!;
         if (new Set(choices.map((c) => c.signature)).size !== choices.length)
           throw new BadRequestException('不能重复选择同一组。');
         const plans = choices
           .map((choice) => {
-            const group = state.groups.find((g) => g.signature === choice.signature);
+            const group = groupBySignature.get(choice.signature);
             if (!group || state.ignored.has(choice.signature))
               throw new NotFoundException('查重结果已变化。');
             if (!!choice.keepIds?.length === !!choice.removeIds?.length)
@@ -424,7 +453,7 @@ export class EagleDuplicateService {
             signature: plan.group.signature,
             resources: expand(plan.assetIds),
             keepers: expand(plan.choice.keepIds),
-            exact: plan.group.kind === 'EXACT',
+            exact: true,
             targetId: plan.choice.keepIds[0]!,
           },
         }));

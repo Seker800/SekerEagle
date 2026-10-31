@@ -1,8 +1,9 @@
 import { readDuplicateCandidates } from './eagle-duplicate-candidates';
 import { ConflictException } from '@nestjs/common';
+import { completeDuplicateItem } from './eagle-duplicate-item';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import {
-  findDuplicateGroups,
+  findVerifiedPixelGroups,
   DUPLICATE_GROUPING_VERSION,
   type DuplicateFingerprint,
 } from '@sekereagle/library-core';
@@ -16,6 +17,10 @@ import {
   type ScanSnapshot,
 } from './eagle-duplicate-model';
 import { DUPLICATE_FINGERPRINT_VERSION, fingerprintPreview } from './eagle-duplicate-fingerprint';
+import {
+  scheduleDuplicateVerification,
+  executeDuplicateVerification,
+} from './eagle-duplicate-verification';
 async function buildProjection(
   prisma: PrismaService,
   libraryMode: LibraryMode,
@@ -29,7 +34,7 @@ async function buildProjection(
     item.operation.isPrivate,
   );
   const byId = new Map(candidates.map((row) => [row.id, row]));
-  const groups = findDuplicateGroups(candidates).filter((group) => group.kind === 'SIMILAR');
+  const groups = findVerifiedPixelGroups(candidates);
   await prisma.$transaction(
     async (tx) => {
       await lockOwnerPrivacyProjection(tx, item.ownerId, libraryMode);
@@ -61,24 +66,6 @@ async function buildProjection(
     { timeout: 45_000 },
   );
 }
-export async function completeDuplicateItem(
-  tx: Prisma.TransactionClient,
-  item: Item,
-  libraryMode: LibraryMode,
-) {
-  const result = await tx.eagleAssetOperationItem.updateMany({
-    where: {
-      id: item.id,
-      ownerId: item.ownerId,
-      libraryMode: libraryMode,
-      status: 'RUNNING',
-      leaseVersion: item.leaseVersion,
-      leaseUntil: { gt: new Date() },
-    },
-    data: { status: 'COMPLETED', leaseUntil: null },
-  });
-  if (result.count !== 1) throw new ConflictException('操作租约已变化。');
-}
 export async function executeDuplicateIndex(
   prisma: PrismaService,
   storage: ObjectStorageService,
@@ -87,7 +74,11 @@ export async function executeDuplicateIndex(
   assertActor: (tx: Prisma.TransactionClient) => Promise<void>,
 ) {
   const snapshot = item.snapshots as unknown as ScanSnapshot;
-  if (snapshot.kind === 'build') return buildProjection(prisma, libraryMode, item, assertActor);
+  if (snapshot.kind === 'build')
+    return scheduleDuplicateVerification(prisma, libraryMode, item, assertActor);
+  if (snapshot.kind === 'verify')
+    return executeDuplicateVerification(prisma, storage, libraryMode, item, assertActor);
+  if (snapshot.kind === 'publish') return buildProjection(prisma, libraryMode, item, assertActor);
   const rows = await prisma.eagleAsset.findMany({
     where: {
       ...inDuplicateLibrary(item.ownerId, libraryMode, item.operation.isPrivate),
@@ -155,6 +146,9 @@ export async function executeDuplicateIndex(
           AND a."mediaRevision"=i.revision AND a."deletedAt" IS NULL AND a."purgeAfter" IS NULL AND NOT a."storageTransferredOut"
           AND (${item.operation.isPrivate} OR NOT a."isPrivate")
         ON CONFLICT ("assetId") DO UPDATE SET "mediaRevision"=excluded."mediaRevision","processorVersion"=excluded."processorVersion",
+          "pixelHash"=CASE WHEN f."mediaRevision"=excluded."mediaRevision" THEN f."pixelHash" ELSE NULL END,
+          "pixelProcessorVersion"=CASE WHEN f."mediaRevision"=excluded."mediaRevision" THEN f."pixelProcessorVersion" ELSE NULL END,
+          "pixelStatus"=CASE WHEN f."mediaRevision"=excluded."mediaRevision" THEN f."pixelStatus" ELSE NULL END,
           hash=excluded.hash,colors=excluded.colors,contrast=excluded.contrast,"updatedAt"=excluded."updatedAt"
         WHERE f."ownerId"=excluded."ownerId" AND f."libraryMode"=excluded."libraryMode"`;
       await assertActor(tx);

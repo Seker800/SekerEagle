@@ -84,15 +84,63 @@ function render() {
 }
 describe('duplicate cleanup review', () => {
   it('cleans thousands of verified copies in one request without opening member comparisons', async () => {
-    mocks.list.mockResolvedValue({ revision: 'b'.repeat(64), exactRevision: 'b'.repeat(64), exactItems: 0,
-      verifiedGroups: 1217, verifiedItems: 2163, coverage: { total: 60000, indexed: 60000, waiting: 0, originalsVerified: 4000 },
-      totalGroups: 1217, exactGroups: 0, similarGroups: 1217, ignoredGroups: 0, removableBytes: 1024,
-      nextCursor: '24', groups: [{ ...group, kind: 'SIMILAR', count: 5 }] });
+    mocks.list.mockResolvedValue({
+      revision: 'b'.repeat(64),
+      exactRevision: 'b'.repeat(64),
+      exactItems: 0,
+      verifiedGroups: 1217,
+      verifiedItems: 2163,
+      coverage: { total: 60000, indexed: 60000, waiting: 0, originalsVerified: 4000 },
+      totalGroups: 1217,
+      exactGroups: 0,
+      similarGroups: 1217,
+      ignoredGroups: 0,
+      removableBytes: 1024,
+      nextCursor: '24',
+      groups: [{ ...group, kind: 'SIMILAR', count: 5 }],
+    });
     render();
     fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     expect(screen.getByText('保留 1217 项，清理 2163 项')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
-    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledWith(expect.objectContaining({ allVerified: true, revision: 'b'.repeat(64) })));
+    await waitFor(() =>
+      expect(mocks.cleanup).toHaveBeenCalledWith(
+        expect.objectContaining({ allVerified: true, revision: 'b'.repeat(64) }),
+      ),
+    );
+    expect(mocks.members).not.toHaveBeenCalled();
+  });
+  it('retains selected groups across pages and submits their signatures without loading members', async () => {
+    mocks.list.mockImplementation(async ({ cursor }: { cursor?: string }) => ({
+      revision: 'b'.repeat(64),
+      exactRevision: 'b'.repeat(64),
+      exactItems: 0,
+      verifiedGroups: 2,
+      verifiedItems: 6,
+      coverage: { total: 8, indexed: 8, waiting: 0 },
+      totalGroups: 2,
+      exactGroups: 0,
+      similarGroups: 2,
+      ignoredGroups: 0,
+      removableBytes: 1024,
+      nextCursor: cursor ? null : '1',
+      groups: [{ ...group, kind: 'SIMILAR', count: 4, signature: (cursor ? 'c' : 'a').repeat(64) }],
+    }));
+    render();
+    fireEvent.click(await screen.findByRole('checkbox', { name: '选择重复组 1' }));
+    fireEvent.click(screen.getByRole('button', { name: '加载更多组' }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '选择重复组 2' }));
+    fireEvent.click(screen.getByRole('button', { name: '清理所选重复组' }));
+    expect(screen.getByText('保留 2 项，清理 6 项')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await waitFor(() =>
+      expect(mocks.cleanup).toHaveBeenCalledWith(
+        expect.objectContaining({
+          signatures: ['a'.repeat(64), 'c'.repeat(64)],
+          revision: 'b'.repeat(64),
+        }),
+      ),
+    );
     expect(mocks.members).not.toHaveBeenCalled();
   });
   beforeEach(() => {
@@ -161,9 +209,9 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: '完全重复 0' }));
     await screen.findByRole('heading', { name: '没有完全重复的文件' });
     expect(screen.queryByText('当前没有待处理的查重结果')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '查看近似清理 2,635 组' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看原图画面相同 2,635 组' }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '近似清理 2635' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: '原图画面相同 2635' })).toHaveAttribute(
         'aria-pressed',
         'true',
       ),
@@ -197,15 +245,15 @@ describe('duplicate cleanup review', () => {
   });
   it('shows incomplete indexing honestly and starts a durable incremental scan', async () => {
     render();
-    await screen.findByRole('button', { name: '清理全部完全重复项' });
+    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
     expect(screen.getByText(/100.*60,000/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
     await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
   });
   it('requires a concrete review before cleaning all exact duplicates and keeps the same retry identity', async () => {
     render();
-    await screen.findByRole('button', { name: '清理全部完全重复项' });
-    fireEvent.click(screen.getByRole('button', { name: '清理全部完全重复项' }));
+    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
+    fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     expect(mocks.cleanup).not.toHaveBeenCalled();
     expect(screen.getAllByText(/回收站/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
@@ -221,7 +269,7 @@ describe('duplicate cleanup review', () => {
   });
   it('keeps a submitted all-exact cleanup hidden across closing and reopening the review', async () => {
     const view = render();
-    fireEvent.click(await screen.findByRole('button', { name: '清理全部完全重复项' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -229,14 +277,14 @@ describe('duplicate cleanup review', () => {
     );
     view.hide();
     view.reopen();
-    await screen.findByRole('button', { name: '清理全部完全重复项' });
+    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
     expect(screen.queryByRole('button', { name: /^文件完全相同/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '清理全部完全重复项' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' })).toBeDisabled();
   });
   it('retains an uncertain all-exact intent and confirms the same operation after reopening', async () => {
     mocks.cleanup.mockRejectedValueOnce(new Error('连接中断'));
     const view = render();
-    fireEvent.click(await screen.findByRole('button', { name: '清理全部完全重复项' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await screen.findByRole('button', { name: '重试确认' });
     const intent = mocks.cleanup.mock.calls[0][0];
@@ -298,7 +346,7 @@ describe('duplicate cleanup review', () => {
   it('retries a failed scan with the same command identity', async () => {
     mocks.scan.mockRejectedValueOnce(new Error('检查连接失败'));
     render();
-    await screen.findByRole('button', { name: '清理全部完全重复项' });
+    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
     fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
     await screen.findByRole('alert');
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
@@ -308,7 +356,7 @@ describe('duplicate cleanup review', () => {
   it('a failed cleanup keeps the review and reuses its id on retry', async () => {
     mocks.cleanup.mockRejectedValueOnce(new Error('清理连接失败'));
     render();
-    fireEvent.click(await screen.findByRole('button', { name: '清理全部完全重复项' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('清理连接失败');
     fireEvent.click(screen.getByRole('button', { name: '重试确认' }));
@@ -352,7 +400,7 @@ describe('duplicate cleanup review', () => {
       })),
     });
     render();
-    fireEvent.click(await screen.findByRole('button', { name: /^画面近似，待确认/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^原图像素完全相同/ }));
     expect(await screen.findByRole('checkbox', { name: '保留 one' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();
     expect(screen.getByRole('button', { name: '保留 3 项，清理 0 项' })).toBeDisabled();
@@ -579,7 +627,7 @@ describe('duplicate cleanup review', () => {
     render();
     await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByText('旧版近似结果已停用，正在按同格式、同尺寸规则更新。'),
+      await screen.findByText('旧版近似结果已停用，正在核验原图；连拍不作为重复副本清理。'),
     ).toBeVisible();
   });
 });

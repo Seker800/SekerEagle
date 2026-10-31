@@ -194,15 +194,16 @@ it('removes both workspace caches when a running session expires', async () => {
 });
 
 it('checks the session when a visible window regains focus', async () => {
-  requestMock.mockResolvedValueOnce(userResponse());
-  requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
+  // Privacy queries and focus recovery may overlap; respond by route, not call order.
+  requestMock.mockImplementation(async (path: string) =>
+    path === '/api/auth/me' ? userResponse() : { enabled: false, expiresAt: null },
+  );
   render(
     <QueryClientProvider client={new QueryClient()}>
       <App />
     </QueryClientProvider>,
   );
   await screen.findByText('素材图库');
-  requestMock.mockResolvedValueOnce(userResponse());
   await act(async () => {
     await Promise.resolve();
   });

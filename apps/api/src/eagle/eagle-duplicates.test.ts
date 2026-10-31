@@ -25,6 +25,28 @@ test('duplicate actions reject injected ownership, empty keeper and malformed re
     pipe.transform({ cursor: '-1' }, { type: 'query', metatype: DuplicateListDto }),
   );
 });
+test('bulk verified cleanup requires one explicit scope and a current revision, with no group quota', async () => {
+  const base = { operationId: randomUUID(), revision: 'a'.repeat(64) };
+  await pipe.transform(
+    { ...base, allVerified: true },
+    { type: 'body', metatype: DuplicateActionDto },
+  );
+  await pipe.transform(
+    { ...base, signatures: Array(1201).fill('b'.repeat(64)) },
+    { type: 'body', metatype: DuplicateActionDto },
+  );
+  for (const patch of [
+    { allVerified: true, revision: undefined },
+    { allVerified: true, allExact: true },
+    { allVerified: true, ownerId: randomUUID() },
+    { allVerified: true, signatures: ['b'.repeat(64)] },
+    { signatures: ['bad'] },
+    { signatures: [] },
+  ])
+    await assert.rejects(
+      pipe.transform({ ...base, ...patch }, { type: 'body', metatype: DuplicateActionDto }),
+    );
+});
 test('preview fingerprints survive image encoding changes and do not consume originals', async () => {
   const pixels = Buffer.alloc(96 * 64 * 3);
   for (let y = 0; y < 64; y++)

@@ -32,22 +32,50 @@ export interface DuplicateCandidate {
 /** Only full-resolution, current-version proofs qualify. Preview similarity is discovery only. */
 export function findVerifiedPixelGroups(input: readonly DuplicateCandidate[]): DuplicateGroup[] {
   const buckets = new Map<string, DuplicateCandidate[]>();
+  const fileKey = (row: DuplicateCandidate) =>
+    JSON.stringify([row.isPrivate, canonicalDuplicateFormat(row.format), row.sha256, row.byteSize]);
+  const proofs = new Map(
+    input
+      .filter((row) => row.sha256 && row.pixelHash && /^[a-f0-9]{64}$/.test(row.pixelHash))
+      .map((row) => [fileKey(row), row.pixelHash!]),
+  );
   for (const row of input) {
-    if (!row.pixelHash || !/^[a-f0-9]{64}$/.test(row.pixelHash) || row.isEdited || row.isLivePhoto)
+    const pixelHash = row.pixelHash ?? (row.sha256 ? proofs.get(fileKey(row)) : null);
+    if (!pixelHash || !/^[a-f0-9]{64}$/.test(pixelHash) || row.isEdited || row.isLivePhoto)
       continue;
     const format = canonicalDuplicateFormat(row.format);
     if (format !== 'jpeg' && format !== 'png') continue;
-    const key = `${row.isPrivate}:${format}:${row.pixelHash}`;
+    const key = `${row.isPrivate}:${format}:${pixelHash}`;
     const members = buckets.get(key) ?? [];
     members.push(row);
     buckets.set(key, members);
   }
-  return [...buckets.values()].filter(members => members.length > 1).map(members => {
-    members.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || b.byteSize - a.byteSize ||
-      a.libraryAddedAt.localeCompare(b.libraryAddedAt) || a.id.localeCompare(b.id));
-    return { kind: 'SIMILAR' as const, assetIds: members.map(row => row.id), recommendedId: members[0]!.id,
-      removableBytes: members.slice(1).reduce((n, row) => n + row.byteSize, 0) };
-  }).sort((a, b) => b.removableBytes - a.removableBytes || a.recommendedId.localeCompare(b.recommendedId));
+  return [...buckets.values()]
+    .filter(
+      (members) =>
+        members.length > 1 &&
+        new Set(members.map((row) => (row.sha256 ? `${row.sha256}:${row.byteSize}` : row.id)))
+          .size > 1,
+    )
+    .map((members) => {
+      members.sort(
+        (a, b) =>
+          (b.rating ?? 0) - (a.rating ?? 0) ||
+          b.byteSize - a.byteSize ||
+          a.libraryAddedAt.localeCompare(b.libraryAddedAt) ||
+          a.id.localeCompare(b.id),
+      );
+      return {
+        kind: 'SIMILAR' as const,
+        assetIds: members.map((row) => row.id),
+        recommendedId: members[0]!.id,
+        removableBytes: members.slice(1).reduce((n, row) => n + row.byteSize, 0),
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.removableBytes - a.removableBytes || a.recommendedId.localeCompare(b.recommendedId),
+    );
 }
 export interface DuplicateGroup {
   kind: 'EXACT' | 'SIMILAR';

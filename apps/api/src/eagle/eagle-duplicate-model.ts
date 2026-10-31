@@ -11,7 +11,11 @@ export type CleanupSnapshot = {
   exact: boolean;
   targetId: string;
 };
-export type ScanSnapshot = { kind: 'scan'; rows: Snapshot[] } | { kind: 'build' };
+export type ScanSnapshot =
+  | { kind: 'scan'; rows: Snapshot[] }
+  | { kind: 'verify'; rows: Snapshot[] }
+  | { kind: 'build' }
+  | { kind: 'publish'; version?: string };
 export type Item = EagleAssetOperationItem & { operation: EagleAssetOperation };
 export function signature(
   ownerId: string,

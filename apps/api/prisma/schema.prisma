@@ -1755,6 +1755,9 @@ model EagleDuplicateFingerprint {
   hash String
   colors Json
   contrast Float
+  pixelHash String?
+  pixelProcessorVersion String?
+  pixelStatus String?
   updatedAt DateTime @updatedAt
   asset EagleAsset @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   @@unique([ownerId, libraryMode, assetId])

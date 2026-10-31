@@ -52,6 +52,13 @@ export class DuplicateActionDto {
   @ApiProperty() @IsUUID('4') operationId!: string;
   @ApiProperty({ required: false }) @IsOptional() @Matches(/^[a-f0-9]{64}$/) revision?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsBoolean() allExact?: boolean;
+  @ApiProperty({ required: false }) @IsOptional() @IsBoolean() allVerified?: boolean;
+  @ApiProperty({ type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @Matches(/^[a-f0-9]{64}$/, { each: true })
+  signatures?: string[];
   @ApiProperty({ type: [DuplicateSelectionDto], required: false })
   @IsOptional()
   @IsArray()
@@ -63,7 +70,15 @@ export class DuplicateActionDto {
     validator: {
       validate: (_v, args) => {
         const obj = args!.object as DuplicateActionDto;
-        return obj.allExact === true ? !!obj.revision && !obj.groups?.length : !!obj.groups?.length;
+        const count =
+          Number(obj.allExact === true) +
+          Number(obj.allVerified === true) +
+          Number(!!obj.signatures?.length) +
+          Number(!!obj.groups?.length);
+        return (
+          count === 1 &&
+          (!(obj.allExact || obj.allVerified || obj.signatures?.length) || !!obj.revision)
+        );
       },
     },
   })
