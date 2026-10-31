@@ -23,6 +23,9 @@ import { ObjectStorageService } from '../../apps/api/dist/storage/object-storage
 import { EagleAssetOperationService } from '../../apps/api/dist/eagle/eagle-asset-operations.service.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
 import { prepareAssetPurge } from '../../apps/worker/dist/asset-purge.js';
+import { MediaOutputAttempt } from '../../apps/worker/dist/media-output-attempt.js';
+import { publishPyramid } from '../../apps/worker/dist/pyramid-publication.js';
+import { buildPyramidDescriptor } from '../../apps/worker/dist/image-pyramid.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
   s3Endpoint: process.env.S3_ENDPOINT,
@@ -398,6 +401,50 @@ try {
       byteSize: tile.length,
     },
   });
+  // A superseded writer must never change the immutable output adopted by a send.
+  const staleJob = await db.eagleAssetProcessingJob.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: pyramidSource.id,
+      assetRevision: 1,
+      kind: 'GENERATE_IMAGE_PYRAMID',
+      processorVersion: 'pyramid-v1',
+      status: 'PROCESSING',
+      leaseVersion: 1,
+    },
+  });
+  const staleAttempt = new MediaOutputAttempt(db, pyramidSource, 'pyramids');
+  await staleAttempt.prepare();
+  const currentJob = await db.eagleAssetProcessingJob.update({
+    where: { id: staleJob.id },
+    data: { leaseVersion: 2 },
+  });
+  const currentAttempt = new MediaOutputAttempt(db, pyramidSource, 'pyramids');
+  await currentAttempt.prepare();
+  const currentTile = await sharp({
+    create: { width: 1, height: 1, channels: 3, background: '#284f8d' },
+  })
+    .webp()
+    .toBuffer();
+  assert.notEqual(digest(currentTile), digest(tile));
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: currentAttempt.key('0/0_0.webp'),
+      Body: currentTile,
+    }),
+  );
+  const currentPublished = await publishPyramid(db, {
+    job: currentJob,
+    descriptor: buildPyramidDescriptor(1, 1),
+    storagePrefix: currentAttempt.prefix,
+    tileCount: 1,
+    byteSize: BigInt(currentTile.length),
+    outputAttempt: currentAttempt,
+  });
+  assert.equal(currentPublished, true);
+  await currentAttempt.finish(currentPublished);
   const outbound = await new EagleLibraryTransferService(db, storage, 'PHOTO').send(
     ownerId,
     { operationId: randomUUID(), assetIds: [pyramidSource.id] },
@@ -409,6 +456,41 @@ try {
     include: { renditions: true, imagePyramids: true },
   });
   assert(!middle.imagePyramids[0].storagePrefix.endsWith('/'));
+  assert.equal(middle.imagePyramids[0].storagePrefix, currentAttempt.prefix.replace(/\/+$/, ''));
+  await s3.send(
+    new PutObjectCommand({ Bucket: bucket, Key: staleAttempt.key('0/0_0.webp'), Body: tile }),
+  );
+  const stalePublished = await publishPyramid(db, {
+    job: staleJob,
+    descriptor: buildPyramidDescriptor(1, 1),
+    storagePrefix: staleAttempt.prefix,
+    tileCount: 1,
+    byteSize: BigInt(tile.length),
+    outputAttempt: staleAttempt,
+  });
+  assert.equal(stalePublished, false);
+  await staleAttempt.finish(stalePublished);
+  const orphanDeadline = Date.now() + 10000;
+  while (await db.eagleObjectDeletion.count({ where: { ownerId } })) {
+    if (Date.now() > orphanDeadline || worker.exitCode !== null)
+      throw new Error('Output orphan cleanup did not drain');
+    await delay(50);
+  }
+  await assert.rejects(
+    storage.headObject(staleAttempt.key('0/0_0.webp')),
+    (error) => error.$metadata?.httpStatusCode === 404,
+  );
+  const adopted = await new EagleMediaService(db, storage, 'MATERIAL').getPyramidTile(
+    ownerId,
+    middle.id,
+    middle.imagePyramids[0].id,
+    0,
+    0,
+    0,
+  );
+  const adoptedChunks = [];
+  for await (const chunk of adopted.stream) adoptedChunks.push(Buffer.from(chunk));
+  assert.deepEqual(Buffer.concat(adoptedChunks), currentTile);
   const retryId = randomUUID();
   const legacyDb = db.$extends({
     query: {
@@ -485,7 +567,7 @@ try {
   );
   const chunks = [];
   for await (const chunk of opened.stream) chunks.push(Buffer.from(chunk));
-  assert.deepEqual(Buffer.concat(chunks), tile);
+  assert.deepEqual(Buffer.concat(chunks), currentTile);
   const roundTripDeadline = Date.now() + 10000;
   while (await db.eagleObjectDeletion.count({ where: { ownerId } })) {
     if (Date.now() > roundTripDeadline || worker.exitCode !== null)
@@ -504,7 +586,7 @@ try {
     );
   assert.equal(
     (await storage.headObject(`${final.imagePyramids[0].storagePrefix}/0/0_0.webp`)).ContentLength,
-    tile.length,
+    currentTile.length,
   );
   console.log(
     JSON.stringify({
@@ -515,7 +597,9 @@ try {
       sourcePurgePreservedTargetBytes: true,
       roundTripTileReadable: true,
       legacyFrozenPlanResumed: true,
-      retiredRoundTripObjectsAbsent: initialKeys.length + middleKeys.length,
+      retiredRoundTripObjectsAbsent: new Set([...initialKeys, ...middleKeys]).size,
+      lateWriterCannotOverwriteTarget: true,
+      orphanAttemptReclaimed: true,
       peakCopies: peak,
       sendMilliseconds,
       cleanedReceipts: cleanupKeys.length,
