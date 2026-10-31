@@ -24,6 +24,8 @@ test('queue command validation rejects owner, mode, private escalation, unknown 
     { isPrivate: true },
     { authVersion: 4 },
     { kind: 'PURGE' },
+    { kind: 'DUPLICATE_SCAN' },
+    { kind: 'DUPLICATE_CLEANUP' },
     { operationId: 'invalid' },
     { assetIds: ['invalid'] },
     { assetIds: Array(1001).fill(randomUUID()) },
@@ -107,7 +109,7 @@ test('idle operation polling uses bounded unlocked probes and opens no claim tra
     {} as never,
   );
   await service.tick();
-  assert.equal(probes.length, 2);
+  assert.equal(probes.length, 3);
   assert.equal(transactions, 0);
   for (const probe of probes) assert.deepEqual((probe as { select: unknown }).select, { id: true });
 });
@@ -197,7 +199,9 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
         assert.ok(where.leaseUntil.gt instanceof Date);
         assert.ok(
           where.operation.kind === 'SEND' ||
-            JSON.stringify(where.operation.kind) === JSON.stringify({ not: 'SEND' }),
+            where.operation.kind === 'DUPLICATE_SCAN' ||
+            JSON.stringify(where.operation.kind) ===
+              JSON.stringify({ notIn: ['SEND', 'DUPLICATE_SCAN'] }),
         );
         return 1;
       },
@@ -216,8 +220,8 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
     {} as never,
   );
   await service.tick();
-  assert.equal(transactions, 2);
-  assert.equal(locks, 2);
+  assert.equal(transactions, 3);
+  assert.equal(locks, 3);
 });
 
 test('batch trash skips owned retired entries and isolates unavailable entries without blocking valid resources', async () => {
