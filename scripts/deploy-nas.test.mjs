@@ -163,3 +163,19 @@ test('NAS operation executor uses the application image and isolated database wi
   assert.deepEqual(executor.command, ['node', 'apps/api/dist/asset-operation-executor.js']);
   assert.equal(executor.mem_limit, '${EAGLE_OPERATION_MEMORY_LIMIT:-512m}');
 });
+
+
+test('large operation admission has its own adjustable gateway deadline', async () => {
+  const { createNasGateway } = await import('./deploy-nas.mjs');
+  const source = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
+  const route = source.match(/location ~ (\S*operations\S*) \{([\s\S]*?)\n {2}\}/u);
+  assert.ok(route, 'operation admission must not inherit the 15 second deadline');
+  const pattern = new RegExp(route[1]);
+  for (const mode of ['eagle', 'photos']) {
+    assert.ok(pattern.test(`/api/${mode}/operations`));
+    assert.ok(pattern.test(`/api/${mode}/assets/batch/send`));
+  }
+  assert.equal(pattern.test('/api/auth/me'), false);
+  assert.match(route[2], /proxy_read_timeout 150s;/u);
+  assert.match(createNasGateway(source, { operationTimeoutSeconds: 180 }), /proxy_read_timeout 180s;/u);
+});

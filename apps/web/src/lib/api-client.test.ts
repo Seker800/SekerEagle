@@ -1,3 +1,5 @@
+import { createAssetOperationsApi } from './asset-operations-api';
+import { createEagleApi } from './eagle-api';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchEagleProcessingSummary } from './eagle-processing-admin-api';
 import { request } from './api-client';
@@ -210,4 +212,17 @@ it('logout waits for an in-flight refresh and fences its protected retry', async
   await logout;
   expect(await protectedResult).toMatchObject({ name: 'AbortError' });
   expect(calls).toEqual(['/api/eagle/assets', '/api/auth/refresh', '/api/auth/logout']);
+});
+
+
+it('operation admission and legacy sending outlive the admission transaction without widening reads', async () => {
+  const deadlines = vi.spyOn(AbortSignal, 'timeout');
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({}));
+  for (const mode of ['MATERIAL', 'PHOTO'] as const) {
+    const api = createAssetOperationsApi(mode);
+    await api.enqueue({ kind: 'SEND', operationId: 'op', assetIds: ['asset'] });
+    await createEagleApi(mode).sendEagleAssets('', { operationId: 'op', assetIds: ['asset'] });
+    await api.list();
+  }
+  expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([150_000, 150_000, 30_000, 150_000, 150_000, 30_000]);
 });
