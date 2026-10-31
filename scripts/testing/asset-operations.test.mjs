@@ -19,9 +19,11 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
 let queryCount = 0;
+let transactionCount = 0;
 let deletionClaimQuery = '';
 prisma.$on('query', ({ query }) => {
   queryCount++;
+  if (query.trim().startsWith('BEGIN')) transactionCount++;
   if (query.includes('UPDATE "EagleObjectDeletion" d')) deletionClaimQuery = query;
 });
 const owners = [];
@@ -1171,4 +1173,43 @@ test('a 60000-item selection is one durable operation with bounded SQL batches a
     await prisma.eagleAssetOperation.deleteMany({ where: { ownerId: f.ownerId } });
     await prisma.eagleAsset.deleteMany({ where: { ownerId: f.ownerId } });
   }
+});
+
+test('a 100-photo send measures the complete queue cost without object copies', async () => {
+  const f = await fixture();
+  const rows = await Promise.all(Array.from({ length: 100 }, () => f.add()));
+  const beforeAdmission = queryCount,
+    beforeAdmissionTransactions = transactionCount,
+    admissionStart = performance.now();
+  const receipt = await f.enqueue('SEND', rows);
+  const admission = {
+    sql: queryCount - beforeAdmission,
+    transactions: transactionCount - beforeAdmissionTransactions,
+    durationMs: Math.round(performance.now() - admissionStart),
+  };
+  const beforeExecution = queryCount,
+    beforeExecutionTransactions = transactionCount,
+    executionStart = performance.now();
+  for (let cursor = 0; cursor < rows.length; cursor += 4) await f.service.tick();
+  const execution = {
+    sql: queryCount - beforeExecution,
+    transactions: transactionCount - beforeExecutionTransactions,
+    durationMs: Math.round(performance.now() - executionStart),
+  };
+  const outcome = await f.state(receipt.id);
+  assert.equal(outcome.completed, rows.length);
+  assert.equal(outcome.failed, 0);
+  assert.equal(f.copies(), 0);
+  assert(execution.sql <= 3500, 'plain handoff must not repeat snapshot/journal reads outside its publication transaction');
+  assert(execution.transactions <= 350, 'plain handoff must not open redundant validation/upsert transactions');
+  console.log(
+    'Complete send cost:',
+    JSON.stringify({
+      count: rows.length,
+      admission,
+      execution,
+      s3Copies: f.copies(),
+      syntheticNoExifTagsOrRenditions: true,
+    }),
+  );
 });
