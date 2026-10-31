@@ -6,6 +6,8 @@ export interface DuplicateFingerprint {
 }
 export interface DuplicateCandidate {
   id: string;
+  format: string;
+  isEdited?: boolean;
   sha256: string | null;
   mediaRevision: number;
   rowVersion: number;
