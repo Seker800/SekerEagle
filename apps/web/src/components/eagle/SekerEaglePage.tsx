@@ -359,7 +359,9 @@ export function SekerEaglePage({
     privateVisible ? 'DATE' : (workspaceCache.browse?.smartFolderOrder ?? 'DATE'),
   );
   const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(() =>
-    privateVisible ? null : (workspaceCache.browse?.activeSmartFolderId ?? null),
+    !privateVisible && libraryView === 'ACTIVE' && photoView === 'timeline'
+      ? (workspaceCache.browse?.activeSmartFolderId ?? null)
+      : null,
   );
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
@@ -1071,18 +1073,33 @@ export function SekerEaglePage({
   const resetFilters = () => {
     setQuickFilters(createEmptyEagleQuickFilterState());
   };
-  const changeLibraryView = (view: EagleLibraryView) => {
+  const navigateLibrary = (
+    destination:
+      | { view: EagleLibraryView; photoView?: EaglePhotoView }
+      | { view: 'SMART_FOLDER'; folder: EagleSmartFolder },
+  ) => {
+    const folder = destination.view === 'SMART_FOLDER' ? destination.folder : null;
+    const view = destination.view === 'SMART_FOLDER' ? 'ACTIVE' : destination.view;
     assetLocator.clearLocation();
     setTimelineCursor('');
-    setPhotoView('timeline');
     setLibraryView(view);
+    setPhotoView(
+      destination.view === 'ACTIVE' ? (destination.photoView ?? 'timeline') : 'timeline',
+    );
+    setActiveSmartFolderId(folder?.id ?? null);
+    setSmartFolderOrder(
+      folder &&
+        (folder.semanticState || readEagleSemanticIntent(toEagleFilterQuery(folder.queryJson)))
+        ? 'RELEVANCE'
+        : 'DATE',
+    );
     if (
+      folder ||
       view === 'PRIVATE' ||
       view === 'TRASH' ||
       libraryView === 'PRIVATE' ||
       libraryView === 'TRASH'
     ) {
-      setActiveSmartFolderId(null);
       resetFilters();
     }
     setSelectedAssetIds([]);
@@ -1090,30 +1107,14 @@ export function SekerEaglePage({
     setIsBatchSelection(false);
     setSelectionMode(false);
     setAssetContextMenu(null);
+    setTagPicker(null);
     selectionAnchorIdRef.current = null;
   };
-  const openLibraryRoot = (view: EaglePhotoView = 'timeline') => {
-    changeLibraryView('ACTIVE');
-    setActiveSmartFolderId(null);
-    setPhotoView(view);
-  };
-  const applySmartFolder = (folder: EagleSmartFolder) => {
-    setPhotoView('timeline');
-    setLibraryView('ACTIVE');
-    setSmartFolderOrder(
-      folder.semanticState || readEagleSemanticIntent(toEagleFilterQuery(folder.queryJson))
-        ? 'RELEVANCE'
-        : 'DATE',
-    );
-    setActiveSmartFolderId(folder.id);
-    resetFilters();
-    setSelectedAssetId(null);
-    setSelectedAssetIds([]);
-    setIsBatchSelection(false);
-    setSelectionMode(false);
-    setAssetContextMenu(null);
-    selectionAnchorIdRef.current = null;
-  };
+  const changeLibraryView = (view: EagleLibraryView) => navigateLibrary({ view });
+  const openLibraryRoot = (photoView: EaglePhotoView = 'timeline') =>
+    navigateLibrary({ view: 'ACTIVE', photoView });
+  const applySmartFolder = (folder: EagleSmartFolder) =>
+    navigateLibrary({ view: 'SMART_FOLDER', folder });
   const selectAsset = (assetId: string, gesture: EagleSelectionGesture) => {
     const nextSelection = applyEagleSelection({
       orderedIds: assets.map((asset) => asset.id),
@@ -1467,6 +1468,11 @@ export function SekerEaglePage({
             ? styles.navActive
             : undefined
         }
+        aria-current={
+          libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'
+            ? 'page'
+            : undefined
+        }
         type="button"
         onClick={() => openLibraryRoot()}
       >
@@ -1485,6 +1491,11 @@ export function SekerEaglePage({
             className={
               libraryView === 'ACTIVE' && photoView === view && !activeSmartFolderId
                 ? styles.navActive
+                : undefined
+            }
+            aria-current={
+              libraryView === 'ACTIVE' && photoView === view && !activeSmartFolderId
+                ? 'page'
                 : undefined
             }
             onClick={() => openLibraryRoot(view)}
@@ -1509,6 +1520,7 @@ export function SekerEaglePage({
         <button
           data-navigation-destination
           className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
+          aria-current={libraryView === 'PRIVATE' ? 'page' : undefined}
           type="button"
           onClick={() => changeLibraryView('PRIVATE')}
           aria-label={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
@@ -1571,6 +1583,7 @@ export function SekerEaglePage({
           data-navigation-destination
           type="button"
           className={workspaceSection === 'TASKS' ? styles.navActive : undefined}
+          aria-current={workspaceSection === 'TASKS' ? 'page' : undefined}
           aria-label={t('任务中心')}
           onClick={() => changeLibraryView('PROCESSING')}
         >
@@ -1581,6 +1594,7 @@ export function SekerEaglePage({
           data-navigation-destination
           type="button"
           className={workspaceSection === 'TAGS' ? styles.navActive : undefined}
+          aria-current={workspaceSection === 'TAGS' ? 'page' : undefined}
           aria-label={t('标签')}
           onClick={() => changeLibraryView('MANUAL_TAGS')}
         >
@@ -1591,6 +1605,7 @@ export function SekerEaglePage({
           data-navigation-destination
           type="button"
           className={workspaceSection === 'PENDING' ? styles.navActive : undefined}
+          aria-current={workspaceSection === 'PENDING' ? 'page' : undefined}
           aria-label={`${t('待处理')} ${pendingWorkCount}`}
           onClick={() => changeLibraryView('VECTOR_REVIEW')}
         >
@@ -1602,6 +1617,7 @@ export function SekerEaglePage({
           data-navigation-destination
           type="button"
           className={workspaceSection === 'SETTINGS' ? styles.navActive : undefined}
+          aria-current={workspaceSection === 'SETTINGS' ? 'page' : undefined}
           aria-label={t('设置')}
           onClick={() => changeLibraryView(accountView ? 'ACCOUNT' : 'VECTOR_TAGS')}
         >
@@ -1622,6 +1638,7 @@ export function SekerEaglePage({
       <button
         data-navigation-destination
         className={libraryView === 'TRASH' ? styles.navActive : undefined}
+        aria-current={libraryView === 'TRASH' ? 'page' : undefined}
         type="button"
         aria-label={t('回收站')}
         onClick={() => changeLibraryView('TRASH')}
@@ -1664,8 +1681,7 @@ export function SekerEaglePage({
     } else if (destination === 'tasks') {
       changeLibraryView('PROCESSING');
     } else if (destination !== 'more') {
-      changeLibraryView('ACTIVE');
-      setPhotoView(destination);
+      openLibraryRoot(destination);
     }
   };
   const activeMobileDestination: MobileDestination =
@@ -1853,8 +1869,7 @@ export function SekerEaglePage({
               setMobileMore(false);
               setMobileSearch((value) => !value);
               if (!showsAssetControls) {
-                changeLibraryView('ACTIVE');
-                setPhotoView('timeline');
+                openLibraryRoot();
               }
             }}
             tools={toolbarTools}
@@ -1955,8 +1970,7 @@ export function SekerEaglePage({
                 includePrivate={privateVisible}
                 canManageProcessing={canManageProcessing}
                 onReview={() => {
-                  changeLibraryView('ACTIVE');
-                  setPhotoView('agent');
+                  openLibraryRoot('agent');
                 }}
               />
             </AsyncViewBoundary>
