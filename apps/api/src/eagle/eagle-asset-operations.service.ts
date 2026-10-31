@@ -1,4 +1,9 @@
 import {
+  OPERATION_DB_BATCH_SIZE,
+  OPERATION_SEND_CONCURRENCY,
+  OPERATION_POLL_MS,
+} from './eagle-operation-settings';
+import {
   BadRequestException,
   ConflictException,
   Inject,
@@ -7,7 +12,6 @@ import {
   NotFoundException,
   Optional,
   type OnModuleDestroy,
-  type OnModuleInit,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -36,8 +40,8 @@ type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode
 };
 const LEASE_MS = 120_000;
 const METADATA_BATCH_SIZE = 32;
-const ADMISSION_BATCH_SIZE = 512;
-const SEND_CONCURRENCY = 4;
+const ADMISSION_BATCH_SIZE = OPERATION_DB_BATCH_SIZE;
+const SEND_CONCURRENCY = OPERATION_SEND_CONCURRENCY;
 // Transfer publication may hold the shared privacy lock for up to 30 seconds.
 // Leave a bounded write budget after that wait, inside the 120-second lease.
 const METADATA_TRANSACTION_TIMEOUT_MS = 45_000;
@@ -51,7 +55,7 @@ class OperationAccessError extends Error {
 
 /** Durable orchestration only: domain writes stay in the existing transfer/trash services. */
 @Injectable()
-export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy {
+export class EagleAssetOperationService implements OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private readonly running = new Set<OperationLane>();
   private readonly pendingWake = new Set<OperationLane>();
@@ -63,17 +67,21 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     private readonly eagle: EagleService,
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
-  onModuleInit() {
+  startExecutor() {
     if (process.env.EAGLE_ASSET_OPERATIONS_ENABLED === 'false') return;
     this.timer = setInterval(
       () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
-      5000,
+      OPERATION_POLL_MS,
     );
-    this.timer.unref();
   }
   onModuleDestroy() {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
+  }
+
+  async drain() {
+    this.onModuleDestroy();
+    while (this.running.size) await new Promise((resolve) => setTimeout(resolve, 25));
   }
 
   private libraryModeWhere(ownerId: string, includePrivate: boolean) {

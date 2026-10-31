@@ -15,7 +15,8 @@
     "test": "node --require ts-node/register --test src/*.test.ts src/**/*.test.ts src/*/**/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "openapi:generate": "npm run build && node dist/openapi.js"
+    "openapi:generate": "npm run build && node dist/openapi.js",
+    "start:operations": "node dist/asset-operation-executor.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

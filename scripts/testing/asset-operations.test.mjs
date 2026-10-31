@@ -109,7 +109,7 @@ for (const mode of ['PHOTO', 'MATERIAL']) {
   test(`${mode} local admission executes after commit without waiting for the five-second recovery poll`, async () => {
     const f = await fixture(mode);
     const asset = await f.add();
-    f.service.onModuleInit();
+    f.service.startExecutor();
     try {
       const receipt = await f.enqueue('TRASH', [asset]);
       // This deadline is shorter than the recovery poll, so completion requires

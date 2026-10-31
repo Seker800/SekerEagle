@@ -154,7 +154,7 @@ test('a command committed during an empty probe is picked up without waiting for
   const prior = process.env.EAGLE_ASSET_OPERATIONS_ENABLED;
   process.env.EAGLE_ASSET_OPERATIONS_ENABLED = 'true';
   try {
-    service.onModuleInit();
+    service.startExecutor();
     const polling = service.tick();
     await service.enqueue({ sub: 'owner', canViewPrivate: false } as never, {
       operationId: 'operation',

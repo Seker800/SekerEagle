@@ -68,15 +68,17 @@ export function AssetOperationsPanel({
             ? t('已停止')
             : t('已完成');
   const errorLabel = (code: string) =>
-    code === 'AUTH_REQUIRED'
-      ? t('账号状态已改变，请重新登录后重试。')
-      : code === 'PRIVATE_LOCKED'
-        ? t('请解锁私密内容后重试。')
-        : code === 'ASSET_CHANGED'
-          ? t('资源已改变，请重新选择。')
-          : code === 'ASSET_UNAVAILABLE'
-            ? t('资源已移除或不再可访问。')
-            : t('操作失败，请重试。');
+    code === 'NOT_FOUND'
+      ? t('部分内容不存在或不可访问，其余项目继续处理。')
+      : code === 'AUTH_REQUIRED'
+        ? t('账号状态已改变，请重新登录后重试。')
+        : code === 'PRIVATE_LOCKED'
+          ? t('请解锁私密内容后重试。')
+          : code === 'ASSET_CHANGED'
+            ? t('资源已改变，请重新选择。')
+            : code === 'ASSET_UNAVAILABLE'
+              ? t('资源已移除或不再可访问。')
+              : t('操作失败，请重试。');
   function card(operation: AssetOperationSummary) {
     return (
       <article key={operation.id} className={styles.card} data-state={operation.state}>
@@ -98,6 +100,9 @@ export function AssetOperationsPanel({
                   value2: operation.total,
                 })}
               </span>
+            )}
+            {!!operation.skipped && (
+              <span>{t('已跳过 {{count}} 项已移除的内容', { count: operation.skipped })}</span>
             )}
             {operation.cancelled > 0 && (
               <span className={styles.wait}>

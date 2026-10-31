@@ -1,4 +1,11 @@
 export const enUS = {
+  '后台内容已更新，当前浏览位置保持不变。':
+    'Background changes are ready. Your browsing position is preserved.',
+  加载更新: 'Load updates',
+  '已跳过 {{count}} 项已移除的内容': 'Skipped {{count}} already removed items',
+  '部分内容不存在或不可访问，其余项目继续处理。':
+    'Some items are missing or unavailable. Other items continue.',
+
   相似人物确认: 'Similar people review',
   '已完成 {{value1}} 项，待重试 {{value2}} 项': 'Completed {{value1}}, awaiting retry {{value2}}',
   重试未完成项: 'Retry unfinished items',
