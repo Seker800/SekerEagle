@@ -148,7 +148,7 @@ it('refreshes both libraries only after publication and never invalidates the po
   }
 });
 
-it('trash progress marks its own workspace stale once without starting a foreground refresh', async () => {
+it('trash progress automatically refreshes its own workspace without invalidating other scopes', async () => {
   mocks.list.mockImplementation(async (mode) => (mode === 'PHOTO' ? [job({ kind: 'TRASH' })] : []));
   const client = show('ALL', false, true);
   await waitFor(() =>
@@ -161,7 +161,7 @@ it('trash progress marks its own workspace stale once without starting a foregro
   );
   await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
   const predicate = invalidate.mock.calls[0]![0]!.predicate!;
-  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('none');
+  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('active');
   expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ALL', {}] } as never)).toBe(
     true,
   );
@@ -175,14 +175,20 @@ it('trash progress marks its own workspace stale once without starting a foregro
     ['eagle', 'owner', 'PHOTO', 'operations'],
   ])
     expect(predicate({ queryKey: key } as never)).toBe(false);
-  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('none');
+  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('active');
   for (const name of ['manual-tags', 'statistics'])
     expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', name] } as never)).toBe(true);
   client.setQueryData(
     ['eagle', 'owner', 'PHOTO', 'operations', false],
-    [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'STOPPED' })],
+    [job({ kind: 'TRASH', completed: 4 })],
   );
+  await new Promise((resolve) => setTimeout(resolve, 20));
   expect(invalidate).toHaveBeenCalledTimes(1);
+  client.setQueryData(
+    ['eagle', 'owner', 'PHOTO', 'operations', false],
+    [job({ kind: 'TRASH', completed: 4, queued: 0, running: 0, failed: 6, state: 'STOPPED' })],
+  );
+  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
 });
 
 it('reports partial completion when unavailable items did not block the valid deletion', async () => {

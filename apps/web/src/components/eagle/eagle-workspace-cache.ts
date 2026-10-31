@@ -43,31 +43,6 @@ export function getEagleWorkspaceCache(
 }
 
 class EagleWorkspaceCache {
-  #backgroundPending = false;
-  #backgroundRevision = 0;
-  readonly #backgroundListeners = new Set<() => void>();
-  readonly subscribeBackgroundChanges = (listener: () => void) => {
-    this.#backgroundListeners.add(listener);
-    return () => {
-      this.#backgroundListeners.delete(listener);
-    };
-  };
-  readonly hasBackgroundChanges = () => this.#backgroundPending;
-  get backgroundRevision() {
-    return this.#backgroundRevision;
-  }
-  markBackgroundChanges() {
-    if (this.#disposed) return;
-    this.#backgroundRevision++;
-    if (this.#backgroundPending) return;
-    this.#backgroundPending = true;
-    for (const listener of this.#backgroundListeners) listener();
-  }
-  acknowledgeBackgroundChanges(revision: number) {
-    if (revision !== this.#backgroundRevision || !this.#backgroundPending) return;
-    this.#backgroundPending = false;
-    for (const listener of this.#backgroundListeners) listener();
-  }
   browse: {
     search: string;
     quickFilters: EagleQuickFilterState;
@@ -107,7 +82,6 @@ class EagleWorkspaceCache {
   }
   readonly scrollPositions = new Map<string, number>();
   clearNavigation() {
-    this.acknowledgeBackgroundChanges(this.#backgroundRevision);
     this.downloads.clear();
     this.uploads.clear();
     this.browse = null;

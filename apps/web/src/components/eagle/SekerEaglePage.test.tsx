@@ -688,7 +688,7 @@ describe('SekerEaglePage', () => {
     const view = renderPage('background-owner');
     await screen.findByRole('button', { name: /Owl Reference/ });
     const region = screen.getByRole('region', { name: '素材瀑布流' });
-    region.scrollTop = 1200;
+    region.scrollTop = 100;
     fireEvent.scroll(region);
     const refresh = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
     listEagleAssetsMock.mockReturnValue(refresh.promise);
@@ -699,9 +699,11 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '加载更新' })).not.toBeInTheDocument();
     await act(async () => refresh.resolve({ items: [survivor], nextCursor: null }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument(),
+    );
     expect(screen.getByRole('button', { name: /Surviving photo/ })).toBeInTheDocument();
-    expect(region.scrollTop).toBe(1200);
+    expect(region.scrollTop).toBe(100);
     progress.dispose();
   });
 

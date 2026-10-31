@@ -3,14 +3,33 @@ import { expect, it, vi } from 'vitest';
 import { AssetOperationRefresher } from './asset-operation-refresh';
 
 it('coalesces publications, automatically refreshes all loaded pages, and leaves inactive and other owner caches alone', async () => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
   const key = ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', {}];
   const page = (i: number) => ({ ids: [`survivor-${i}`], nextCursor: String(i + 1) });
-  const data = { pages: Array.from({ length: 12 }, (_, i) => ({ ...page(i), ids: [`deleted-${i}`, `survivor-${i}`] })), pageParams: Array.from({ length: 12 }, (_, i) => String(i)) };
+  const data = {
+    pages: Array.from({ length: 12 }, (_, i) => ({
+      ...page(i),
+      ids: [`deleted-${i}`, `survivor-${i}`],
+    })),
+    pageParams: Array.from({ length: 12 }, (_, i) => String(i)),
+  };
   let release!: () => void;
-  const pending = new Promise<void>((resolve) => { release = resolve; });
-  const queryFn = vi.fn(async ({ pageParam }: { pageParam: string }) => { await pending; return page(Number(pageParam)); });
-  const observer = new InfiniteQueryObserver(client, { queryKey: key, queryFn, initialPageParam: '0', getNextPageParam: (p) => p.nextCursor, initialData: data });
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queryFn = vi.fn(async ({ pageParam }: { pageParam: string }) => {
+    await pending;
+    return page(Number(pageParam));
+  });
+  const observer = new InfiniteQueryObserver(client, {
+    queryKey: key,
+    queryFn,
+    initialPageParam: '0',
+    getNextPageParam: (p) => p.nextCursor,
+    initialData: data,
+  });
   const unsubscribe = observer.subscribe(() => {});
   const inactiveKey = ['eagle', 'owner', 'PHOTO', 'assets', 'TRASH', {}];
   const otherKey = ['eagle', 'other', 'PHOTO', 'assets', 'ACTIVE', {}];
@@ -24,18 +43,31 @@ it('coalesces publications, automatically refreshes all loaded pages, and leaves
     release();
     await vi.waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
     expect(queryFn).toHaveBeenCalledTimes(12);
-    expect(client.getQueryData(key)).toEqual({ pages: Array.from({ length: 12 }, (_, i) => page(i)), pageParams: data.pageParams });
+    expect(client.getQueryData(key)).toEqual({
+      pages: Array.from({ length: 12 }, (_, i) => page(i)),
+      pageParams: data.pageParams,
+    });
     expect(client.getQueryState(inactiveKey)?.isInvalidated).toBe(true);
     expect(client.getQueryData(inactiveKey)).toEqual(data);
     expect(client.getQueryState(otherKey)?.isInvalidated).toBe(false);
-  } finally { release(); progress.dispose(); unsubscribe(); client.clear(); }
+  } finally {
+    release();
+    progress.dispose();
+    unsubscribe();
+    client.clear();
+  }
 });
 
 it('finishes a refresh already in flight before applying a newer publication', async () => {
   const client = new QueryClient();
   let release!: () => void;
-  const pending = new Promise<void>((resolve) => { release = resolve; });
-  const invalidate = vi.spyOn(client, 'invalidateQueries').mockImplementationOnce(() => pending).mockResolvedValue(undefined);
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const invalidate = vi
+    .spyOn(client, 'invalidateQueries')
+    .mockImplementationOnce(() => pending)
+    .mockResolvedValue(undefined);
   const progress = new AssetOperationRefresher(client, 'owner');
   progress.schedule('PHOTO', false);
   await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
