@@ -75,8 +75,6 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     this.timer = setInterval(
       () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
       OPERATION_POLL_MS,
-      OPERATION_ADMISSION_TIMEOUT_MS,
-      OPERATION_METADATA_BATCH_SIZE,
     );
   }
   onModuleDestroy() {
