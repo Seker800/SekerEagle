@@ -1,3 +1,4 @@
+import { EagleDuplicates } from './EagleDuplicates';
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { EagleUploadQueue } from './EagleUploadQueue';
 import { AsyncViewBoundary } from '../AsyncViewBoundary';
@@ -342,6 +343,7 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [photoView, setPhotoView] = useState<EaglePhotoView>(() =>
     !privateVisible ? (workspaceCache.browse?.photoView ?? 'timeline') : 'timeline',
   );
@@ -1608,6 +1610,9 @@ export function SekerEaglePage({
           {' ' + t('设置')}
         </button>
       </div>
+      <button type="button" data-navigation-destination onClick={() => { closeNavigation(); setDuplicatesOpen(true); }}>
+        <IconPhoto size={17} /> {t('查重清理')}
+      </button>
       <button
         data-navigation-destination
         className={libraryView === 'TRASH' ? styles.navActive : undefined}
@@ -3146,6 +3151,7 @@ export function SekerEaglePage({
           }
         />
       )}
+      {duplicatesOpen && <EagleDuplicates key={`${storeScope}:${privateVisible}:${privacyRulesRevision}`} includePrivate={privateVisible} onClose={() => setDuplicatesOpen(false)} />}
     </main>
   );
 }
