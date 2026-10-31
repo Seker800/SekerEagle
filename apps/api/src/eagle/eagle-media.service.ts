@@ -5,7 +5,7 @@ import {
 } from '../common/range-parser';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
-import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertOwnedObjectKey } from '../storage/object-key';
@@ -16,7 +16,7 @@ export class EagleMediaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   async getOriginal(

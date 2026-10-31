@@ -14,6 +14,7 @@ test('AI tag search candidates keep exact tags first and semantic tags by descen
       ],
     } as never,
     { embedText: async () => ({ embedding: [0.6, 0.8] }) } as never,
+    'MATERIAL',
   );
 
   assert.deepEqual(await service.resolveSearchTags('owner-1', ' 汽车 '), [

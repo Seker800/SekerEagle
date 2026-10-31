@@ -68,7 +68,7 @@ export class EagleUploadService {
     private readonly storage: ObjectStorageService,
     private readonly mediaCapabilities: EagleMediaCapabilityService,
     private readonly inspection: EagleUploadInspectionService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
     @Optional()
     @Inject(LIBRARY_REVISION_OBSERVER)
     private readonly revisionObserver?: LibraryRevisionObserver,

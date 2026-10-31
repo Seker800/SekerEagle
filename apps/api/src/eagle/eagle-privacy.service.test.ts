@@ -19,11 +19,14 @@ test('privacy advisory lock returns a Prisma-deserializable scalar', async () =>
 });
 
 test('privacy settings expose only the owner private-tag rules', async () => {
-  const service = new EaglePrivacyService({
-    eagleManualTag: {
-      findMany: async () => [{ id: 'tag-private' }, { id: 'tag-sensitive' }],
-    },
-  } as never);
+  const service = new EaglePrivacyService(
+    {
+      eagleManualTag: {
+        findMany: async () => [{ id: 'tag-private' }, { id: 'tag-sensitive' }],
+      },
+    } as never,
+    'MATERIAL',
+  );
 
   assert.deepEqual(await service.getSettings('owner-a'), {
     tagIds: ['tag-private', 'tag-sensitive'],
@@ -42,9 +45,12 @@ test('privacy settings fail closed when any selected tag belongs to another owne
       },
     },
   };
-  const service = new EaglePrivacyService({
-    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
-  } as never);
+  const service = new EaglePrivacyService(
+    {
+      $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   await assert.rejects(
     service.updateSettings('owner-a', { expectedTagIds: [], tagIds: ['tag-owned', 'tag-foreign'] }),
@@ -71,9 +77,12 @@ test('privacy settings fail closed if a selected tag disappears during the trans
       },
     },
   };
-  const service = new EaglePrivacyService({
-    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
-  } as never);
+  const service = new EaglePrivacyService(
+    {
+      $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   await assert.rejects(
     service.updateSettings('owner-a', { expectedTagIds: [], tagIds: ['tag-removed-concurrently'] }),
@@ -102,9 +111,12 @@ test('privacy settings replace tag rules and recompute only assets whose derived
       },
     },
   };
-  const service = new EaglePrivacyService({
-    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
-  } as never);
+  const service = new EaglePrivacyService(
+    {
+      $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   assert.deepEqual(
     await service.updateSettings('owner-a', {

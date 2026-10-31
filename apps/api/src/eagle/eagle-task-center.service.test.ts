@@ -135,51 +135,57 @@ test('waiting reasons reflect policy, deployment, dependencies and model availab
     { reason: 'RETRY', expected: 'RETRY' },
   ];
   for (const item of cases) {
-    const service = new EagleTaskCenterService({
-      $queryRaw: async () => [{ ...row, reason: 'reason' in item ? item.reason : row.reason }],
-      eagleProcessingWorkerHeartbeat: {
-        findMany: async () =>
-          'workers' in item
-            ? item.workers
-            : [{ capabilities: 'capability' in item ? item.capability : capabilities }],
-      },
-      eagleProcessingSetting: {
-        findUnique: async () => ({
-          mode: 'mode' in item ? item.mode : 'ALWAYS',
-          nightStart: '23:00',
-          nightEnd: '06:00',
-        }),
-      },
-      eagleTaskPolicy: { findMany: async () => ('policy' in item ? [item.policy] : []) },
-    } as never);
+    const service = new EagleTaskCenterService(
+      {
+        $queryRaw: async () => [{ ...row, reason: 'reason' in item ? item.reason : row.reason }],
+        eagleProcessingWorkerHeartbeat: {
+          findMany: async () =>
+            'workers' in item
+              ? item.workers
+              : [{ capabilities: 'capability' in item ? item.capability : capabilities }],
+        },
+        eagleProcessingSetting: {
+          findUnique: async () => ({
+            mode: 'mode' in item ? item.mode : 'ALWAYS',
+            nightStart: '23:00',
+            nightEnd: '06:00',
+          }),
+        },
+        eagleTaskPolicy: { findMany: async () => ('policy' in item ? [item.policy] : []) },
+      } as never,
+      'MATERIAL',
+    );
     assert.equal((await service.overview('owner')).groups[0]?.waiting[0]?.reason, item.expected);
   }
 });
 
 test('overview merges steps and distinguishes completed work, failures and human decisions', async () => {
-  const service = new EagleTaskCenterService({
-    $queryRaw: async () => [
-      ...['QUEUED', 'QUEUED', 'RUNNING', 'FAILED', 'COMPLETED'].map((status) => ({
-        family: 'BROWSE',
-        step: 'GENERATE_RENDITIONS',
-        status,
-        reason: 'QUEUED',
-        count: 1n,
-        nextAt: null,
-      })),
-      {
-        family: 'APPROVALS',
-        step: 'APPROVALS',
-        status: 'APPROVAL',
-        reason: 'APPROVAL',
-        count: 2n,
-        nextAt: null,
-      },
-    ],
-    eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: null }] },
-    eagleProcessingSetting: { findUnique: async () => null },
-    eagleTaskPolicy: { findMany: async () => [] },
-  } as never);
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [
+        ...['QUEUED', 'QUEUED', 'RUNNING', 'FAILED', 'COMPLETED'].map((status) => ({
+          family: 'BROWSE',
+          step: 'GENERATE_RENDITIONS',
+          status,
+          reason: 'QUEUED',
+          count: 1n,
+          nextAt: null,
+        })),
+        {
+          family: 'APPROVALS',
+          step: 'APPROVALS',
+          status: 'APPROVAL',
+          reason: 'APPROVAL',
+          count: 2n,
+          nextAt: null,
+        },
+      ],
+      eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: null }] },
+      eagleProcessingSetting: { findUnique: async () => null },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'MATERIAL',
+  );
   const result = await service.overview('owner');
   const browse = result.groups.find((entry) => entry.id === 'BROWSE');
   assert.equal(browse?.queued, 2);
@@ -195,25 +201,28 @@ test('retry preserves saved indexing progress and only resets failed work in its
     target: string;
     input: { where: { status: string }; data: Record<string, unknown> };
   }> = [];
-  const service = new EagleTaskCenterService({
-    $transaction: async (action: (tx: unknown) => unknown) =>
-      action({
-        $queryRaw: async (query: { sql: string }) =>
-          query.sql.includes('pg_advisory') ? [] : [{ count: 2n }],
-        eagleSmartFolderSemanticSnapshot: {
-          updateMany: async (input: never) => {
-            writes.push({ target: 'folder', input });
-            return { count: 1 };
+  const service = new EagleTaskCenterService(
+    {
+      $transaction: async (action: (tx: unknown) => unknown) =>
+        action({
+          $queryRaw: async (query: { sql: string }) =>
+            query.sql.includes('pg_advisory') ? [] : [{ count: 2n }],
+          eagleSmartFolderSemanticSnapshot: {
+            updateMany: async (input: never) => {
+              writes.push({ target: 'folder', input });
+              return { count: 1 };
+            },
           },
-        },
-        eagleTagSemanticBuild: {
-          updateMany: async (input: never) => {
-            writes.push({ target: 'tag', input });
-            return { count: 1 };
+          eagleTagSemanticBuild: {
+            updateMany: async (input: never) => {
+              writes.push({ target: 'tag', input });
+              return { count: 1 };
+            },
           },
-        },
-      }),
-  } as never);
+        }),
+    } as never,
+    'MATERIAL',
+  );
   assert.deepEqual(await service.retry('owner', 'SMART_FOLDERS'), { retried: 1 });
   assert.deepEqual(await service.retry('owner', 'TAG_INDEX', true), { retried: 1 });
   for (const write of writes) {
@@ -238,22 +247,25 @@ test('schedule explanations use the actual intersection and deployment-specific 
     photoMap: true,
   };
   const overview = async (family: string, setting: unknown, capabilities: unknown) => {
-    const service = new EagleTaskCenterService({
-      $queryRaw: async () => [
-        {
-          family,
-          step: family,
-          version: 'v1',
-          status: 'QUEUED',
-          reason: 'QUEUED',
-          count: 1n,
-          nextAt: null,
-        },
-      ],
-      eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities }] },
-      eagleProcessingSetting: { findUnique: async () => setting },
-      eagleTaskPolicy: { findMany: async () => [] },
-    } as never);
+    const service = new EagleTaskCenterService(
+      {
+        $queryRaw: async () => [
+          {
+            family,
+            step: family,
+            version: 'v1',
+            status: 'QUEUED',
+            reason: 'QUEUED',
+            count: 1n,
+            nextAt: null,
+          },
+        ],
+        eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities }] },
+        eagleProcessingSetting: { findUnique: async () => setting },
+        eagleTaskPolicy: { findMany: async () => [] },
+      } as never,
+      'MATERIAL',
+    );
     return (await service.overview('owner')).groups[0]?.waiting[0];
   };
   const night = { mode: 'NIGHT', nightStart: '23:00', nightEnd: '06:00' };
@@ -272,59 +284,65 @@ test('schedule explanations use the actual intersection and deployment-specific 
 });
 
 test('indexes that only use saved vectors do not wait for the inference host', async () => {
-  const service = new EagleTaskCenterService({
-    $queryRaw: async () =>
-      ['TAG_INDEX', 'SMART_FOLDERS'].map((family) => ({
-        family,
-        step: family,
-        version: '',
-        status: 'QUEUED',
-        reason: 'QUEUED',
-        count: 1n,
-        nextAt: null,
-      })),
-    eagleProcessingWorkerHeartbeat: {
-      findMany: async () => [
-        {
-          capabilities: {
-            background: true,
-            jobKinds: null,
-            tagBuilds: true,
-            smartFolders: true,
-            embedding: 'OFFLINE',
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () =>
+        ['TAG_INDEX', 'SMART_FOLDERS'].map((family) => ({
+          family,
+          step: family,
+          version: '',
+          status: 'QUEUED',
+          reason: 'QUEUED',
+          count: 1n,
+          nextAt: null,
+        })),
+      eagleProcessingWorkerHeartbeat: {
+        findMany: async () => [
+          {
+            capabilities: {
+              background: true,
+              jobKinds: null,
+              tagBuilds: true,
+              smartFolders: true,
+              embedding: 'OFFLINE',
+            },
           },
-        },
-      ],
-    },
-    eagleProcessingSetting: {
-      findUnique: async () => ({ mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' }),
-    },
-    eagleTaskPolicy: { findMany: async () => [] },
-  } as never);
+        ],
+      },
+      eagleProcessingSetting: {
+        findUnique: async () => ({ mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' }),
+      },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'MATERIAL',
+  );
   const result = await service.overview('owner');
   for (const group of result.groups) assert.equal(group.waiting[0]?.reason, 'QUEUED');
 });
 
 test('disabled capability is reported even if every task is failed and has no wait bucket', async () => {
-  const service = new EagleTaskCenterService({
-    $queryRaw: async () => [
-      {
-        family: 'MEDIA',
-        step: 'EXTRACT_COLOR_PALETTE',
-        version: 'v1',
-        status: 'FAILED',
-        reason: 'QUEUED',
-        count: 6n,
-      },
-    ],
-    eagleProcessingWorkerHeartbeat: {
-      findMany: async () => [
-        { capabilities: { background: true, jobKinds: ['GENERATE_RENDITIONS'] } },
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [
+        {
+          family: 'MEDIA',
+          step: 'EXTRACT_COLOR_PALETTE',
+          version: 'v1',
+          status: 'FAILED',
+          reason: 'QUEUED',
+          count: 6n,
+        },
       ],
-    },
-    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
-    eagleTaskPolicy: { findMany: async () => [] },
-  } as never);
+      eagleProcessingWorkerHeartbeat: {
+        findMany: async () => [
+          { capabilities: { background: true, jobKinds: ['GENERATE_RENDITIONS'] } },
+        ],
+      },
+      eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'MATERIAL',
+  );
   assert.equal((await service.overview('owner')).groups[0]?.availability, 'DISABLED');
 });
 
@@ -335,14 +353,17 @@ test('pause needs no user priority, and historical priority cannot override auto
     0,
   );
   let write: { create: { priority: number }; update: { priority: number } } | undefined;
-  const service = new EagleTaskCenterService({
-    eagleTaskPolicy: {
-      upsert: async (input: typeof write) => {
-        write = input;
-        return {};
+  const service = new EagleTaskCenterService(
+    {
+      eagleTaskPolicy: {
+        upsert: async (input: typeof write) => {
+          write = input;
+          return {};
+        },
       },
-    },
-  } as never);
+    } as never,
+    'MATERIAL',
+  );
   await service.policy('owner', { family: 'EMBEDDING', paused: true, priority: 1 });
   assert.equal(write?.create.priority, 0);
   assert.equal(write?.update.priority, 0);
@@ -453,22 +474,25 @@ test('transition history is bounded, current-version and private/owner/mode scop
 });
 
 test('lost worker heartbeat is visible before long execution leases expire', async () => {
-  const service = new EagleTaskCenterService({
-    $queryRaw: async () => [
-      {
-        family: 'MEDIA',
-        step: 'GENERATE_RENDITIONS',
-        version: 'v1',
-        status: 'RUNNING',
-        reason: 'QUEUED',
-        count: 1n,
-        nextAt: null,
-      },
-    ],
-    eagleProcessingWorkerHeartbeat: { findMany: async () => [] },
-    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
-    eagleTaskPolicy: { findMany: async () => [] },
-  } as never);
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [
+        {
+          family: 'MEDIA',
+          step: 'GENERATE_RENDITIONS',
+          version: 'v1',
+          status: 'RUNNING',
+          reason: 'QUEUED',
+          count: 1n,
+          nextAt: null,
+        },
+      ],
+      eagleProcessingWorkerHeartbeat: { findMany: async () => [] },
+      eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'MATERIAL',
+  );
   const result = await service.overview('owner-a');
   assert.equal(result.groups[0]?.running, 1); // A lease is not silently erased.
   assert.equal(result.groups[0]?.presentation?.status, 'WAITING');
@@ -637,12 +661,15 @@ test('only admin task overview exposes sanitized machine capacity', async () => 
       },
     ],
   };
-  const service = new EagleTaskCenterService({
-    $queryRaw: async () => [],
-    eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: { compute } }] },
-    eagleProcessingSetting: { findUnique: async () => null },
-    eagleTaskPolicy: { findMany: async () => [] },
-  } as never);
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [],
+      eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: { compute } }] },
+      eagleProcessingSetting: { findUnique: async () => null },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'MATERIAL',
+  );
   assert.equal((await service.overview('owner', false)).compute, undefined);
   const admin = await service.overview('owner', false, 'ACTIVE', true);
   assert.equal(admin.compute?.nodes[0]?.name, 'Mac');

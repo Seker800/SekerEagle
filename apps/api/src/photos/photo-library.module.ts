@@ -25,8 +25,7 @@ import { EagleUploadController } from '../eagle/eagle-upload.controller';
 import { EagleVectorController } from '../eagle/eagle-vector.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
 import { EagleTaskCenterController } from '../eagle/eagle-task-center.controller';
-import { EAGLE_LIBRARY_PROVIDERS } from '../eagle/eagle.module';
-import { EagleMaintenanceService } from '../eagle/eagle-maintenance.service';
+import { libraryProviders } from '../eagle/library-capabilities';
 import type { Request, Response } from 'express';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
@@ -104,7 +103,7 @@ export class PhotoPrivacyVisibilityController {
     PhotoAgentService,
     PhotoRevisionObserver,
     { provide: LIBRARY_REVISION_OBSERVER, useExisting: PhotoRevisionObserver },
-    ...EAGLE_LIBRARY_PROVIDERS.filter((provider) => provider !== EagleMaintenanceService),
+    ...libraryProviders('PHOTO'),
     { provide: LIBRARY_MODE, useValue: 'PHOTO' },
   ],
 })

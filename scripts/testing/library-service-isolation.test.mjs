@@ -80,7 +80,7 @@ async function fixtures() {
     ownerId,
     material: await create('MATERIAL'),
     photo: await create('PHOTO'),
-    materials: new EagleService(prisma),
+    materials: new EagleService(prisma, undefined, 'MATERIAL'),
     photos: new EagleService(prisma, undefined, 'PHOTO'),
   };
 }
@@ -262,6 +262,7 @@ test('source changes during an existing editor upload roll back copy publication
         durationMs: null,
       }),
     },
+    'MATERIAL',
   );
   const session = await service.initiate(f.ownerId, {
     originalName: 'edited.png',
@@ -339,7 +340,7 @@ test('media denies wrong mode before accessing the object store', async () => {
     },
   };
   await assert.rejects(
-    () => new EagleMediaService(prisma, storage).getOriginal(f.ownerId, f.photo.id),
+    () => new EagleMediaService(prisma, storage, 'MATERIAL').getOriginal(f.ownerId, f.photo.id),
     NotFoundException,
   );
   await assert.rejects(
@@ -370,7 +371,7 @@ test('photo upload freezes mode, rejects old-route resume and deduplicates only 
     }),
   };
   const photos = new EagleUploadService(prisma, storage, capabilities, inspection, 'PHOTO');
-  const materials = new EagleUploadService(prisma, storage, capabilities, inspection);
+  const materials = new EagleUploadService(prisma, storage, capabilities, inspection, 'MATERIAL');
   const upload = await photos.initiate(f.ownerId, {
     originalName: 'photo.jpg',
     mimeType: 'image/jpeg',
@@ -1952,12 +1953,16 @@ test('search keyset continues after the anchor is deleted and newer photos are i
       }),
     );
   }
-  const search = new EagleImageSearchService(prisma, {
-    embedText: async () => {
-      throw new Error('offline test');
+  const search = new EagleImageSearchService(
+    prisma,
+    {
+      embedText: async () => {
+        throw new Error('offline test');
+      },
     },
-  });
-  const service = new EagleService(prisma, search);
+    'MATERIAL',
+  );
+  const service = new EagleService(prisma, search, 'MATERIAL');
   const first = await service.listAssets(f.ownerId, { limit: 1, search: 'sample' });
   assert.equal(first.items[0].id, f.material.id);
   assert.ok(first.nextCursor);
@@ -2006,7 +2011,7 @@ test('reconcile reuses pruned durable outputs and repairs completed jobs with mi
       status: 'READY',
     })),
   });
-  const service = new EagleProcessingService(prisma);
+  const service = new EagleProcessingService(prisma, 'MATERIAL');
   await service.reconcile(f.ownerId);
   assert.equal(
     await prisma.eagleAssetProcessingJob.count({

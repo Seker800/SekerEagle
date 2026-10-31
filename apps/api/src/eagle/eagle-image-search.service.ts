@@ -1,5 +1,5 @@
 import { literalSearchPattern } from './eagle-search-predicate';
-import { Injectable, Inject, Optional } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
@@ -28,7 +28,7 @@ export class EagleImageSearchService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddings: EagleEmbeddingClient,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
   prepare(ownerId: string, query: string): Promise<ImageSearchContext> {
     const spaceId = process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1';

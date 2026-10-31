@@ -29,6 +29,7 @@ test('media lookup stays owner-scoped, hides private assets and remains availabl
         };
       },
     } as never,
+    'MATERIAL',
   );
 
   const abort = new AbortController();
@@ -69,6 +70,7 @@ test('media lookup permits private assets only during an active visibility windo
       },
     } as never,
     { getObject: async () => ({ Body: {}, ContentLength: 3 }) } as never,
+    'MATERIAL',
   );
 
   await service.getOriginal('owner-a', 'asset-1', undefined, undefined, true);
@@ -97,6 +99,7 @@ test('conditional media reads preserve an object-storage not-modified response',
         });
       },
     } as never,
+    'MATERIAL',
   );
 
   const result = await service.getRendition('owner-a', 'asset-1', 'rendition-1', 'etag-1');
@@ -123,6 +126,7 @@ test('derived-media persistence eligibility comes from the actual asset, not ses
     {
       getObject: async () => ({ Body: {}, ContentType: 'image/webp', ContentLength: 3 }),
     } as never,
+    'MATERIAL',
   );
 
   const result = await service.getRendition('owner-a', 'asset-1', 'rendition-1', undefined, true);
@@ -150,6 +154,7 @@ test('old rendition revisions are hidden before object storage access', async ()
         return { Body: {} };
       },
     } as never,
+    'MATERIAL',
   );
 
   await assert.rejects(service.getRendition('owner-a', 'asset-1', 'old-rendition'), /不存在/u);
@@ -182,6 +187,7 @@ test('pyramid descriptor is owner-scoped and only exposes the current ready revi
       },
     } as never,
     {} as never,
+    'MATERIAL',
   );
 
   assert.deepEqual(await service.getPyramidDescriptor('owner-a', 'asset-1'), {
@@ -245,6 +251,7 @@ test('pyramid tiles validate coordinates and remain owner-scoped', async () => {
         return { Body: {}, ContentType: 'image/webp', ContentLength: 10 };
       },
     } as never,
+    'MATERIAL',
   );
 
   await service.getPyramidTile('owner-a', 'asset-1', 'pyramid-1', 13, 15, 11);
@@ -331,6 +338,7 @@ test('untrusted storage MIME cannot override the inspected database MIME', async
       },
     } as never,
     { getObject: async () => ({ Body: {}, ContentType: 'text/html' }) } as never,
+    'MATERIAL',
   );
   assert.equal((await service.getOriginal('owner', 'asset')).mimeType, 'image/jpeg');
 });

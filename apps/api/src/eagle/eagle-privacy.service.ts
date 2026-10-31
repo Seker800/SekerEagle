@@ -1,6 +1,6 @@
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
-import { ConflictException, Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface EaglePrivacySettings {
@@ -14,7 +14,7 @@ import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/librar
 export class EaglePrivacyService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   async getSettings(ownerId: string): Promise<EaglePrivacySettings> {

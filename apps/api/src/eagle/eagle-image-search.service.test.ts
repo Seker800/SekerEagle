@@ -24,6 +24,7 @@ test('image search caches/coalesces text vectors and scopes them by owner and mo
         };
       },
     } as never,
+    'MATERIAL',
   );
   await Promise.all([service.prepare('one', '猫'), service.prepare('one', '猫')]);
   assert.equal(calls, 1);
@@ -40,6 +41,7 @@ test('mismatched image space and unavailable model degrade explicitly without re
         throw new Error('offline');
       },
     } as never,
+    'MATERIAL',
   );
   assert.equal((await service.prepare('one', '猫')).status, 'UNAVAILABLE');
   assert.equal(calls, 0);
@@ -56,6 +58,7 @@ test('ranking queries current image embeddings and never traverses AI tag links'
       },
     } as never,
     {} as never,
+    'MATERIAL',
   );
   const result = await service.rankPage(
     'owner',
@@ -120,6 +123,7 @@ test('explicit search date order uses date and ID for both ORDER BY and continua
         },
       } as never,
       {} as never,
+      'MATERIAL',
     );
     await service.rankPage(
       'owner',
@@ -192,6 +196,7 @@ test('date search crosses nonmatching windows without truncating sparse results 
       },
     } as never,
     {} as never,
+    'MATERIAL',
   );
   assert.deepEqual(
     await service.rankPage(
@@ -223,6 +228,7 @@ test('incompatible vector spaces never invoke inference or masquerade as semanti
     const service = new EagleImageSearchService(
       { eagleEmbeddingSpace: { findUnique: async () => incompatible } } as never,
       { embedText: async () => assert.fail('incompatible space invoked inference') } as never,
+      'MATERIAL',
     );
     assert.equal((await service.prepare('owner', '猫')).status, 'UNAVAILABLE');
   }
@@ -238,6 +244,7 @@ test('offline inference is not cached and a healthy retry can return real semant
         return { embedding: [1, 0], revision: space.revision };
       },
     } as never,
+    'MATERIAL',
   );
   assert.equal((await service.prepare('owner', '猫')).status, 'UNAVAILABLE');
   assert.equal((await service.prepare('owner', '猫')).status, 'READY');
@@ -296,6 +303,7 @@ test('literal name and tag matching uses indexable predicates without making per
       },
     } as never,
     {} as never,
+    'MATERIAL',
   );
   await service.rankPage(
     'owner',

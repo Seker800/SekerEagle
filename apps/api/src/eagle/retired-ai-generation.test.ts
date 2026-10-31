@@ -25,16 +25,19 @@ test('neither library registers retired generation routes or accepts its task co
 });
 
 test('legacy per-job retry returns 404 without changing any job or asset', async () => {
-  const service = new EagleProcessingService({
-    $transaction: async (run: (tx: unknown) => Promise<unknown>) =>
-      run({
-        eagleAssetProcessingJob: {
-          findFirst: async () => ({ id: 'retired', kind: 'GENERATE_AI_TAGS' }),
-          updateMany: async () => {
-            throw new Error('Must not revive retired jobs');
+  const service = new EagleProcessingService(
+    {
+      $transaction: async (run: (tx: unknown) => Promise<unknown>) =>
+        run({
+          eagleAssetProcessingJob: {
+            findFirst: async () => ({ id: 'retired', kind: 'GENERATE_AI_TAGS' }),
+            updateMany: async () => {
+              throw new Error('Must not revive retired jobs');
+            },
           },
-        },
-      }),
-  } as never);
+        }),
+    } as never,
+    'MATERIAL',
+  );
   await assert.rejects(service.retry('owner', 'retired'), { status: 404 });
 });

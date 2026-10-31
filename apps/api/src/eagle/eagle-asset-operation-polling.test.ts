@@ -23,6 +23,7 @@ test('idle operation lanes avoid claim transactions when unlocked probes are emp
     db as never,
     undefined as never,
     undefined as never,
+    'MATERIAL',
   );
   service.startExecutor();
   try {
@@ -72,6 +73,7 @@ test('accepted and retried commands wake the local processor only after commit',
     db as never,
     undefined as never,
     undefined as never,
+    'MATERIAL',
   );
   service.tick = async () => {
     assert.ok(committed);

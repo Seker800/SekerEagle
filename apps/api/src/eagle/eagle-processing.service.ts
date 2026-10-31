@@ -2,7 +2,7 @@ import { mediaBlocksAssetReadySql } from '@sekereagle/library-persistence';
 import { mediaRequeueData, mediaTaskBlocksAssetReady } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
-import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
@@ -17,7 +17,7 @@ import { readMediaProcessingFacts } from './media-processing-facts';
 export class EagleProcessingService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   async summary(ownerId: string, includePrivate = false) {

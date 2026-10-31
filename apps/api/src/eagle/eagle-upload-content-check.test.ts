@@ -54,6 +54,7 @@ test('absent, foreign, private or recycled content has the same preflight respon
     {} as never,
     {} as never,
     {} as never,
+    'MATERIAL',
   );
   assert.deepEqual(
     await service.checkContent('owner', { contentSha256: 'b'.repeat(64), size: 10 }),

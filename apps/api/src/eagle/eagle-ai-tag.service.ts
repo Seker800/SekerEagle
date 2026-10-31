@@ -1,6 +1,6 @@
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
-import { Injectable, Optional, Inject } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
@@ -20,7 +20,7 @@ export class EagleAiTagService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddings: EagleEmbeddingClient,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   async resolveSearchTags(ownerId: string, query: string): Promise<EagleAiTagSearchMatch[]> {

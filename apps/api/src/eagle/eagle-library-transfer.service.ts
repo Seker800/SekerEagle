@@ -18,7 +18,6 @@ import {
   ConflictException,
   Injectable,
   Inject,
-  Optional,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, type LibraryMode, type EagleLibraryTransfer } from '@prisma/client';
@@ -70,7 +69,7 @@ export class EagleLibraryTransferService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly sourceMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly sourceMode: LibraryMode,
   ) {}
   private libraryModeWhere(ownerId: string, ids: string[], includePrivate: boolean) {
     return {

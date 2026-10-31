@@ -1,65 +1,18 @@
-import { EagleDuplicateService } from './eagle-duplicates.service';
-import { EagleAssetOperationService } from './eagle-asset-operations.service';
-import { EagleLibraryTransferService } from './eagle-library-transfer.service';
-import { EagleImageSearchService } from './eagle-image-search.service';
-import { Module, type Provider } from '@nestjs/common';
+import { libraryProviders } from './library-capabilities';
+import { Module } from '@nestjs/common';
 import { LIBRARY_MODE } from './library-mode';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EagleController } from './eagle.controller';
 import { EagleBrowserCaptureController } from './eagle-browser-capture.controller';
-import { EagleAiTagService } from './eagle-ai-tag.service';
-import { EagleEmbeddingClient } from './eagle-embedding-client';
-import { EagleBrowserCaptureService } from './eagle-browser-capture.service';
 import { EagleImportController } from './eagle-import.controller';
-import { EagleImportService } from './eagle-import.service';
-import { EagleMediaService } from './eagle-media.service';
-import { EagleMaintenanceService } from './eagle-maintenance.service';
-import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleProcessingController } from './eagle-processing.controller';
-import { EagleProcessingService } from './eagle-processing.service';
 import { EagleTaskCenterController } from './eagle-task-center.controller';
-import { EagleTaskCenterService } from './eagle-task-center.service';
 import { EagleVectorController } from './eagle-vector.controller';
-import { EagleVectorService } from './eagle-vector.service';
 import { EagleService } from './eagle.service';
-import { EaglePrivacyService } from './eagle-privacy.service';
 import { EagleUploadController } from './eagle-upload.controller';
-import { EagleUploadService } from './eagle-upload.service';
-import { EagleUploadRecoveryService } from './eagle-upload-recovery.service';
-import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
-import { PrismaSekerEagleIngestionAdapter } from './adapters/prisma/seker-eagle-ingestion.adapter';
-import { PrismaEagleImportsRepository } from './import/adapters/prisma/eagle-app-import.repository';
-import { EAGLE_IMPORTS_REPOSITORY } from './import/eagle-app-import.repository';
-import { EagleImportsService } from './import/eagle-app-import.service';
-import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
 
-export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
-  EagleAssetOperationService,
-  EagleDuplicateService,
-  EagleLibraryTransferService,
-  EagleService,
-  EagleImageSearchService,
-  EaglePrivacyService,
-  EagleAiTagService,
-  EagleEmbeddingClient,
-  EagleBrowserCaptureService,
-  EagleMediaService,
-  EagleMaintenanceService,
-  EagleMediaCapabilityService,
-  EagleUploadService,
-  EagleUploadRecoveryService,
-  EagleUploadInspectionService,
-  EagleImportService,
-  EagleImportsService,
-  PrismaEagleImportsRepository,
-  PrismaSekerEagleIngestionAdapter,
-  { provide: EAGLE_IMPORTS_REPOSITORY, useExisting: PrismaEagleImportsRepository },
-  { provide: SEKER_EAGLE_INGESTION_PORT, useExisting: PrismaSekerEagleIngestionAdapter },
-  EagleProcessingService,
-  EagleTaskCenterService,
-  EagleVectorService,
-];
+export { EAGLE_LIBRARY_CAPABILITIES, EAGLE_LIBRARY_PROVIDERS } from './library-capabilities';
 
 @Module({
   imports: [AuthModule, StorageModule],
@@ -72,7 +25,7 @@ export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
     EagleTaskCenterController,
     EagleVectorController,
   ],
-  providers: [...EAGLE_LIBRARY_PROVIDERS, { provide: LIBRARY_MODE, useValue: 'MATERIAL' }],
+  providers: [...libraryProviders('MATERIAL'), { provide: LIBRARY_MODE, useValue: 'MATERIAL' }],
   exports: [EagleService],
 })
 export class EagleModule {}

@@ -78,7 +78,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly transfers: EagleLibraryTransferService,
     private readonly eagle: EagleService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
     @Optional() private readonly duplicates?: EagleDuplicateService,
   ) {}
   get mode() {

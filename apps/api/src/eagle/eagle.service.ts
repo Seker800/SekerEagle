@@ -155,8 +155,8 @@ const BATCH_TAG_WRITE_ASSET_CHUNK_SIZE = 100;
 export class EagleService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly imageSearch?: EagleImageSearchService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Optional() private readonly imageSearch: EagleImageSearchService | undefined,
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   createEditRender(

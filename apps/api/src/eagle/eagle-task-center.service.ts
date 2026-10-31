@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Optional,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import {
   mediaTaskFamilySql,
@@ -53,7 +47,7 @@ const counts = () => ({ queued: 0, running: 0, failed: 0, completed: 0, approval
 export class EagleTaskCenterService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   async policy(ownerId: string, input: { family: TaskFamily; paused: boolean; priority?: number }) {

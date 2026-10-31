@@ -29,7 +29,7 @@ try {
   `);
   await prisma.$executeRaw`ANALYZE "EagleAsset"`;
   await prisma.$executeRaw`ANALYZE "EaglePhotoMetadata"`;
-  const materials = new EagleService(prisma),
+  const materials = new EagleService(prisma, undefined, 'MATERIAL'),
     photos = new EagleService(prisma, undefined, 'PHOTO');
   assert.equal(await prisma.eagleAsset.count({ where: { ownerId, libraryMode: 'PHOTO' } }), 100000);
   assert.equal(

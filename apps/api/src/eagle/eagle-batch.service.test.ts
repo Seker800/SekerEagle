@@ -20,7 +20,7 @@ test('batch asset update rejects a stale member before mutating any asset', asyn
   const prisma = {
     $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
   };
-  const service = new EagleService(prisma as never);
+  const service = new EagleService(prisma as never, undefined, 'MATERIAL');
 
   await assert.rejects(
     service.batchUpdate('owner-a', {
@@ -44,7 +44,7 @@ test('batch tag changes fail closed before writes when any asset belongs elsewhe
       transactions += 1;
     },
   };
-  const service = new EagleService(prisma as never);
+  const service = new EagleService(prisma as never, undefined, 'MATERIAL');
 
   await assert.rejects(
     service.batchChangeManualTags('owner-a', {
@@ -99,7 +99,7 @@ test('batch clear removes every manual tag and distance for owned assets without
     eagleManualTag: { findMany: async () => [] },
     $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
   };
-  const service = new EagleService(prisma as never);
+  const service = new EagleService(prisma as never, undefined, 'MATERIAL');
 
   const result = await service.batchChangeManualTags('owner-a', {
     assetIds: ['asset-a', 'asset-b'],
@@ -151,11 +151,15 @@ test('batch tag removal refreshes only assets that end without any manual tag', 
       return [{ scanned: 1, matched: 1 }];
     },
   };
-  const service = new EagleService({
-    eagleAsset: { findMany: async () => [{ id: 'asset-a' }, { id: 'asset-b' }] },
-    eagleManualTag: { findMany: async () => [{ id: 'tag-a' }] },
-    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
-  } as never);
+  const service = new EagleService(
+    {
+      eagleAsset: { findMany: async () => [{ id: 'asset-a' }, { id: 'asset-b' }] },
+      eagleManualTag: { findMany: async () => [{ id: 'tag-a' }] },
+      $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.batchChangeManualTags('owner-a', {
     assetIds: ['asset-a', 'asset-b'],
@@ -201,7 +205,7 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
     eagleManualTag: { findMany: async () => tagIds.map((id) => ({ id })) },
     $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
   };
-  const service = new EagleService(prisma as never);
+  const service = new EagleService(prisma as never, undefined, 'MATERIAL');
 
   await service.batchChangeManualTags('owner-a', {
     assetIds,
@@ -240,15 +244,19 @@ test('replacing tags can move a locked asset into privacy without returning its 
     eagleTagMemberDistance: { deleteMany: async () => ({ count: 0 }) },
     $executeRaw: async () => 0,
   };
-  const service = new EagleService({
-    eagleAsset: {
-      findFirst: async () => {
-        detailReads += 1;
-        return null;
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findFirst: async () => {
+          detailReads += 1;
+          return null;
+        },
       },
-    },
-    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
-  } as never);
+      $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   assert.deepEqual(await service.replaceAssetTags('owner-a', 'asset-a', ['tag-private']), {
     affectedAssetCount: 1,
@@ -274,10 +282,14 @@ test('a tag used as a privacy rule cannot be deleted before the rule is removed 
     },
     eagleAsset: { updateMany: async () => ({ count: 0 }) },
   };
-  const service = new EagleService({
-    eagleManualTag: { findFirst: async () => ({ id: 'tag-private' }) },
-    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
-  } as never);
+  const service = new EagleService(
+    {
+      eagleManualTag: { findFirst: async () => ({ id: 'tag-private' }) },
+      $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await assert.rejects(service.deleteManualTag('owner-a', 'tag-private'), ConflictException);
   assert.equal(deleted, false);
@@ -285,24 +297,28 @@ test('a tag used as a privacy rule cannot be deleted before the rule is removed 
 
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {
   let rejectionWasInsideTransaction = false;
-  const service = new EagleService({
-    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => {
-      try {
-        return await callback({
-          eagleAsset: {
-            findMany: async () => [
-              { id: 'asset-1', mediaRevision: 1 },
-              { id: 'asset-2', mediaRevision: 1 },
-            ],
-            updateMany: async () => ({ count: 1 }),
-          },
-        });
-      } catch (error) {
-        rejectionWasInsideTransaction = true;
-        throw error;
-      }
-    },
-  } as never);
+  const service = new EagleService(
+    {
+      $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => {
+        try {
+          return await callback({
+            eagleAsset: {
+              findMany: async () => [
+                { id: 'asset-1', mediaRevision: 1 },
+                { id: 'asset-2', mediaRevision: 1 },
+              ],
+              updateMany: async () => ({ count: 1 }),
+            },
+          });
+        } catch (error) {
+          rejectionWasInsideTransaction = true;
+          throw error;
+        }
+      },
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await assert.rejects(
     service.setTrash('owner-1', ['asset-1', 'asset-2'], false),
@@ -327,9 +343,13 @@ test('deleting a non-private tag does not recalculate unrelated library privacy'
       },
     },
   };
-  const service = new EagleService({
-    $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx),
-  } as never);
+  const service = new EagleService(
+    {
+      $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx),
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
   assert.deepEqual(await service.deleteManualTag('owner', 'public-tag'), {
     deletedId: 'public-tag',
   });

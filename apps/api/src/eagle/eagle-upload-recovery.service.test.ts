@@ -30,6 +30,7 @@ test('recovery retries every recoverable upload session without stopping on one 
       markUploadFailed: async () => undefined,
     } as never,
     {} as never,
+    'MATERIAL',
   );
 
   await recovery.recoverPendingFinalizations();

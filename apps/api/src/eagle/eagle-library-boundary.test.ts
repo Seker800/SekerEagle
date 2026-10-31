@@ -17,7 +17,7 @@ test('legacy asset queries are explicitly material scoped', async () => {
       },
     },
   };
-  await new EagleService(prisma as never).listAssets(ownerId, { limit: 50 });
+  await new EagleService(prisma as never, undefined, 'MATERIAL').listAssets(ownerId, { limit: 50 });
   assert.equal(where?.libraryMode, 'MATERIAL');
 });
 
@@ -50,7 +50,11 @@ test('old media route cannot fetch a photo even when owner matches', async () =>
     },
   };
   await assert.rejects(
-    () => new EagleMediaService(prisma as never, storage as never).getOriginal(ownerId, 'photo-id'),
+    () =>
+      new EagleMediaService(prisma as never, storage as never, 'MATERIAL').getOriginal(
+        ownerId,
+        'photo-id',
+      ),
     NotFoundException,
   );
   assert.equal(reads, 0);
@@ -99,7 +103,7 @@ test('upload creation freezes the target library on the session', async () => {
 });
 
 test('material counts reject photo rules before database access', async () => {
-  const service = new EagleService({} as never);
+  const service = new EagleService({} as never, undefined, 'MATERIAL');
   const query = {
     version: 2,
     conditions: [

@@ -6,20 +6,23 @@ import { EagleVectorService } from './eagle-vector.service';
 
 test('summary counts only suggestions that can appear in recommendation review', async () => {
   let pendingSuggestionQuery: Record<string, unknown> | undefined;
-  const service = new EagleVectorService({
-    eagleAsset: { count: async () => 0 },
-    eagleAssetEmbedding: { count: async () => 0 },
-    eagleManualTagSemanticConfig: { count: async () => 0 },
-    eagleVectorTagSuggestion: {
-      count: async (input: Record<string, unknown>) => {
-        pendingSuggestionQuery = input;
-        return 0;
+  const service = new EagleVectorService(
+    {
+      eagleAsset: { count: async () => 0 },
+      eagleAssetEmbedding: { count: async () => 0 },
+      eagleManualTagSemanticConfig: { count: async () => 0 },
+      eagleVectorTagSuggestion: {
+        count: async (input: Record<string, unknown>) => {
+          pendingSuggestionQuery = input;
+          return 0;
+        },
       },
-    },
-    eagleAssetProcessingJob: { groupBy: async () => [] },
-    eagleProcessingSetting: { findUnique: async () => null },
-    $queryRaw: async () => [{ count: 0 }],
-  } as never);
+      eagleAssetProcessingJob: { groupBy: async () => [] },
+      eagleProcessingSetting: { findUnique: async () => null },
+      $queryRaw: async () => [{ count: 0 }],
+    } as never,
+    'MATERIAL',
+  );
 
   await service.summary('owner-1', false);
 
@@ -35,14 +38,17 @@ test('summary counts only suggestions that can appear in recommendation review',
 
 test('tag semantics defaults to enabled tags and search is bounded to disabled candidates', async () => {
   const queries: Array<Record<string, unknown>> = [];
-  const service = new EagleVectorService({
-    eagleManualTag: {
-      findMany: async (input: Record<string, unknown>) => {
-        queries.push(input);
-        return [];
+  const service = new EagleVectorService(
+    {
+      eagleManualTag: {
+        findMany: async (input: Record<string, unknown>) => {
+          queries.push(input);
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    'MATERIAL',
+  );
 
   await service.listTagSemantics('owner-1');
   await service.listTagSemantics('owner-1', ' 汽车 ');
@@ -87,10 +93,13 @@ test('disabling recommendation invalidates only the owner tag pending suggestion
       },
     },
   };
-  const service = new EagleVectorService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
-      work(transaction),
-  } as never);
+  const service = new EagleVectorService(
+    {
+      $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+        work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.setRecommendationEnabled('owner-1', 'tag-1', false);
 
@@ -122,21 +131,24 @@ test('disabling recommendation invalidates only the owner tag pending suggestion
 });
 
 test('requesting a tag rebuild remains opt-in and enqueues one owner-scoped build', async () => {
-  const service = new EagleVectorService({
-    eagleManualTagSemanticConfig: {
-      findUnique: async () => ({ recommendationEnabled: true }),
-    },
-    eagleManualTag: {
-      findFirst: async () => ({ id: 'tag-1', _count: { assetLinks: 4 } }),
-    },
-    eagleTagSemanticBuild: {
-      findFirst: async () => null,
-      create: async ({ data }: { data: Record<string, unknown> }) => ({
-        id: 'build-1',
-        ...data,
-      }),
-    },
-  } as never);
+  const service = new EagleVectorService(
+    {
+      eagleManualTagSemanticConfig: {
+        findUnique: async () => ({ recommendationEnabled: true }),
+      },
+      eagleManualTag: {
+        findFirst: async () => ({ id: 'tag-1', _count: { assetLinks: 4 } }),
+      },
+      eagleTagSemanticBuild: {
+        findFirst: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => ({
+          id: 'build-1',
+          ...data,
+        }),
+      },
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.requestTagRebuild('owner-1', 'tag-1');
   assert.equal(result.status, 'PENDING');
@@ -146,41 +158,44 @@ test('requesting a tag rebuild remains opt-in and enqueues one owner-scoped buil
 test('suggestion review listing does not load representative assets that the review UI no longer uses', async () => {
   let representativeQueryCount = 0;
   let suggestionQuery: Record<string, unknown> | undefined;
-  const service = new EagleVectorService({
-    eagleVectorTagSuggestion: {
-      findMany: async (input: Record<string, unknown>) => {
-        suggestionQuery = input;
-        return [
-          {
-            id: 'suggestion-1',
-            snapshotId: 'snapshot-1',
-            prototypeRank: 0,
-            score: 0.95,
-            suggestedTag: { id: 'tag-1', name: '汽车', color: null },
-            asset: {
-              id: 'asset-1',
-              displayName: 'car.jpg',
-              width: 800,
-              height: 600,
-              renditions: [],
+  const service = new EagleVectorService(
+    {
+      eagleVectorTagSuggestion: {
+        findMany: async (input: Record<string, unknown>) => {
+          suggestionQuery = input;
+          return [
+            {
+              id: 'suggestion-1',
+              snapshotId: 'snapshot-1',
+              prototypeRank: 0,
+              score: 0.95,
+              suggestedTag: { id: 'tag-1', name: '汽车', color: null },
+              asset: {
+                id: 'asset-1',
+                displayName: 'car.jpg',
+                width: 800,
+                height: 600,
+                renditions: [],
+              },
             },
-          },
-        ];
+          ];
+        },
       },
-    },
-    eagleTagPrototype: {
-      findMany: async () => {
-        representativeQueryCount += 1;
-        return [];
+      eagleTagPrototype: {
+        findMany: async () => {
+          representativeQueryCount += 1;
+          return [];
+        },
       },
-    },
-    eagleAsset: {
-      findMany: async () => {
-        representativeQueryCount += 1;
-        return [];
+      eagleAsset: {
+        findMany: async () => {
+          representativeQueryCount += 1;
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.listSuggestions('owner-1', {
     limit: 40,
@@ -214,14 +229,17 @@ test('suggestion review listing does not load representative assets that the rev
 
 test('unclassified assets include previews for the same large-image experience', async () => {
   let assetQuery: Record<string, unknown> | undefined;
-  const service = new EagleVectorService({
-    eagleAsset: {
-      findMany: async (input: Record<string, unknown>) => {
-        assetQuery = input;
-        return [];
+  const service = new EagleVectorService(
+    {
+      eagleAsset: {
+        findMany: async (input: Record<string, unknown>) => {
+          assetQuery = input;
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    'MATERIAL',
+  );
 
   await service.listUnclassified('owner-1', { limit: 40 }, false);
 
@@ -248,17 +266,20 @@ test('unclassified assets include previews for the same large-image experience',
 
 test('distance inspection loads an owner-visible thumbnail for visual classification', async () => {
   let distanceQuery: Record<string, unknown> | undefined;
-  const service = new EagleVectorService({
-    eagleManualTag: {
-      findFirst: async () => ({ semanticConfig: { currentSnapshotId: 'snapshot-1' } }),
-    },
-    eagleTagMemberDistance: {
-      findMany: async (input: Record<string, unknown>) => {
-        distanceQuery = input;
-        return [];
+  const service = new EagleVectorService(
+    {
+      eagleManualTag: {
+        findFirst: async () => ({ semanticConfig: { currentSnapshotId: 'snapshot-1' } }),
       },
-    },
-  } as never);
+      eagleTagMemberDistance: {
+        findMany: async (input: Record<string, unknown>) => {
+          distanceQuery = input;
+          return [];
+        },
+      },
+    } as never,
+    'MATERIAL',
+  );
 
   await service.listTagDistanceAssets('owner-1', 'tag-1', { limit: 40, direction: 'DESC' }, false);
 
@@ -290,17 +311,20 @@ test('distance inspection loads an owner-visible thumbnail for visual classifica
 
 test('distance inspection defaults to lowest similarity first across cursor pages', async () => {
   const queries: Array<Record<string, unknown>> = [];
-  const service = new EagleVectorService({
-    eagleManualTag: {
-      findFirst: async () => ({ semanticConfig: { currentSnapshotId: 'snapshot-1' } }),
-    },
-    eagleTagMemberDistance: {
-      findMany: async (input: Record<string, unknown>) => {
-        queries.push(input);
-        return [];
+  const service = new EagleVectorService(
+    {
+      eagleManualTag: {
+        findFirst: async () => ({ semanticConfig: { currentSnapshotId: 'snapshot-1' } }),
       },
-    },
-  } as never);
+      eagleTagMemberDistance: {
+        findMany: async (input: Record<string, unknown>) => {
+          queries.push(input);
+          return [];
+        },
+      },
+    } as never,
+    'MATERIAL',
+  );
 
   const cursor = Buffer.from(JSON.stringify({ distance: 0.42, assetId: 'asset-2' })).toString(
     'base64url',
@@ -359,10 +383,13 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
       },
     },
   };
-  const service = new EagleVectorService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
-      work(transaction),
-  } as never);
+  const service = new EagleVectorService(
+    {
+      $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+        work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.reviewSuggestion('owner-1', 'suggestion-1', 'ACCEPT');
 
@@ -412,10 +439,13 @@ test('cross-owner suggestion review returns 404 without writes', async () => {
     eagleVectorTagSuggestion: { findFirst: async () => null },
     eagleAssetManualTag: { upsert: async () => (wrote = true) },
   };
-  const service = new EagleVectorService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
-      work(transaction),
-  } as never);
+  const service = new EagleVectorService(
+    {
+      $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+        work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   await assert.rejects(
     () => service.reviewSuggestion('owner-a', 'other-owner-suggestion', 'ACCEPT'),
@@ -433,10 +463,13 @@ test('missing embedding scan repairs drift and bulk-enqueues every owner-scoped 
       return call++ === 0 ? 2 : 67_000;
     },
   };
-  const service = new EagleVectorService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
-      work(transaction),
-  } as never);
+  const service = new EagleVectorService(
+    {
+      $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+        work(transaction),
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.scanMissingEmbeddings('owner-1');
 
@@ -450,12 +483,15 @@ test('missing embedding scan repairs drift and bulk-enqueues every owner-scoped 
 
 test('unclassified suggestion scan reuses ready embeddings without enqueueing embedding work', async () => {
   const statements: unknown[] = [];
-  const service = new EagleVectorService({
-    $queryRaw: async (statement: unknown) => {
-      statements.push(statement);
-      return [{ scanned: 42, matched: 9 }];
-    },
-  } as never);
+  const service = new EagleVectorService(
+    {
+      $queryRaw: async (statement: unknown) => {
+        statements.push(statement);
+        return [{ scanned: 42, matched: 9 }];
+      },
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.scanUnclassifiedSuggestions('owner-1', false);
 
@@ -504,15 +540,18 @@ test('vector summary recognizes a compatible coordinator and its offline state',
       fleet: { revision: 1, nodes: [] },
     }),
   );
-  const service = new EagleVectorService({
-    eagleAsset: { count: async () => 0 },
-    eagleAssetEmbedding: { count: async () => 0 },
-    eagleManualTagSemanticConfig: { count: async () => 0 },
-    eagleVectorTagSuggestion: { count: async () => 0 },
-    eagleAssetProcessingJob: { groupBy: async () => [] },
-    eagleProcessingSetting: { findUnique: async () => null },
-    $queryRaw: async () => [{ count: 0 }],
-  } as never);
+  const service = new EagleVectorService(
+    {
+      eagleAsset: { count: async () => 0 },
+      eagleAssetEmbedding: { count: async () => 0 },
+      eagleManualTagSemanticConfig: { count: async () => 0 },
+      eagleVectorTagSuggestion: { count: async () => 0 },
+      eagleAssetProcessingJob: { groupBy: async () => [] },
+      eagleProcessingSetting: { findUnique: async () => null },
+      $queryRaw: async () => [{ count: 0 }],
+    } as never,
+    'MATERIAL',
+  );
   assert.equal((await service.summary('owner', false)).host.status, 'ONLINE');
   status = 'offline';
   assert.equal((await service.summary('owner', false)).host.status, 'OFFLINE');

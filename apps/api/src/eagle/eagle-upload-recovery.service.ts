@@ -5,7 +5,6 @@ import {
   Logger,
   type OnModuleDestroy,
   type OnModuleInit,
-  Optional,
   Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -27,7 +26,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
     private readonly uploads: EagleUploadService,
     private readonly imports: EagleImportsService,
     private readonly storage: ObjectStorageService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   onModuleInit(): void {

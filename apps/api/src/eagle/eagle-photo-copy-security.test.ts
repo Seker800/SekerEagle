@@ -59,6 +59,7 @@ test('stale edited-source versions cannot initiate a new copy', async () => {
     { createMultipartUpload: async () => 'multipart' } as never,
     { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never,
     {} as never,
+    'MATERIAL',
   );
   await assert.rejects(
     () =>
@@ -109,6 +110,7 @@ test('edited-photo copies derive every ownership field from the authenticated su
     } as never,
     { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never,
     {} as never,
+    'MATERIAL',
   );
   await service.initiate('5a1fd7d1-fd57-4e42-83f7-55425ca8704a', input as InitiateEagleUploadDto);
   assert.equal(written.uploaderId, '5a1fd7d1-fd57-4e42-83f7-55425ca8704a');
@@ -137,6 +139,7 @@ test('ordinary uploads retain the previous skip-duplicate behavior', async () =>
     { createMultipartUpload: async () => 'multipart' } as never,
     { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never,
     {} as never,
+    'MATERIAL',
   );
   await service.initiate('5a1fd7d1-fd57-4e42-83f7-55425ca8704a', {
     originalName: input.originalName,

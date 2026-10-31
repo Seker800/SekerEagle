@@ -31,6 +31,7 @@ test('lists uploaded multipart parts for resumable clients', async () => {
     storage as never,
     {} as never,
     {} as never,
+    'MATERIAL',
   );
 
   assert.deepEqual(await service.listParts(ownerId, sessionId), {
@@ -49,7 +50,13 @@ test('multipart part listing does not reveal another owner session', async () =>
       count: async () => 0,
     },
   };
-  const service = new EagleUploadService(prisma as never, {} as never, {} as never, {} as never);
+  const service = new EagleUploadService(
+    prisma as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    'MATERIAL',
+  );
 
   await assert.rejects(service.listParts(ownerId, sessionId), NotFoundException);
 });
@@ -78,6 +85,7 @@ test('lists committed parts from the database while recovering an assembled uplo
     } as never,
     {} as never,
     {} as never,
+    'MATERIAL',
   );
 
   assert.deepEqual(await service.listParts(ownerId, sessionId), {
@@ -133,6 +141,7 @@ test('completion preserves an assembled object for recovery when DB finalization
         durationMs: null,
       }),
     } as never,
+    'MATERIAL',
   );
 
   await assert.rejects(
@@ -208,6 +217,7 @@ test('finalization skips an owner-scoped duplicate and queues uploaded object cl
         durationMs: null,
       }),
     } as never,
+    'MATERIAL',
   );
 
   const result = await service.complete(ownerId, sessionId, {
@@ -284,6 +294,7 @@ test('content replacement preserves the logical asset id and advances its media 
         durationMs: null,
       }),
     } as never,
+    'MATERIAL',
   );
 
   const result = await service.complete(ownerId, sessionId, {
@@ -364,6 +375,7 @@ test('new browser captures commit provenance and initial metadata with the uploa
         durationMs: null,
       }),
     } as never,
+    'MATERIAL',
   );
 
   const result = await service.complete(ownerId, sessionId, {
@@ -478,6 +490,7 @@ test('transient inspection failure increments finalization attempts exactly once
         throw new ServiceUnavailableException('decoder temporarily unavailable');
       },
     } as never,
+    'MATERIAL',
   );
   await assert.rejects(
     service.complete(ownerId, sessionId, { parts: [{ partNumber: 1, etag: 'etag' }] }),
@@ -522,6 +535,7 @@ test('concurrent finalization retries share inspection and consume one failed at
         throw new ServiceUnavailableException('decoder temporarily unavailable');
       },
     } as never,
+    'MATERIAL',
   );
   const results = await Promise.allSettled(
     Array.from({ length: 3 }, () =>

@@ -17,7 +17,6 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  Optional,
 } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -40,7 +39,7 @@ export class EagleDuplicateService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
   private inLibrary(ownerId: string, includePrivate: boolean) {
     return {

@@ -28,7 +28,7 @@ assertDedicatedScaleTarget(DATABASE_URL);
 process.stdout.write(`Scale target accepted: ${describeRuntimeTarget(runtimeTarget)}\n`);
 
 const prisma = new PrismaClient();
-const service = new EagleService(prisma);
+const service = new EagleService(prisma, undefined, 'MATERIAL');
 const shouldSeed = process.argv.includes('--seed');
 const shouldVerify = process.argv.includes('--verify') || !shouldSeed;
 

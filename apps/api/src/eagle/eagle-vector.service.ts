@@ -6,7 +6,6 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  Optional,
   Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -53,7 +52,7 @@ const reviewableSuggestionAssetWhere = (includePrivate: boolean) => ({
 export class EagleVectorService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
   async summary(ownerId: string, includePrivate = false) {

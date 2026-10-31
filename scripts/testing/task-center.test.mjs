@@ -325,7 +325,7 @@ test('task overview uses current visible resources and never crosses owner or mo
     2,
   );
   assert.equal(
-    (await new EagleTaskCenterService(prisma).overview(f.owner)).groups.find(
+    (await new EagleTaskCenterService(prisma, 'MATERIAL').overview(f.owner)).groups.find(
       (g) => g.id === 'EMBEDDING',
     ).queued,
     1,

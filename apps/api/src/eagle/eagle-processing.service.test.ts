@@ -4,45 +4,48 @@ import { EagleProcessingService } from './eagle-processing.service';
 
 test('reconciler creates every missing current-version image task', async () => {
   const created: unknown[] = [];
-  const service = new EagleProcessingService({
-    eagleAsset: {
-      findMany: async () => [
-        { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 1, width: 100, height: 100 },
-        { id: 'asset-2', ownerId: 'owner-1', mediaRevision: 3, width: 100, height: 100 },
-      ],
-    },
-    eagleAssetProcessingJob: {
-      findMany: async () => [
-        {
-          id: 'color-job-1',
-          assetId: 'asset-1',
-          assetRevision: 1,
-          kind: 'EXTRACT_COLOR_PALETTE',
-          processorVersion: 'color-v3-thumbnail',
-        },
-        {
-          id: 'rendition-job-1',
-          assetId: 'asset-1',
-          assetRevision: 1,
-          kind: 'GENERATE_RENDITIONS',
-          processorVersion: 'rendition-v2',
-        },
-        {
-          id: 'rendition-job-2',
-          assetId: 'asset-2',
-          assetRevision: 3,
-          kind: 'GENERATE_RENDITIONS',
-          processorVersion: 'rendition-v2',
-        },
-      ],
-      createMany: async ({ data }: { data: unknown[] }) => {
-        created.push(...data);
-        return { count: data.length };
+  const service = new EagleProcessingService(
+    {
+      eagleAsset: {
+        findMany: async () => [
+          { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 1, width: 100, height: 100 },
+          { id: 'asset-2', ownerId: 'owner-1', mediaRevision: 3, width: 100, height: 100 },
+        ],
       },
-    },
-    eagleAiAnalysisRun: { groupBy: async () => [] },
-    $queryRaw: async () => [],
-  } as never);
+      eagleAssetProcessingJob: {
+        findMany: async () => [
+          {
+            id: 'color-job-1',
+            assetId: 'asset-1',
+            assetRevision: 1,
+            kind: 'EXTRACT_COLOR_PALETTE',
+            processorVersion: 'color-v3-thumbnail',
+          },
+          {
+            id: 'rendition-job-1',
+            assetId: 'asset-1',
+            assetRevision: 1,
+            kind: 'GENERATE_RENDITIONS',
+            processorVersion: 'rendition-v2',
+          },
+          {
+            id: 'rendition-job-2',
+            assetId: 'asset-2',
+            assetRevision: 3,
+            kind: 'GENERATE_RENDITIONS',
+            processorVersion: 'rendition-v2',
+          },
+        ],
+        createMany: async ({ data }: { data: unknown[] }) => {
+          created.push(...data);
+          return { count: data.length };
+        },
+      },
+      eagleAiAnalysisRun: { groupBy: async () => [] },
+      $queryRaw: async () => [],
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.reconcile('owner-1');
 
@@ -83,17 +86,20 @@ test('reconciler scans beyond the first page without exceeding its creation boun
     height: 100,
   }));
   let page = 0;
-  const service = new EagleProcessingService({
-    eagleAsset: {
-      findMany: async () => (page++ === 0 ? assets.slice(0, 500) : assets.slice(500)),
-    },
-    eagleAssetProcessingJob: {
-      findMany: async () => [],
-      createMany: async ({ data }: { data: unknown[] }) => ({ count: data.length }),
-    },
-    eagleAiAnalysisRun: { groupBy: async () => [] },
-    $queryRaw: async () => [],
-  } as never);
+  const service = new EagleProcessingService(
+    {
+      eagleAsset: {
+        findMany: async () => (page++ === 0 ? assets.slice(0, 500) : assets.slice(500)),
+      },
+      eagleAssetProcessingJob: {
+        findMany: async () => [],
+        createMany: async ({ data }: { data: unknown[] }) => ({ count: data.length }),
+      },
+      eagleAiAnalysisRun: { groupBy: async () => [] },
+      $queryRaw: async () => [],
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.reconcile('owner-1');
 
@@ -104,27 +110,30 @@ test('reconciler scans beyond the first page without exceeding its creation boun
 test('reconciler skips an AI job whose completed result survived job pruning', async () => {
   const created: Array<{ kind: string }> = [];
   const completionQueries: unknown[] = [];
-  const service = new EagleProcessingService({
-    eagleAsset: {
-      findMany: async () => [
-        { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 2, width: 100, height: 100 },
-      ],
-    },
-    eagleAssetProcessingJob: {
-      findMany: async () => [],
-      createMany: async ({ data }: { data: Array<{ kind: string }> }) => {
-        created.push(...data);
-        return { count: data.length };
+  const service = new EagleProcessingService(
+    {
+      eagleAsset: {
+        findMany: async () => [
+          { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 2, width: 100, height: 100 },
+        ],
       },
-    },
-    eagleAiAnalysisRun: {
-      groupBy: async (query: unknown) => {
-        completionQueries.push(query);
-        return [{ assetId: 'asset-1', assetRevision: 2 }];
+      eagleAssetProcessingJob: {
+        findMany: async () => [],
+        createMany: async ({ data }: { data: Array<{ kind: string }> }) => {
+          created.push(...data);
+          return { count: data.length };
+        },
       },
-    },
-    $queryRaw: async () => [],
-  } as never);
+      eagleAiAnalysisRun: {
+        groupBy: async (query: unknown) => {
+          completionQueries.push(query);
+          return [{ assetId: 'asset-1', assetRevision: 2 }];
+        },
+      },
+      $queryRaw: async () => [],
+    } as never,
+    'MATERIAL',
+  );
 
   const result = await service.reconcile('owner-1');
 
@@ -155,11 +164,14 @@ test('retrying a required media task restores the current asset processing lifec
       },
     },
   };
-  const service = new EagleProcessingService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
-      work(transaction),
-    $queryRaw: async () => [],
-  } as never);
+  const service = new EagleProcessingService(
+    {
+      $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+        work(transaction),
+      $queryRaw: async () => [],
+    } as never,
+    'MATERIAL',
+  );
 
   assert.deepEqual(await service.retry('owner-1', 'job-1'), { retried: 1 });
   assert.deepEqual(assetWrites[0], {
@@ -182,11 +194,14 @@ test('retrying all failed media tasks uses one owner-scoped set operation', asyn
       return [{ retried: 1250n }];
     },
   };
-  const service = new EagleProcessingService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
-      work(transaction),
-    $queryRaw: async () => [],
-  } as never);
+  const service = new EagleProcessingService(
+    {
+      $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+        work(transaction),
+      $queryRaw: async () => [],
+    } as never,
+    'MATERIAL',
+  );
 
   assert.deepEqual(await service.retryFailed('owner-1', false), { retried: 1250 });
   assert.equal(statements.length, 1);

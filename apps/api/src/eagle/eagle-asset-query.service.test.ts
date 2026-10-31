@@ -5,20 +5,24 @@ import { EagleService } from './eagle.service';
 
 test('a parent smart folder evaluates itself and its direct children as a union', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
-  const service = new EagleService({
-    eagleSmartFolder: {
-      findFirst: async () => ({
-        queryJson: { version: 1, filters: { rating: 4 } },
-        children: [{ queryJson: { version: 1, filters: { formats: ['png'] } } }],
-      }),
-    },
-    eagleAsset: {
-      findMany: async (query: { where: Record<string, unknown> }) => {
-        queries.push(query);
-        return [];
+  const service = new EagleService(
+    {
+      eagleSmartFolder: {
+        findFirst: async () => ({
+          queryJson: { version: 1, filters: { rating: 4 } },
+          children: [{ queryJson: { version: 1, filters: { formats: ['png'] } } }],
+        }),
       },
-    },
-  } as never);
+      eagleAsset: {
+        findMany: async (query: { where: Record<string, unknown> }) => {
+          queries.push(query);
+          return [];
+        },
+      },
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
 
@@ -29,37 +33,41 @@ test('a parent smart folder evaluates itself and its direct children as a union'
 
 test('an empty smart folder matches no assets', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
-  const service = new EagleService({
-    eagleSmartFolder: {
-      findFirst: async () => ({
-        queryJson: {
-          version: 2,
-          conditions: [
-            {
-              id: 'condition-1',
-              match: 'ANY',
-              result: 'MATCH',
-              rules: [
-                {
-                  id: 'rule-1',
-                  field: 'MANUAL_TAGS',
-                  operator: 'ALL_OF',
-                  value: [],
-                },
-              ],
-            },
-          ],
-        },
-        children: [],
-      }),
-    },
-    eagleAsset: {
-      findMany: async (query: { where: Record<string, unknown> }) => {
-        queries.push(query);
-        return [];
+  const service = new EagleService(
+    {
+      eagleSmartFolder: {
+        findFirst: async () => ({
+          queryJson: {
+            version: 2,
+            conditions: [
+              {
+                id: 'condition-1',
+                match: 'ANY',
+                result: 'MATCH',
+                rules: [
+                  {
+                    id: 'rule-1',
+                    field: 'MANUAL_TAGS',
+                    operator: 'ALL_OF',
+                    value: [],
+                  },
+                ],
+              },
+            ],
+          },
+          children: [],
+        }),
       },
-    },
-  } as never);
+      eagleAsset: {
+        findMany: async (query: { where: Record<string, unknown> }) => {
+          queries.push(query);
+          return [];
+        },
+      },
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
 
@@ -70,20 +78,24 @@ test('an empty smart folder matches no assets', async () => {
 
 test('an empty parent contributes no assets and only aggregates its active children', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
-  const service = new EagleService({
-    eagleSmartFolder: {
-      findFirst: async () => ({
-        queryJson: { version: 1, filters: { tagMatch: 'ANY' } },
-        children: [{ queryJson: { version: 1, filters: { formats: ['png'] } } }],
-      }),
-    },
-    eagleAsset: {
-      findMany: async (query: { where: Record<string, unknown> }) => {
-        queries.push(query);
-        return [];
+  const service = new EagleService(
+    {
+      eagleSmartFolder: {
+        findFirst: async () => ({
+          queryJson: { version: 1, filters: { tagMatch: 'ANY' } },
+          children: [{ queryJson: { version: 1, filters: { formats: ['png'] } } }],
+        }),
       },
-    },
-  } as never);
+      eagleAsset: {
+        findMany: async (query: { where: Record<string, unknown> }) => {
+          queries.push(query);
+          return [];
+        },
+      },
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
 
@@ -99,14 +111,18 @@ test('an empty parent contributes no assets and only aggregates its active child
 
 test('ANY tag matching combines every selected manual and AI tag into one union', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
-  const service = new EagleService({
-    eagleAsset: {
-      findMany: async (query: { where: Record<string, unknown> }) => {
-        queries.push(query);
-        return [];
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findMany: async (query: { where: Record<string, unknown> }) => {
+          queries.push(query);
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listAssets('owner-1', {
     limit: 30,
@@ -122,13 +138,17 @@ test('ANY tag matching combines every selected manual and AI tag into one union'
 });
 
 test('color filtering reports original global image-analysis coverage', async () => {
-  const service = new EagleService({
-    eagleAsset: {
-      findMany: async () => [],
-      count: async () => 10,
-    },
-    eagleAssetColorAnalysis: { count: async () => 7 },
-  } as never);
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findMany: async () => [],
+        count: async () => 10,
+      },
+      eagleAssetColorAnalysis: { count: async () => 7 },
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   const result = await service.listAssets('owner-1', { limit: 30, color: '#abcdef' });
 
@@ -142,14 +162,18 @@ test('color filtering reports original global image-analysis coverage', async ()
 
 test('rule count is owner scoped even when the query itself has no owner field', async () => {
   let where: unknown;
-  const service = new EagleService({
-    eagleAsset: {
-      count: async (input: { where: unknown }) => {
-        where = input.where;
-        return 7;
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        count: async (input: { where: unknown }) => {
+          where = input.where;
+          return 7;
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   const result = await service.countAssets('owner-1', {
     version: 2,
@@ -169,14 +193,18 @@ test('rule count is owner scoped even when the query itself has no owner field',
 
 test('asset listing only loads relations required by gallery cards', async () => {
   let include: Record<string, unknown> | undefined;
-  const service = new EagleService({
-    eagleAsset: {
-      findMany: async (query: { include: Record<string, unknown> }) => {
-        include = query.include;
-        return [];
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findMany: async (query: { include: Record<string, unknown> }) => {
+          include = query.include;
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listAssets('owner-1', { limit: 40 });
 
@@ -268,6 +296,7 @@ test('image search preserves the ranked order without resolving AI tags', async 
         }));
       },
     } as never,
+    'MATERIAL',
   );
 
   const result = await service.listAssets('owner-1', { limit: 40, search: 'ui' });
@@ -296,14 +325,18 @@ test('image search preserves the ranked order without resolving AI tags', async 
 
 test('private assets stay out of the regular gallery and use a dedicated unlocked view', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
-  const service = new EagleService({
-    eagleAsset: {
-      findMany: async (query: { where: Record<string, unknown> }) => {
-        queries.push(query);
-        return [];
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findMany: async (query: { where: Record<string, unknown> }) => {
+          queries.push(query);
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listAssets('owner-1', { limit: 30 });
   await service.listAssets('owner-1', { limit: 30 }, { includePrivate: true });
@@ -319,14 +352,18 @@ test('private assets stay out of the regular gallery and use a dedicated unlocke
 
 test('tag counts exclude private assets while visibility is locked', async () => {
   let query: unknown;
-  const service = new EagleService({
-    eagleManualTag: {
-      findMany: async (input: unknown) => {
-        query = input;
-        return [];
+  const service = new EagleService(
+    {
+      eagleManualTag: {
+        findMany: async (input: unknown) => {
+          query = input;
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.listManualTags('owner-1');
 
@@ -336,16 +373,20 @@ test('tag counts exclude private assets while visibility is locked', async () =>
 
 test('smart folder creation rejects a missing owner-scoped tag before writing', async () => {
   let wroteFolder = false;
-  const service = new EagleService({
-    eagleSmartFolder: {
-      aggregate: async () => ({ _max: { position: null } }),
-      create: async () => {
-        wroteFolder = true;
+  const service = new EagleService(
+    {
+      eagleSmartFolder: {
+        aggregate: async () => ({ _max: { position: null } }),
+        create: async () => {
+          wroteFolder = true;
+        },
       },
-    },
-    eagleManualTag: { count: async () => 0 },
-    eagleAiTag: { count: async () => 0 },
-  } as never);
+      eagleManualTag: { count: async () => 0 },
+      eagleAiTag: { count: async () => 0 },
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await assert.rejects(
     service.createSmartFolder('owner-1', {
@@ -367,13 +408,17 @@ test('new smart folders default to matching any selected tag', async () => {
       },
     },
   };
-  const service = new EagleService({
-    eagleSmartFolder: { aggregate: async () => ({ _max: { position: null } }) },
-    eagleManualTag: { count: async () => 0 },
-    eagleAiTag: { count: async () => 0 },
-    $transaction: async (callback: (client: typeof transaction) => unknown) =>
-      callback(transaction),
-  } as never);
+  const service = new EagleService(
+    {
+      eagleSmartFolder: { aggregate: async () => ({ _max: { position: null } }) },
+      eagleManualTag: { count: async () => 0 },
+      eagleAiTag: { count: async () => 0 },
+      $transaction: async (callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.createSmartFolder('owner-1', { name: '新文件夹', query: {} });
 
@@ -391,21 +436,25 @@ test('changing only a smart folder color preserves its stored query definition',
       findFirstOrThrow: async () => ({ id: 'folder-1' }),
     },
   };
-  const service = new EagleService({
-    eagleSmartFolder: {
-      findFirst: async () => ({
-        id: 'folder-1',
-        ownerId: 'owner-1',
-        parentId: null,
-        name: '图片',
-        color: null,
-        queryJson: { version: 1, filters: { formats: ['png'] } },
-      }),
-      count: async () => 0,
-    },
-    $transaction: async (callback: (client: typeof transaction) => unknown) =>
-      callback(transaction),
-  } as never);
+  const service = new EagleService(
+    {
+      eagleSmartFolder: {
+        findFirst: async () => ({
+          id: 'folder-1',
+          ownerId: 'owner-1',
+          parentId: null,
+          name: '图片',
+          color: null,
+          queryJson: { version: 1, filters: { formats: ['png'] } },
+        }),
+        count: async () => 0,
+      },
+      $transaction: async (callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
 
   await service.updateSmartFolder('owner-1', 'folder-1', { rowVersion: 1, color: '#112233' });
 
@@ -503,14 +552,18 @@ test('timeline seek uses the selected field and cannot reuse a cursor or semanti
 
 test('date navigation can seek inside a large day and resumes ordinary keyset paging', async () => {
   let input: any;
-  const service = new EagleService({
-    eagleAsset: {
-      findMany: async (q: any) => {
-        input = q;
-        return [];
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findMany: async (q: any) => {
+          input = q;
+          return [];
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
   await service.listAssets('owner', {
     limit: 60,
     sort: 'ADDED_AT',
@@ -527,21 +580,25 @@ test('date navigation can seek inside a large day and resumes ordinary keyset pa
 
 test('color pagination does not recount coverage already returned with the first page', async () => {
   let counts = 0;
-  const service = new EagleService({
-    eagleAsset: {
-      findMany: async () => [],
-      count: async () => {
-        counts++;
-        return 10;
+  const service = new EagleService(
+    {
+      eagleAsset: {
+        findMany: async () => [],
+        count: async () => {
+          counts++;
+          return 10;
+        },
       },
-    },
-    eagleAssetColorAnalysis: {
-      count: async () => {
-        counts++;
-        return 7;
+      eagleAssetColorAnalysis: {
+        count: async () => {
+          counts++;
+          return 7;
+        },
       },
-    },
-  } as never);
+    } as never,
+    undefined,
+    'MATERIAL',
+  );
   const cursor = encodeEagleAssetCursor(
     { id: 'asset', libraryAddedAt: new Date('2026-01-01') },
     { ownerId: 'owner-1', libraryMode: 'MATERIAL' },

@@ -116,6 +116,7 @@ test('idle operation polling uses bounded unlocked probes and opens no claim tra
     } as never,
     {} as never,
     {} as never,
+    'MATERIAL',
   );
   await service.tick();
   assert.equal(probes.length, 3);
@@ -161,6 +162,7 @@ test('a command committed during an empty probe is picked up without waiting for
     } as never,
     {} as never,
     {} as never,
+    'MATERIAL',
   );
   const prior = process.env.EAGLE_ASSET_OPERATIONS_ENABLED;
   process.env.EAGLE_ASSET_OPERATIONS_ENABLED = 'true';
@@ -227,6 +229,7 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
     } as never,
     {} as never,
     {} as never,
+    'MATERIAL',
   );
   await service.tick();
   assert.equal(transactions, 3);
@@ -307,7 +310,7 @@ test('batch trash skips owned retired entries and isolates unavailable entries w
 });
 
 test('constructing the HTTP provider exposes no Nest lifecycle that starts background execution', () => {
-  const service = new EagleAssetOperationService({} as never, {} as never, {} as never);
+  const service = new EagleAssetOperationService({} as never, {} as never, {} as never, 'MATERIAL');
   assert.equal(Reflect.get(service, 'onModuleInit'), undefined);
 });
 
