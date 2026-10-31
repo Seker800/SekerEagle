@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { rm, writeFile } from 'node:fs/promises';
 import { ConfigService } from '@nestjs/config';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
 import { PrismaService } from './prisma/prisma.service';
@@ -45,23 +46,35 @@ async function main() {
   }
   const prisma = new PrismaService();
   const storage = new ObjectStorageService(new ConfigService(storageConfig));
-  await prisma.onModuleInit();
-  const executors = createAssetOperationExecutors(prisma, storage);
-  let closing = false;
-  const shutdown = async () => {
-    if (closing) return;
-    closing = true;
-    await Promise.all(executors.map((executor) => executor.drain()));
-    storage.onModuleDestroy();
-    await prisma.onModuleDestroy();
-  };
+  const readyFile = env.EAGLE_OPERATION_READY_FILE ?? '/tmp/sekereagle-asset-operations-ready';
+  let executors: ReturnType<typeof createAssetOperationExecutors> = [];
+  let closing: Promise<void> | undefined;
+  const shutdown = () =>
+    (closing ??= (async () => {
+      await rm(readyFile, { force: true });
+      try {
+        await Promise.all(executors.map((executor) => executor.drain()));
+      } finally {
+        storage.onModuleDestroy();
+        await prisma.onModuleDestroy();
+      }
+    })());
+  try {
+    await rm(readyFile, { force: true });
+    await prisma.onModuleInit();
+    executors = createAssetOperationExecutors(prisma, storage);
+    for (const executor of executors) executor.startExecutor();
+    await writeFile(readyFile, String(process.pid), { mode: 0o600 });
+  } catch (error) {
+    await shutdown();
+    throw error;
+  }
   for (const signal of ['SIGINT', 'SIGTERM'])
     process.once(signal, () => {
       void shutdown().catch(() => {
         process.exitCode = 1;
       });
     });
-  for (const executor of executors) executor.startExecutor();
   console.info('Asset operation executor ready; HTTP API only admits and reads operations.');
 }
 

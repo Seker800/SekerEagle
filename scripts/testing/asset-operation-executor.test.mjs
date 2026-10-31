@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setTimeout, clearTimeout } from 'node:timers';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { readFile, mkdtemp, rm } from 'node:fs/promises';
