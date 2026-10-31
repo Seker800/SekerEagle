@@ -179,3 +179,14 @@ it('trash progress marks its own workspace stale once without starting a foregro
   );
   expect(invalidate).toHaveBeenCalledTimes(1);
 });
+
+it('reports partial completion when unavailable items did not block the valid deletion', async () => {
+  mocks.list.mockImplementation(async mode => mode === 'PHOTO' ? [job({ kind: 'TRASH', total: 3,
+    completed: 2, skipped: 1, failed: 1, queued: 0, running: 0, state: 'STOPPED',
+    errors: [{ code: 'NOT_FOUND', count: 1 }] })] : []);
+  show('PHOTO');
+  expect(await screen.findByText('已部分完成（1项失败）')).toBeVisible();
+  expect(screen.getByText('已完成 2 / 3 项')).toBeVisible();
+  expect(screen.getByText('已跳过 1 项已移除的内容')).toBeVisible();
+  expect(screen.queryByText('已停止（1项失败）')).not.toBeInTheDocument();
+});
