@@ -1363,11 +1363,12 @@ test('explicit sending creates independent targets, preserves privacy, removes s
     NotFoundException,
   );
   assert.ok(source.transferredAt);
-  const cleanup = await prisma.eagleObjectDeletion.findFirstOrThrow({
-    where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' },
-  });
-  assert.deepEqual(cleanup.objectKeys, [source.originalObjectKey]);
-  assert.ok(!cleanup.objectKeys.includes(target.originalObjectKey));
+  assert.equal(source.storageTransferredOut, true);
+  assert.equal(
+    await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }),
+    0,
+    'handed-off bytes must never enter source cleanup',
+  );
   assert.equal(target.libraryMode, 'PHOTO');
   assert.equal(target.isPrivate, true);
   assert.equal(target.manualTagLinks.length, 2);
@@ -1387,12 +1388,12 @@ test('explicit sending creates independent targets, preserves privacy, removes s
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: targetId } })).isPrivate,
     true,
   );
-  assert.notEqual(target.originalObjectKey, source.originalObjectKey);
+  assert.equal(target.originalObjectKey, source.originalObjectKey);
   assert.ok(
     target.processingJobs.every((job) => job.libraryMode === 'PHOTO' && job.assetRevision === 1),
   );
   assert.deepEqual(await sender.send(f.ownerId, input, true), result);
-  assert.equal(copies.length, 1);
+  assert.equal(copies.length, 0);
   await assert.rejects(
     () => new EagleLibraryTransferService(prisma, storage, 'PHOTO').send(f.ownerId, input, true),
     NotFoundException,
@@ -2513,7 +2514,7 @@ test('PAT issuance rejects stale accounts and self-revocation preserves other cr
   await assert.rejects(service.create(f.ownerId, 'disabled', ['asset:write'], 2), /登录状态已失效/);
 });
 
-test('cross-library sending reuses current browse outputs with independent keys and no source dependency', async () => {
+test('cross-library sending transfers exclusive browse storage ownership to independent target records', async () => {
   const { EagleLibraryTransferService } =
     await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
   const f = await fixtures();
@@ -2585,19 +2586,20 @@ test('cross-library sending reuses current browse outputs with independent keys 
   assert.ok(!target.processingJobs.some((j) => j.kind === 'GENERATE_EMBEDDING'));
 
   assert.equal(target.renditions.length, 3);
-  assert.equal(copies.length, 4);
+  assert.equal(copies.length, 0);
   assert.ok(
     target.renditions.every(
       (r) =>
         r.libraryMode === 'MATERIAL' &&
         r.assetId === target.id &&
         r.revision === 1 &&
-        r.storageKey.startsWith(`users/${f.ownerId}/assets/${target.id}/`),
+        r.storageKey.startsWith(`users/${f.ownerId}/assets/${f.photo.id}/`),
     ),
   );
   assert.ok(!target.processingJobs.some((j) => j.processorVersion === 'rendition-v2'));
   const listed = await f.materials.listAssets(f.ownerId, { limit: 40 });
   assert.equal(listed.items.find((a) => a.id === target.id).renditions.length, 3);
+  assert.equal(await prisma.eagleAssetRendition.count({ where: { assetId: f.photo.id } }), 0);
   await prisma.eagleAsset.delete({ where: { id: f.photo.id } });
   assert.equal(await prisma.eagleAssetRendition.count({ where: { assetId: target.id } }), 3);
 });
