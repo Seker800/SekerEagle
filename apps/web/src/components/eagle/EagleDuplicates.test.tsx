@@ -489,4 +489,12 @@ describe('duplicate cleanup review', () => {
     view.rerender(show('after'));
     expect(screen.queryByText('old-public-name')).not.toBeInTheDocument();
   });
+ it('can refresh current results without starting another scan and preserves keep choices',async()=>{
+  render();await screen.findByText('1 组待检查');const before=mocks.list.mock.calls.length;
+  fireEvent.click(screen.getByRole('button',{name:'刷新结果'}));await waitFor(()=>expect(mocks.list).toHaveBeenCalledTimes(before+1));expect(mocks.scan).not.toHaveBeenCalled();
+ });
+ it('refreshes results when checking finds an already completed index',async()=>{
+  mocks.scan.mockResolvedValue({operationId:null});render();await screen.findByText('1 组待检查');const before=mocks.list.mock.calls.length;fireEvent.click(screen.getByRole('button',{name:'检查新内容'}));await waitFor(()=>expect(mocks.list.mock.calls.length).toBeGreaterThan(before));
+ });
+
 });

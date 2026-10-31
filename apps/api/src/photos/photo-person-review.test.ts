@@ -156,3 +156,8 @@ test('manual face reassignment invalidates review versions of both affected iden
   await service.reassignFace('owner', 'face', 'target', false);
   assert.deepEqual(changed.sort(), ['source', 'target']);
 });
+
+test('same-photo exclusions are joined once per anchor instead of scanned per candidate',()=>{
+ const q=personReviewCandidatesSql('owner',false,reviewCursor(undefined,'owner',false)).text;
+ assert.match(q,/LEFT JOIN cooccurring/);assert.doesNotMatch(q,/NOT EXISTS\(SELECT 1 FROM cooccurring/);
+});
