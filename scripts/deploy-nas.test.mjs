@@ -185,6 +185,7 @@ test('large operation admission has its own adjustable gateway deadline', async 
   for (const mode of ['eagle', 'photos']) {
     assert.ok(pattern.test(`/api/${mode}/operations`));
     assert.ok(pattern.test(`/api/${mode}/assets/batch/send`));
+    assert.ok(pattern.test(`/api/${mode}/duplicates/cleanup`));
   }
   assert.equal(pattern.test('/api/auth/me'), false);
   assert.match(route[2], /proxy_read_timeout 150s;/u);

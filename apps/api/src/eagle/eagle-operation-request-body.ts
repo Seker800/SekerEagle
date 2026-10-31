@@ -6,7 +6,7 @@ export function installOperationRequestBodyParser(app: Pick<NestExpressApplicati
   const limit = process.env.EAGLE_OPERATION_BODY_LIMIT ?? '32mb';
   const parse = json({ limit });
   app.use(
-    /^\/api\/(eagle|photos)\/(operations|assets\/batch\/send)\/?$/,
+    /^\/api\/(eagle|photos)\/(operations|assets\/batch\/send|duplicates\/cleanup)\/?$/,
     function operationSelectionJson(req: Request, res: Response, next: NextFunction) {
       if (req.method === 'POST') parse(req, res, next);
       else next();
