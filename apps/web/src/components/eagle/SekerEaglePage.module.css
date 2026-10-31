@@ -946,6 +946,7 @@
 }
 
 .assetBrowser {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
@@ -1174,9 +1175,11 @@
 }
 
 .queryProgress {
-  position: sticky;
-  top: 0;
+  position: absolute;
+  top: 8px;
+  right: 20px;
   z-index: 2;
+  pointer-events: none;
   padding: 4px 12px;
   background: var(--ui-raised);
   border-top: 2px solid var(--ui-accent);

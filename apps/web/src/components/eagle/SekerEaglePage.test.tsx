@@ -2742,6 +2742,216 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it.each(['MATERIAL', 'PHOTO'] as const)(
+    'returns from a smart folder to the complete cached %s library',
+    async (mode) => {
+      testWorkspaceMode.value = mode;
+      const outsideFolder = { ...asset, id: 'outside-folder', displayName: 'Outside Folder' };
+      listEagleAssetsMock.mockImplementation(async (_token, filters) => ({
+        items: filters.smartFolderId ? [asset] : [asset, outsideFolder],
+        nextCursor: null,
+      }));
+      listEagleSmartFoldersMock.mockResolvedValue([
+        {
+          id: 'folder-1',
+          name: '常用集合',
+          color: null,
+          parentId: null,
+          queryVersion: 1,
+          queryJson: { version: 1, filters: {} },
+          position: 0,
+          rowVersion: 1,
+        },
+      ]);
+      renderPage();
+      expect(await screen.findByRole('button', { name: /Outside Folder/ })).toBeVisible();
+      fireEvent.click(await screen.findByRole('button', { name: '常用集合' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /Outside Folder/ })).not.toBeInTheDocument(),
+      );
+      expect(listEagleAssetsMock.mock.lastCall?.[1]).toEqual(
+        expect.objectContaining({ smartFolderId: 'folder-1' }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '全部' }));
+      expect(await screen.findByRole('heading', { name: '全部' })).toBeVisible();
+      expect(await screen.findByRole('button', { name: /Outside Folder/ })).toBeVisible();
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole('button', { name: '常用集合' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /Outside Folder/ })).not.toBeInTheDocument(),
+      );
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it.each(
+    (['MATERIAL', 'PHOTO'] as const).flatMap((mode) =>
+      [
+        '标签',
+        '任务中心',
+        '待处理',
+        '设置',
+        '回收站',
+        mode === 'PHOTO' ? '隐私照片' : '隐私素材',
+        ...(mode === 'PHOTO' ? ['地图', '人物', '整理审批', '照片统计'] : []),
+      ].map((destination) => ({ mode, destination })),
+    ),
+  )(
+    'exits smart-folder scope when $mode sidebar opens $destination',
+    async ({ mode, destination }) => {
+      testWorkspaceMode.value = mode;
+      listEagleSmartFoldersMock.mockResolvedValue([
+        {
+          id: 'folder-sidebar',
+          name: '侧栏集合',
+          color: null,
+          parentId: null,
+          queryVersion: 1,
+          queryJson: { version: 1, filters: {} },
+          position: 0,
+          rowVersion: 1,
+        },
+      ]);
+      renderPage(
+        'owner-test',
+        false,
+        destination.startsWith('隐私')
+          ? { enabled: true, durationHours: 1, expiresAt: null }
+          : undefined,
+      );
+      const sidebar = screen.getByRole('navigation', {
+        name: mode === 'PHOTO' ? '照片库导航' : '素材库导航',
+      });
+      fireEvent.click(await within(sidebar).findByRole('button', { name: '侧栏集合' }));
+      expect(within(sidebar).getByRole('treeitem', { name: '侧栏集合' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      const button = within(sidebar).getByRole('button', { name: new RegExp(`^${destination}`) });
+      fireEvent.click(button);
+      expect(within(sidebar).getByRole('treeitem', { name: '侧栏集合' })).toHaveAttribute(
+        'aria-selected',
+        'false',
+      );
+      expect(button).toHaveAttribute('aria-current', 'page');
+      expect(sidebar.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+      fireEvent.click(within(sidebar).getByRole('button', { name: /^全部/ }));
+      expect(await screen.findByRole('heading', { name: '全部' })).toBeVisible();
+      expect(within(sidebar).getByRole('button', { name: /^全部/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+    },
+  );
+
+  it.each(['MATERIAL', 'PHOTO'] as const)(
+    'opens a %s smart folder immediately when navigation clears temporary filters',
+    async (mode) => {
+      testWorkspaceMode.value = mode;
+      listEagleSmartFoldersMock.mockResolvedValue([
+        {
+          id: 'immediate-folder',
+          name: '即时集合',
+          color: null,
+          parentId: null,
+          queryVersion: 1,
+          queryJson: { version: 1, filters: {} },
+          position: 0,
+          rowVersion: 1,
+        },
+      ]);
+      const view = renderPage();
+      await screen.findByRole('button', { name: /Owl Reference/ });
+      fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
+      fireEvent.click(screen.getByRole('button', { name: '格式筛选' }));
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: '格式筛选' })).getByRole('checkbox', {
+          name: 'WEBP',
+        }),
+      );
+      await waitFor(() =>
+        expect(JSON.stringify(listEagleAssetsMock.mock.lastCall?.[1])).toContain('webp'),
+      );
+      const before = listEagleAssetsMock.mock.calls.length;
+      vi.useFakeTimers();
+      try {
+        fireEvent.change(
+          screen.getByRole('searchbox', { name: mode === 'PHOTO' ? '搜索照片' : '搜索素材' }),
+          {
+            target: { value: '北京' },
+          },
+        );
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: '即时集合' }));
+        });
+        expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
+        expect(listEagleAssetsMock.mock.lastCall?.[1]).toMatchObject({
+          smartFolderId: 'immediate-folder',
+          search: '北京',
+          rules: undefined,
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(300);
+        });
+        expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
+        expect(screen.queryByText('正在更新结果…')).not.toBeInTheDocument();
+        expect(screen.queryByRole('status', { name: '正在加载…' })).not.toBeInTheDocument();
+      } finally {
+        view.unmount();
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('only shows nonblocking loading feedback for a slow smart-folder request', async () => {
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'slow-folder',
+        name: '慢速集合',
+        color: null,
+        parentId: null,
+        queryVersion: 1,
+        queryJson: { version: 1, filters: {} },
+        position: 0,
+        rowVersion: 1,
+      },
+    ]);
+    const view = renderPage();
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    const next = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
+    listEagleAssetsMock.mockReturnValueOnce(next.promise);
+    const before = listEagleAssetsMock.mock.calls.length;
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '慢速集合' }));
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
+      expect(screen.queryByText('正在更新结果…')).not.toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: '正在加载…' })).not.toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(199);
+      });
+      expect(screen.queryByRole('status', { name: '正在加载…' })).not.toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(screen.getByRole('status', { name: '正在加载…' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeVisible();
+      await act(async () => {
+        next.resolve({ items: [asset], nextCursor: null });
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(screen.queryByRole('status', { name: '正在加载…' })).not.toBeInTheDocument();
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('reuses recently visited folder listings instead of refetching on every switch', async () => {
     listEagleSmartFoldersMock.mockResolvedValue([
       {
