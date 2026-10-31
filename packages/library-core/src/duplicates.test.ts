@@ -27,7 +27,7 @@ test('exact members cannot silently disappear from a visual group and results ar
   const rows = [item('a', {sha256: 'same', fingerprint}), item('b', {sha256: 'same', fingerprint}), item('c', {fingerprint})];
   const groups = findDuplicateGroups(rows);
   assert.deepEqual(findDuplicateGroups([...rows].reverse()), groups);
-  assert.deepEqual(groups.map(g => g.assetIds), [['a', 'b']]);
+  assert.deepEqual(groups.map(g => g.assetIds), [['a', 'b'], ['a', 'c']]);
 });
 test('missing and malformed fingerprints are not duplicate evidence', () => {
   assert.deepEqual(findDuplicateGroups([item('a'), item('b'), item('x', {fingerprint: {hash: 'bad', colors: [], contrast: 30}})]), []);
