@@ -13,6 +13,28 @@ import {
   RemoteMediaClient,
   RemoteMediaUnavailableError,
 } from './remote-media';
+test('remote rejection keeps its HTTP cause instead of blaming a healthy source file', async (t) => {
+  let status = 401;
+  const server = createServer((req, res) => {
+    req.resume();
+    res.writeHead(status, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'IMAGE_PIXEL_LIMIT_EXCEEDED' }));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('address');
+  const client = new RemoteMediaClient(`http://127.0.0.1:${address.port}`, 'synthetic-token');
+  const request = () => client.image(Readable.from([Buffer.from('test')]), {
+    assetMimeType: 'image/jpeg', sourceMimeType: 'image/jpeg', kind: 'GENERATE_RENDITIONS', mode: 'PHOTO', detailsOnly: false, verifiesOriginalHash: true,
+  });
+  await assert.rejects(request(), /REMOTE_MEDIA_HTTP_401/);
+  status=500;
+  await assert.rejects(request(), /REMOTE_MEDIA_HTTP_500/);
+  status=422;
+  await assert.rejects(request(), /IMAGE_PIXEL_LIMIT_EXCEEDED/);
+});
 test('real HTTP pyramid work streams all validated tiles and rejects command-bearing recipes', async (t) => {
   const server = createRemoteMediaServer('test-media-token', 1, false, undefined, [
     'image',
