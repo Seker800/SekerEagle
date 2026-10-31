@@ -327,7 +327,7 @@ export async function copyTransferFacts(
     SELECT gen_random_uuid()::text,${ownerId},${targetMode}::"LibraryMode",${targetId},1,e."spaceId",'PENDING',false,e.embedding,e."l2Norm",e."startedAt",e."completedAt",now()
     FROM "EagleAssetEmbedding" e JOIN "EagleEmbeddingSpace" s ON s.id=e."spaceId"
     WHERE e."ownerId"=${ownerId} AND e."libraryMode"=${source.libraryMode}::"LibraryMode" AND e."assetId"=${source.id}
-      AND e."assetRevision"=${source.mediaRevision} AND e.status='READY' AND e."isCurrent" AND e.embedding IS NOT NULL
+      AND e."assetRevision"=${source.mediaRevision} AND e.status IN ('PENDING','RUNNING','READY','FAILED') AND e.embedding IS NOT NULL
       AND s."isCurrent" AND s.normalized AND s.dimensions=1024 AND s.model=${EAGLE_EMBEDDING_MODEL}
       AND s."instructionVersion"='image-retrieval-v1' AND s."preprocessingVersion"='preview-webp-v1'  AND e."l2Norm" BETWEEN 0.99 AND 1.01
     RETURNING id

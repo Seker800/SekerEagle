@@ -2609,14 +2609,18 @@ test('cross-library sending transfers exclusive browse storage ownership to inde
   });
   assert.ok(links.some((l) => l.tag.name === '跨库保留标签' && l.tag.id !== tag.id));
   const embeddings = await prisma.$queryRawUnsafe(
-    'SELECT embedding::text AS embedding,"assetRevision","spaceId","libraryMode" FROM "EagleAssetEmbedding" WHERE "assetId"=$1',
+    'SELECT embedding::text AS embedding,status,"isCurrent","assetRevision","spaceId","libraryMode" FROM "EagleAssetEmbedding" WHERE "assetId"=$1',
     target.id,
   );
   assert.equal(embeddings.length, 1);
   assert.equal(embeddings[0].embedding, vector);
   assert.equal(embeddings[0].libraryMode, 'MATERIAL');
   assert.equal(embeddings[0].assetRevision, 1);
-  assert.ok(!target.processingJobs.some((j) => j.kind === 'GENERATE_EMBEDDING'));
+  assert.equal(embeddings[0].status, 'PENDING');
+  assert.equal(embeddings[0].isCurrent, false);
+  assert.ok(
+    target.processingJobs.some((j) => j.kind === 'GENERATE_EMBEDDING' && j.status === 'PENDING'),
+  );
 
   assert.equal(target.renditions.length, 3);
   assert.equal(copies.length, 0);
