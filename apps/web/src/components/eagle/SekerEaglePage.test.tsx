@@ -2773,8 +2773,8 @@ describe('SekerEaglePage', () => {
         expect.objectContaining({ smartFolderId: 'folder-1' }),
       );
 
-      fireEvent.click(screen.getByRole('button', { name: '全部', exact: true }));
-      expect(await screen.findByRole('heading', { name: '全部', exact: true })).toBeVisible();
+      fireEvent.click(screen.getByRole('button', { name: '全部' }));
+      expect(await screen.findByRole('heading', { name: '全部' })).toBeVisible();
       expect(await screen.findByRole('button', { name: /Outside Folder/ })).toBeVisible();
       expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
 

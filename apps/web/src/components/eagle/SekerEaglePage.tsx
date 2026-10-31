@@ -1092,6 +1092,11 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
   };
+  const openLibraryRoot = (view: EaglePhotoView = 'timeline') => {
+    changeLibraryView('ACTIVE');
+    setActiveSmartFolderId(null);
+    setPhotoView(view);
+  };
   const applySmartFolder = (folder: EagleSmartFolder) => {
     setPhotoView('timeline');
     setLibraryView('ACTIVE');
@@ -1463,10 +1468,7 @@ export function SekerEaglePage({
             : undefined
         }
         type="button"
-        onClick={() => {
-          changeLibraryView('ACTIVE');
-          setPhotoView('timeline');
-        }}
+        onClick={() => openLibraryRoot()}
       >
         <IconPhoto size={17} />
         {' ' + t('全部') + ' '}
@@ -1485,10 +1487,7 @@ export function SekerEaglePage({
                 ? styles.navActive
                 : undefined
             }
-            onClick={() => {
-              changeLibraryView('ACTIVE');
-              setPhotoView(view);
-            }}
+            onClick={() => openLibraryRoot(view)}
           >
             {view === 'map' ? (
               <IconMapPin size={17} />
