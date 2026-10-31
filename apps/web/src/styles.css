@@ -1466,7 +1466,7 @@ select:focus-visible {
 .photo-people-review-grid article {
   border: 2px solid var(--ui-line);
   border-radius: var(--ui-radius-control);
-  padding: 8px;
+  padding: 6px;
   min-width: 0;
 }
 .photo-people-review-grid article[data-selected='true'] {
@@ -1475,7 +1475,7 @@ select:focus-visible {
 .photo-people-review-grid label {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   cursor: pointer;
   position: relative;
 }
@@ -1488,7 +1488,7 @@ select:focus-visible {
   height: 20px;
 }
 .photo-people-review-grid .photo-face-crop {
-  width: min(100%, clamp(88px, 14vh, 144px));
+  width: min(100%, clamp(72px, 10vh, 112px));
   align-self: center;
   height: auto;
   aspect-ratio: 1;
@@ -1496,5 +1496,7 @@ select:focus-visible {
 }
 .photo-people-review-grid article > button {
   width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
   margin-top: 6px;
 }
