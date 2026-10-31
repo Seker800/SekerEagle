@@ -391,7 +391,7 @@ model EagleAsset {
   height                         Int?
   aspectRatio                    Float?                         @default(dbgenerated())
   durationMs                     Int?
-  originalObjectKey              String                         @unique
+  originalObjectKey              String // Exclusive owner indexed by migration; retired handoff history is not an owner.
   lifecycleStatus                EagleAssetLifecycleStatus      @default(PROCESSING)
   mediaErrorCode                 String?
   mediaRevision                  Int                            @default(0)

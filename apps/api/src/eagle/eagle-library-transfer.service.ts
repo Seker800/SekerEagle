@@ -1,4 +1,5 @@
 import { runTransferWork } from './eagle-transfer-work';
+import { readMediaProcessingFacts } from './media-processing-facts';
 import {
   planTransferPyramid,
   copyTransferPyramid,
@@ -312,6 +313,53 @@ export class EagleLibraryTransferService {
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
         checkExpected(sources);
         if (guard) await guard.beforePublish(tx);
+        const processingFacts = new Map(
+          (await readMediaProcessingFacts(tx, ownerId, this.sourceMode, sourceIds)).map((fact) => [
+            fact.assetId,
+            fact,
+          ]),
+        );
+        // Release exclusive storage ownership only inside the publishing transaction.
+        // Any subsequent failure rolls back both the source retirement and new records.
+        const retiredAt = new Date();
+        const retireSources = async () => {
+          const retired = await tx.eagleAsset.updateMany({
+            where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
+            data: {
+              deletedAt: retiredAt,
+              purgeAfter: retiredAt,
+              transferredAt: retiredAt,
+              storageTransferredOut: handoff,
+              rowVersion: { increment: 1 },
+            },
+          });
+          if (retired.count !== items.length)
+            throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+        };
+        if (handoff) {
+          await retireSources();
+          const renditionIds = items.flatMap((item) => (item.renditions ?? []).map((r) => r.id));
+          const pyramidIds = items.flatMap((item) => (item.pyramid ? [item.pyramid.id] : []));
+          // The frozen transfer plan preserves provenance; only target records own READY outputs.
+          if (renditionIds.length)
+            await tx.eagleAssetRendition.deleteMany({
+              where: {
+                ownerId,
+                libraryMode: this.sourceMode,
+                assetId: { in: sourceIds },
+                id: { in: renditionIds },
+              },
+            });
+          if (pyramidIds.length)
+            await tx.eagleImagePyramid.deleteMany({
+              where: {
+                ownerId,
+                libraryMode: this.sourceMode,
+                assetId: { in: sourceIds },
+                id: { in: pyramidIds },
+              },
+            });
+        }
         const liveIdentifiers = new Map<string, string>();
         for (const source of sources)
           if (source.livePhotoIdentifier && !liveIdentifiers.has(source.livePhotoIdentifier))
@@ -431,7 +479,14 @@ export class EagleLibraryTransferService {
               },
             });
           }
-          const facts = await copyTransferFacts(tx, ownerId, targetMode, item.targetId, source);
+          const facts = await copyTransferFacts(
+            tx,
+            ownerId,
+            targetMode,
+            item.targetId,
+            source,
+            Boolean(processingFacts.get(source.id)?.detailsReady),
+          );
           if (browsingReady && targetMode === 'PHOTO' && facts.photoMetadataReady)
             await tx.eagleAsset.update({
               where: { id: item.targetId, ownerId, libraryMode: targetMode },
@@ -489,19 +544,7 @@ export class EagleLibraryTransferService {
         // Keep the non-restorable source identity for approval history and privacy checks.
         // Only objects still owned by the retired source enter the deletion outbox.
         // A handoff transfers exclusive storage lifetime to the independent target.
-        const retiredAt = new Date();
-        const retired = await tx.eagleAsset.updateMany({
-          where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-          data: {
-            deletedAt: retiredAt,
-            purgeAfter: retiredAt,
-            transferredAt: retiredAt,
-            storageTransferredOut: handoff,
-            rowVersion: { increment: 1 },
-          },
-        });
-        if (retired.count !== items.length)
-          throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+        if (!handoff) await retireSources();
         const retainedKeys = new Set(
           handoff
             ? items.flatMap((item) => [

@@ -7,7 +7,6 @@ import {
   type EagleManualTag,
 } from '@prisma/client';
 import { matchSmartFoldersForEmbedding } from '@sekereagle/library-persistence';
-import { readMediaProcessingFacts } from './media-processing-facts';
 import { COLOR_THUMBNAIL_PROCESSOR_VERSION } from './media-job-plan';
 
 export const transferFactIncludes = {
@@ -238,6 +237,7 @@ export async function copyTransferFacts(
   targetMode: LibraryMode,
   targetId: string,
   source: Source,
+  detailsReady: boolean,
 ) {
   const hasPrivateTag = await copyTags(tx, ownerId, targetMode, targetId, source);
   const archive =
@@ -257,10 +257,6 @@ export async function copyTransferFacts(
     source.editRecipe?.assetRevision === source.mediaRevision
       ? { recipe: source.editRecipe.recipe, baseMediaRevision: source.editRecipe.baseMediaRevision }
       : archive?.editRecipe;
-  const sourceFacts = (
-    await readMediaProcessingFacts(tx, ownerId, source.libraryMode, [source.id])
-  )[0];
-  const detailsReady = Boolean(sourceFacts?.detailsReady);
   await tx.eagleAssetTransferFacts.create({
     data: {
       ownerId,

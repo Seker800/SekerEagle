@@ -247,12 +247,14 @@ for (const handoff of [false, true])
         },
       },
       eagleImagePyramid: {
+        deleteMany: async () => ({ count: 1 }),
         create: async ({ data }: { data: Record<string, unknown> }) => {
           publishedPyramid = data;
         },
       },
       eagleAssetTransferFacts: { create: async () => ({}) },
       eagleAssetRendition: {
+        deleteMany: async () => ({ count: 3 }),
         createMany: async ({ data }: { data: unknown[] }) => {
           published = data;
         },
