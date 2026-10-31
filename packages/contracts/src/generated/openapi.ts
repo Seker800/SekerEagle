@@ -324,6 +324,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/operations/{operationId}/results': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_operationResults'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/operations/{operationId}/undo': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_undoOperation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/operations/{operationId}/retry': {
     parameters: {
       query?: never;
@@ -1870,6 +1902,38 @@ export interface paths {
     get: operations['PhotosController_listOperations'];
     put?: never;
     post: operations['PhotosController_enqueueOperation'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/operations/{operationId}/results': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotosController_operationResults'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/operations/{operationId}/undo': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_undoOperation'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3778,6 +3842,10 @@ export interface components {
       kind: 'SEND' | 'TRASH' | 'RESTORE' | 'EMPTY_TRASH';
       assetIds: string[];
     };
+    UndoAssetOperationDto: {
+      /** Format: uuid */
+      operationId: string;
+    };
     SendEagleAssetsDto: {
       assetIds: string[];
       /** Format: uuid */
@@ -4617,6 +4685,51 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['EnqueueAssetOperationDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_operationResults: {
+    parameters: {
+      query?: {
+        cursor?: number;
+        revision?: string;
+      };
+      header?: never;
+      path: {
+        operationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_undoOperation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        operationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UndoAssetOperationDto'];
       };
     };
     responses: {
@@ -7045,6 +7158,51 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['EnqueueAssetOperationDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_operationResults: {
+    parameters: {
+      query?: {
+        cursor?: number;
+        revision?: string;
+      };
+      header?: never;
+      path: {
+        operationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_undoOperation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        operationId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UndoAssetOperationDto'];
       };
     };
     responses: {

@@ -5,12 +5,18 @@ import type { AssetOperationSummary } from '@sekereagle/library-core';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import { AssetOperationsPanel } from './AssetOperationsPanel';
 import { useAssetOperationProgress } from './useAssetOperations';
-const mocks = vi.hoisted(() => ({ list: vi.fn(), retry: vi.fn(), cancel: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  retry: vi.fn(),
+  cancel: vi.fn(),
+  results: vi.fn(),
+}));
 vi.mock('../../lib/asset-operations-api', () => ({
   createAssetOperationsApi: (mode: string) => ({
     list: (visible: boolean) => mocks.list(mode, visible),
     retry: (id: string) => mocks.retry(mode, id),
     cancel: (id: string) => mocks.cancel(mode, id),
+    results: (id: string) => mocks.results(mode, id),
   }),
 }));
 const job = (changes: Partial<AssetOperationSummary> = {}): AssetOperationSummary => ({
@@ -114,81 +120,82 @@ it('reports request failure without presenting the command as completed', async 
   expect(await screen.findByRole('alert')).toHaveTextContent('操作失败，请重试。');
   expect(screen.getByText('发送中…')).toBeVisible();
 });
-it('refreshes both libraries only after publication and never invalidates the polling queries themselves', async () => {
+it('reconciles terminal send receipts in both modes and never refetches the polling queries', async () => {
   const client = show('ALL', false, true);
   await waitFor(() =>
     expect(client.getQueryData(['eagle', 'owner', 'PHOTO', 'operations', false])).toBeDefined(),
   );
   const invalidate = vi.spyOn(client, 'invalidateQueries');
-  client.setQueryData(
-    ['eagle', 'owner', 'PHOTO', 'operations', false],
-    [job({ completed: 2, running: 0, queued: 0, failed: 8 })],
-  );
+  client.setQueryData(['eagle', 'owner', 'PHOTO', 'operations', false], [job({ completed: 3 })]);
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(invalidate).not.toHaveBeenCalled();
-  client.setQueryData(['eagle', 'owner', 'PHOTO', 'operations', false], [job({ completed: 3 })]);
+  const terminal = job({ completed: 3, queued: 0, running: 0, failed: 7, state: 'STOPPED' });
+  mocks.results.mockResolvedValue({
+    operation: terminal,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  client.setQueryData(['eagle', 'owner', 'PHOTO', 'operations', false], [terminal]);
   await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
-  const predicates = invalidate.mock.calls.map(([filters]) => filters!.predicate!);
   for (const mode of ['MATERIAL', 'PHOTO']) {
+    const predicates = invalidate.mock.calls.map(([filters]) => filters!.predicate!);
     expect(
       predicates.some((predicate) =>
-        predicate({ queryKey: ['eagle', 'owner', mode, 'assets', 'ALL', {}] } as never),
+        predicate({ queryKey: ['eagle', 'owner', mode, 'manual-tags'], state: {} } as never),
       ),
     ).toBe(true);
     expect(
       predicates.some((predicate) =>
-        predicate({ queryKey: ['eagle', 'owner', mode, 'operations'] } as never),
+        predicate({ queryKey: ['eagle', 'owner', mode, 'operations'], state: {} } as never),
       ),
     ).toBe(false);
     expect(
       predicates.some((predicate) =>
-        predicate({ queryKey: ['eagle', 'other', mode, 'assets'] } as never),
+        predicate({ queryKey: ['eagle', 'other', mode, 'manual-tags'], state: {} } as never),
       ),
     ).toBe(false);
   }
 });
 
-it('trash progress automatically refreshes its own workspace without invalidating other scopes', async () => {
+it('trash completion calibrates counters once without fetching infinite asset pages', async () => {
   mocks.list.mockImplementation(async (mode) => (mode === 'PHOTO' ? [job({ kind: 'TRASH' })] : []));
   const client = show('ALL', false, true);
   await waitFor(() =>
     expect(client.getQueryData(['eagle', 'owner', 'PHOTO', 'operations', false])).toBeDefined(),
   );
   const invalidate = vi.spyOn(client, 'invalidateQueries');
-  client.setQueryData(
-    ['eagle', 'owner', 'PHOTO', 'operations', false],
-    [job({ kind: 'TRASH', completed: 3 })],
-  );
+  const terminal = job({
+    kind: 'TRASH',
+    completed: 4,
+    queued: 0,
+    running: 0,
+    failed: 6,
+    state: 'STOPPED',
+  });
+  mocks.results.mockResolvedValue({
+    operation: terminal,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  client.setQueryData(['eagle', 'owner', 'PHOTO', 'operations', false], [terminal]);
   await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
   const predicate = invalidate.mock.calls[0]![0]!.predicate!;
-  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('active');
-  expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ALL', {}] } as never)).toBe(
-    true,
-  );
+  expect(
+    predicate({
+      queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', {}],
+      state: { data: { pages: [] } },
+    } as never),
+  ).toBe(false);
   expect(
     predicate({
       queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'library-count', false, 0],
+      state: {},
     } as never),
   ).toBe(true);
-  for (const key of [
-    ['eagle', 'owner', 'MATERIAL', 'assets', 'ALL', {}],
-    ['eagle', 'owner', 'PHOTO', 'operations'],
-  ])
-    expect(predicate({ queryKey: key } as never)).toBe(false);
-  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('active');
-  for (const name of ['manual-tags', 'statistics'])
-    expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', name] } as never)).toBe(true);
-  client.setQueryData(
-    ['eagle', 'owner', 'PHOTO', 'operations', false],
-    [job({ kind: 'TRASH', completed: 4 })],
-  );
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  expect(invalidate).toHaveBeenCalledTimes(1);
-  client.setQueryData(
-    ['eagle', 'owner', 'PHOTO', 'operations', false],
-    [job({ kind: 'TRASH', completed: 4, queued: 0, running: 0, failed: 6, state: 'STOPPED' })],
-  );
-  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
 });
 
 it('reports partial completion when unavailable items did not block the valid deletion', async () => {

@@ -1,3 +1,4 @@
+import { AssetOperationWakeup } from '../../apps/api/dist/asset-operation-wakeup.js';
 import { OPERATION_SEND_CONCURRENCY } from '../../apps/api/dist/eagle/eagle-operation-settings.js';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -1321,3 +1322,175 @@ test('large admission does not hold the owner privacy mutex or block unrelated w
   }
   if (failure) throw failure;
 });
+
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode} undo cancels queued deletion durably and never restores already-trashed skips`, async () => {
+    const f = await fixture(mode),
+      a = await f.add(),
+      b = await f.add({ deletedAt: new Date() });
+    const op = await f.enqueue('TRASH', [a, b]);
+    const undo = await f.service.undo(f.principal, op.id, randomUUID());
+    const duplicate = await f.service.undo(f.principal, op.id, randomUUID());
+    assert.equal(undo.id, duplicate.id, 'one compensation per source intent');
+    for (let i = 0; i < 6; i++) await f.service.tick();
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: a.id } })).deletedAt,
+      null,
+    );
+    assert.notEqual(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: b.id } })).deletedAt,
+      null,
+      'skip was not this operation’s deletion',
+    );
+    const state = await f.state(undo.id);
+    assert.equal(state.queued, 0);
+    assert.equal(state.running, 0);
+    assert.equal(state.failed, 0);
+    assert.equal(state.undoOf, op.id);
+    assert.equal(state.total, 0);
+  });
+  test(`${mode} undo restores only committed successful deletions and preserves newer manual changes`, async () => {
+    const f = await fixture(mode),
+      a = await f.add(),
+      b = await f.add();
+    const op = await f.enqueue('TRASH', [a, b, { id: randomUUID() }]);
+    await f.service.tick();
+    const source = await f.state(op.id);
+    assert.equal(source.completed, 2);
+    assert.equal(source.failed, 1);
+    // A later row change must not be silently undone using the original delete receipt.
+    await prisma.eagleAsset.update({ where: { id: b.id }, data: { rowVersion: { increment: 1 } } });
+    const undo = await f.service.undo(f.principal, op.id, randomUUID());
+    for (let i = 0; i < 6; i++) await f.service.tick();
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: a.id } })).deletedAt,
+      null,
+    );
+    assert.notEqual(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: b.id } })).deletedAt,
+      null,
+    );
+    const state = await f.state(undo.id);
+    assert.equal(state.completed, 1);
+    assert.equal(state.failed, 1);
+    const receipts = await f.service.results(f.principal, undo.id, {});
+    assert(
+      receipts.receipts.some((row) => row.status === 'COMPLETED' && row.assetIds.includes(a.id)),
+    );
+    assert(receipts.receipts.some((row) => row.status === 'FAILED' && row.assetIds.includes(b.id)));
+    await assert.rejects(
+      f.service.results({ ...f.principal, sub: randomUUID() }, op.id, {}),
+      /操作不存在/,
+    );
+    await assert.rejects(
+      f.service.undo({ ...f.principal, sub: randomUUID() }, op.id, randomUUID()),
+      /操作不存在/,
+    );
+    const wrong = new EagleAssetOperationService(
+      prisma,
+      undefined,
+      undefined,
+      mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO',
+    );
+    await assert.rejects(wrong.results(f.principal, op.id, {}), /操作不存在/);
+  });
+  test(`${mode} durable undo follows a deletion that was already claimed by another executor`, async () => {
+    const f = await fixture(mode),
+      a = await f.add();
+    const op = await f.enqueue('TRASH', [a]);
+    const claimed = await f.service.claim('METADATA');
+    assert.equal(claimed.length, 1);
+    const undo = await f.service.undo(f.principal, op.id, randomUUID());
+    await f.service.execute(claimed);
+    const replacement = f.createService();
+    for (let i = 0; i < 6; i++) await replacement.tick();
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: a.id } })).deletedAt,
+      null,
+    );
+    assert.equal((await f.state(undo.id)).completed, 1);
+  });
+}
+
+test('independent LISTEN wakes after committed admission, reconnects, and closes without API polling', async () => {
+  const f = await fixture('PHOTO');
+  let ticks = 0;
+  const listener = new AssetOperationWakeup(process.env.DATABASE_URL, [
+    {
+      mode: 'PHOTO',
+      tick: async () => {
+        ticks++;
+      },
+    },
+  ]);
+  try {
+    await listener.start();
+    const waitFor = async (predicate) => {
+      const deadline = Date.now() + 10000;
+      while (!predicate()) {
+        assert.ok(Date.now() < deadline, 'notification timeout');
+        await delay(20);
+      }
+    };
+    await waitFor(() => ticks > 0);
+    const baseline = ticks;
+    const asset = await f.add();
+    await f.service.enqueue(f.principal, {
+      operationId: randomUUID(),
+      kind: 'TRASH',
+      assetIds: [asset.id],
+    });
+    await waitFor(() => ticks > baseline);
+    // A lost listener reconnects independently; the normal queue remains durable.
+    await prisma.$queryRaw`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name='sekereagle-operation-wakeup' AND pid<>pg_backend_pid()`;
+    const beforeReconnect = ticks;
+    await waitFor(() => ticks > beforeReconnect);
+    await listener.close();
+    const afterClose = ticks;
+    await prisma.$queryRaw`SELECT pg_notify('eagle_asset_operations','PHOTO')::text`;
+    await delay(100);
+    assert.equal(ticks, afterClose);
+  } finally {
+    await listener.close();
+  }
+});
+
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode} receipts use current visible membership for successes, skips and missing resources`, async () => {
+    const f = await fixture(mode);
+    const hidden = await f.add();
+    const alreadyTrashed = await f.add({ deletedAt: new Date() });
+    const missing = { id: randomUUID() };
+    const operation = await f.enqueue('TRASH', [hidden, alreadyTrashed, missing]);
+    for (let i = 0; i < 4; i++) await f.service.tick();
+    await prisma.eagleAsset.update({
+      where: { id: hidden.id },
+      data: { isPrivate: true, rowVersion: { increment: 1 } },
+    });
+    const result = await f.service.results(f.principal, operation.id, {});
+    const facts = new Map(result.membership.map((row) => [row.id, row]));
+    assert.deepEqual(facts.get(hidden.id), {
+      id: hidden.id,
+      rowVersion: null,
+      state: 'UNAVAILABLE',
+    });
+    assert.deepEqual(facts.get(missing.id), {
+      id: missing.id,
+      rowVersion: null,
+      state: 'UNAVAILABLE',
+    });
+    assert.equal(facts.get(alreadyTrashed.id).state, 'TRASH');
+    assert(
+      result.receipts.some(
+        (row) => row.assetIds.includes(alreadyTrashed.id) && row.status === 'SKIPPED',
+      ),
+    );
+    assert.equal(result.operation.failed, 1);
+    const authorized = await f.service.results(
+      { ...f.principal, canViewPrivate: true },
+      operation.id,
+      {},
+    );
+    assert.equal(authorized.membership.find((row) => row.id === hidden.id).state, 'TRASH');
+  });
+}

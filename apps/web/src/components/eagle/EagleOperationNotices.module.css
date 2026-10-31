@@ -1,0 +1,36 @@
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgb(var(--ui-accent-rgb) / 18%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 7%);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.notice[role='alert'] {
+  color: #e8a0a0;
+  background: rgb(232 141 141 / 7%);
+}
+.notice button {
+  padding: 3px 9px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.notice button:hover {
+  background: rgb(var(--ui-accent-rgb) / 12%);
+}
+.notice button:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.notice button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}

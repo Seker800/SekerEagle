@@ -1,9 +1,6 @@
-import { useMemo } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAssetOperationActions } from './useAssetOperationActions';
 import type { AssetOperationSummary } from '@sekereagle/library-core';
-import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import type { LibraryMode } from '../../lib/library-api-scope';
-import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useAssetOperationList } from './useAssetOperations';
 import styles from './EagleTaskCenter.module.css';
@@ -15,29 +12,8 @@ export function AssetOperationsPanel({
   includePrivate: boolean;
   scope: 'ALL' | LibraryMode;
 }) {
-  const { ownerId } = useLibraryWorkspace();
-  const client = useQueryClient();
   const queries = useAssetOperationList(includePrivate);
-  const apis = useMemo(
-    () => ({
-      MATERIAL: createAssetOperationsApi('MATERIAL'),
-      PHOTO: createAssetOperationsApi('PHOTO'),
-    }),
-    [],
-  );
-  const action = useMutation({
-    mutationFn: ({ operation, retry }: { operation: AssetOperationSummary; retry: boolean }) =>
-      retry
-        ? apis[operation.libraryMode].retry(operation.id)
-        : apis[operation.libraryMode].cancel(operation.id),
-    onSuccess: () =>
-      client.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === 'eagle' &&
-          query.queryKey[1] === ownerId &&
-          query.queryKey[3] === 'operations',
-      }),
-  });
+  const action = useAssetOperationActions();
   const operations = queries
     .flatMap((query) => query.data ?? [])
     .filter((operation) => scope === 'ALL' || operation.libraryMode === scope);
@@ -117,11 +93,24 @@ export function AssetOperationsPanel({
             )}
           </div>
           <div className={styles.actions}>
+            {(operation.kind === 'TRASH' || operation.kind === 'DUPLICATE_CLEANUP') &&
+              !operations.some((row) => row.undoOf === operation.id) &&
+              (operation.completed > (operation.skipped ?? 0) ||
+                operation.queued > 0 ||
+                operation.running > 0) && (
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ operation, action: 'undo' })}
+                >
+                  {operation.kind === 'TRASH' ? t('撤销删除') : t('恢复清理项（保留已合并信息）')}
+                </button>
+              )}
             {operation.failed > 0 && (
               <button
                 type="button"
                 disabled={action.isPending}
-                onClick={() => action.mutate({ operation, retry: true })}
+                onClick={() => action.mutate({ operation, action: 'retry' })}
               >
                 {t('重试失败任务')}
               </button>
@@ -130,7 +119,7 @@ export function AssetOperationsPanel({
               <button
                 type="button"
                 disabled={action.isPending}
-                onClick={() => action.mutate({ operation, retry: false })}
+                onClick={() => action.mutate({ operation, action: 'cancel' })}
               >
                 {t('停止排队')}
               </button>

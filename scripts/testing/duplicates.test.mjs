@@ -1,3 +1,4 @@
+import { setImmediate as flushQueryEvents } from 'node:timers/promises';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
 import assert from 'node:assert/strict';
@@ -171,13 +172,18 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       1,
     );
     assert.equal(f.reads(), 0, 'exact review and cleanup perform zero object reads');
-    const restore = await f.executor.enqueue(f.principal, {
-      operationId: randomUUID(),
-      kind: 'RESTORE',
-      assetIds: [a.id],
-    });
-    await f.drain(restore.id);
+    const receipts = await f.executor.results(f.principal, result.operationId, {});
+    assert.equal(receipts.receipts[0].groupSignature, signature);
+    assert.ok(receipts.membership.some((row) => row.id === a.id && row.state === 'TRASH'));
+    const restore = await f.executor.undo(f.principal, result.operationId, randomUUID());
+    const restored = await f.drain(restore.id);
+    assert.equal(restored.failed, 0);
     assert.equal((await db.eagleAsset.findUnique({ where: { id: a.id } })).deletedAt, null);
+    assert.equal(
+      await db.eagleAssetManualTag.count({ where: { assetId: b.id, tagId: tag.id } }),
+      1,
+      'undo restores removed resources without losing merged keeper information',
+    );
   });
   test(`${mode}: owner, mode, private, trash, stale review and changed keeper cannot be bypassed`, async () => {
     const f = await fixture(mode),
@@ -351,11 +357,14 @@ test('60k library read, group pagination beyond the first page, and batch admiss
     });
     await db.eagleAsset.createMany({ data: rows });
   }
+  // Prisma query events are delivered asynchronously; exclude the preceding seed/cleanup.
+  await flushQueryEvents();
   queries = 0;
   const start = performance.now(),
     page = await f.duplicate.list(f.ownerId, false, {}),
-    readMs = performance.now() - start,
-    readQueries = queries;
+    readMs = performance.now() - start;
+  await flushQueryEvents();
+  const readQueries = queries;
   assert.equal(page.coverage.total, 60000);
   assert.equal(page.exactGroups, 100);
   assert.equal(page.groups.length, 24);

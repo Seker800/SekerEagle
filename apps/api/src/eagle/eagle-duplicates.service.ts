@@ -191,6 +191,23 @@ export class EagleDuplicateService {
       throw new NotFoundException('操作不存在。');
     if (existing.kind !== kind || JSON.stringify(existing.inputIds) !== JSON.stringify(inputIds))
       throw new ConflictException('操作标识与选择不一致。');
+    if (kind === 'DUPLICATE_CLEANUP') {
+      const items = await tx.eagleAssetOperationItem.findMany({
+        where: { operationId: id, ownerId: principal.sub, libraryMode: this.libraryMode },
+        select: { assetIds: true, snapshots: true },
+      });
+      return {
+        operationId: existing.id,
+        assetIds: [
+          ...new Set(
+            items.flatMap((item) => {
+              const snapshot = item.snapshots as unknown as CleanupSnapshot;
+              return snapshot.resources?.map((row) => row.id) ?? item.assetIds;
+            }),
+          ),
+        ],
+      };
+    }
     return { operationId: existing.id };
   }
   private async admit(
@@ -237,6 +254,20 @@ export class EagleDuplicateService {
           ordinal: offset + index,
         })),
       });
+    await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
+    if (kind === 'DUPLICATE_CLEANUP')
+      return {
+        operationId: id,
+        assetIds: [
+          ...new Set(
+            items.flatMap((item) =>
+              'resources' in item.snapshots
+                ? item.snapshots.resources.map((row) => row.id)
+                : item.assetIds,
+            ),
+          ),
+        ],
+      };
     return { operationId: id };
   }
   async scan(principal: AuthPrincipal, id: string) {
@@ -402,6 +433,7 @@ export class EagleDuplicateService {
           weight: plan.assetIds.length,
           snapshots: {
             kind: 'cleanup' as const,
+            signature: plan.group.signature,
             resources: expand(plan.assetIds),
             keepers: expand(plan.choice.keepIds),
             exact: plan.group.kind === 'EXACT',

@@ -10,7 +10,11 @@ import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { EagleController } from './eagle.controller';
 import { SendEagleAssetsDto } from './eagle.dto';
-import { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
+import {
+  EnqueueAssetOperationDto,
+  UndoAssetOperationDto,
+  AssetOperationResultsDto,
+} from './eagle-asset-operations.dto';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { PhotosController } from '../photos/photo-library.module';
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
@@ -44,7 +48,12 @@ test('both inherited controllers require authenticated browser principals and or
     const guards = Reflect.getMetadata(GUARDS_METADATA, controller) as unknown[];
     assert.ok(guards.includes(AccessAuthGuard));
     assert.ok(guards.includes(BrowserPrincipalGuard));
-    for (const name of ['enqueueOperation', 'retryOperation', 'cancelOperation'] as const)
+    for (const name of [
+      'enqueueOperation',
+      'retryOperation',
+      'cancelOperation',
+      'undoOperation',
+    ] as const)
       assert.ok(
         (
           Reflect.getMetadata(
@@ -391,7 +400,133 @@ test('operation result receipts reject foreign, wrong-mode and locked private op
     queries,
     ['MATERIAL', 'PHOTO'].map((libraryMode) => ({
       where: { id: 'operation', ownerId: 'owner', libraryMode, isPrivate: false },
-      select: { id: true, kind: true, libraryMode: true, inputIds: true, updatedAt: true },
+      select: { id: true, kind: true, libraryMode: true, undoOfId: true, updatedAt: true },
     })),
   );
+});
+
+test('receipts expose only scoped membership and versions, page by ordinal, and reject a changed revision', async () => {
+  const operation = {
+    id: 'op',
+    kind: 'TRASH',
+    libraryMode: 'PHOTO',
+    inputIds: [],
+    updatedAt: new Date('2026-10-31T00:00:00Z'),
+  };
+  const calls: unknown[] = [];
+  const rows = Array.from({ length: 513 }, (_, ordinal) => ({
+    ordinal,
+    assetIds: [`asset-${ordinal}`],
+    snapshots: [
+      {
+        id: `asset-${ordinal}`,
+        rowVersion: 2,
+        mediaRevision: 1,
+        displayName: 'DO_NOT_EXPOSE',
+        storageKey: 'PRIVATE_KEY',
+      },
+    ],
+    status: 'COMPLETED',
+    errorCode: null,
+  }));
+  const prisma = {
+    $queryRaw: async () => [{ id: 'asset-0', rowVersion: 7, state: 'ACTIVE' }],
+    eagleAssetOperation: { findFirst: async () => operation },
+    eagleAssetOperationItem: {
+      groupBy: async () => [{ status: 'COMPLETED', errorCode: null, _sum: { weight: 513 } }],
+      findMany: async (query: { where: { ordinal: { gte: number } } }) => {
+        calls.push(query);
+        return rows.slice(query.where.ordinal.gte);
+      },
+    },
+  };
+  const service = new EagleAssetOperationService(
+    prisma as never,
+    undefined as never,
+    undefined as never,
+    'PHOTO',
+  );
+  const principal = { sub: 'owner', canViewPrivate: false } as AuthPrincipal;
+  const first = await service.results(principal, 'op', {});
+  assert.equal(first.receipts.length, 512);
+  assert.equal(first.nextCursor, 512);
+  assert.deepEqual(first.receipts[0], {
+    status: 'COMPLETED',
+    errorCode: null,
+    assetIds: ['asset-0'],
+  });
+  assert.deepEqual(first.membership, [{ id: 'asset-0', rowVersion: 7, state: 'ACTIVE' }]);
+  assert(!JSON.stringify(first).includes('DO_NOT_EXPOSE'));
+  assert(!JSON.stringify(first).includes('PRIVATE_KEY'));
+  const second = await service.results(principal, 'op', {
+    cursor: first.nextCursor!,
+    revision: first.revision,
+  });
+  assert.equal(second.receipts.length, 1);
+  assert.equal(second.nextCursor, null);
+  assert.equal((calls[1] as { where: { ownerId: string } }).where.ownerId, 'owner');
+  operation.updatedAt = new Date('2026-10-31T00:00:01Z');
+  await assert.rejects(
+    () => service.results(principal, 'op', { cursor: 512, revision: first.revision }),
+    /操作结果已变化/,
+  );
+});
+
+test('in-flight results never pretend the queued selection is completed', async () => {
+  const service = new EagleAssetOperationService(
+    {
+      eagleAssetOperation: {
+        findFirst: async () => ({
+          id: 'op',
+          kind: 'TRASH',
+          libraryMode: 'PHOTO',
+          updatedAt: new Date(),
+        }),
+      },
+      eagleAssetOperationItem: {
+        groupBy: async () => [{ status: 'RUNNING', errorCode: null, _sum: { weight: 3 } }],
+        findMany: () => {
+          throw Error('No premature resource receipts');
+        },
+      },
+    } as never,
+    undefined as never,
+    undefined as never,
+    'PHOTO',
+  );
+  const result = await service.results(
+    { sub: 'owner', canViewPrivate: false } as AuthPrincipal,
+    'op',
+    {},
+  );
+  assert.equal(result.operation.running, 3);
+  assert.deepEqual(result.receipts, []);
+});
+
+test('undo and result inputs reject scope escalation and malformed cursor values', async () => {
+  await pipe.transform(
+    { operationId: randomUUID() },
+    { type: 'body', metatype: UndoAssetOperationDto },
+  );
+  for (const extra of [
+    { ownerId: 'other' },
+    { libraryMode: 'PHOTO' },
+    { assetIds: [randomUUID()] },
+    { operationId: 'invalid' },
+  ])
+    await assert.rejects(
+      pipe.transform(
+        { operationId: randomUUID(), ...extra },
+        { type: 'body', metatype: UndoAssetOperationDto },
+      ),
+    );
+  for (const cursor of ['-1', 'NaN', '1.5'])
+    await assert.rejects(
+      pipe.transform({ cursor }, { type: 'query', metatype: AssetOperationResultsDto }),
+    );
+  const query = await pipe.transform(
+    { cursor: '512' },
+    { type: 'query', metatype: AssetOperationResultsDto },
+  );
+  assert.equal(query.cursor, 512);
 });

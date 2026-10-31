@@ -27,12 +27,27 @@ export function useEaglePrependAnchor(
       return;
     }
     // Entity normalization and append/resize renders can happen before the page commits.
-    if (saved.items[0]?.id === items[0]?.id) return;
+    const nextIds = new Set(items.map((item) => item.id));
+    if (saved.items[0]?.id === items[0]?.id && saved.items.every((item) => nextIds.has(item.id)))
+      return;
     clear();
-    const item = items.find((item) => item.id === saved.id);
+    const byId = new Map(items.map((item) => [item.id, item]));
+    const original = saved.items.find((item) => item.id === saved.id);
+    const survivor =
+      original && byId.has(original.id)
+        ? original
+        : saved.items
+            .slice(
+              Math.max(
+                0,
+                saved.items.findIndex((item) => item.id === saved.id),
+              ),
+            )
+            .find((item) => byId.has(item.id));
+    const item = survivor ? byId.get(survivor.id) : undefined;
     const element = viewport.elementRef.current;
-    if (!item || !element || item.top === saved.top) return;
-    const top = Math.max(0, element.scrollTop + item.top - saved.top);
+    if (!item || !element || item.top === (survivor?.top ?? saved.top)) return;
+    const top = Math.max(0, element.scrollTop + item.top - (survivor?.top ?? saved.top));
     element.scrollTo({ top, behavior: 'instant' });
     viewport.handleScroll(top);
   }, [items, scope, viewport.elementRef, viewport.handleScroll, clear]);

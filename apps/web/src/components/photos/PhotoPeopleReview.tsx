@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { getPhotoPeopleReview, decidePhotoPeople } from '../../lib/photo-management-api';
@@ -37,6 +37,12 @@ export function PhotoPeopleReview({
       !skipped.has(item.key) && representativeFace(item.first) && representativeFace(item.second),
   );
   const busy = pending || saving;
+  const { fetchNextPage, hasNextPage, isFetching, isFetchNextPageError } = query;
+  useEffect(() => {
+    if (!pair && hasNextPage && !isFetching && !isFetchNextPageError && !busy) {
+      void fetchNextPage();
+    }
+  }, [pair, hasNextPage, isFetching, isFetchNextPageError, busy, fetchNextPage, query.data]);
   async function decide(decision: 'SAME' | 'DIFFERENT') {
     if (!pair || submitting.current) return;
     submitting.current = true;
@@ -131,7 +137,7 @@ export function PhotoPeopleReview({
             </button>
           </div>
         </>
-      ) : query.hasNextPage ? (
+      ) : query.hasNextPage && query.isFetchNextPageError ? (
         <button
           type="button"
           disabled={query.isFetchingNextPage || busy}
@@ -139,6 +145,8 @@ export function PhotoPeopleReview({
         >
           {query.isFetchingNextPage ? t('正在查找相似人物…') : t('继续查找相似人物')}
         </button>
+      ) : query.hasNextPage ? (
+        <p role="status">{t('正在查找相似人物…')}</p>
       ) : (
         <p>{t('暂时没有需要确认的相似人物。')}</p>
       )}

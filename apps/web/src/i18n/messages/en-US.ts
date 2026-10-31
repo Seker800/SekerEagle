@@ -1,4 +1,20 @@
 export const enUS = {
+  确认永久删除: 'Permanently delete',
+  '将永久删除当前图库回收站中的全部项目，包括尚未加载的项目。此操作无法撤销。':
+    'Permanently delete every item in this library’s Trash, including items not yet loaded. This cannot be undone.',
+  确认清空回收站: 'Confirm emptying Trash',
+  '恢复所选 {{count}} 项': 'Restore {{count}} selected items',
+  '正在确认操作是否受理，请勿重复提交。':
+    'Confirming whether the operation was accepted. Do not submit it again.',
+  '正在处理 {{done}} / {{total}} 项': 'Processing {{done}} / {{total}} items',
+  '已完成 {{done}} 项，{{failed}} 项未完成': 'Completed {{done}} items; {{failed}} unfinished',
+  '恢复清理项（保留已合并信息）': 'Restore removed items (keep merged information)',
+  撤销删除: 'Undo deletion',
+  '已申请撤销，可查看恢复进度。': 'Undo requested. View restoration progress for the result.',
+  重试确认: 'Confirm again',
+  关闭操作提示: 'Dismiss operation notice',
+  '正在提交撤销…': 'Submitting undo…',
+  取消排队: 'Cancel queued work',
   '每组按推荐保留一项，其余移入回收站，可以恢复。':
     'Keep the recommended item in each group and move the others to Trash, where they can be restored.',
   已提交清理: 'Cleanup queued',

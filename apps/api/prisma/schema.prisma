@@ -186,6 +186,9 @@ model EagleAssetOperation {
   libraryMode LibraryMode
   kind String
   inputIds String[]
+  undoOfId String? @unique
+  undoSource EagleAssetOperation? @relation("EagleOperationUndo", fields: [ownerId, libraryMode, undoOfId], references: [ownerId, libraryMode, id], onDelete: NoAction, onUpdate: NoAction, map: "EagleAssetOperation_undo_scope_fkey")
+  undoRequests EagleAssetOperation[] @relation("EagleOperationUndo")
   authVersion Int
   privateUntil DateTime?
   isPrivate Boolean @default(false)

@@ -60,7 +60,7 @@ export function createDuplicatesApi(mode: LibraryMode) {
         body: JSON.stringify({ operationId }),
       }),
     cleanup: (input: DuplicateCleanupInput) =>
-      request<{ operationId: string | null }>(`${base}/cleanup`, {
+      request<{ operationId: string | null; assetIds?: string[] }>(`${base}/cleanup`, {
         method: 'POST',
         body: JSON.stringify(input),
       }),

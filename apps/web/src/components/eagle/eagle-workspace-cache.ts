@@ -1,3 +1,5 @@
+import type { AssetOperationKind } from '@sekereagle/library-core';
+import { EagleOperationChanges } from './eagle-operation-changes';
 import { LibraryUploadQueue } from '../../lib/library-upload-queue';
 import { OriginalDownloadQueue } from '../../lib/original-download-queue';
 import type { EagleQuickFilterState } from './eagle-quick-filter-state';
@@ -43,6 +45,37 @@ export function getEagleWorkspaceCache(
 }
 
 class EagleWorkspaceCache {
+  readonly operations = new EagleOperationChanges();
+  beginOperation(
+    id: string,
+    kind: AssetOperationKind,
+    assetIds: string[],
+    projectedCount?: number,
+  ) {
+    const existing = this.operations.entries.find((entry) => entry.id === id);
+    if (existing?.pending) return;
+    const countQuery = this.client
+      .getQueryCache()
+      .findAll({ queryKey: [...this.#keys.assets, 'library-count'] })[0];
+    const count = (countQuery?.state.data as { count?: number } | undefined)?.count;
+    const known = [...new Set(assetIds)].filter(
+      (assetId) => this.store.get(assetId) && this.operations.visible(assetId, kind === 'RESTORE'),
+    );
+    if (kind === 'TRASH' || kind === 'RESTORE' || kind === 'DUPLICATE_CLEANUP')
+      this.operations.adjustCount(
+        count,
+        (projectedCount ?? known.length) * (kind === 'RESTORE' ? 1 : -1),
+      );
+    if (existing) this.operations.resume(id);
+    else this.operations.begin(id, kind, assetIds, projectedCount);
+    if (kind === 'TRASH' || kind === 'RESTORE' || kind === 'DUPLICATE_CLEANUP') {
+      const companions = assetIds.flatMap((assetId) => {
+        const motion = this.store.get(assetId)?.livePhotoMotion;
+        return motion ? [motion.assetId] : [];
+      });
+      if (companions.length) this.operations.expand(id, companions);
+    }
+  }
   browse: {
     search: string;
     quickFilters: EagleQuickFilterState;
@@ -82,6 +115,7 @@ class EagleWorkspaceCache {
   }
   readonly scrollPositions = new Map<string, number>();
   clearNavigation() {
+    this.operations.clear();
     this.downloads.clear();
     this.uploads.clear();
     this.browse = null;
@@ -136,6 +170,7 @@ class EagleWorkspaceCache {
         if (!client.getQueryCache().findAll({ queryKey: this.#keys.root }).length) {
           this.downloads.clear();
           this.uploads.clear();
+          this.operations.clear();
         }
         this.#collect();
       }
@@ -164,7 +199,7 @@ class EagleWorkspaceCache {
   }
 
   #collect() {
-    if (this.#disposed || this.#references) return;
+    if (this.#disposed || this.#references || this.operations.hasPending()) return;
     const lists = this.client.getQueryCache().findAll({ queryKey: this.#keys.assets });
     if (lists.some(({ queryKey }) => queryKey.length === this.#keys.assets.length + 2)) return;
     if (
@@ -174,9 +209,9 @@ class EagleWorkspaceCache {
         .some((query) => query.state.data !== undefined)
     )
       return;
+    this.#disposed = true;
     this.clearNavigation();
     this.uploads.dispose();
-    this.#disposed = true;
     clearTimeout(this.#entityCollection);
     this.#entityReferences.clear();
     this.#unsubscribe();

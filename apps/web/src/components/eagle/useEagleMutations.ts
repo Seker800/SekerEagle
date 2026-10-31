@@ -33,7 +33,7 @@ interface EagleMutationCallbacks {
   onMetadataSaved: (assetId: string, revision: number) => void;
   onBatchTagsApplied: () => void;
   onAssetPrivacyChanged: () => void;
-  onOperationQueued: () => void;
+  onOperationStarted: () => void;
   onSmartFolderCreated: () => void;
   onSmartFolderUpdated: (folder: EagleSmartFolder, changes: SmartFolderChanges) => void;
 }
@@ -248,21 +248,15 @@ export function useEagleMutations(
   });
   const trashMutation = useMutation({
     mutationFn: (assetIds: string[]) => enqueueOperation('TRASH', assetIds),
-    onSuccess: () => {
-      callbacks.onOperationQueued();
-    },
+    onMutate: () => callbacks.onOperationStarted(),
   });
   const restoreMutation = useMutation({
     mutationFn: (assetIds: string[]) => enqueueOperation('RESTORE', assetIds),
-    onSuccess: () => {
-      callbacks.onOperationQueued();
-    },
+    onMutate: () => callbacks.onOperationStarted(),
   });
   const emptyTrashMutation = useMutation({
     mutationFn: () => enqueueOperation('EMPTY_TRASH'),
-    onSuccess: () => {
-      callbacks.onOperationQueued();
-    },
+    onMutate: () => callbacks.onOperationStarted(),
   });
   const smartFolderMutation = useMutation({
     mutationFn: (input: { name: string; query: EagleFilterQuery }) =>

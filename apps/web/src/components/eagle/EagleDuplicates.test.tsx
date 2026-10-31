@@ -1,3 +1,6 @@
+import { act } from '@testing-library/react';
+import { ApiError } from '../../lib/api-error';
+import { useAssetOperationProgress } from './useAssetOperations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -21,8 +24,28 @@ const mocks = vi.hoisted(() => ({
   }>,
 }));
 vi.mock('../../lib/eagle-duplicates-api', () => ({ createDuplicatesApi: () => mocks }));
-vi.mock('./useAssetOperations', () => ({
-  useAssetOperationList: () => [{ data: mocks.operations }, { data: [] }],
+vi.mock('../../lib/asset-operations-api', () => ({
+  createAssetOperationsApi: (mode: string) => ({
+    list: async () => mocks.operations.filter((row) => row.libraryMode === mode),
+    results: async (id: string) => {
+      const operation = mocks.operations.find((row) => row.id === id);
+      if (!operation) throw new ApiError('操作不存在', 404, null);
+      return {
+        operation: { cancelled: 0, state: 'COMPLETED', errors: [], ...operation },
+        revision: 'v1',
+        membership: [],
+        receipts: [
+          {
+            status: operation.completed ? 'COMPLETED' : operation.failed ? 'FAILED' : 'CANCELLED',
+            errorCode: null,
+            assetIds: ['two'],
+            groupSignature: 'a'.repeat(64),
+          },
+        ],
+        nextCursor: null,
+      };
+    },
+  }),
 }));
 vi.mock('./EagleAssetThumbnail', () => ({ EagleAssetThumbnail: () => <span>图片预览</span> }));
 const group = {
@@ -37,13 +60,27 @@ function render() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const show = () => (
+  function Progress() {
+    useAssetOperationProgress(false, true);
+    return null;
+  }
+  const show = (open = true) => (
     <QueryClientProvider client={client}>
-      <EagleDuplicates includePrivate={false} onClose={() => {}} />
+      <Progress />
+      {open && <EagleDuplicates includePrivate={false} onClose={() => {}} />}
     </QueryClientProvider>
   );
   const view = renderInWorkspace(show());
-  return { ...view, update: () => view.rerender(show()) };
+  return {
+    ...view,
+    client,
+    reopen: () => view.rerender(show(true)),
+    hide: () => view.rerender(show(false)),
+    update: () => {
+      client.setQueryData(['eagle', 'owner', 'MATERIAL', 'operations', false], mocks.operations);
+      view.rerender(show());
+    },
+  };
 }
 describe('duplicate cleanup review', () => {
   beforeEach(() => {
@@ -68,8 +105,32 @@ describe('duplicate cleanup review', () => {
       nextCursor: null,
       groups: [group],
     });
-    mocks.scan.mockResolvedValue({ operationId: 'scan' });
-    mocks.cleanup.mockResolvedValue({ operationId: 'cleanup' });
+    mocks.scan.mockImplementation(async (id: string) => {
+      mocks.operations.push({
+        id,
+        libraryMode: 'MATERIAL',
+        kind: 'DUPLICATE_SCAN',
+        queued: true,
+        running: false,
+        completed: 0,
+        total: 1,
+        failed: 0,
+      });
+      return { operationId: id };
+    });
+    mocks.cleanup.mockImplementation(async (input: { operationId: string }) => {
+      mocks.operations.push({
+        id: input.operationId,
+        libraryMode: 'MATERIAL',
+        kind: 'DUPLICATE_CLEANUP',
+        queued: true,
+        running: false,
+        completed: 0,
+        total: 1,
+        failed: 0,
+      });
+      return { operationId: input.operationId };
+    });
   });
   it('shows incomplete indexing honestly and starts a durable incremental scan', async () => {
     render();
@@ -93,6 +154,36 @@ describe('duplicate cleanup review', () => {
           operationId: expect.any(String),
         }),
       ),
+    );
+  });
+  it('keeps a submitted all-exact cleanup hidden across closing and reopening the review', async () => {
+    const view = render();
+    fireEvent.click(await screen.findByRole('button', { name: '清理全部完全重复项' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^文件完全相同/ })).not.toBeInTheDocument(),
+    );
+    view.hide();
+    view.reopen();
+    await screen.findByRole('button', { name: '清理全部完全重复项' });
+    expect(screen.queryByRole('button', { name: /^文件完全相同/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '清理全部完全重复项' })).toBeDisabled();
+  });
+  it('retains an uncertain all-exact intent and confirms the same operation after reopening', async () => {
+    mocks.cleanup.mockRejectedValueOnce(new Error('连接中断'));
+    const view = render();
+    fireEvent.click(await screen.findByRole('button', { name: '清理全部完全重复项' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await screen.findByRole('button', { name: '重试确认' });
+    const intent = mocks.cleanup.mock.calls[0][0];
+    view.hide();
+    view.reopen();
+    fireEvent.click(await screen.findByRole('button', { name: '重试确认' }));
+    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(2));
+    expect(mocks.cleanup.mock.calls[1][0]).toEqual(intent);
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^文件完全相同/ })).not.toBeInTheDocument(),
     );
   });
   it('reports read failures and permits retry without presenting an empty clean library', async () => {
@@ -157,7 +248,7 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: '清理全部完全重复项' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('清理连接失败');
-    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    fireEvent.click(screen.getByRole('button', { name: '重试确认' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(2));
     expect(mocks.cleanup.mock.calls[0]).toEqual(mocks.cleanup.mock.calls[1]);
   });
@@ -247,16 +338,16 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[1]).toHaveAttribute(
+      expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[0]).toHaveAttribute(
         'aria-expanded',
         'true',
       ),
     );
-    expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[0]).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(1);
     mocks.list.mockResolvedValue({ ...initial, groups: [next] });
     mocks.operations = [
       {
-        id: 'cleanup',
+        id: mocks.cleanup.mock.calls[0]![0].operationId,
         libraryMode: 'MATERIAL',
         kind: 'DUPLICATE_CLEANUP',
         running: false,
@@ -277,7 +368,7 @@ describe('duplicate cleanup review', () => {
     view.unmount();
   });
   it('keeps a failed single-group choice visible and retries the same command', async () => {
-    mocks.cleanup.mockRejectedValueOnce(new Error('单组连接失败'));
+    mocks.cleanup.mockRejectedValueOnce(new ApiError('单组请求失败', 400, null));
     mocks.members.mockResolvedValue({
       signature: group.signature,
       total: 2,
@@ -301,7 +392,7 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^文件完全相同/ }));
     await screen.findByRole('checkbox', { name: '保留 one' });
     fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('单组连接失败');
+    expect(await screen.findByRole('alert')).toHaveTextContent('单组请求失败');
     expect(screen.getByRole('checkbox', { name: '保留 one' })).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(2));
@@ -313,7 +404,7 @@ describe('duplicate cleanup review', () => {
     await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
     mocks.operations = [
       {
-        id: 'scan',
+        id: mocks.scan.mock.calls[0]![0],
         libraryMode: 'MATERIAL',
         kind: 'DUPLICATE_SCAN',
         running: false,
@@ -356,14 +447,16 @@ describe('duplicate cleanup review', () => {
         mediaRevision: 1,
       })),
     });
-    render();
+    const view = render();
     fireEvent.click(await screen.findByRole('button', { name: '加载更多组' }));
     await waitFor(() =>
       expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(2),
     );
     fireEvent.click(screen.getAllByRole('button', { name: /^文件完全相同/ })[1]);
     fireEvent.click(await screen.findByRole('checkbox', { name: '保留 two' }));
-    fireEvent.click(screen.getByRole('button', { name: '刷新结果' }));
+    await act(async () =>
+      view.client.invalidateQueries({ queryKey: ['eagle', 'owner', 'MATERIAL', 'duplicates'] }),
+    );
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(4));
     expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(2);
     expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();

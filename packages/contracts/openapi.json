@@ -531,6 +531,85 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/operations/{operationId}/results": {
+      "get": {
+        "operationId": "EagleController_operationResults",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "revision",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/operations/{operationId}/undo": {
+      "post": {
+        "operationId": "EagleController_undoOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UndoAssetOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/operations/{operationId}/retry": {
       "post": {
         "operationId": "EagleController_retryOperation",
@@ -4237,6 +4316,85 @@
         ],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/operations/{operationId}/results": {
+      "get": {
+        "operationId": "PhotosController_operationResults",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "revision",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/operations/{operationId}/undo": {
+      "post": {
+        "operationId": "PhotosController_undoOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UndoAssetOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -8471,6 +8629,16 @@
           }
         },
         "required": ["operationId", "kind", "assetIds"]
+      },
+      "UndoAssetOperationDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["operationId"]
       },
       "SendEagleAssetsDto": {
         "type": "object",

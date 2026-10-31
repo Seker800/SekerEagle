@@ -1,10 +1,11 @@
+import { getEagleWorkspaceCache } from './eagle-workspace-cache';
+import { ApiError } from '../../lib/api-error';
 import { useEffect, useMemo, useRef } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { AssetOperationKind, AssetOperationSummary } from '@sekereagle/library-core';
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
-import { AssetOperationRefresher } from './asset-operation-refresh';
-import type { LibraryMode } from '../../lib/library-api-scope';
+import { getAssetOperationRefresher } from './asset-operation-refresh';
 
 export function useEnqueueAssetOperation() {
   const { ownerId, libraryMode } = useLibraryWorkspace();
@@ -15,13 +16,34 @@ export function useEnqueueAssetOperation() {
     const key = JSON.stringify([ownerId, libraryMode, kind, [...assetIds].sort()]);
     const operationId = pendingIds.current.get(key) ?? crypto.randomUUID();
     pendingIds.current.set(key, operationId);
-    const operation = await api.enqueue({ operationId, kind, assetIds });
-    pendingIds.current.delete(key);
-    void client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
-    return operation;
+    const cache = getEagleWorkspaceCache(client, ownerId, libraryMode);
+    const changes = cache.operations;
+    cache.beginOperation(operationId, kind, assetIds);
+    try {
+      const operation = await api.enqueue({ operationId, kind, assetIds });
+      pendingIds.current.delete(key);
+      changes.observe(operation);
+      void client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
+      return operation;
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 408
+      ) {
+        changes.reject(operationId, error.message);
+        await client.invalidateQueries({
+          queryKey: ['eagle', ownerId, libraryMode, 'assets', 'library-count'],
+        });
+        changes.confirmCounts();
+      } else changes.uncertain(operationId, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
   };
 }
 export function useAssetOperationList(includePrivate: boolean, enabled = true) {
+  const client = useQueryClient();
   const { ownerId, libraryMode } = useLibraryWorkspace();
   const apis = useMemo(
     () => ({
@@ -39,6 +61,7 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
         enabled,
         staleTime: 1000,
         refetchInterval: (query: { state: { data?: AssetOperationSummary[] } }) =>
+          getEagleWorkspaceCache(client, ownerId, mode).operations.hasPending() ||
           query.state.data?.some((operation) => operation.running || operation.queued)
             ? 1500
             : 60000,
@@ -47,63 +70,56 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
     }),
   });
 }
-/** Refresh only published results; accepting or failing a command must not hide its sources. */
+/** Observe durable outcomes in both modes even while a modal is closed. */
 export function useAssetOperationProgress(includePrivate: boolean, enabled: boolean) {
   const { ownerId } = useLibraryWorkspace();
   const client = useQueryClient();
   const queries = useAssetOperationList(includePrivate, enabled);
   const material = queries[0].data,
     photo = queries[1].data;
-  const previous = useRef<Array<AssetOperationSummary[] | undefined>>([material, photo]);
-  const refresher = useRef<AssetOperationRefresher | null>(null);
-  const publishedOperations = useRef(new Set<string>());
-  const refreshedAt = useRef(new Map<LibraryMode, number>());
-  useEffect(() => {
-    const queue = new AssetOperationRefresher(client, ownerId);
-    refresher.current = queue;
-    previous.current = [undefined, undefined];
-    publishedOperations.current.clear();
-    refreshedAt.current.clear();
-    return () => {
-      queue.dispose();
-      if (refresher.current === queue) refresher.current = null;
-    };
-  }, [client, ownerId]);
+  const materialUpdatedAt = queries[0].dataUpdatedAt,
+    photoUpdatedAt = queries[1].dataUpdatedAt;
+  const previous = useRef<Array<AssetOperationSummary[] | undefined>>([]);
   useEffect(() => {
     const snapshots = [material, photo];
-    const affected = new Map<LibraryMode, boolean>();
     snapshots.forEach((rows, index) => {
-      const before = previous.current[index];
-      if (!before) return;
+      const mode = index === 0 ? 'MATERIAL' : 'PHOTO';
+      const changes = getEagleWorkspaceCache(client, ownerId, mode).operations;
+      for (const tracked of changes.entries) {
+        if (tracked.pending && !rows?.some((row) => row.id === tracked.id))
+          void getAssetOperationRefresher(client, ownerId).reconcile(mode, {
+            id: tracked.id,
+            kind: tracked.kind,
+            libraryMode: mode,
+            total: tracked.assetIds.length,
+            completed: 0,
+            running: 0,
+            queued: 0,
+            failed: 0,
+            cancelled: 0,
+            state: 'STOPPED',
+            errors: [],
+          });
+      }
       for (const row of rows ?? []) {
-        if (row.kind === 'DUPLICATE_SCAN') continue;
-        const old = before.find((candidate) => candidate.id === row.id);
-        const published = row.completed > (old?.completed ?? 0);
-        if (published) publishedOperations.current.add(row.id);
-        const finished =
+        if (row.undoOf && changes.entries.some((entry) => entry.id === row.undoOf)) {
+          changes.setUndo(row.undoOf, row.id);
+          if (!changes.entries.some((entry) => entry.id === row.id))
+            getEagleWorkspaceCache(client, ownerId, mode).beginOperation(row.id, 'RESTORE', []);
+        }
+        const tracked = changes.entries.find((entry) => entry.id === row.id);
+        const old = previous.current[index]?.find((candidate) => candidate.id === row.id);
+        if (tracked) changes.observe(row);
+        if (
           !row.running &&
           !row.queued &&
-          !!old &&
-          (!!old.running || !!old.queued) &&
-          publishedOperations.current.has(row.id);
-        if (!published && !finished) continue;
-        const final = !row.running && !row.queued;
-        affected.set(row.libraryMode, final || !!affected.get(row.libraryMode));
-        if (row.kind === 'SEND') {
-          const target = row.libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
-          affected.set(target, final || !!affected.get(target));
+          (tracked?.pending ||
+            (previous.current[index] !== undefined && JSON.stringify(old) !== JSON.stringify(row)))
+        ) {
+          void getAssetOperationRefresher(client, ownerId).reconcile(mode, row);
         }
-        if (final) publishedOperations.current.delete(row.id);
       }
     });
-    for (const [mode, final] of affected) {
-      const now = Date.now();
-      // Intermediate results must not repeatedly read a deeply paged list.
-      // Completion always bypasses this cadence, including partial failure.
-      if (!final && now - (refreshedAt.current.get(mode) ?? -Infinity) < 10_000) continue;
-      refreshedAt.current.set(mode, now);
-      refresher.current?.schedule(mode, final);
-    }
     previous.current = snapshots;
-  }, [material, photo]);
+  }, [client, ownerId, material, photo, materialUpdatedAt, photoUpdatedAt]);
 }

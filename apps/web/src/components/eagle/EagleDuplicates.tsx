@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAssetOperationActions } from './useAssetOperationActions';
+import { ApiError } from '../../lib/api-error';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconCopy, IconX, IconCheck, IconZoomIn } from '@tabler/icons-react';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -47,7 +49,21 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     removeCount: number;
   } | null>(null);
   const [notice, setNotice] = useState('');
-  const [submitted, setSubmitted] = useState<Record<string, string>>({});
+  const cache = getEagleWorkspaceCache(client, ownerId, libraryMode);
+  const changes = cache.operations;
+  useSyncExternalStore(changes.subscribe, changes.getSnapshot, changes.getSnapshot);
+  const action = useAssetOperationActions();
+  const priorChoices = new Map(
+    changes.entries.flatMap(
+      (row) =>
+        row.duplicateInput?.groups?.map((choice) => [choice.signature, choice] as const) ?? [],
+    ),
+  );
+  const submitted = Object.fromEntries(
+    changes.entries
+      .filter((row) => row.pending)
+      .flatMap((row) => (row.groupSignatures ?? []).map((signature) => [signature, row.id])),
+  );
   const hadConfirmation = useRef(false);
   useEffect(() => {
     if (confirm) {
@@ -90,7 +106,17 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     retry: false,
   });
   const data = results.data?.pages[0],
-    groups = results.data?.pages.flatMap((p) => p.groups) ?? [];
+    allGroups = results.data?.pages.flatMap((p) => p.groups) ?? [];
+  const hiddenGroups = new Set(
+    changes.entries.flatMap((row) =>
+      row.pending
+        ? (row.groupSignatures ?? [])
+        : (row.completedAt ?? 0) > results.dataUpdatedAt
+          ? (row.finishedGroups ?? [])
+          : [],
+    ),
+  );
+  const groups = allGroups.filter((group) => !hiddenGroups.has(group.signature));
   const operationQueries = useAssetOperationList(includePrivate),
     operations = operationQueries
       .flatMap((q) => q.data ?? [])
@@ -101,46 +127,18 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       );
   const active = operations.filter((op) => op.running || op.queued),
     scanning = active.some((op) => op.kind === 'DUPLICATE_SCAN');
-  const previousActive = useRef(new Set<string>());
-  const refreshing = useRef(new Set<string>());
-  const acceptedScan = useRef<string | null>(null);
-  const refetchResults = results.refetch;
-  useEffect(() => {
-    active.forEach((op) => refreshing.current.delete(op.id));
-    const finished = operations.filter(
-      (op) =>
-        !op.running &&
-        !op.queued &&
-        !refreshing.current.has(op.id) &&
-        (previousActive.current.has(op.id) ||
-          acceptedScan.current === op.id ||
-          Object.values(submitted).includes(op.id)),
-    );
-    previousActive.current = new Set(active.map((op) => op.id));
-    if (!finished.length) return;
-    const ids = new Set(finished.map((op) => op.id));
-    ids.forEach((id) => refreshing.current.add(id));
-    // Infinite-query refetch follows fresh cursors and retains loaded pages and scroll.
-    // The main gallery still uses its existing background-stale refresh contract.
-    void refetchResults().then((result) => {
-      if (!result.isError) {
-        if (acceptedScan.current && ids.has(acceptedScan.current)) acceptedScan.current = null;
-        setSubmitted((current) =>
-          Object.fromEntries(Object.entries(current).filter(([, id]) => !ids.has(id))),
-        );
-      }
-    });
-  }, [operations, active, submitted, refetchResults]);
   const invalidate = () =>
     client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
   const scan = useMutation({
     mutationFn: () => {
       scanId.current ??= crypto.randomUUID();
+      cache.beginOperation(scanId.current, 'DUPLICATE_SCAN', []);
       return api.scan(scanId.current);
     },
     onSuccess: (result) => {
+      if (!result.operationId && scanId.current)
+        changes.finish(scanId.current, 'DUPLICATE_SCAN', []);
       scanId.current = null;
-      acceptedScan.current = result.operationId;
       setNotice(
         result.operationId
           ? t('检查已加入后台任务，关闭此窗口后仍会继续。')
@@ -150,19 +148,71 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     },
   });
   const cleanup = useMutation({
-    mutationFn: (input: DuplicateCleanupInput) => api.cleanup(input),
+    mutationFn: async (input: DuplicateCleanupInput) => {
+      const signatures =
+        changes.entries.find((row) => row.id === input.operationId)?.groupSignatures ??
+        (input.allExact
+          ? groups.filter((group) => group.kind === 'EXACT').map((group) => group.signature)
+          : (input.groups?.map((group) => group.signature) ?? []));
+      const ids = new Set<string>();
+      for (const choice of input.groups ?? []) {
+        if (choice.removeIds) choice.removeIds.forEach((id) => ids.add(id));
+        else {
+          const memberPages = client.getQueryData<{
+            pages: Array<{ items: Array<{ id: string }> }>;
+          }>(['eagle', ownerId, libraryMode, 'duplicate-members', choice.signature, scopeRevision]);
+          memberPages?.pages.forEach((page) =>
+            page.items.forEach((item) => {
+              if (!choice.keepIds?.includes(item.id)) ids.add(item.id);
+            }),
+          );
+        }
+      }
+      cache.beginOperation(
+        input.operationId,
+        'DUPLICATE_CLEANUP',
+        [...ids],
+        input.allExact ? data?.exactItems : undefined,
+      );
+      changes.setGroups(input.operationId, signatures);
+      changes.setDuplicateInput(input.operationId, input);
+      advance(signatures);
+      try {
+        return await api.cleanup(input);
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.status >= 400 &&
+          error.status < 500 &&
+          error.status !== 408
+        ) {
+          changes.reject(input.operationId, error.message);
+          setExpanded(input.groups?.[0]?.signature ?? null);
+          await client.invalidateQueries({
+            queryKey: ['eagle', ownerId, libraryMode, 'assets', 'library-count'],
+          });
+          changes.confirmCounts();
+        } else {
+          setConfirm(null);
+          changes.uncertain(
+            input.operationId,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+        throw error;
+      }
+    },
     onSuccess: (result, input) => {
       setConfirm(null);
-      const signatures = input.allExact
-        ? groups.filter((group) => group.kind === 'EXACT').map((group) => group.signature)
-        : (input.groups?.map((group) => group.signature) ?? []);
+      const signatures =
+        changes.entries.find((row) => row.id === input.operationId)?.groupSignatures ??
+        (input.allExact
+          ? groups.filter((group) => group.kind === 'EXACT').map((group) => group.signature)
+          : (input.groups?.map((group) => group.signature) ?? []));
       if (result.operationId) {
-        const operationId = result.operationId;
-        setSubmitted((current) => ({
-          ...current,
-          ...Object.fromEntries(signatures.map((sig) => [sig, operationId])),
-        }));
-      }
+        changes.setGroups(result.operationId, signatures);
+        if (result.assetIds) changes.expand(result.operationId, result.assetIds);
+      } else changes.finish(input.operationId, 'DUPLICATE_CLEANUP', []);
       advance(signatures);
       setNotice(
         result.operationId
@@ -187,12 +237,6 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const refresh = async () => {
     const result = await results.refetch();
     if (!result.isError) {
-      const finishedIds = new Set(
-        operations.filter((op) => !op.running && !op.queued).map((op) => op.id),
-      );
-      setSubmitted((current) =>
-        Object.fromEntries(Object.entries(current).filter(([, id]) => !finishedIds.has(id))),
-      );
       setNotice('');
     }
   };
@@ -296,9 +340,6 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               >
                 {scanning ? t('后台检查中…') : t('检查新内容')}
               </button>
-              <button type="button" onClick={() => void refresh()} disabled={results.isFetching}>
-                {t('刷新结果')}
-              </button>
             </div>
           </div>
           <div className={styles.content}>
@@ -330,18 +371,65 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 {op.kind === 'DUPLICATE_SCAN' ? t('检查图片') : t('清理重复项')} ·{' '}
                 {op.completed.toLocaleString()} / {op.total.toLocaleString()}{' '}
                 {op.running ? t('正在处理') : t('排队中')}
+                {op.queued > 0 && (
+                  <button
+                    type="button"
+                    disabled={action.isPending}
+                    onClick={() => action.mutate({ operation: op, action: 'cancel' })}
+                  >
+                    {t('取消排队')}
+                  </button>
+                )}
               </div>
             ))}
             {operations
               .filter((op) => op.failed > 0)
               .map((op) => (
                 <p key={op.id} className={styles.warning}>
-                  {t('{{count}} 项未完成，可在任务中心查看原因并重试。', { count: op.failed })}
+                  {t('已完成 {{done}} 项，{{failed}} 项未完成', {
+                    done: op.completed,
+                    failed: op.failed,
+                  })}
+                  {op.errors?.map((error) => (
+                    <span key={error.code}>
+                      {error.code === 'ASSET_CHANGED'
+                        ? t('资源已改变，请重新选择。')
+                        : t('操作失败，请重试。')}{' '}
+                      ({error.count})
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={action.isPending}
+                    onClick={() => action.mutate({ operation: op, action: 'retry' })}
+                  >
+                    {t('重试未完成项')}
+                  </button>
                 </p>
               ))}
+            {changes.entries
+              .filter((row) => row.pending && row.kind === 'DUPLICATE_CLEANUP' && row.uncertain)
+              .map((row) => (
+                <div key={row.id} role="alert">
+                  <p>
+                    {t('正在确认操作是否受理，请勿重复提交。')} {row.message}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={cleanup.isPending || !row.duplicateInput}
+                    onClick={() => row.duplicateInput && cleanup.mutate(row.duplicateInput)}
+                  >
+                    {t('重试确认')}
+                  </button>
+                </div>
+              ))}
+            {action.error && <p role="alert">{action.error.message}</p>}
             {notice && (
               <p role="status" className={styles.notice}>
                 {notice}
+                <button type="button" onClick={() => setNotice('')}>
+                  {t('关闭')}
+                </button>
               </p>
             )}
             {scan.error && (
@@ -437,6 +525,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   <DuplicateComparison
                     key={group.signature}
                     group={group}
+                    initialSelection={priorChoices.get(group.signature)}
                     ignored={showIgnored}
                     api={api}
                     scheduler={scheduler}
@@ -497,6 +586,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
 }
 function DuplicateComparison({
   group,
+  initialSelection,
   ignored,
   api,
   scheduler,
@@ -508,6 +598,7 @@ function DuplicateComparison({
   onCleanup,
 }: {
   group: DuplicateGroupSummary;
+  initialSelection?: { keepIds?: string[]; removeIds?: string[] };
   ignored: boolean;
   api: ReturnType<typeof createDuplicatesApi>;
   scheduler: MediaLoadScheduler;
@@ -520,8 +611,8 @@ function DuplicateComparison({
 }) {
   const { ownerId, libraryMode, api: workspaceApi } = useLibraryWorkspace();
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
-  const [keepIds, setKeepIds] = useState([group.recommendedId]);
-  const [removeIds, setRemoveIds] = useState<string[]>([]);
+  const [keepIds, setKeepIds] = useState(initialSelection?.keepIds ?? [group.recommendedId]);
+  const [removeIds, setRemoveIds] = useState<string[]>(initialSelection?.removeIds ?? []);
   const actionBar = useRef<HTMLDivElement>(null);
   const isKept = (id: string) =>
     group.kind === 'EXACT' ? keepIds.includes(id) : !removeIds.includes(id);

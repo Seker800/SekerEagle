@@ -1,5 +1,9 @@
 import { EAGLE_OPERATION_REQUEST_TIMEOUT_MS } from './eagle-operation-request';
-import type { AssetOperationKind, AssetOperationSummary } from '@sekereagle/library-core';
+import type {
+  AssetOperationKind,
+  AssetOperationSummary,
+  AssetOperationResults,
+} from '@sekereagle/library-core';
 import { request } from './api-client';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 export function createAssetOperationsApi(mode: LibraryMode) {
@@ -11,6 +15,28 @@ export function createAssetOperationsApi(mode: LibraryMode) {
       request<AssetOperationSummary>(
         base,
         { method: 'POST', body: JSON.stringify(input) },
+        EAGLE_OPERATION_REQUEST_TIMEOUT_MS,
+      ),
+    results: (
+      id: string,
+      query: { cursor?: number; revision?: string } = {},
+      signal?: AbortSignal,
+    ) =>
+      request<AssetOperationResults>(
+        `${base}/${encodeURIComponent(id)}/results?${new URLSearchParams(
+          Object.entries(query)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]) => [key, String(value)]),
+        )}`,
+        { signal },
+      ),
+    undo: (id: string, operationId: string) =>
+      request<AssetOperationSummary>(
+        `${base}/${encodeURIComponent(id)}/undo`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ operationId }),
+        },
         EAGLE_OPERATION_REQUEST_TIMEOUT_MS,
       ),
     retry: (id: string) =>

@@ -1,3 +1,4 @@
+import { AssetOperationWakeup } from './asset-operation-wakeup';
 import { EagleDuplicateService } from './eagle/eagle-duplicates.service';
 import 'reflect-metadata';
 import { rm, writeFile } from 'node:fs/promises';
@@ -51,10 +52,12 @@ async function main() {
   const readyFile = env.EAGLE_OPERATION_READY_FILE ?? '/tmp/sekereagle-asset-operations-ready';
   let executors: ReturnType<typeof createAssetOperationExecutors> = [];
   let closing: Promise<void> | undefined;
+  let wakeup: AssetOperationWakeup | undefined;
   const shutdown = () =>
     (closing ??= (async () => {
       await rm(readyFile, { force: true });
       try {
+        await wakeup?.close();
         await Promise.all(executors.map((executor) => executor.drain()));
       } finally {
         storage.onModuleDestroy();
@@ -66,6 +69,8 @@ async function main() {
     await prisma.onModuleInit();
     executors = createAssetOperationExecutors(prisma, storage);
     for (const executor of executors) executor.startExecutor();
+    wakeup = new AssetOperationWakeup(env.DATABASE_URL!, executors);
+    await wakeup.start();
     await writeFile(readyFile, String(process.pid), { mode: 0o600 });
   } catch (error) {
     await shutdown();

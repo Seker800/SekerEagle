@@ -159,15 +159,16 @@ it('never falls back to arbitrary pairs when the server has no similarity candid
   expect(screen.getByRole('heading', { name: '相似人物确认' })).toBeVisible();
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
 });
-it('can traverse the full library instead of stopping at the directory page', async () => {
-  mocks.suggest.mockImplementation(async (after?: string) =>
-    after ? { items: [items[0]], nextCursor: null } : { items: [], nextCursor: 'next-anchor' },
-  );
+it('automatically searches through empty pages until it finds another pair', async () => {
+  mocks.suggest.mockImplementation(async (after?: string) => {
+    if (!after) return { items: [], nextCursor: 'first' };
+    if (after === 'first') return { items: [], nextCursor: 'second' };
+    return { items: [items[0]], nextCursor: null };
+  });
   show();
   fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
-  fireEvent.click(await screen.findByRole('button', { name: '继续查找相似人物' }));
   await screen.findByRole('button', { name: '是，同一个人' });
-  expect(mocks.suggest.mock.calls.some(([cursor]) => cursor === 'next-anchor')).toBe(true);
+  expect(mocks.suggest.mock.calls.some(([cursor]) => cursor === 'second')).toBe(true);
 });
 
 it('shows complete photos beside the crops and blocks held confirmation keys', async () => {

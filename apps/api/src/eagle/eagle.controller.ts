@@ -6,7 +6,12 @@ import {
   DuplicateScanDto,
 } from './eagle-duplicates.dto';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
-import { EnqueueAssetOperationDto, ListAssetOperationsDto } from './eagle-asset-operations.dto';
+import {
+  EnqueueAssetOperationDto,
+  ListAssetOperationsDto,
+  AssetOperationResultsDto,
+  UndoAssetOperationDto,
+} from './eagle-asset-operations.dto';
 import { CreateEditRenderDto } from './eagle-edit-render';
 import { AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
 import { safeMediaResponse } from '../common/media-response';
@@ -145,6 +150,23 @@ export class EagleController {
       principal.sub,
       principal.canViewPrivate && query.publicOnly !== 'true',
     );
+  }
+  @Get('operations/:operationId/results')
+  operationResults(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('operationId', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() query: AssetOperationResultsDto,
+  ) {
+    return this.operations!.results(principal, id, query);
+  }
+  @Post('operations/:operationId/undo')
+  @UseGuards(BrowserOriginGuard)
+  undoOperation(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('operationId', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() input: UndoAssetOperationDto,
+  ) {
+    return this.operations!.undo(principal, id, input.operationId);
   }
   @Post('operations/:operationId/retry')
   @UseGuards(BrowserOriginGuard)

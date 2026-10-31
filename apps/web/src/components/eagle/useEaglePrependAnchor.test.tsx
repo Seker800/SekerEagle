@@ -63,3 +63,20 @@ it('retains the pending anchor through an intermediate entity or append render',
   });
   expect(element.scrollTo).toHaveBeenCalledWith({ top: 120, behavior: 'instant' });
 });
+
+it('keeps a surviving visible card anchored when deletion occurs in the middle of loaded pages', () => {
+  const element = { scrollTop: 170, scrollTo: vi.fn() };
+  const viewport = { elementRef: { current: element }, handleScroll: vi.fn() };
+  const items = [
+    { id: 'a', top: 0, height: 80 },
+    { id: 'delete', top: 80, height: 80 },
+    { id: 'visible', top: 160, height: 80 },
+  ];
+  const { result, rerender } = renderHook(
+    ({ items }) => useEaglePrependAnchor(items, viewport as never, 'scope'),
+    { initialProps: { items } },
+  );
+  act(() => result.current.capture());
+  rerender({ items: [items[0]!, { id: 'visible', top: 80, height: 80 }] });
+  expect(element.scrollTo).toHaveBeenCalledWith({ top: 90, behavior: 'instant' });
+});

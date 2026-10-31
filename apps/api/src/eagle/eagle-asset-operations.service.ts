@@ -28,6 +28,8 @@ import {
   assetOperationState,
   type AssetOperationKind,
   type AssetOperationSummary,
+  type AssetOperationResults,
+  type AssetMembershipFact,
 } from '@sekereagle/library-core';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthPrincipal } from '../auth/auth.types';
@@ -40,6 +42,7 @@ import type { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
 
 type Snapshot = { id: string; rowVersion: number; mediaRevision: number };
 type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode'> & {
+  undoOfId?: string | null;
   items: Array<Pick<EagleAssetOperationItem, 'status' | 'weight' | 'errorCode'>>;
 };
 const LEASE_MS = 120_000;
@@ -78,6 +81,9 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
     @Optional() private readonly duplicates?: EagleDuplicateService,
   ) {}
+  get mode() {
+    return this.libraryMode;
+  }
   startExecutor() {
     if (process.env.EAGLE_ASSET_OPERATIONS_ENABLED === 'false') return;
     this.timer = setInterval(
@@ -119,6 +125,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       if (item.status === 'FAILED' && item.errorCode)
         errors.set(item.errorCode, (errors.get(item.errorCode) ?? 0) + item.weight);
     return {
+      ...(operation.undoOfId ? { undoOf: operation.undoOfId } : {}),
       id: operation.id,
       kind: operation.kind as AssetOperationKind,
       libraryMode: operation.libraryMode,
@@ -130,7 +137,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     };
   }
   async list(ownerId: string, includePrivate = false) {
-    const select = { id: true, kind: true, libraryMode: true } as const;
+    const select = { id: true, kind: true, libraryMode: true, undoOfId: true } as const;
     const [active, recent] = await Promise.all([
       this.prisma.eagleAssetOperation.findMany({
         where: {
@@ -172,6 +179,242 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     );
   }
 
+  async results(
+    principal: AuthPrincipal,
+    id: string,
+    query: { cursor?: number; revision?: string },
+  ): Promise<AssetOperationResults> {
+    const operation = await this.prisma.eagleAssetOperation.findFirst({
+      where: { id, ...this.libraryModeWhere(principal.sub, principal.canViewPrivate) },
+      select: { id: true, kind: true, libraryMode: true, undoOfId: true, updatedAt: true },
+    });
+    if (!operation) throw new NotFoundException('操作不存在。');
+    const scope = { operationId: id, ownerId: principal.sub, libraryMode: this.libraryMode };
+    const counts = await this.prisma.eagleAssetOperationItem.groupBy({
+      by: ['status', 'errorCode'],
+      where: { ...scope, libraryMode: this.libraryMode },
+      _sum: { weight: true },
+    });
+    counts.sort((a, b) =>
+      `${a.status}:${a.errorCode ?? ''}`.localeCompare(`${b.status}:${b.errorCode ?? ''}`),
+    );
+    const summary = this.summary({
+      ...operation,
+      items: counts.map((row) => ({ ...row, weight: row._sum.weight ?? 0 })),
+    });
+    const revision = JSON.stringify([operation.updatedAt.toISOString(), summary]);
+    if (query.revision && query.revision !== revision)
+      throw new ConflictException('操作结果已变化，请重新读取。');
+    if (summary.running || summary.queued)
+      return { operation: summary, revision, receipts: [], membership: [], nextCursor: null };
+    const rows = await this.prisma.eagleAssetOperationItem.findMany({
+      where: { ...scope, libraryMode: this.libraryMode, ordinal: { gte: query.cursor ?? 0 } },
+      select: { ordinal: true, assetIds: true, snapshots: true, status: true, errorCode: true },
+      orderBy: { ordinal: 'asc' },
+      take: ADMISSION_BATCH_SIZE + 1,
+    });
+    const page = rows.slice(0, ADMISSION_BATCH_SIZE);
+    const resourceIds = [
+      ...new Set(page.flatMap((row) => this.receiptIds(row.assetIds, row.snapshots))),
+    ];
+    const membership: AssetMembershipFact[] = [];
+    for (let offset = 0; offset < resourceIds.length; offset += ADMISSION_BATCH_SIZE) {
+      const ids = resourceIds.slice(offset, offset + ADMISSION_BATCH_SIZE);
+      membership.push(
+        ...(await this.prisma.$queryRaw<AssetMembershipFact[]>`
+        SELECT requested.id, a."rowVersion",
+          CASE WHEN a.id IS NULL OR a."storageTransferredOut" OR a."purgeAfter" IS NOT NULL THEN 'UNAVAILABLE'
+               WHEN a."deletedAt" IS NOT NULL THEN 'TRASH' ELSE 'ACTIVE' END AS state
+        FROM unnest(${ids}::text[]) AS requested(id)
+        LEFT JOIN "EagleAsset" a ON a.id=requested.id AND a."ownerId"=${principal.sub}
+          AND a."libraryMode"=${this.libraryMode}::"LibraryMode"
+          AND (${principal.canViewPrivate} OR NOT a."isPrivate")
+      `),
+      );
+    }
+    return {
+      operation: summary,
+      revision,
+      membership,
+      receipts: page.map((row) => ({
+        ...(row.snapshots &&
+        !Array.isArray(row.snapshots) &&
+        typeof row.snapshots === 'object' &&
+        typeof row.snapshots.signature === 'string'
+          ? { groupSignature: row.snapshots.signature }
+          : {}),
+        status: row.status,
+        errorCode: row.errorCode,
+        assetIds: this.receiptIds(row.assetIds, row.snapshots),
+      })),
+      nextCursor: rows.length > ADMISSION_BATCH_SIZE ? rows[ADMISSION_BATCH_SIZE]!.ordinal : null,
+    };
+  }
+  private receiptIds(assetIds: string[], snapshots: Prisma.JsonValue) {
+    const resources = Array.isArray(snapshots)
+      ? snapshots
+      : snapshots && typeof snapshots === 'object' && 'resources' in snapshots
+        ? snapshots.resources
+        : [];
+    return [
+      ...new Set([
+        ...assetIds,
+        ...(Array.isArray(resources)
+          ? resources.flatMap((row) =>
+              row && typeof row === 'object' && 'id' in row && typeof row.id === 'string'
+                ? [row.id]
+                : [],
+            )
+          : []),
+      ]),
+    ];
+  }
+
+  /** Persist compensation before returning. The independent executor waits for running source work. */
+  async undo(principal: AuthPrincipal, id: string, operationId: string) {
+    return this.prisma
+      .$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-admission:${principal.sub}:${this.libraryMode}:${operationId}`}, 0))::text`;
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-undo:${principal.sub}:${this.libraryMode}:${id}`}, 0))::text`;
+          const source = await this.owned(tx, id, principal.sub, principal.canViewPrivate);
+          if (source.kind !== 'TRASH' && source.kind !== 'DUPLICATE_CLEANUP')
+            throw new BadRequestException('此操作不能撤销删除。');
+          const existing = await tx.eagleAssetOperation.findUnique({
+            where: { id: operationId, ownerId: principal.sub, libraryMode: this.libraryMode },
+          });
+          if (existing) {
+            if (
+              existing.ownerId !== principal.sub ||
+              existing.libraryMode !== this.libraryMode ||
+              existing.undoOfId !== id
+            )
+              throw new NotFoundException('操作不存在。');
+            return this.summary(
+              await this.owned(tx, operationId, principal.sub, principal.canViewPrivate),
+            );
+          }
+          const priorUndo = await tx.eagleAssetOperation.findFirst({
+            where: {
+              ...this.libraryModeWhere(principal.sub, principal.canViewPrivate),
+              kind: 'RESTORE',
+              undoOfId: id,
+            },
+          });
+          if (priorUndo)
+            return this.summary(
+              await this.owned(tx, priorUndo.id, principal.sub, principal.canViewPrivate),
+            );
+          await tx.eagleAssetOperationItem.updateMany({
+            where: {
+              operationId: id,
+              ownerId: principal.sub,
+              libraryMode: this.libraryMode,
+              status: 'PENDING',
+            },
+            data: { status: 'CANCELLED', leaseUntil: null },
+          });
+          const operation = await tx.eagleAssetOperation.create({
+            data: {
+              id: operationId,
+              ownerId: principal.sub,
+              libraryMode: this.libraryMode,
+              kind: 'RESTORE',
+              inputIds: [],
+              undoOfId: id,
+              authVersion: principal.authVersion,
+              isPrivate: source.isPrivate,
+              privateUntil:
+                source.isPrivate && principal.privacyVisibleUntil
+                  ? new Date(principal.privacyVisibleUntil)
+                  : null,
+              items: {
+                create: {
+                  id: randomUUID(),
+                  ordinal: 0,
+                  assetIds: [],
+                  snapshots: { undoOf: id },
+                  weight: 1,
+                },
+              },
+            },
+            include: { items: { select: { status: true, weight: true, errorCode: true } } },
+          });
+          await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
+          return this.summary(operation);
+        },
+        { timeout: OPERATION_ADMISSION_TIMEOUT_MS },
+      )
+      .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
+          throw new NotFoundException('操作不存在。');
+        throw error;
+      });
+  }
+
+  private async expandUndo(item: ClaimedItem) {
+    const snapshot = item.snapshots as { undoOf: string };
+    await this.prisma.$transaction(
+      async (tx) => {
+        await lockOwnerPrivacyProjection(tx, item.ownerId, this.libraryMode);
+        await this.assertActor(tx, item.operation, [item]);
+        const source = await tx.eagleAssetOperation.findFirst({
+          where: {
+            id: snapshot.undoOf,
+            ownerId: item.ownerId,
+            libraryMode: this.libraryMode,
+            kind: { in: ['TRASH', 'DUPLICATE_CLEANUP'] },
+          },
+          include: { items: { orderBy: { ordinal: 'asc' } } },
+        });
+        if (!source) throw new NotFoundException('操作不存在。');
+        if (source.items.some((row) => row.status === 'RUNNING')) {
+          await tx.eagleAssetOperationItem.updateMany({
+            where: { libraryMode: this.libraryMode, ...this.leaseWhere([item]) },
+            data: { leaseUntil: new Date(Date.now() + OPERATION_POLL_MS) },
+          });
+          return;
+        }
+        const restore = source.items
+          .filter((row) => row.status === 'COMPLETED')
+          .flatMap((row) => {
+            const frozen = Array.isArray(row.snapshots)
+              ? row.snapshots
+              : (row.snapshots as { resources?: Snapshot[] })?.resources;
+            if (!Array.isArray(frozen) || !frozen.length) return [];
+            const resources = frozen as unknown as Snapshot[];
+            return [
+              {
+                id: randomUUID(),
+                operationId: item.operationId,
+                ownerId: item.ownerId,
+                libraryMode: this.libraryMode,
+                ordinal: row.ordinal + 1,
+                assetIds: row.assetIds,
+                weight: row.weight,
+                snapshots: resources.map((resource) => ({
+                  ...resource,
+                  rowVersion: resource.rowVersion + 1,
+                })),
+              },
+            ];
+          });
+        for (let offset = 0; offset < restore.length; offset += ADMISSION_BATCH_SIZE)
+          await tx.eagleAssetOperationItem.createMany({
+            data: restore.slice(offset, offset + ADMISSION_BATCH_SIZE),
+            skipDuplicates: true,
+          });
+        // Atomically replace the control item with ordinary restore items. An
+        // all-cancelled source needs no resource work and completes with total 0.
+        const removed = await tx.eagleAssetOperationItem.deleteMany({
+          where: { libraryMode: this.libraryMode, ...this.leaseWhere([item]) },
+        });
+        if (removed.count !== 1) throw new OperationAccessError('LEASE_LOST');
+      },
+      { timeout: METADATA_TRANSACTION_TIMEOUT_MS },
+    );
+  }
+
   private async owned(
     tx: Prisma.TransactionClient,
     id: string,
@@ -180,7 +423,17 @@ export class EagleAssetOperationService implements OnModuleDestroy {
   ) {
     const operation = await tx.eagleAssetOperation.findFirst({
       where: { id, ...this.libraryModeWhere(ownerId, includePrivate) },
-      include: { items: { select: { status: true, weight: true, errorCode: true } } },
+      select: {
+        id: true,
+        ownerId: true,
+        libraryMode: true,
+        kind: true,
+        authVersion: true,
+        isPrivate: true,
+        privateUntil: true,
+        undoOfId: true,
+        items: { select: { status: true, weight: true, errorCode: true } },
+      },
     });
     if (!operation) throw new NotFoundException('操作不存在。');
     return operation;
@@ -194,6 +447,11 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     return this.prisma
       .$transaction(
         async (tx) => {
+          // Large repeated IN batches otherwise switch to an under-estimated generic
+          // owner-index scan on a freshly imported library. Keep value-aware plans
+          // local to this admission transaction; never change global DB settings.
+          if (ids.length > ADMISSION_BATCH_SIZE)
+            await tx.$executeRaw`SET LOCAL plan_cache_mode = 'force_custom_plan'`;
           // Serialize retries of this intent, not all unrelated writes in the workspace.
           // Permissions, versions and resource membership are authoritative at execution.
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-admission:${principal.sub}:${this.libraryMode}:${input.operationId}`}, 0))::text`;
@@ -391,6 +649,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
               data: pendingItems.slice(offset, offset + ADMISSION_BATCH_SIZE),
             });
           }
+          await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
           return this.summary({
             ...operation,
             items: outcomes.map((item) => ({
@@ -447,6 +706,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           },
           data: { status: 'PENDING', errorCode: null, leaseUntil: null },
         });
+      await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
     this.wake();
@@ -674,6 +934,16 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     const { operation } = item;
     const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
     try {
+      if (
+        operation.kind === 'RESTORE' &&
+        !Array.isArray(item.snapshots) &&
+        item.snapshots &&
+        typeof item.snapshots === 'object' &&
+        'undoOf' in item.snapshots
+      ) {
+        await this.expandUndo(item);
+        return;
+      }
       if (operation.kind === 'DUPLICATE_SCAN' || operation.kind === 'DUPLICATE_CLEANUP') {
         if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
         if (operation.kind === 'DUPLICATE_SCAN')

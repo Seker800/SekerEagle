@@ -1,3 +1,5 @@
+import { EagleTrashConfirmation } from './EagleTrashConfirmation';
+import { EagleOperationNotices } from './EagleOperationNotices';
 import { EagleDuplicates } from './EagleDuplicates';
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { EagleUploadQueue } from './EagleUploadQueue';
@@ -325,6 +327,11 @@ export function SekerEaglePage({
     () => getEagleWorkspaceCache(queryClient, ownerId, libraryMode),
     [queryClient, ownerId, libraryMode],
   );
+  const operationRevision = useSyncExternalStore(
+    workspaceCache.operations.subscribe,
+    workspaceCache.operations.getSnapshot,
+    workspaceCache.operations.getSnapshot,
+  );
   const thumbnailLoadService = workspaceCache.thumbnails;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
@@ -358,6 +365,7 @@ export function SekerEaglePage({
       ? (workspaceCache.browse?.activeSmartFolderId ?? null)
       : null,
   );
+  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
@@ -406,7 +414,6 @@ export function SekerEaglePage({
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
-  const [transferStatus, setTransferStatus] = useState<string | null>(null);
   const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
   const [editorTitle, setEditorTitle] = useState('');
   const [editorDescription, setEditorDescription] = useState('');
@@ -431,7 +438,6 @@ export function SekerEaglePage({
   }, [thumbnailSize, preferencesKey]);
   useEffect(() => {
     setOriginalFileError(null);
-    setTransferStatus(null);
     setAssetDragStatus(null);
     setAiTagReferenceRequested(false);
   }, [ownerId, libraryMode]);
@@ -587,12 +593,18 @@ export function SekerEaglePage({
         : undefined;
     },
     queryFn: async ({ pageParam, signal }) => {
+      const membershipRevision = workspaceCache.operations.getSnapshot();
       const pageFilters = { ...assetFilters, cursor: pageParam || undefined };
       const page =
         libraryView === 'TRASH'
           ? await listEagleTrash(accessToken, pageFilters, signal)
           : await listEagleAssets(accessToken, pageFilters, signal);
       signal.throwIfAborted();
+      workspaceCache.operations.observePage(
+        page.items,
+        libraryView === 'TRASH',
+        membershipRevision,
+      );
       return assetStore.normalizePage(page);
     },
     initialPageParam: browserCursor,
@@ -703,8 +715,7 @@ export function SekerEaglePage({
     },
     onBatchTagsApplied: () => setTagPicker(null),
     onAssetPrivacyChanged: resetAssetPrivacyState,
-    onOperationQueued: () => {
-      setTransferStatus(t('已加入任务中心，可继续浏览。'));
+    onOperationStarted: () => {
       setPreviewAssetId(null);
       setPreviewContext(null);
       imagePreview.closePreview();
@@ -727,10 +738,20 @@ export function SekerEaglePage({
   const loadedAssets = useMemo(() => {
     const uniqueAssets = new Map<string, EagleAssetListItem>();
     assetsQuery.data?.pages.forEach((page) => {
-      assetStore.getMany(page.assetIds).forEach((item) => uniqueAssets.set(item.id, item));
+      assetStore.getMany(page.assetIds).forEach((item) => {
+        if (workspaceCache.operations.visible(item.id, libraryView === 'TRASH'))
+          uniqueAssets.set(item.id, item);
+      });
     });
     return [...uniqueAssets.values()];
-  }, [assetStore, assetStoreRevision, assetsQuery.data]);
+  }, [
+    assetStore,
+    assetStoreRevision,
+    assetsQuery.data,
+    workspaceCache,
+    operationRevision,
+    libraryView,
+  ]);
   useEffect(() => {
     const nextPrivacyState = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
     if (privacyStateRef.current === nextPrivacyState) return;
@@ -755,8 +776,15 @@ export function SekerEaglePage({
     const stacks = new Map<string, EaglePhotoStack>();
     for (const page of assetsQuery.data?.pages ?? [])
       for (const stack of page.photoStacks ?? []) stacks.set(stack.id, stack);
-    return [...stacks.values()];
-  }, [assetsQuery.data]);
+    return [...stacks.values()].flatMap((stack) => {
+      const assetIds = stack.assetIds.filter((id) => workspaceCache.operations.visible(id, false));
+      if (assetIds.length < 2) return [];
+      const cover = workspaceCache.operations.visible(stack.cover.id, false)
+        ? stack.cover
+        : assetStore.getMany(assetIds)[0];
+      return cover ? [{ ...stack, assetIds, cover }] : [];
+    });
+  }, [assetsQuery.data, workspaceCache, assetStore, operationRevision, assetStoreRevision]);
   const assets = useMemo(
     () =>
       libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH'
@@ -764,6 +792,26 @@ export function SekerEaglePage({
         : collapseLivePhotoComponents(loadedAssets),
     [loadedAssets, photoStacks, libraryMode, photoView, libraryView],
   );
+  useEffect(() => {
+    if (
+      isAssetView &&
+      !assets.length &&
+      assetsQuery.hasNextPage &&
+      !assetsQuery.isFetching &&
+      !assetsQuery.isFetchNextPageError &&
+      !workspaceCache.operations.hasPending()
+    )
+      void assetsQuery.fetchNextPage({ cancelRefetch: false });
+  }, [
+    isAssetView,
+    assets.length,
+    assetsQuery.hasNextPage,
+    assetsQuery.isFetching,
+    assetsQuery.isFetchNextPageError,
+    assetsQuery.fetchNextPage,
+    workspaceCache,
+    operationRevision,
+  ]);
   const previewStack = photoStacks.find((stack) => stack.assetIds.includes(previewAssetId ?? ''));
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   useEffect(() => {
@@ -906,6 +954,10 @@ export function SekerEaglePage({
     masonryLayout.items,
     assetViewport,
     JSON.stringify(queryKeys.assetList(libraryView, assetFilters)),
+  );
+  useEffect(
+    () => workspaceCache.operations.subscribeBeforeChange(prependAnchor.capture),
+    [workspaceCache, prependAnchor.capture],
   );
   const loadPreviousPage = useCallback(() => {
     if (!browserCursor || !assetsQuery.hasPreviousPage || assetsQuery.isFetching) return;
@@ -1794,10 +1846,10 @@ export function SekerEaglePage({
       {libraryView === 'TRASH' && (
         <button
           type="button"
-          aria-label={t('恢复当前素材')}
-          disabled={!selectedAssetId || restoreMutation.isPending}
+          aria-label={t('恢复所选 {{count}} 项', { count: selectedAssetIds.length })}
+          disabled={selectedAssetIds.length === 0 || restoreMutation.isPending}
           onClick={() => {
-            if (selectedAssetId) restoreMutation.mutate([selectedAssetId]);
+            if (selectedAssetIds.length) restoreMutation.mutate(selectedAssetIds);
           }}
         >
           <IconRefresh size={18} />
@@ -1811,9 +1863,7 @@ export function SekerEaglePage({
           aria-label={t('清空回收站')}
           disabled={assets.length === 0 || emptyTrashMutation.isPending}
           onClick={() => {
-            if (window.confirm(t('确认清空回收站？其中的全部素材将被永久删除，且无法恢复。'))) {
-              emptyTrashMutation.mutate();
-            }
+            setConfirmEmptyTrash(true);
           }}
         >
           <IconTrash size={18} />
@@ -2152,14 +2202,8 @@ export function SekerEaglePage({
                     {t('图片内容搜索暂不可用，当前仅匹配名称和人工标签。')}
                   </div>
                 )}
-              {transferStatus && (
-                <div className={styles.statusBar} role="status">
-                  {transferStatus}
-                  <button type="button" onClick={() => changeLibraryView('PROCESSING')}>
-                    {t('查看进度')}
-                  </button>
-                </div>
-              )}
+              <EagleOperationNotices onShowProgress={() => changeLibraryView('PROCESSING')} />
+
               {selectionToolbar}
               <EagleUploadQueue
                 items={uploads}
@@ -2927,7 +2971,6 @@ export function SekerEaglePage({
                   setSelectedAssetId(null);
                   setIsBatchSelection(false);
                   setSelectionMode(false);
-                  setTransferStatus(t('已加入任务中心，可继续浏览。'));
                 }}
               />
             )}
@@ -3045,6 +3088,16 @@ export function SekerEaglePage({
         </EagleAssetActionMenu>
       )}
 
+      {confirmEmptyTrash && (
+        <EagleTrashConfirmation
+          mode={libraryMode}
+          onClose={() => setConfirmEmptyTrash(false)}
+          onConfirm={() => {
+            setConfirmEmptyTrash(false);
+            emptyTrashMutation.mutate();
+          }}
+        />
+      )}
       {tagPicker && tagPicker.assetIds.length > 0 && (
         <EagleBatchTagPicker
           mode={tagPicker.mode}

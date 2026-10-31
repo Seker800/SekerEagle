@@ -42,6 +42,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "express": "5.2.1",
+    "pg": "8.23.1",
     "pinyin-pro": "^3.29.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
@@ -54,6 +55,7 @@
     "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
+    "@types/pg": "8.23.1",
     "prisma": "6.19.3",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
