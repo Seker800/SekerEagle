@@ -70,14 +70,25 @@ export function createNasGateway(
   source,
   {
     operationTimeoutSeconds = Number(process.env.EAGLE_OPERATION_PROXY_TIMEOUT_SECONDS ?? 150),
+    signedUploadEndpoint = canonicalOrigin,
   } = {},
 ) {
   if (!Number.isSafeInteger(operationTimeoutSeconds) || operationTimeoutSeconds <= 0)
     throw new Error('EAGLE_OPERATION_PROXY_TIMEOUT_SECONDS must be a positive integer');
   const marker = 'proxy_set_header Host localhost:8180;';
   if (source.split(marker).length !== 2) throw new Error('Upload gateway host contract changed');
+  const endpoint = new URL(signedUploadEndpoint);
+  if (
+    !['http:', 'https:'].includes(endpoint.protocol) ||
+    endpoint.username ||
+    endpoint.password ||
+    endpoint.pathname !== '/' ||
+    endpoint.search ||
+    endpoint.hash
+  )
+    throw new Error('Invalid signed upload endpoint');
   return source
-    .replace(marker, 'proxy_set_header Host localhost:8181;')
+    .replace(marker, `proxy_set_header Host ${endpoint.host};`)
     .replace('loopback identity', 'canonical identity')
     .replace('proxy_read_timeout 150s;', `proxy_read_timeout ${operationTimeoutSeconds}s;`);
 }
@@ -98,7 +109,9 @@ export async function prepareNasPackage(directory, revision) {
   await write('compose.yml', yaml.dump(compose, { noRefs: true, lineWidth: 110 }));
   await write(
     'nginx.conf',
-    createNasGateway(await readFile(new URL('deploy/gateway/nginx.conf', root), 'utf8')),
+    createNasGateway(await readFile(new URL('deploy/gateway/nginx.conf', root), 'utf8'), {
+      signedUploadEndpoint: compose.services.api.environment.S3_PUBLIC_ENDPOINT,
+    }),
   );
   for (const name of ['minio-init.sh', 'minio-app-policy.json']) {
     await write(name, await readFile(new URL(`deploy/mac/${name}`, root)));

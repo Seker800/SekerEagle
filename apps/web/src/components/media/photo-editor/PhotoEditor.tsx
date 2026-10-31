@@ -434,6 +434,7 @@ export function PhotoEditor({
       return;
     setBusy(true);
     setError('');
+    let savingToAlbum = false;
     try {
       if (onSaveRecipe) {
         const recipe: PhotoEditRecipe = {
@@ -474,6 +475,7 @@ export function PhotoEditor({
           exportController.current = null;
         }
       }
+      savingToAlbum = true;
       const savedPhoto = await onSave(file, { version: 1, edits });
       pendingSaveRef.current = null;
       setSavedName(savedPhoto.name);
@@ -485,7 +487,7 @@ export function PhotoEditor({
         setError(t('原照片或保存条件已变化，请关闭后重新打开编辑器。'));
       } else {
         setError(
-          cause instanceof ApiError || (onSaveRecipe && cause instanceof Error)
+          cause instanceof ApiError || ((onSaveRecipe || savingToAlbum) && cause instanceof Error)
             ? cause.message
             : t('照片保存失败，请重试。'),
         );
