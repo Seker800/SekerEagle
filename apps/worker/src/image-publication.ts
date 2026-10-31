@@ -1,9 +1,10 @@
-import { mediaCompletion } from '@sekereagle/library-core';
 import type { EagleAsset, EagleAssetProcessingJob, Prisma, PrismaClient } from '@prisma/client';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { persistPhotoAnalysis } from './photo-analysis-persistence';
 import { groupAnalyzedPhoto } from './photo-grouping';
 import { FACE_MODEL_VERSION } from './photo-faces';
+import { beginMediaPublication } from './media-publication';
+import type { MediaOutputAttempt } from './media-output-attempt';
 
 type Asset = Pick<
   EagleAsset,
@@ -30,6 +31,7 @@ interface ImagePublication {
   scheduleFaces: boolean;
   deferDetails?: boolean;
   preserveBrowseState?: boolean;
+  outputAttempt?: Pick<MediaOutputAttempt, 'publish'>;
 }
 const defaults = {
   lockPrivacy: lockOwnerPrivacyProjection,
@@ -64,25 +66,14 @@ export async function publishImage(
     throw new Error('IMAGE_PUBLICATION_SCOPE');
   return client.$transaction(
     async (tx) => {
-      await dependencies.lockPrivacy(tx, asset.ownerId, asset.libraryMode);
-      if (asset.libraryMode === 'PHOTO')
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${asset.ownerId}`}))`;
-      await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE id=${asset.id} AND "ownerId"=${asset.ownerId} AND "libraryMode"=${asset.libraryMode}::"LibraryMode" FOR UPDATE`;
-      const current = await tx.eagleAsset.findFirst({
-        where: {
-          id: asset.id,
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          mediaRevision: job.assetRevision,
-          deletedAt: null,
+      if (
+        !(await beginMediaPublication(tx, job, {
+          lockPrivacy: dependencies.lockPrivacy,
+          photoGroups: true,
           sha256: asset.sha256,
-        },
-      });
-      if (!current) return false;
-      const completed = await tx.eagleAssetProcessingJob.updateMany({
-        ...mediaCompletion(job),
-      });
-      if (completed.count !== 1) return false;
+        }))
+      )
+        return false;
       for (const rendition of renditions)
         await tx.eagleAssetRendition.upsert({
           where: {
@@ -149,6 +140,7 @@ export async function publishImage(
         },
       });
       await dependencies.syncPrivacy(tx, asset.ownerId, [asset.id], asset.libraryMode);
+      await input.outputAttempt?.publish(tx);
       return true;
     },
     { timeout: 30000, maxWait: 10000 },

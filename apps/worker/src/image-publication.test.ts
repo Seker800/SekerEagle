@@ -214,12 +214,17 @@ test('details publication preserves an already browsable asset and its live-phot
   assert.equal('mediaErrorCode' in update, false);
 });
 
-
 test('only a current image publication may consume an immutable output intent', async () => {
   for (const current of [true, false]) {
     const f = fixture(1, current);
     let published = false;
-    Object.assign(f.input, { outputAttempt: { publish: async () => { published = true; } } });
+    Object.assign(f.input, {
+      outputAttempt: {
+        publish: async () => {
+          published = true;
+        },
+      },
+    });
     await f.run();
     assert.equal(published, current);
   }
