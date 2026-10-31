@@ -65,6 +65,7 @@ function show(
   return client;
 }
 it('does not repeatedly poll both modes every 1.5 seconds during unchanged background work', async () => {
+  mocks.list.mockResolvedValue([job()]);
   vi.useFakeTimers();
   focusManager.setFocused(true);
   let client: QueryClient | undefined;
@@ -72,7 +73,8 @@ it('does not repeatedly poll both modes every 1.5 seconds during unchanged backg
     client = show('ALL', false, true);
     await act(() => vi.advanceTimersByTimeAsync(1));
     expect(mocks.list).toHaveBeenCalledTimes(2);
-    await act(() => vi.advanceTimersByTimeAsync(3900));
+    for (const elapsed of [1000, 1000, 1000, 900])
+      await act(() => vi.advanceTimersByTimeAsync(elapsed));
     expect(mocks.list).toHaveBeenCalledTimes(4);
   } finally {
     client?.clear();

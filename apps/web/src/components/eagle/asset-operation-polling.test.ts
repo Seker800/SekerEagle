@@ -11,5 +11,8 @@ it('backs off unchanged work, immediately follows new progress and leaves idle w
   expect(poll([], false, 0, 33000)).toBe(60000);
   expect(poll([], true, 0, 34000)).toBe(2000);
   expect(poll([], true, 1, 35000)).toBe(5000);
-  expect(poll([], true, 3, 36000)).toBe(20000);
+  expect(poll([], true, 1, 35500)).toBe(5000);
+  expect(poll([], true, 2, 36000)).toBe(10000);
+  expect(poll([], true, 3, 37000)).toBe(20000);
+  expect(poll(running, false, 0, 38000)).toBe(2000);
 });
