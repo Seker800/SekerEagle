@@ -2788,10 +2788,15 @@ describe('SekerEaglePage', () => {
 
   it.each(
     (['MATERIAL', 'PHOTO'] as const).flatMap((mode) =>
-      ['标签', '任务中心', '待处理', '设置', '回收站'].map((destination) => ({
-        mode,
-        destination,
-      })),
+      [
+        '标签',
+        '任务中心',
+        '待处理',
+        '设置',
+        '回收站',
+        mode === 'PHOTO' ? '隐私照片' : '隐私素材',
+        ...(mode === 'PHOTO' ? ['地图', '人物', '整理审批', '照片统计'] : []),
+      ].map((destination) => ({ mode, destination })),
     ),
   )(
     'exits smart-folder scope when $mode sidebar opens $destination',
@@ -2809,7 +2814,13 @@ describe('SekerEaglePage', () => {
           rowVersion: 1,
         },
       ]);
-      renderPage();
+      renderPage(
+        'owner-test',
+        false,
+        destination.startsWith('隐私')
+          ? { enabled: true, durationHours: 1, expiresAt: null }
+          : undefined,
+      );
       const sidebar = screen.getByRole('navigation', {
         name: mode === 'PHOTO' ? '照片库导航' : '素材库导航',
       });
