@@ -160,7 +160,19 @@ test('NAS operation executor uses the application image and isolated database wi
   assert.equal(executor.environment.JWT_SECRET, undefined);
   assert.equal(executor.environment.MLX_EMBEDDING_URL, undefined);
   assert.deepEqual(executor.command, ['node', 'apps/api/dist/asset-operation-executor.js']);
-  assert.equal(executor.mem_limit, '${EAGLE_OPERATION_MEMORY_LIMIT:-512m}');
+  assert.equal(executor.mem_limit, '${EAGLE_OPERATION_MEMORY_LIMIT:-768m}');
+  assert.equal(
+    executor.environment.EAGLE_DUPLICATE_ORIGINAL_MAX_BYTES,
+    '${EAGLE_DUPLICATE_ORIGINAL_MAX_BYTES:-536870912}',
+  );
+  assert.equal(
+    executor.environment.EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS,
+    '${EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS:-65000000}',
+  );
+  assert.equal(
+    executor.environment.EAGLE_DUPLICATE_ORIGINAL_TIMEOUT_MS,
+    '${EAGLE_DUPLICATE_ORIGINAL_TIMEOUT_MS:-120000}',
+  );
 });
 
 test('large operation admission has its own adjustable gateway deadline', async () => {
