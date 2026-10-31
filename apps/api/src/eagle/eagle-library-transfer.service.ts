@@ -242,19 +242,21 @@ export class EagleLibraryTransferService {
       if (operation.status === 'COMPLETED')
         return operation.result as unknown as LibraryTransferResult;
     }
-    const items = operation.plan as unknown as TransferItem[];
-    if (!Array.isArray(items) || !items.length || items.length > 200)
+    const planItems = operation.plan as unknown as TransferItem[];
+    if (!Array.isArray(planItems) || !planItems.length || planItems.length > 200)
       throw new ConflictException('发送计划无效。');
-    const handoff = items.every((item) => item.storageAction === 'HANDOFF');
+    const handoff = planItems.every((item) => item.storageAction === 'HANDOFF');
     if (
-      items.some((item) => item.storageAction !== undefined && item.storageAction !== 'HANDOFF') ||
-      (!handoff && items.some((item) => item.storageAction === 'HANDOFF'))
+      planItems.some(
+        (item) => item.storageAction !== undefined && item.storageAction !== 'HANDOFF',
+      ) ||
+      (!handoff && planItems.some((item) => item.storageAction === 'HANDOFF'))
     )
       throw new ConflictException('发送存储计划无效。');
 
     if (
       guard &&
-      JSON.stringify(items.map((item) => item.sourceId).sort()) !==
+      JSON.stringify(planItems.map((item) => item.sourceId).sort()) !==
         JSON.stringify([...guard.componentIds].sort())
     )
       throw new ConflictException('实况照片组件已变化。');
@@ -263,13 +265,13 @@ export class EagleLibraryTransferService {
       const currentSources = await this.prisma.eagleAsset.findMany({
         where: this.libraryModeWhere(
           ownerId,
-          items.map((item) => item.sourceId),
+          planItems.map((item) => item.sourceId),
           includePrivate,
         ),
       });
       if (
-        currentSources.length !== items.length ||
-        items.some((item) => {
+        currentSources.length !== planItems.length ||
+        planItems.some((item) => {
           const source = currentSources.find((row) => row.id === item.sourceId);
           return (
             !source ||
@@ -283,7 +285,7 @@ export class EagleLibraryTransferService {
       checkExpected(currentSources);
     }
     // The durable plan owns these keys before copying; retrying never creates additional copies.
-    for (const item of items) {
+    for (const item of planItems) {
       const objects = [
         { sourceKey: item.sourceKey, targetKey: item.targetKey, size: item.size },
         ...(item.renditions ?? []),
@@ -319,6 +321,7 @@ export class EagleLibraryTransferService {
     }
     return this.prisma.$transaction(
       async (tx) => {
+        let items = planItems;
         await tx.$queryRaw`SELECT id FROM "EagleLibraryTransfer" WHERE id=${operation.id} AND "ownerId"=${ownerId} FOR UPDATE`;
         const currentOperation = await tx.eagleLibraryTransfer.findUniqueOrThrow({
           where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
@@ -339,6 +342,31 @@ export class EagleLibraryTransferService {
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
         checkExpected(sources);
         if (guard) await guard.beforePublish(tx);
+        if (handoff) {
+          // The user freezes original content and metadata, not the completion time
+          // of background derivatives. Adopt the current immutable READY outputs.
+          items = items.map((item) => {
+            const source = sources.find((row) => row.id === item.sourceId)!;
+            const pyramid = planTransferPyramid(
+              ownerId,
+              item.targetId,
+              item.revision,
+              source.imagePyramids,
+            );
+            return {
+              ...item,
+              renditions: planTransferRenditions(
+                ownerId,
+                item.targetId,
+                item.revision,
+                source.renditions,
+              ).map((r) => ({ ...r, targetKey: r.sourceKey })),
+              pyramid: pyramid
+                ? { ...pyramid, targetPrefix: `${pyramidStoragePrefix(pyramid.storagePrefix)}/` }
+                : undefined,
+            };
+          });
+        }
         const processingFacts = new Map(
           (await readMediaProcessingFacts(tx, ownerId, this.sourceMode, sourceIds)).map((fact) => [
             fact.assetId,
@@ -612,7 +640,13 @@ export class EagleLibraryTransferService {
         };
         await tx.eagleLibraryTransfer.update({
           where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
-          data: { status: 'COMPLETED', result: result as unknown as Prisma.InputJsonValue },
+          data: {
+            status: 'COMPLETED',
+            result: result as unknown as Prisma.InputJsonValue,
+            ...(handoff
+              ? { plan: JSON.parse(JSON.stringify(items)) as Prisma.InputJsonValue }
+              : {}),
+          },
         });
         await guard?.afterPublish?.(tx);
         return result;
