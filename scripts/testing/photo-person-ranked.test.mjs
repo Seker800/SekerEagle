@@ -282,6 +282,28 @@ test('count-sorted unnamed pages and atomic multi-person merge preserve scope an
       service.people(foreign, false, first.nextCursor, 'UNNAMED', 'cards'),
       /游标无效/,
     );
+    // The all-person directory ranks named people globally before large unnamed groups.
+    await db.eaglePhotoPerson.update({ where: { id: groups[0].id }, data: { name: 'Named one' } });
+    await db.eaglePhotoPerson.update({ where: { id: groups[1].id }, data: { name: 'Named two' } });
+    await db.eaglePhotoPerson.update({ where: { id: groups[2].id }, data: { marksAssetsPrivate: true } });
+    const all = await service.people(owner, false, undefined, 'ALL', 'cards');
+    assert.equal(all.people.length, 24);
+    assert.deepEqual(all.people.slice(0, 2).map(p => p.id), [groups[1].id, groups[0].id]);
+    assert.equal(all.people[2].photoCount, 30);
+    assert(all.nextCursor);
+    const rest = await service.people(owner, false, all.nextCursor, 'ALL', 'cards');
+    const combined = [...all.people, ...rest.people];
+    assert.equal(combined.length, 29);
+    assert.equal(new Set(combined.map(p => p.id)).size, 29);
+    assert(!combined.some(p => p.id === groups[2].id || p.id === outsider.id));
+    assert.deepEqual(combined.slice(2).map(p => p.photoCount), Array.from({length: 27}, (_, i) => 30-i));
+    assert.equal(rest.nextCursor, null);
+    for (const [id, privacy, view] of [[foreign, false, 'ALL'], [owner, true, 'ALL'], [owner, false, 'UNNAMED']])
+      await assert.rejects(service.people(id, privacy, all.nextCursor, view, 'cards'), /游标无效/);
+    const visiblePrivate = await service.people(owner, true, undefined, 'ALL', 'cards');
+    const privateRest = await service.people(owner, true, visiblePrivate.nextCursor, 'ALL', 'cards');
+    assert([...visiblePrivate.people, ...privateRest.people].some(p => p.id === groups[2].id));
+    await db.eaglePhotoPerson.updateMany({ where: { id: {in:[groups[0].id,groups[1].id,groups[2].id]} }, data: {name:null,marksAssetsPrivate:false} });
     const target = groups[29].id,
       sources = [groups[28].id, groups[27].id];
     const selection = [target, ...sources].map((id) => ({ id, rowVersion: 1 }));

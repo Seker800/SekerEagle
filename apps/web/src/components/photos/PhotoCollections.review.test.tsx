@@ -308,8 +308,8 @@ it('selects unnamed groups across pages and merges into an existing named person
   mocks.list.mockImplementation(
     async (after: string | undefined, _signal: unknown, view: string) => ({
       runtimeConfigured: true,
-      people: view === 'UNNAMED' ? [after ? c : a] : [b],
-      nextCursor: view === 'UNNAMED' && !after ? 'page2' : null,
+      people: view === 'ALL' ? [after ? c : a] : [b],
+      nextCursor: view === 'ALL' && !after ? 'page2' : null,
     }),
   );
   mocks.merge.mockResolvedValue({
@@ -320,7 +320,7 @@ it('selects unnamed groups across pages and merges into an existing named person
     mergedIds: [a.id, c.id],
   });
   show();
-  fireEvent.click(await screen.findByRole('tab', { name: /^待整理分组/ }));
+  fireEvent.click(await screen.findByRole('tab', { name: /^所有人/ }));
   fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 1' }));
   fireEvent.click(screen.getByRole('button', { name: '加载更多人物' }));
   fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 2' }));
@@ -343,4 +343,20 @@ it('selects unnamed groups across pages and merges into an existing named person
   );
   expect(screen.queryByRole('checkbox', { name: '选择分组 2' })).not.toBeInTheDocument();
   expect(mocks.list).toHaveBeenCalledTimes(before);
+});
+
+it('all people includes named people ahead of unnamed groups ordered by photo count', async () => {
+  const large = { ...a, photoCount: 100 };
+  const small = { ...c, photoCount: 2 };
+  const named = { ...b, photoCount: 1 };
+  mocks.list.mockImplementation(async (_after: unknown, _signal: unknown, view: string) => ({
+    runtimeConfigured: true, people: view === 'ALL' ? [small, large, named] : [named], nextCursor: null,
+  }));
+  show();
+  fireEvent.click(await screen.findByRole('tab', { name: '所有人 (3001)' }));
+  await screen.findByText('100 张照片');
+  expect(mocks.list).toHaveBeenLastCalledWith(undefined, expect.any(AbortSignal), 'ALL');
+  expect(screen.getAllByRole('checkbox').map(el => el.closest('article')?.textContent)).toEqual([
+    expect.stringContaining('小明'), expect.stringContaining('100 张照片'), expect.stringContaining('2 张照片'),
+  ]);
 });
