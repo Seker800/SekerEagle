@@ -443,7 +443,12 @@ test('a handed-off original retains exactly one active storage owner', async () 
   await assert.rejects(f.add({ originalObjectKey: source.originalObjectKey }), /Unique constraint/);
   await db.eagleAsset.update({
     where: { id: source.id },
-    data: { storageTransferredOut: true, deletedAt: new Date(), purgeAfter: new Date() },
+    data: {
+      storageTransferredOut: true,
+      deletedAt: new Date(),
+      purgeAfter: new Date(),
+      transferredAt: new Date(),
+    },
   });
   const target = await f.add({ libraryMode: 'PHOTO', originalObjectKey: source.originalObjectKey });
   assert.equal(target.originalObjectKey, source.originalObjectKey);
