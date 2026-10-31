@@ -150,3 +150,16 @@ test('explicit NAS search connection requires dedicated credentials and cannot e
   assert.equal(defaults.services.worker.environment.MLX_EMBEDDING_URL, 'http://127.0.0.1:11435');
   assert.deepEqual(defaults.services.worker.profiles, ['processing']);
 });
+
+
+test('NAS operation executor uses the application image and isolated database without API or model secrets', async () => {
+  const { services } = await render();
+  const executor = services.operations;
+  assert.equal(executor.image, 'sekereagle/api:nas-f8e4864739a9');
+  assert.match(executor.environment.DATABASE_URL, /@postgres:5432\/sekereagle_test\?/u);
+  assert.equal(executor.environment.S3_PUBLIC_ENDPOINT, 'http://minio:9000');
+  assert.equal(executor.environment.JWT_SECRET, undefined);
+  assert.equal(executor.environment.MLX_EMBEDDING_URL, undefined);
+  assert.deepEqual(executor.command, ['node', 'apps/api/dist/asset-operation-executor.js']);
+  assert.equal(executor.mem_limit, '${EAGLE_OPERATION_MEMORY_LIMIT:-512m}');
+});
