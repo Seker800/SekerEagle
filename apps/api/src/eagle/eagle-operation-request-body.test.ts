@@ -15,6 +15,8 @@ test('large operation selection bodies work in both modes without widening ordin
       '/api/photos/operations',
       '/api/eagle/assets/batch/send',
       '/api/photos/assets/batch/send',
+      '/api/eagle/duplicates/cleanup',
+      '/api/photos/duplicates/cleanup',
       '/ordinary',
     ],
     (req, res) => res.json({ count: req.body.assetIds.length }),
@@ -34,6 +36,8 @@ test('large operation selection bodies work in both modes without widening ordin
       '/api/photos/operations',
       '/api/eagle/assets/batch/send',
       '/api/photos/assets/batch/send',
+      '/api/eagle/duplicates/cleanup',
+      '/api/photos/duplicates/cleanup',
     ]) {
       const result = await fetch(`http://127.0.0.1:${address.port}${path}`, {
         method: 'POST',
