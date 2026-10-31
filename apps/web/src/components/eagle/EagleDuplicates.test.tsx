@@ -83,6 +83,18 @@ function render() {
   };
 }
 describe('duplicate cleanup review', () => {
+  it('cleans thousands of verified copies in one request without opening member comparisons', async () => {
+    mocks.list.mockResolvedValue({ revision: 'b'.repeat(64), exactRevision: 'b'.repeat(64), exactItems: 0,
+      verifiedGroups: 1217, verifiedItems: 2163, coverage: { total: 60000, indexed: 60000, waiting: 0, originalsVerified: 4000 },
+      totalGroups: 1217, exactGroups: 0, similarGroups: 1217, ignoredGroups: 0, removableBytes: 1024,
+      nextCursor: '24', groups: [{ ...group, kind: 'SIMILAR', count: 5 }] });
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    expect(screen.getByText('保留 1217 项，清理 2163 项')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledWith(expect.objectContaining({ allVerified: true, revision: 'b'.repeat(64) })));
+    expect(mocks.members).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.operations = [];
