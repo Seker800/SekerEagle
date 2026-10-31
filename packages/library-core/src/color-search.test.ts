@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { paletteColorScore, deltaE2000 } from './color-search';
+
+const swatch = (hex: string, weight: number) => ({ hex, weight });
+
+test('ordinary color filtering matches Eagle Build 23 area boundaries', () => {
+  for (const whitePercent of [2, 3, 5, 10, 20, 25, 30, 33, 34, 40, 50, 60, 80, 95]) {
+    const palette = [swatch('#040404', 1 - whitePercent / 100), swatch('#fcfcfc', whitePercent / 100)]
+      .sort((a, b) => b.weight - a.weight);
+    assert.equal(paletteColorScore('#ffffff', palette) !== null, whitePercent > 33, `${whitePercent}% white`);
+  }
+});
+
+test('white backgrounds admit a significant secondary subject with the Eagle penalty', () => {
+  const palette = [swatch('#fcfcfc', 0.85), swatch('#0404fc', 0.15)];
+  const score = paletteColorScore('#0000ff', palette);
+  assert.ok(score !== null && Math.abs(score - 7.23606797749979) < 1e-10);
+  assert.equal(paletteColorScore('#0000ff', [swatch('#040404', 0.85), palette[1]!]), null);
+  assert.equal(paletteColorScore('#0000ff', [swatch('#fcfcfc', 0.92), swatch('#0404fc', 0.08)]), null);
+});
+
+test('exact top-two matches retain Eagle exception and minimum dominant area', () => {
+  assert.equal(paletteColorScore('#ffffff', [swatch('#000000', 0.95), swatch('#ffffff', 0.05)]), 0.01);
+  assert.equal(paletteColorScore('#ffffff', [swatch('#040404', 0.95), swatch('#fcfcfc', 0.05)]), null);
+  assert.equal(paletteColorScore('#ffffff', [swatch('#ffffff', 0.24), swatch('#777777', 0.20)]), null);
+  assert.equal(paletteColorScore('#ffffff', []), null);
+});
+
+test('score is color distance rather than descending occupied area', () => {
+  const lowArea = paletteColorScore('#ffffff', [swatch('#fcfcfc', 0.4), swatch('#aaaaaa', 0.35)]);
+  const highArea = paletteColorScore('#ffffff', [swatch('#dddddd', 0.9), swatch('#040404', 0.1)]);
+  assert.ok(lowArea !== null && highArea !== null && lowArea < highArea);
+});
+
+test('CIEDE2000 matches published Sharma reference pairs', () => {
+  const reference: Array<[number[], number[], number]> = [
+    [[50, 2.6772, -79.7751], [50, 0, -82.7485], 2.0425],
+    [[50, 3.1571, -77.2803], [50, 0, -82.7485], 2.8615],
+    [[50, 2.8361, -74.0200], [50, 0, -82.7485], 3.4412],
+    [[50, 0, 0], [50, -1, 2], 2.3669],
+    [[50, 2.49, -0.001], [50, -2.49, 0.0011], 7.2195],
+  ];
+  for (const [a,b,expected] of reference) {
+    assert.ok(Math.abs(deltaE2000(a as [number,number,number], b as [number,number,number])-expected)<0.0001);
+  }
+});
