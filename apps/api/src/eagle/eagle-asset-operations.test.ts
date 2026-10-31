@@ -297,15 +297,34 @@ test('constructing the HTTP provider exposes no Nest lifecycle that starts backg
   assert.equal(Reflect.get(service, 'onModuleInit'), undefined);
 });
 
-
 test('a repeated selected ID is canonicalized without duplicating work or rejecting the user', async () => {
-  const assetId = randomUUID(), operationId = randomUUID();
+  const assetId = randomUUID(),
+    operationId = randomUUID();
   const principal = { sub: 'owner', canViewPrivate: false } as AuthPrincipal;
-  const existing = { id: operationId, ownerId: 'owner', libraryMode: 'PHOTO', isPrivate: false,
-    kind: 'SEND', inputIds: [assetId], items: [{ status: 'PENDING', weight: 1, errorCode: null }] };
-  const tx = { $queryRaw: async () => [], eagleAssetOperation: { findUnique: async () => existing } };
-  const service = new EagleAssetOperationService({ $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never, {} as never, {} as never, 'PHOTO');
-  const result = await service.enqueue(principal, { operationId, kind: 'SEND', assetIds: [assetId, assetId] });
+  const existing = {
+    id: operationId,
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    isPrivate: false,
+    kind: 'SEND',
+    inputIds: [assetId],
+    items: [{ status: 'PENDING', weight: 1, errorCode: null }],
+  };
+  const tx = {
+    $queryRaw: async () => [],
+    eagleAssetOperation: { findUnique: async () => existing },
+  };
+  const service = new EagleAssetOperationService(
+    { $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never,
+    {} as never,
+    {} as never,
+    'PHOTO',
+  );
+  const result = await service.enqueue(principal, {
+    operationId,
+    kind: 'SEND',
+    assetIds: [assetId, assetId],
+  });
   assert.equal(result.total, 1);
   assert.equal(result.queued, 1);
 });

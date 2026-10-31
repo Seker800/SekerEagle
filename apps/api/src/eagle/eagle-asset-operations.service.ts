@@ -176,11 +176,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
   }
   async enqueue(principal: AuthPrincipal, input: EnqueueAssetOperationDto) {
     const ids = [...new Set(input.assetIds)].sort();
-    if (
-      ids.length !== input.assetIds.length ||
-      (input.kind === 'EMPTY_TRASH' ? ids.length !== 0 : ids.length === 0)
-    )
-      throw new BadRequestException('请选择不重复的资源。');
+    if (input.kind === 'EMPTY_TRASH' ? ids.length !== 0 : ids.length === 0)
+      throw new BadRequestException('请选择要处理的资源。');
     return this.prisma
       .$transaction(
         async (tx) => {
