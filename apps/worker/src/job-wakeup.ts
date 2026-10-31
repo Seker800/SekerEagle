@@ -3,6 +3,7 @@ import { nextBackgroundTime } from '@sekereagle/library-core';
 import { Client, type Notification } from 'pg';
 
 export const WORKER_WAKEUP_CHANNEL = 'sekereagle_worker_wakeup';
+export const OBJECT_DELETION_WAKEUP_CHANNEL = 'sekereagle_object_deletion_wakeup';
 const FALLBACK_POLL_MS = 30_000;
 
 export interface PendingWakeCandidate {
@@ -96,6 +97,7 @@ export class PostgresWakeListener {
     private readonly databaseUrl: string,
     private readonly onWake: (payload?: string) => void,
     private readonly reportError: (error: unknown) => void,
+    private readonly onObjectDeletion?: () => void,
   ) {}
 
   async start(): Promise<void> {
@@ -126,10 +128,12 @@ export class PostgresWakeListener {
     client.on('end', () => reconnect());
     client.on('notification', (message: Notification) => {
       if (message.channel === WORKER_WAKEUP_CHANNEL) this.onWake(message.payload);
+      else if (message.channel === OBJECT_DELETION_WAKEUP_CHANNEL) this.onObjectDeletion?.();
     });
     try {
       await client.connect();
       await client.query(`LISTEN ${WORKER_WAKEUP_CHANNEL}`);
+      if (this.onObjectDeletion) await client.query(`LISTEN ${OBJECT_DELETION_WAKEUP_CHANNEL}`);
       this.reconnectAttempt = 0;
       this.onWake();
     } catch (error) {

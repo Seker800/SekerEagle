@@ -1614,6 +1614,7 @@ async function main(): Promise<void> {
       wakeScheduler?.wakeNow();
     },
     reportLoopError,
+    () => objectDeletionRunner?.wake(),
   );
   await wakeListener.start();
   heartbeatTimer = setInterval(() => void heartbeat().catch(reportLoopError), 15_000);
