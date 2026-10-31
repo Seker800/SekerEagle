@@ -2,9 +2,12 @@ import {
   OPERATION_DB_BATCH_SIZE,
   OPERATION_SEND_CONCURRENCY,
   OPERATION_POLL_MS,
+  OPERATION_ADMISSION_TIMEOUT_MS,
+  OPERATION_METADATA_BATCH_SIZE,
 } from './eagle-operation-settings';
 import {
   BadRequestException,
+  RequestTimeoutException,
   ConflictException,
   Inject,
   Injectable,
@@ -39,7 +42,7 @@ type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode
   items: Array<Pick<EagleAssetOperationItem, 'status' | 'weight' | 'errorCode'>>;
 };
 const LEASE_MS = 120_000;
-const METADATA_BATCH_SIZE = 32;
+const METADATA_BATCH_SIZE = OPERATION_METADATA_BATCH_SIZE;
 const ADMISSION_BATCH_SIZE = OPERATION_DB_BATCH_SIZE;
 const SEND_CONCURRENCY = OPERATION_SEND_CONCURRENCY;
 // Transfer publication may hold the shared privacy lock for up to 30 seconds.
@@ -72,6 +75,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     this.timer = setInterval(
       () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
       OPERATION_POLL_MS,
+      OPERATION_ADMISSION_TIMEOUT_MS,
+      OPERATION_METADATA_BATCH_SIZE,
     );
   }
   onModuleDestroy() {
@@ -385,13 +390,15 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             })),
           });
         },
-        { timeout: 15000 },
+        { timeout: OPERATION_ADMISSION_TIMEOUT_MS },
       )
       .then((result) => {
         this.wake();
         return result;
       })
       .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028')
+          throw new RequestTimeoutException('批量任务准备超时，请重试；已创建的任务不会重复执行。');
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
           throw new NotFoundException('操作不存在。');
         throw error;
