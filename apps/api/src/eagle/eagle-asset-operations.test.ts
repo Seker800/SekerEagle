@@ -16,7 +16,7 @@ const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, t
 const input = () => ({ operationId: randomUUID(), kind: 'SEND', assetIds: [randomUUID()] });
 const validate = (body: unknown) =>
   pipe.transform(body, { type: 'body', metatype: EnqueueAssetOperationDto });
-test('queue command validation rejects owner, mode, private escalation, unknown actions and duplicate/unbounded IDs', async () => {
+test('queue command validation rejects owner, mode, private escalation, unknown actions and invalid IDs', async () => {
   await validate(input());
   for (const extra of [
     { ownerId: randomUUID() },
@@ -26,11 +26,10 @@ test('queue command validation rejects owner, mode, private escalation, unknown 
     { kind: 'PURGE' },
     { operationId: 'invalid' },
     { assetIds: ['invalid'] },
-    { assetIds: Array(1001).fill(randomUUID()) },
   ])
     await assert.rejects(validate({ ...input(), ...extra }));
   const duplicate = randomUUID();
-  await assert.rejects(validate({ ...input(), assetIds: [duplicate, duplicate] }));
+  await validate({ ...input(), assetIds: [duplicate, duplicate] });
 });
 test('a queue command accepts a large unique selection instead of imposing a 1000 item user limit', async () => {
   const assetIds = Array.from({ length: 5001 }, () => randomUUID());
@@ -296,4 +295,17 @@ test('batch trash skips owned retired entries and isolates unavailable entries w
 test('constructing the HTTP provider exposes no Nest lifecycle that starts background execution', () => {
   const service = new EagleAssetOperationService({} as never, {} as never, {} as never);
   assert.equal(Reflect.get(service, 'onModuleInit'), undefined);
+});
+
+
+test('a repeated selected ID is canonicalized without duplicating work or rejecting the user', async () => {
+  const assetId = randomUUID(), operationId = randomUUID();
+  const principal = { sub: 'owner', canViewPrivate: false } as AuthPrincipal;
+  const existing = { id: operationId, ownerId: 'owner', libraryMode: 'PHOTO', isPrivate: false,
+    kind: 'SEND', inputIds: [assetId], items: [{ status: 'PENDING', weight: 1, errorCode: null }] };
+  const tx = { $queryRaw: async () => [], eagleAssetOperation: { findUnique: async () => existing } };
+  const service = new EagleAssetOperationService({ $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never, {} as never, {} as never, 'PHOTO');
+  const result = await service.enqueue(principal, { operationId, kind: 'SEND', assetIds: [assetId, assetId] });
+  assert.equal(result.total, 1);
+  assert.equal(result.queued, 1);
 });
