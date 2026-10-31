@@ -145,6 +145,8 @@ export const enUS = {
   '正在查找相似人物…': 'Finding similar people…',
   '仅推荐有清晰人脸和充分相似依据的组合；证据不足时不提问，不会自动合并。':
     'Only clear faces with strong matching evidence are suggested. Insufficient evidence means no question; people are never merged automatically.',
+  '按相似程度、检测可信度和照片数量排序，由你决定是否合并。':
+    'Ranked by similarity, detection confidence, and photo count. You decide whether to merge.',
   '已记住：不是同一个人。': 'Remembered: different people.',
   '暂无待整理分组。': 'No unorganized groups.',
   '还没有已命名人物。可从待整理分组中命名，或先确认相似人物。':

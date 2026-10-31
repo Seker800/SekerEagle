@@ -175,26 +175,13 @@ export interface PhotoPersonReview {
 }
 export const getPhotoPeopleSummary = () =>
   request<{ named: number; unnamed: number }>(`${base}/people/summary`);
-// Start with the largest visible identities, then retain full-library pagination.
-const PRIORITY_REVIEW_COMPLETE = 'priority-complete';
 export async function getPhotoPeopleReview(
   after?: string,
   signal?: AbortSignal,
 ): Promise<{ items: PhotoPersonReview[]; nextCursor: string | null }> {
-  if (after === undefined) {
-    const { pairs } = await reviewPhotoPeople(signal);
-    return {
-      items: pairs.map((pair) => ({
-        ...pair,
-        key: [pair.first.id, pair.second.id].sort().join(':'),
-      })),
-      nextCursor: PRIORITY_REVIEW_COMPLETE,
-    };
-  }
-  return request(
-    `${base}/people/review${after === PRIORITY_REVIEW_COMPLETE ? '' : `?after=${encodeURIComponent(after)}`}`,
-    { signal },
-  );
+  return request(`${base}/people/review${after ? `?after=${encodeURIComponent(after)}` : ''}`, {
+    signal,
+  });
 }
 export const decidePhotoPeople = (input: {
   firstId: string;

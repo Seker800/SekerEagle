@@ -52,13 +52,22 @@ export class PhotoPersonReviewService {
             anchorId: string;
             candidateId: string | null;
             score: number | null;
-            lastAnchor: string;
+            anchorPhotos: bigint;
+            candidatePhotos: bigint | null;
+            anchorConfidence: number;
             hasMore: boolean;
           }>
         >(personReviewCandidatesSql(ownerId, includePrivate, cursor));
         const retrieved = rows.flatMap((row) =>
           row.candidateId && row.score !== null && Number.isFinite(row.score)
-            ? [{ firstId: row.anchorId, secondId: row.candidateId }]
+            ? [
+                {
+                  firstId: row.anchorId,
+                  secondId: row.candidateId,
+                  firstCount: row.anchorPhotos,
+                  secondCount: row.candidatePhotos ?? 0n,
+                },
+              ]
             : [],
         );
         const evidence = await readPersonReviewEvidence(
@@ -75,7 +84,7 @@ export class PhotoPersonReviewService {
               select: personPreviewSelect(
                 ownerId,
                 includePrivate,
-                1,
+                qualified.length * 2,
                 qualified.flatMap((p) => [p.firstFaceId, p.secondFaceId]),
               ),
             })
@@ -94,21 +103,36 @@ export class PhotoPersonReviewService {
             ? [
                 {
                   key,
-                  first: { ...first, faces: [firstFace] },
-                  second: { ...second, faces: [secondFace] },
+                  first: { ...first, faces: [firstFace], photoCount: Number(r.firstCount ?? 0n) },
+                  second: {
+                    ...second,
+                    faces: [secondFace],
+                    photoCount: Number(r.secondCount ?? 0n),
+                  },
                   similarity: r.similarity,
                 },
               ]
             : [];
         });
+        const last = rows.at(-1);
+        const found = cursor.found || rows.some((row) => row.candidateId !== null);
+        const next = last?.hasMore
+          ? {
+              id: last.anchorId,
+              photos: Number(last.anchorPhotos),
+              confidence: last.anchorConfidence,
+              round: cursor.round,
+              found,
+            }
+          : found
+            ? { id: '', photos: 0, confidence: 0, round: cursor.round + 1, found: false }
+            : null;
         return {
           items,
-          nextCursor: rows[0]?.hasMore
-            ? encodeReviewCursor(rows[0].lastAnchor, ownerId, includePrivate)
-            : null,
+          nextCursor: next ? encodeReviewCursor(next, ownerId, includePrivate) : null,
         };
       },
-      { timeout: 12000 },
+      { isolationLevel: 'RepeatableRead', timeout: 12000 },
     );
   }
   async decide(

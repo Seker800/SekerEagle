@@ -2,13 +2,7 @@ import { Prisma } from '@prisma/client';
 import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
 import { normalizeEmbedding } from '@sekereagle/vector-core';
 
-// Retrieval is deliberately broader than the evidence required to ask a question.
-// These are conservative product cutoffs, not identity probabilities.
-export const PERSON_REVIEW_RETRIEVAL_SIMILARITY = 0.4;
 export const PERSON_REVIEW_SAMPLE_LIMIT = 3;
-const CORROBORATING_SIMILARITY = 0.5;
-const STRONG_SIMILARITY = 0.55;
-const SINGLE_SAMPLE_SIMILARITY = 0.6;
 
 type ReviewPair = { firstId: string; secondId: string; firstCount?: bigint; secondCount?: bigint };
 export type ReviewFaceEvidence = {
@@ -17,6 +11,7 @@ export type ReviewFaceEvidence = {
   assetId: string;
   modelVersion: string;
   embedding: number[];
+  confidence?: number;
 };
 export type QualifiedReviewPair<T> = T & {
   similarity: number;
@@ -24,7 +19,7 @@ export type QualifiedReviewPair<T> = T & {
   secondFaceId: string;
 };
 
-/** Only independently supported, current face samples may become a human question. */
+/** Rank comparable face evidence; low similarity remains available later in the traversal. */
 export function qualifyPersonReviewPairs<T extends ReviewPair>(
   pairs: readonly T[],
   faces: readonly ReviewFaceEvidence[],
@@ -50,7 +45,7 @@ export function qualifyPersonReviewPairs<T extends ReviewPair>(
       /* A zero or malformed vector provides no identity evidence. */
     }
   }
-  const qualified: QualifiedReviewPair<T>[] = [];
+  const qualified: Array<QualifiedReviewPair<T> & { rank: number }> = [];
   for (const pair of pairs) {
     const a = byPerson.get(pair.firstId) ?? [],
       b = byPerson.get(pair.secondId) ?? [];
@@ -66,45 +61,30 @@ export function qualifyPersonReviewPairs<T extends ReviewPair>(
     const aScores = matrix.map((row) => Math.max(...row));
     const bScores = b.map((_, i) => Math.max(...matrix.map((row) => row[i]!)));
     const best = Math.max(...aScores);
-    if (a.length === 1 && b.length === 1) {
-      if (best < SINGLE_SAMPLE_SIMILARITY) continue;
-    } else if (
-      best < STRONG_SIMILARITY ||
-      aScores.filter((s) => s >= CORROBORATING_SIMILARITY).length < Math.min(2, a.length) ||
-      bScores.filter((s) => s >= CORROBORATING_SIMILARITY).length < Math.min(2, b.length)
-    )
-      continue;
     const mean = (scores: number[]) => scores.reduce((sum, s) => sum + s, 0) / scores.length;
     const similarity = Math.min(mean(aScores), mean(bScores));
-    if (similarity < CORROBORATING_SIMILARITY) continue;
     const firstIndex = aScores.indexOf(best),
       secondIndex = matrix[firstIndex]!.indexOf(best);
+    const confidence = Math.min(a[firstIndex]!.confidence ?? 0, b[secondIndex]!.confidence ?? 0);
+    const volume = Math.log1p(Number((pair.firstCount ?? 0n) + (pair.secondCount ?? 0n)));
     qualified.push({
       ...pair,
       similarity,
       firstFaceId: a[firstIndex]!.faceId,
       secondFaceId: b[secondIndex]!.faceId,
+      rank: 0.8 * similarity + 0.1 * confidence + 0.1 * (volume / (1 + volume)),
     });
   }
   qualified.sort(
     (a, b) =>
-      b.similarity - a.similarity ||
+      b.rank - a.rank ||
       Number(
         (b.firstCount ?? 0n) + (b.secondCount ?? 0n) - (a.firstCount ?? 0n) - (a.secondCount ?? 0n),
       ) ||
       a.firstId.localeCompare(b.firstId) ||
       a.secondId.localeCompare(b.secondId),
   );
-  // Do not ask a rapid series of different questions about the same identity.
-  const used = new Set<string>();
-  return qualified
-    .filter((pair) => {
-      if (used.has(pair.firstId) || used.has(pair.secondId)) return false;
-      used.add(pair.firstId);
-      used.add(pair.secondId);
-      return true;
-    })
-    .slice(0, 100);
+  return qualified;
 }
 
 /** Bounded exemplars, one face per actual photo. No biometric data leaves the API. */
@@ -135,14 +115,16 @@ export async function readPersonReviewEvidence(
         AND f."personId" IN (${Prisma.join(ids)}) AND f."assetRevision"=a."mediaRevision" AND a."deletedAt" IS NULL
         AND f."modelVersion"=p."modelVersion" AND f."modelVersion"=${PHOTO_FACE_MODEL_VERSION}
         AND (${includePrivate} OR (NOT a."isPrivate" AND NOT p."marksAssetsPrivate"))
-        AND f.confidence BETWEEN 0.95 AND 1 AND cardinality(f.box)=4
+        AND cardinality(f.embedding)=128
+        AND NOT EXISTS (SELECT 1 FROM unnest(f.embedding) v WHERE v IS NULL OR v NOT BETWEEN -1.001 AND 1.001)
+        AND EXISTS (SELECT 1 FROM unnest(f.embedding) v WHERE abs(v)>0.000001)
+        AND f.confidence BETWEEN 0 AND 1 AND cardinality(f.box)=4
         AND f.box[1]>=0 AND f.box[2]>=0 AND f.box[3]>0 AND f.box[4]>0
         AND f.box[1]+f.box[3]<=1.001 AND f.box[2]+f.box[4]<=1.001
-        AND r.width * f.box[3]>=48 AND r.height * f.box[4]>=48
     ), ranked AS (
       SELECT *,row_number() OVER(PARTITION BY "personId" ORDER BY confidence DESC,pixels DESC,"faceId") AS position
       FROM usable WHERE duplicate=1
-    ) SELECT "faceId","personId","assetId","modelVersion",embedding FROM ranked
+    ) SELECT "faceId","personId","assetId","modelVersion",embedding,confidence FROM ranked
       WHERE position<=${PERSON_REVIEW_SAMPLE_LIMIT} ORDER BY "personId",position
   `);
 }
