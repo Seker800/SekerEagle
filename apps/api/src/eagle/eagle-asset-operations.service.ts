@@ -991,6 +991,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             },
           };
         });
+        const failed = new Set<string>();
         if (requests.length === 1) {
           const request = requests[0]!;
           await this.transfers.send(
@@ -1000,9 +1001,21 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             request.expected,
             request.guard,
           );
-        } else await this.transfers.sendBatch(operation.ownerId, requests, operation.isPrivate);
+        } else {
+          const results = await this.transfers.sendBatch(
+            operation.ownerId,
+            requests,
+            operation.isPrivate,
+          );
+          for (const [index, result] of results.entries()) {
+            if (result.status !== 'rejected') continue;
+            const entry = items[index]!;
+            failed.add(entry.id);
+            await this.failItems([entry], result.reason);
+          }
+        }
         // A completed journal can be replayed after a crash without publishing again.
-        const replayed = items.filter((entry) => !published.has(entry.id));
+        const replayed = items.filter((entry) => !published.has(entry.id) && !failed.has(entry.id));
         if (replayed.length)
           await this.prisma.eagleAssetOperationItem.updateMany({
             where: { libraryMode: this.libraryMode, ...this.leaseWhere(replayed) },
@@ -1096,42 +1109,46 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         for (const entry of items) await this.execute([entry]);
         return;
       }
-      const code =
-        error instanceof OperationAccessError
-          ? error.code
-          : error instanceof NotFoundException
-            ? 'ASSET_UNAVAILABLE'
-            : error instanceof ConflictException
-              ? 'ASSET_CHANGED'
-              : error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028'
-                ? 'TRANSACTION_TIMEOUT'
-                : 'OPERATION_FAILED';
-      this.logger.error({
-        event: 'ASSET_OPERATION_FAILED',
-        operationId: operation.id,
-        itemIds: items.map((entry) => entry.id),
-        kind: operation.kind,
-        libraryMode: this.libraryMode,
-        errorCode: code,
-        databaseCode:
-          error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined,
-        errorType: error instanceof Error ? error.constructor.name : 'Unknown',
-      });
+      await this.failItems(items, error);
+    }
+  }
+  private async failItems(items: ClaimedItem[], error: unknown) {
+    const { operation } = items[0]!;
+    const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
+    const code =
+      error instanceof OperationAccessError
+        ? error.code
+        : error instanceof NotFoundException
+          ? 'ASSET_UNAVAILABLE'
+          : error instanceof ConflictException
+            ? 'ASSET_CHANGED'
+            : error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028'
+              ? 'TRANSACTION_TIMEOUT'
+              : 'OPERATION_FAILED';
+    this.logger.error({
+      event: 'ASSET_OPERATION_FAILED',
+      operationId: operation.id,
+      itemIds: items.map((entry) => entry.id),
+      kind: operation.kind,
+      libraryMode: this.libraryMode,
+      errorCode: code,
+      databaseCode: error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined,
+      errorType: error instanceof Error ? error.constructor.name : 'Unknown',
+    });
+    await this.prisma.eagleAssetOperationItem.updateMany({
+      where: { ...libraryModeIdentity },
+      data: { status: 'FAILED', errorCode: code, leaseUntil: null },
+    });
+    if (code === 'AUTH_REQUIRED' || code === 'PRIVATE_LOCKED') {
       await this.prisma.eagleAssetOperationItem.updateMany({
-        where: { ...libraryModeIdentity },
-        data: { status: 'FAILED', errorCode: code, leaseUntil: null },
+        where: {
+          operationId: operation.id,
+          ownerId: operation.ownerId,
+          libraryMode: this.libraryMode,
+          status: 'PENDING',
+        },
+        data: { status: 'FAILED', errorCode: code },
       });
-      if (code === 'AUTH_REQUIRED' || code === 'PRIVATE_LOCKED') {
-        await this.prisma.eagleAssetOperationItem.updateMany({
-          where: {
-            operationId: operation.id,
-            ownerId: operation.ownerId,
-            libraryMode: this.libraryMode,
-            status: 'PENDING',
-          },
-          data: { status: 'FAILED', errorCode: code },
-        });
-      }
     }
   }
 }

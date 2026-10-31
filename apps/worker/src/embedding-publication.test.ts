@@ -152,3 +152,64 @@ test('stored-vector activation preserves compatibility, scope and lease without 
     assert.ok(lookup.includes(field), field);
   assert.ok(sql[0]!.includes('"deletedAt" IS NULL'));
 });
+
+for (const scenario of [
+  'no-cache',
+  'stale-asset',
+  'lost-lease',
+  'ready',
+  'missing-record',
+] as const)
+  test(`stored activation handles ${scenario} without unsafe publication`, async () => {
+    let matched = 0;
+    let completions = 0;
+    const tx = {
+      $queryRaw: async (query: { sql: string }) =>
+        query.sql.includes('FROM "EagleAsset"')
+          ? scenario === 'stale-asset'
+            ? []
+            : [{ id: job.assetId }]
+          : scenario === 'no-cache'
+            ? []
+            : [
+                {
+                  id: 'stored',
+                  status: scenario === 'ready' ? 'READY' : 'FAILED',
+                  isCurrent: scenario === 'ready',
+                },
+              ],
+      eagleAssetProcessingJob: {
+        updateMany: async () => {
+          completions++;
+          return { count: scenario === 'lost-lease' ? 0 : 1 };
+        },
+      },
+      eagleAssetEmbedding: {
+        updateMany: async (input: { data: { status: string } }) => ({
+          count: scenario === 'missing-record' && input.data.status === 'READY' ? 0 : 1,
+        }),
+      },
+      $executeRaw: async () => {
+        matched++;
+        return 1;
+      },
+    };
+    const client = { $transaction: async (work: (tx: unknown) => Promise<boolean>) => work(tx) };
+    const identity = {
+      id: 'space',
+      model: 'model',
+      revision: 'revision',
+      dimensions: 1024,
+      normalized: true,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+    };
+    const activate = () =>
+      publishStoredEmbedding(client as never, job, identity, async () => {
+        matched++;
+      });
+    if (scenario === 'missing-record') await assert.rejects(activate, /EMBEDDING_RECORD_NOT_OWNED/);
+    else assert.equal(await activate(), scenario !== 'no-cache');
+    assert.equal(completions, scenario === 'no-cache' ? 0 : 1);
+    assert.equal(matched, 0);
+  });

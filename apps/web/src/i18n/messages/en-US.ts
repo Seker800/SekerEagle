@@ -214,6 +214,7 @@ export const enUS = {
   '请解锁私密内容后重试。': 'Unlock private content to retry.',
   '资源已改变，请重新选择。': 'The asset changed. Select it again.',
   '资源已移除或不再可访问。': 'The asset was removed or is no longer accessible.',
+  '数据库事务等待超时，未提交的项目可以重试。': 'The database transaction timed out. Uncommitted items can be retried.',
   '操作失败，请重试。': 'Operation failed. Try again.',
   '已完成 {{value1}} / {{value2}} 项': 'Completed {{value1}} / {{value2}} items',
   '已取消 {{count}} 项': 'Cancelled {{count}} items',

@@ -223,9 +223,21 @@ it('reports partial completion when unavailable items did not block the valid de
   expect(screen.queryByText('已停止（1项失败）')).not.toBeInTheDocument();
 });
 
-
 it('shows an actionable transaction timeout instead of an undiagnosed operation failure', async () => {
-  mocks.list.mockImplementation(async mode => mode === 'PHOTO' ? [job({ state: 'STOPPED', failed: 1, running: 0, queued: 0, errors: [{ code: 'TRANSACTION_TIMEOUT', count: 1 }] })] : []);
+  mocks.list.mockImplementation(async (mode) =>
+    mode === 'PHOTO'
+      ? [
+          job({
+            state: 'STOPPED',
+            failed: 1,
+            running: 0,
+            queued: 0,
+            errors: [{ code: 'TRANSACTION_TIMEOUT', count: 1 }],
+          }),
+        ]
+      : [],
+  );
   show();
+  fireEvent.click(await screen.findByText('查看失败原因'));
   expect(await screen.findByText(/数据库事务等待超时，未提交的项目可以重试。/)).toBeVisible();
 });

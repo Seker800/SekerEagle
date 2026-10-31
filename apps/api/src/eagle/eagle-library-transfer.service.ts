@@ -116,39 +116,64 @@ export class EagleLibraryTransferService {
     guard?: TransferRequest['guard'],
   ): Promise<LibraryTransferResult> {
     const [result] = await this.sendBatch(ownerId, [{ input, expected, guard }], includePrivate);
-    return result!;
+    if (result!.status === 'rejected') throw result!.reason;
+    return result!.value;
   }
 
   /** Preparation may copy legacy objects concurrently; publication commits one bounded quantum. */
   async sendBatch(ownerId: string, requests: readonly TransferRequest[], includePrivate: boolean) {
-    const prepared: Array<LibraryTransferResult | PublishTransfer> = [];
+    const prepared: Array<PromiseSettledResult<LibraryTransferResult | PublishTransfer>> = [];
     await runTransferWork(
       requests.map((request, index) => ({ request, index })),
       async ({ request, index }) => {
-        prepared[index] = await this.prepare(
-          ownerId,
-          request.input,
-          includePrivate,
-          request.expected,
-          request.guard,
-        );
+        try {
+          prepared[index] = {
+            status: 'fulfilled',
+            value: await this.prepare(
+              ownerId,
+              request.input,
+              includePrivate,
+              request.expected,
+              request.guard,
+            ),
+          };
+        } catch (reason) {
+          // A failed legacy copy must not abort the preparation or publication of unrelated items.
+          prepared[index] = { status: 'rejected', reason };
+        }
       },
     );
-    if (prepared.every((value) => typeof value !== 'function'))
-      return prepared as LibraryTransferResult[];
+    if (
+      !prepared.some(
+        (result) => result.status === 'fulfilled' && typeof result.value === 'function',
+      )
+    )
+      return prepared as Array<PromiseSettledResult<LibraryTransferResult>>;
     return this.prisma.$transaction(
       async (tx) => {
         // Lock all journals in deterministic order before the shared privacy locks.
-        // Each item keeps its own durable identity, so partial retries never change selection.
         const ids = requests
-          .filter((_, index) => typeof prepared[index] === 'function')
+          .filter((_, index) => {
+            const result = prepared[index]!;
+            return result.status === 'fulfilled' && typeof result.value === 'function';
+          })
           .map((request) => request.input.operationId)
           .sort();
         await tx.$queryRaw`SELECT id FROM "EagleLibraryTransfer" WHERE "ownerId"=${ownerId} AND "sourceMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
         const context = { privacyLocked: false };
-        const results: LibraryTransferResult[] = [];
-        for (const value of prepared)
-          results.push(typeof value === 'function' ? await value(tx, context) : value);
+        const results: Array<PromiseSettledResult<LibraryTransferResult>> = [];
+        for (const result of prepared)
+          results.push(
+            result.status === 'rejected'
+              ? result
+              : {
+                  status: 'fulfilled',
+                  value:
+                    typeof result.value === 'function'
+                      ? await result.value(tx, context)
+                      : result.value,
+                },
+          );
         return results;
       },
       { timeout: 30000 },

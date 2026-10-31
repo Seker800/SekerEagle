@@ -60,7 +60,9 @@ export function AssetOperationsPanel({
             ? t('资源已改变，请重新选择。')
             : code === 'ASSET_UNAVAILABLE'
               ? t('资源已移除或不再可访问。')
-              : t('操作失败，请重试。');
+              : code === 'TRANSACTION_TIMEOUT'
+                ? t('数据库事务等待超时，未提交的项目可以重试。')
+                : t('操作失败，请重试。');
   function card(operation: AssetOperationSummary) {
     return (
       <article key={operation.id} className={styles.card} data-state={operation.state}>

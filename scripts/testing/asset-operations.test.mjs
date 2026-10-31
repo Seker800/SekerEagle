@@ -1,3 +1,5 @@
+import { publishStoredEmbedding } from '../../apps/worker/dist/embedding-publication.js';
+import { EAGLE_EMBEDDING_MODEL } from '../../packages/vector-core/dist/index.js';
 import { AssetOperationWakeup } from '../../apps/api/dist/asset-operation-wakeup.js';
 import { OPERATION_SEND_CONCURRENCY } from '../../apps/api/dist/eagle/eagle-operation-settings.js';
 import { performance } from 'node:perf_hooks';
@@ -1520,3 +1522,96 @@ test('SEND rotates to a newer operation after one quantum, including after execu
   assert.equal((await f.state(second.id)).completed, 1);
   assert.equal((await f.state(first.id)).completed, OPERATION_SEND_CONCURRENCY);
 });
+
+for (const mode of ['PHOTO', 'MATERIAL'])
+  test(`${mode} SEND preserves a vector off-index until its scoped worker lease atomically activates it`, async () => {
+    const f = await fixture(mode);
+    const source = await f.add();
+    const identity = {
+      id: 'send-publication-test-space',
+      model: EAGLE_EMBEDDING_MODEL,
+      revision: 'synthetic-v1',
+      dimensions: 1024,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+      normalized: true,
+    };
+    await prisma.eagleEmbeddingSpace.upsert({
+      where: { id: identity.id },
+      create: { ...identity, isCurrent: true },
+      update: {},
+    });
+    const vector = `[1,${Array.from({ length: 1023 }, () => 0).join(',')}]`;
+    await prisma.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES (${randomUUID()},${f.ownerId},${mode}::"LibraryMode",${source.id},1,${identity.id},'READY',true,${vector}::vector,1,now())`;
+    const receipt = await f.enqueue('SEND', [source]);
+    await f.service.tick();
+    assert.equal((await f.state(receipt.id)).completed, 1);
+    const target = await prisma.eagleAsset.findFirstOrThrow({
+      where: {
+        ownerId: f.ownerId,
+        libraryMode: mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO',
+        deletedAt: null,
+      },
+    });
+    const copied = await prisma.eagleAssetEmbedding.findFirstOrThrow({
+      where: { assetId: target.id },
+    });
+    assert.equal(copied.status, 'PENDING');
+    assert.equal(copied.isCurrent, false);
+    const queued = await prisma.eagleAssetProcessingJob.findFirstOrThrow({
+      where: { assetId: target.id, kind: 'GENERATE_EMBEDDING' },
+    });
+    const job = await prisma.eagleAssetProcessingJob.update({
+      where: { id: queued.id },
+      data: { status: 'PROCESSING', leaseVersion: { increment: 1 }, lockedAt: new Date() },
+    });
+    const suggest = async () => {};
+    assert.equal(
+      await publishStoredEmbedding(
+        prisma,
+        job,
+        { ...identity, revision: 'wrong-model-revision' },
+        suggest,
+      ),
+      false,
+    );
+    assert.equal(
+      await publishStoredEmbedding(
+        prisma,
+        { ...job, leaseVersion: job.leaseVersion - 1 },
+        identity,
+        suggest,
+      ),
+      true,
+    );
+    assert.equal(
+      (await prisma.eagleAssetEmbedding.findUniqueOrThrow({ where: { id: copied.id } })).status,
+      'PENDING',
+    );
+    await assert.rejects(
+      publishStoredEmbedding(prisma, job, identity, async () => {
+        throw new Error('synthetic-rollback');
+      }),
+      /synthetic-rollback/,
+    );
+    assert.equal(
+      (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } })).status,
+      'PROCESSING',
+    );
+    assert.equal(
+      (await prisma.eagleAssetEmbedding.findUniqueOrThrow({ where: { id: copied.id } })).status,
+      'PENDING',
+    );
+    assert.equal(await publishStoredEmbedding(prisma, job, identity, suggest), true);
+    const ready = await prisma.eagleAssetEmbedding.findUniqueOrThrow({ where: { id: copied.id } });
+    assert.equal(ready.status, 'READY');
+    assert.equal(ready.isCurrent, true);
+    assert.equal(
+      (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } })).status,
+      'COMPLETED',
+    );
+    const [actual] =
+      await prisma.$queryRaw`SELECT embedding::text AS value FROM "EagleAssetEmbedding" WHERE id=${copied.id}`;
+    assert.equal(actual.value, vector);
+    assert.equal(f.copies(), 0);
+  });
