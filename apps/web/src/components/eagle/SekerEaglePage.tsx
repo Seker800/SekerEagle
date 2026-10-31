@@ -390,7 +390,8 @@ export function SekerEaglePage({
       (!privateVisible && workspaceCache.browse?.quickFilters) ||
       createEmptyEagleQuickFilterState(),
   );
-  const deferredQuickFilters = useDebouncedValue(quickFilters, 150);
+  const [quickFilterResetKey, setQuickFilterResetKey] = useState(0);
+  const deferredQuickFilters = useDebouncedValue(quickFilters, 150, quickFilterResetKey);
   const filterInputsPending =
     hashKey([quickFilters]) !== hashKey([deferredQuickFilters]) ||
     search.normalize('NFKC').trim() !== deferredSearch;
@@ -607,6 +608,18 @@ export function SekerEaglePage({
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
   const listIdentity = hashKey(listKey);
+  const loadingNewResults = assetsQuery.isFetching && assetsQuery.isPlaceholderData;
+  const [loadingFeedbackKey, setLoadingFeedbackKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!loadingNewResults) {
+      setLoadingFeedbackKey(null);
+      return;
+    }
+    // Delay only feedback; the query starts immediately and cached results stay visible.
+    const timeout = window.setTimeout(() => setLoadingFeedbackKey(listIdentity), 200);
+    return () => window.clearTimeout(timeout);
+  }, [loadingNewResults, listIdentity]);
+  const showLoadingFeedback = loadingNewResults && loadingFeedbackKey === listIdentity;
   const selectionScope = hashKey([listIdentity, quickFilters, search]);
   const previousSelectionScope = useRef(selectionScope);
   useEffect(() => {
@@ -1072,6 +1085,7 @@ export function SekerEaglePage({
   ]);
   const resetFilters = () => {
     setQuickFilters(createEmptyEagleQuickFilterState());
+    setQuickFilterResetKey((key) => key + 1);
   };
   const navigateLibrary = (
     destination:
@@ -2247,6 +2261,11 @@ export function SekerEaglePage({
                     : undefined
                 }
               >
+                {showLoadingFeedback && (
+                  <div className={styles.queryProgress} role="status" aria-label={t('正在加载…')}>
+                    {t('正在加载…')}
+                  </div>
+                )}
                 <div
                   ref={assetViewport.containerRef}
                   className={`${styles.assetViewport} ${isPhotoTimeline ? styles.horizontalViewport : ''}`}
@@ -2260,13 +2279,6 @@ export function SekerEaglePage({
                   onClick={clearAssetSelection}
                   onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
                 >
-                  {(filterInputsPending ||
-                    (assetsQuery.isFetching && !assetsQuery.isFetchingNextPage)) &&
-                    !assetsQuery.isLoading && (
-                      <div className={styles.queryProgress} role="status">
-                        {t('正在更新结果…')}
-                      </div>
-                    )}
                   <div className={styles.scrollContent}>
                     {assetsQuery.isFetchPreviousPageError && (
                       <button type="button" onClick={loadPreviousPage}>
