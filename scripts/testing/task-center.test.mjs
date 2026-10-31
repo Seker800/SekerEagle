@@ -68,28 +68,102 @@ test('trash retires pending and leased work atomically, fences stale publication
   const f = await fixture();
   const a = await f.asset();
   const queued = await f.job(a);
-  const active = await f.job(a, { kind: 'ANALYZE_PHOTO_FACES', status: 'PROCESSING', leaseVersion: 7, lockedAt: new Date() });
+  const active = await f.job(a, {
+    kind: 'ANALYZE_PHOTO_FACES',
+    status: 'PROCESSING',
+    leaseVersion: 7,
+    lockedAt: new Date(),
+  });
   const completed = await f.job(a, { kind: 'EXTRACT_COLOR_PALETTE', status: 'COMPLETED' });
-  await prisma.$transaction(tx => setEagleTrash(tx, {ownerId:f.owner,libraryMode:'PHOTO'},[a.id],false));
-  for(const job of [queued,active]) {
-    const current = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:job.id}});
+  await prisma.$transaction((tx) =>
+    setEagleTrash(tx, { ownerId: f.owner, libraryMode: 'PHOTO' }, [a.id], false),
+  );
+  for (const job of [queued, active]) {
+    const current = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
     assert.equal(current.status, 'COMPLETED');
     assert.equal(current.lastError, 'ASSET_TRASHED');
-    assert.equal(current.leaseVersion, job.leaseVersion+1);
+    assert.equal(current.leaseVersion, job.leaseVersion + 1);
   }
-  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:completed.id}})).lastError,null);
-  await prisma.$transaction(tx => setEagleTrash(tx, {ownerId:f.owner,libraryMode:'PHOTO'},[a.id],true));
-  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:active.id}})).status,'PENDING');
-  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:completed.id}})).status,'COMPLETED');
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: completed.id } }))
+      .lastError,
+    null,
+  );
+  await prisma.$transaction((tx) =>
+    setEagleTrash(tx, { ownerId: f.owner, libraryMode: 'PHOTO' }, [a.id], true),
+  );
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: active.id } })).status,
+    'PENDING',
+  );
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: completed.id } }))
+      .status,
+    'COMPLETED',
+  );
 });
 
 test('processing summary excludes trashed and obsolete versions rather than advertising work that cannot run', async () => {
   const f = await fixture();
   await f.job(await f.asset());
-  await f.job(await f.asset({deletedAt:new Date()}));
-  await f.job(await f.asset(), {assetRevision:1});
-  const summary = await new EagleProcessingService(prisma,'PHOTO').summary(f.owner);
-  assert.equal(summary.counts.queued,1);
+  await f.job(await f.asset({ deletedAt: new Date() }));
+  await f.job(await f.asset(), { assetRevision: 1 });
+  const summary = await new EagleProcessingService(prisma, 'PHOTO').summary(f.owner);
+  assert.equal(summary.counts.queued, 1);
+});
+
+test('legacy trash backfill is transactional and keeps successful history and physical purge work', async () => {
+  const f = await fixture();
+  const a = await f.asset({ deletedAt: new Date() });
+  const skipped = await f.job(a, { status: 'PROCESSING', lockedAt: new Date(), leaseVersion: 5 });
+  const purge = await f.job(a, { kind: 'PURGE_ASSET' });
+  const done = await f.job(a, { kind: 'EXTRACT_COLOR_PALETTE', status: 'COMPLETED' });
+  const sql = await readFile(
+    new URL(
+      '../../apps/api/prisma/migrations/20261031140000_trash_media_jobs/migration.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const update = sql.slice(sql.indexOf('-- Reconcile')).replace(/COMMIT;\s*$/, '');
+  const rollback = new Error('rollback synthetic backfill');
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(update);
+      const current = await tx.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: { id: skipped.id },
+      });
+      assert.equal(current.status, 'COMPLETED');
+      assert.equal(current.lastError, 'ASSET_TRASHED');
+      assert.equal(current.leaseVersion, 6);
+      assert.equal(
+        (await tx.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: purge.id } })).status,
+        'PENDING',
+      );
+      assert.equal(
+        (await tx.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: done.id } })).lastError,
+        null,
+      );
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: skipped.id } })).status,
+    'PROCESSING',
+  );
+});
+
+test('bulk trash retires media jobs once per statement instead of once per selected photo', async () => {
+  const f=await fixture();
+  const ids=[];
+  for(let n=0;n<40;n++) { const a=await f.asset(); ids.push(a.id); await f.job(a); }
+  const result=await prisma.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,FORMAT JSON) UPDATE "EagleAsset" SET "deletedAt"=now() WHERE "ownerId"=${f.owner} AND "libraryMode"='PHOTO' AND id=ANY(${ids}::text[])`);
+  const trigger=result[0]['QUERY PLAN'][0].Triggers.find(row=>row['Trigger Name']==='eagle_trash_media_jobs');
+  assert.equal(trigger.Calls,1,'the queue transition must be amortized across the deletion batch');
+  assert.equal(await prisma.eagleAssetProcessingJob.count({where:{ownerId:f.owner,status:'COMPLETED',lastError:'ASSET_TRASHED'}}),40);
 });
 
 test('accepted and rejected approvals both appear in scoped completion history', async () => {
