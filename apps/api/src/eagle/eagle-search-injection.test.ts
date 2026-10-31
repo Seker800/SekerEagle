@@ -28,7 +28,9 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       ],
     }).compile();
     try {
-      const result = await module.get(EagleService).listAssets('owner', { search: '飞机', limit: 30 });
+      const result = await module
+        .get(EagleService)
+        .listAssets('owner', { search: '飞机', limit: 30 });
       assert.deepEqual(calls, [['owner', '飞机']]);
       assert.ok('imageSearch' in result);
       assert.deepEqual(result.imageSearch, { status: 'READY', spaceId: 'space' });

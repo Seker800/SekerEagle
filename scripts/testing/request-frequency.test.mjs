@@ -64,6 +64,13 @@ try {
       await Promise.all(Array.from({ length: Math.min(16, count - i) }, () => check(path, status)));
   };
   for (const mode of ['eagle', 'photos']) {
+    const search = await fetch(`${origin}/api/${mode}/assets?search=airplane&limit=40`, {
+      headers: { cookie, Origin: browserOrigin },
+    });
+    assert.equal(search.status, 200);
+    const searchResult = await search.json();
+    assert.equal(searchResult.imageSearch?.status, 'UNAVAILABLE');
+    assert.deepEqual(searchResult.items, []);
     const foreign = await db.eagleAsset.create({
       data: {
         id: randomUUID(),
