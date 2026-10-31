@@ -34,17 +34,29 @@ test('video poster, deferred playback and normal full processing preserve scoped
   process.env.FFPROBE_PATH = probe;
   process.env.FFMPEG_PATH = encode;
   try {
-    for (const [kind, enabled, claimed, expected] of [
-      ['GENERATE_THUMBNAIL', false, true, ['THUMBNAIL']],
-      ['GENERATE_PREVIEW', true, true, ['PREVIEW']],
-      ['GENERATE_THUMBNAIL', true, true, ['PREVIEW', 'THUMBNAIL']],
-      ['GENERATE_THUMBNAIL', false, false, []],
+    const generatedKeys = new Set<string>();
+    for (const [kind, enabled, claimed, current, expected] of [
+      ['GENERATE_THUMBNAIL', false, true, true, ['THUMBNAIL']],
+      ['GENERATE_PREVIEW', true, true, true, ['PREVIEW']],
+      ['GENERATE_THUMBNAIL', true, true, true, ['PREVIEW', 'THUMBNAIL']],
+      ['GENERATE_THUMBNAIL', false, false, true, []],
+      ['GENERATE_THUMBNAIL', false, true, false, []],
     ] as const) {
       await writeFile(calls, '');
       const publications: Record<string, unknown>[] = [];
       const deferred: Record<string, unknown>[] = [];
       const updates: Record<string, unknown>[] = [];
+      let intent = false;
+      const cleanup = {
+        create: async () => {
+          intent = true;
+          return { id: 'orphan' };
+        },
+        deleteMany: async () => ({ count: 1 }),
+        updateMany: async () => ({ count: 1 }),
+      };
       const tx = {
+        eagleObjectDeletion: cleanup,
         $queryRaw: async () => [],
         $executeRaw: async () => 0,
         eagleAssetProcessingJob: {
@@ -54,11 +66,13 @@ test('video poster, deferred playback and normal full processing preserve scoped
           },
         },
         eagleAssetRendition: {
+          findMany: async () => [],
           upsert: async (input: { create: Record<string, unknown> }) => {
             publications.push(input.create);
           },
         },
         eagleAsset: {
+          findFirst: async () => (current ? { id: 'asset' } : null),
           updateMany: async (input: Record<string, unknown>) => {
             updates.push(input);
             return { count: 1 };
@@ -66,12 +80,21 @@ test('video poster, deferred playback and normal full processing preserve scoped
         },
       };
       const prisma = {
+        eagleObjectDeletion: cleanup,
         $transaction: async (work: (transaction: typeof tx) => Promise<void>) => work(tx),
       };
       const storage = {
-        send: async (command: { input: { Body?: AsyncIterable<Uint8Array> | Buffer } }) => {
+        send: async (command: {
+          input: { Key?: string; Body?: AsyncIterable<Uint8Array> | Buffer };
+        }) => {
           if (command instanceof GetObjectCommand)
             return { Body: Readable.from([Buffer.from('original')]) };
+          assert.equal(intent, true, 'cleanup intent must precede video storage writes');
+          assert(
+            !generatedKeys.has(command.input.Key!),
+            'a new execution cannot overwrite a previous output',
+          );
+          generatedKeys.add(command.input.Key!);
           if (command.input.Body && !Buffer.isBuffer(command.input.Body))
             for await (const chunk of command.input.Body) assert.ok(chunk.length);
           return {};
@@ -79,7 +102,15 @@ test('video poster, deferred playback and normal full processing preserve scoped
       };
       let verified = false;
       await processVideo(
-        { id: 'job', kind, assetRevision: 3, leaseVersion: 2 } as never,
+        {
+          id: 'job',
+          ownerId: 'owner',
+          libraryMode: 'PHOTO',
+          assetId: 'asset',
+          kind,
+          assetRevision: 3,
+          leaseVersion: 2,
+        } as never,
         {
           id: 'asset',
           ownerId: 'owner',
@@ -114,14 +145,14 @@ test('video poster, deferred playback and normal full processing preserve scoped
         ),
       );
       if (!enabled) assert.doesNotMatch(await readFile(calls, 'utf8'), /PLAYBACK/);
-      assert.equal(deferred.length, claimed && !enabled ? 1 : 0);
+      assert.equal(deferred.length, claimed && current && !enabled ? 1 : 0);
       if (deferred.length)
         assert.equal(
           (deferred[0]!.data as { processorVersion: string }[])[0]!.processorVersion,
           VIDEO_PLAYBACK_PROCESSOR_VERSION,
         );
-      assert.equal(updates.length, claimed ? 1 : 0);
-      if (claimed && kind === 'GENERATE_PREVIEW')
+      assert.equal(updates.length, claimed && current ? 1 : 0);
+      if (claimed && current && kind === 'GENERATE_PREVIEW')
         assert.deepEqual((updates[0] as { data: unknown }).data, { mediaErrorCode: null });
     }
   } finally {
