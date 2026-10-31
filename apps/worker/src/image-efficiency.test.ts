@@ -32,9 +32,10 @@ test('browse renditions decode the source once and preserve oriented, bounded di
     assert.equal((await sharp(r.output.data).metadata()).orientation, undefined);
 });
 
-test('ordinary photo details select only a current browse preview; RAW editing retains the original', () => {
+test('hashed photo details select only a current browse preview; RAW editing retains the original', () => {
   const asset = {
     originalObjectKey: 'original.heic',
+    sha256: 'a'.repeat(64),
     mimeType: 'image/heic',
     mediaRevision: 2,
     renditions: [
