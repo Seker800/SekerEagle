@@ -13,6 +13,7 @@ import { inDuplicateLibrary, type Item, type ScanSnapshot } from './eagle-duplic
 import { completeDuplicateItem } from './eagle-duplicate-item';
 import {
   verifyDuplicateOriginal,
+  duplicateOriginalPixelLimit,
   withDuplicateOriginalSlot,
   type OriginalProof,
 } from './eagle-duplicate-original';
@@ -50,6 +51,7 @@ export async function scheduleDuplicateVerification(
     if (bucket.length > 1) for (const id of bucket) ids.add(id);
   const missing: Array<{ id: string; rowVersion: number; mediaRevision: number }> = [];
   const candidates = rows.filter((row) => ids.has(row.id) && !row.isEdited && !row.isLivePhoto);
+  const pixelLimit = duplicateOriginalPixelLimit();
   for (let offset = 0; offset < candidates.length; offset += 500) {
     const part = candidates.slice(offset, offset + 500);
     const cached = await prisma.eagleDuplicateFingerprint.findMany({
@@ -58,14 +60,21 @@ export async function scheduleDuplicateVerification(
         libraryMode: mode,
         assetId: { in: part.map((r) => r.id) },
         pixelProcessorVersion: DUPLICATE_PIXEL_VERSION,
-        pixelStatus: { in: ['VERIFIED', 'UNSUPPORTED'] },
+        pixelStatus: { in: ['VERIFIED', 'UNSUPPORTED', 'PIXEL_LIMIT'] },
       },
-      select: { assetId: true, mediaRevision: true },
+      select: { assetId: true, mediaRevision: true, pixelStatus: true },
     });
-    const byId = new Map(cached.map((r) => [r.assetId, r.mediaRevision]));
-    for (const row of part)
-      if (byId.get(row.id) !== row.mediaRevision)
+    const byId = new Map(cached.map((r) => [r.assetId, r]));
+    for (const row of part) {
+      const proof = byId.get(row.id);
+      // Reuse only a proven exclusion still beyond the current budget. Raising it retries the original.
+      const stillOverBudget = !!row.width && !!row.height && row.width * row.height > pixelLimit;
+      if (
+        proof?.mediaRevision !== row.mediaRevision ||
+        (proof.pixelStatus === 'PIXEL_LIMIT' && !stillOverBudget)
+      )
         missing.push({ id: row.id, rowVersion: row.rowVersion, mediaRevision: row.mediaRevision });
+    }
   }
   await prisma.$transaction(
     async (tx) => {

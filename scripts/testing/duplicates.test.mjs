@@ -714,6 +714,14 @@ test('pixel budget skips are visible and retryable after resource configuration 
     const result = await f.duplicate.list(f.ownerId, false, {});
     assert.equal(result.similarGroups, 0);
     assert.equal(result.coverage.unsupportedOriginals, 2);
+    const readsBeforeRepeat = f.reads();
+    const repeat = await f.duplicate.scan(f.principal, randomUUID());
+    assert.equal((await f.drain(repeat.operationId)).failed, 0);
+    assert.equal(
+      f.reads(),
+      readsBeforeRepeat,
+      'unchanged pixel budget reuses its exclusion evidence',
+    );
   } finally {
     delete process.env.EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS;
   }

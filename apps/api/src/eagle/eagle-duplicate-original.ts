@@ -12,6 +12,9 @@ export interface OriginalProof {
   hash: string | null;
   status: string;
 }
+export function duplicateOriginalPixelLimit(value?: number): number {
+  return budget(value, 'EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS', 65_000_000);
+}
 let originalLane: Promise<void> = Promise.resolve();
 /** Both library modes share one decoder slot in the independent process. */
 export async function withDuplicateOriginalSlot<T>(work: () => Promise<T>): Promise<T> {
@@ -64,7 +67,7 @@ export async function verifyDuplicateOriginal(
   let dir: string | undefined;
   try {
     const maxBytes = budget(options.maxBytes, 'EAGLE_DUPLICATE_ORIGINAL_MAX_BYTES', 536_870_912);
-    const maxPixels = budget(options.maxPixels, 'EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS', 65_000_000);
+    const maxPixels = duplicateOriginalPixelLimit(options.maxPixels);
     dir = await mkdtemp(join(tmpdir(), 'eagle-duplicate-'));
     const path = join(dir, 'original');
     const fileHash = createHash('sha256');
