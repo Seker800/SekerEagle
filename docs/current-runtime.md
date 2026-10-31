@@ -1,5 +1,9 @@
 # 现用运行状态与交接
 
+> **2026-10-31 18:26 查重扫描参数溢出修复已上线**：API与独立operations现为 `sekereagle/api:duplicate-scan-089c53d4e46b`，运行源码固定 `089c53d4e46bc8a52a5119069bfbbab5befd2146`。修复六万图库扫描及最终分组的Prisma复合关联参数展开，改为同owner／模式／可见性及当前媒体版本的SQL关联，不加用户数量限制。两服务healthy、零重启，旧执行器正常排空退出；网页继续delete-auto-f4154139fe87，数据库／MinIO／网关／协调器／中继及停止中的NAS媒体worker容器身份不变，未操作Mac媒体worker。68项迁移保持，处理暂停及设置前后逐项一致。
+>
+> 六万项真实隔离数据库回归及最终API成品启动／对象存储验收通过；生产HTTPS普通测试账号在两模式完成首次扫描与指纹复用，匿名401／owner注入400／错误Origin403通过，4份原件哈希保持。验收主体与16个所属合成对象已清理；没有替用户启动真实图库扫描或清理照片。完整Compose链仅追加 `maintenance/duplicate-scan-bind-20261031/images.json`，旧镜像与回滚覆盖保留；未混入其他任务尚未提交的删除／撤销改动。详见[本次故障修复与验证](duplicate-scan-hotfix-2026-10-31.md)。
+
 > **2026-10-31 16:18 删除自动同步修复已上线（覆盖下方网页镜像与手动加载交互）**：网页现为 `sekereagle/web:delete-auto-f4154139fe87`，固定源码 `f4154139fe876e68f44284ff9ed032b3e5752cae`，已推送main；删除“加载更新”步骤，真实发布后自动刷新活跃列表，保留读取期间旧页、卡片与滚动，中间合并、结束立即同步。API／operations仍为 `all-main-22ac5261c53d`，其他容器身份、68项迁移、唯一Mac worker现场PID15629与新鲜心跳保持；NAS媒体worker继续停止。生产Chrome两模式单张／多选删除、恢复、失效项混合删除均通过，手动刷新零次、页面异常零次；临时验收账号与16个所属对象已清理。仅追加网页Compose覆盖，旧APK与Range保持；详见[验收与回滚](deletion-auto-sync-2026-10-31.md)。后台独立审查仅记录已启动。
 
 > **2026-10-31 全分支整合生产发布完成**：全部33个本地／远端业务引用已归入并推送main，功能整合提交 `4ac84da695a8fbfcc7b29c832d4e45819b2b7999`。API／web／独立operations现为 `sekereagle/{api,web}:all-main-22ac5261c53d`，运行源码 `22ac5261c53def76fd462a96d13945470425d9b0`；整合提交其后仅网关引用与测试样例，运行代码一致。三服务healthy／零重启，68项迁移已完成；Mac旧进程正常退出，新可信worker为 `worker-22ac5261c53d`／现场PID15629，心跳新鲜；后续仍实时核验。NAS媒体worker继续stopped／restart=no／replicas=0，数据库、对象存储、网关、协调器与中继容器身份保持，用户暂停／时段和计算修订66未变。
