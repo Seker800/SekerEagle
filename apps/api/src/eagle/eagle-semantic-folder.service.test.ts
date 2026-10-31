@@ -23,6 +23,14 @@ test('semantic preview rechecks media revision, privacy, owner and mode when hyd
   const service = new EagleService(
     {
       eagleSmartFolderSemanticSnapshot: { findFirst: async () => null },
+      $transaction: async (work: (tx: unknown) => Promise<unknown>) =>
+        work({
+          $executeRaw: async () => 1,
+          $queryRaw: async (sql: (typeof raw)[number]) => {
+            raw.push(sql);
+            return [{ id: 'candidate', mediaRevision: 3 }];
+          },
+        }),
       $queryRaw: async (sql: (typeof raw)[number]) => {
         raw.push(sql);
         return [{ id: 'candidate', mediaRevision: 3 }];

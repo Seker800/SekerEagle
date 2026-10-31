@@ -240,8 +240,15 @@ test('image search preserves the ranked order without resolving AI tags', async 
           coverageCounts++;
           return 10;
         },
-        findMany: async (query: { select?: unknown; where: { AND: Array<{ id?: { in?: string[] } }> } }) => {
-          assert.equal(query.select, undefined, 'filtered search must not materialize every eligible ID in Node');
+        findMany: async (query: {
+          select?: unknown;
+          where: { AND: Array<{ id?: { in?: string[] } }> };
+        }) => {
+          assert.equal(
+            query.select,
+            undefined,
+            'filtered search must not materialize every eligible ID in Node',
+          );
           return (query.where.AND?.at(-1)?.id?.in ?? [...assets.keys()]).flatMap((id) => {
             const asset = assets.get(id);
             return asset ? [asset] : [];

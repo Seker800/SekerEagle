@@ -1,3 +1,4 @@
+import { literalSearchPattern } from './eagle-search-predicate';
 import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -86,14 +87,18 @@ export class EagleImageSearchService {
     limit: number,
     includePrivate: boolean,
     trash: boolean,
-    allowedAssetIds?: readonly string[],
+    allowedAssetIds?: readonly string[] | Prisma.Sql,
     sort?: EagleAssetSort,
   ): Promise<ImageSearchPosition[]> {
-    if (allowedAssetIds?.length === 0 || limit === 0) return [];
+    const isIds = (value: unknown): value is readonly string[] => Array.isArray(value);
+    if ((isIds(allowedAssetIds) && allowedAssetIds.length === 0) || limit === 0) return [];
     const normalized = search.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
-    const eligibility = allowedAssetIds
+    const eligibility = isIds(allowedAssetIds)
       ? Prisma.sql`AND asset.id = ANY(${[...allowedAssetIds]}::text[])`
-      : Prisma.empty;
+      : allowedAssetIds
+        ? Prisma.sql`AND ${allowedAssetIds}`
+        : Prisma.empty;
+    const pattern = literalSearchPattern(normalized);
     const visible = Prisma.sql`asset."ownerId"=${ownerId} AND asset."libraryMode"=${this.libraryMode}::"LibraryMode"
       ${trash ? Prisma.sql`AND asset."deletedAt" IS NOT NULL AND asset."purgeAfter" IS NULL` : Prisma.sql`AND asset."deletedAt" IS NULL`}
       ${includePrivate ? Prisma.empty : Prisma.sql`AND asset."isPrivate"=false`} ${eligibility}`;
@@ -107,7 +112,7 @@ export class EagleImageSearchService {
         sort === 'CAPTURED_AT'
           ? Prisma.sql`asset."chronologicalAt"`
           : Prisma.sql`asset."libraryAddedAt"`;
-      const nameMatch = Prisma.sql`(strpos(asset."normalizedDisplayName",${normalized})>0 OR strpos(lower(asset."originalName"),${normalized})>0)`;
+      const nameMatch = Prisma.sql`(asset."normalizedDisplayName" LIKE ${pattern} OR asset."originalName" ILIKE ${pattern})`;
       const semanticProbe =
         context.status === 'READY'
           ? Prisma.sql`
@@ -149,7 +154,7 @@ export class EagleImageSearchService {
           FROM "EagleAssetManualTag" link JOIN "EagleManualTag" tag
             ON tag.id=link."tagId" AND tag."ownerId"=link."ownerId" AND tag."libraryMode"=link."libraryMode"
           WHERE link."ownerId"=asset."ownerId" AND link."libraryMode"=asset."libraryMode" AND link."assetId"=asset.id
-            AND strpos(tag."normalizedName",${normalized})>0
+            AND tag."normalizedName" LIKE ${pattern}
         ) manual ON true
         LEFT JOIN LATERAL (${semanticProbe}) semantic ON true
         ORDER BY asset."orderDate" DESC,asset.id DESC
@@ -174,13 +179,20 @@ export class EagleImageSearchService {
       context.status === 'READY'
         ? Prisma.sql`
       UNION ALL
-      SELECT asset.id, 1::integer, (1-(embedding.embedding <=> ${context.vector}::vector))::double precision
+      SELECT "assetId", 1::integer, similarity FROM semantic_scores WHERE similarity>=${threshold}
+    `
+        : Prisma.empty;
+    const semanticScores =
+      context.status === 'READY'
+        ? Prisma.sql`
+      semantic_scores AS MATERIALIZED (
+      SELECT asset.id AS "assetId", (1-(embedding.embedding <=> ${context.vector}::vector))::double precision AS similarity
       FROM "EagleAssetEmbedding" AS embedding
       JOIN "EagleAsset" AS asset ON asset.id=embedding."assetId" AND asset."ownerId"=embedding."ownerId" AND asset."libraryMode"=embedding."libraryMode"
       WHERE ${visible} AND embedding."ownerId"=${ownerId} AND embedding."libraryMode"=${this.libraryMode}::"LibraryMode"
         AND embedding."spaceId"=${context.spaceId} AND embedding.status='READY' AND embedding."isCurrent"=true
         AND embedding."assetRevision"=asset."mediaRevision" AND embedding.embedding IS NOT NULL
-        AND 1-(embedding.embedding <=> ${context.vector}::vector)>=${threshold}
+      ),
     `
         : Prisma.empty;
     const dateColumn = Prisma.sql`asset."libraryAddedAt"`;
@@ -191,15 +203,15 @@ export class EagleImageSearchService {
     const rows = await this.prisma.$queryRaw<
       Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
     >(Prisma.sql`
-      WITH candidates("assetId",tier,similarity) AS (
+      WITH ${semanticScores} candidates("assetId",tier,similarity) AS (
         SELECT asset.id, 3::integer, 1::double precision FROM "EagleAsset" AS asset
-        WHERE ${visible} AND (strpos(asset."normalizedDisplayName",${normalized})>0 OR strpos(lower(asset."originalName"),${normalized})>0)
+        WHERE ${visible} AND (asset."normalizedDisplayName" LIKE ${pattern} OR asset."originalName" ILIKE ${pattern})
         UNION ALL
         SELECT asset.id, CASE WHEN tag."normalizedName"=${normalized} THEN 5 ELSE 4 END, 1::double precision
         FROM "EagleAssetManualTag" AS link
         JOIN "EagleManualTag" AS tag ON tag.id=link."tagId" AND tag."ownerId"=link."ownerId" AND tag."libraryMode"=link."libraryMode"
         JOIN "EagleAsset" AS asset ON asset.id=link."assetId" AND asset."ownerId"=link."ownerId" AND asset."libraryMode"=link."libraryMode"
-        WHERE ${visible} AND strpos(tag."normalizedName",${normalized})>0
+        WHERE ${visible} AND tag."normalizedName" LIKE ${pattern}
         ${semantic}
       ), ranked AS (SELECT "assetId",max(tier) AS tier,max(similarity) AS similarity FROM candidates GROUP BY "assetId")
       SELECT ranked."assetId", ranked.tier, ranked.similarity, ${dateColumn} AS "libraryAddedAt" FROM ranked JOIN "EagleAsset" AS asset ON asset.id=ranked."assetId"

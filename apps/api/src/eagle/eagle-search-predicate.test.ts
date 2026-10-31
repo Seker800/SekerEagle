@@ -5,11 +5,15 @@ import { buildEagleFilterWhere } from './eagle-filter-query';
 
 test('search compiles the canonical asset filters into a bound, owner-scoped SQL predicate', () => {
   const hostile = "相机' OR true --";
-  const query = compileSearchPredicate({ ownerId: 'owner', libraryMode: 'PHOTO', AND: [
-    { photoMetadata: { is: { cameraModel: { contains: hostile, mode: 'insensitive' } } } },
-    { manualTagLinks: { none: { tagId: { in: ['tag'] } } } },
-    { NOT: { photoMetadata: { is: null } } },
-  ] });
+  const query = compileSearchPredicate({
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    AND: [
+      { photoMetadata: { is: { cameraModel: { contains: hostile, mode: 'insensitive' } } } },
+      { manualTagLinks: { none: { tagId: { in: ['tag'] } } } },
+      { NOT: { photoMetadata: { is: null } } },
+    ],
+  });
   assert.match(query.sql, /EXISTS/);
   assert.match(query.sql, /"EaglePhotoMetadata"/);
   assert.match(query.sql, /"EagleAssetManualTag"/);
@@ -19,11 +23,24 @@ test('search compiles the canonical asset filters into a bound, owner-scoped SQL
 });
 
 test('the shared rule engine remains the only definition of search filter behavior', () => {
-  const where = buildEagleFilterWhere({ version: 2, conditions: [{ id: 'c', match: 'ANY', result: 'NOT_MATCH', rules: [
-    { id: 'a', field: 'GPS', operator: 'EQUALS', value: 'WITH' },
-    { id: 'b', field: 'RATING', operator: 'EQUALS', value: '0' },
-    { id: 'c', field: 'COLOR', operator: 'EQUALS', value: '#aabbcc' },
-  ] }] }, 'PHOTO');
+  const where = buildEagleFilterWhere(
+    {
+      version: 2,
+      conditions: [
+        {
+          id: 'c',
+          match: 'ANY',
+          result: 'NOT_MATCH',
+          rules: [
+            { id: 'a', field: 'GPS', operator: 'EQUALS', value: 'WITH' },
+            { id: 'b', field: 'RATING', operator: 'EQUALS', value: '0' },
+            { id: 'c', field: 'COLOR', operator: 'EQUALS', value: '#aabbcc' },
+          ],
+        },
+      ],
+    },
+    'PHOTO',
+  );
   const query = compileSearchPredicate(where);
   assert.match(query.sql, /NOT/);
   assert.match(query.sql, /"EagleAssetColorSwatch"/);
@@ -31,6 +48,12 @@ test('the shared rule engine remains the only definition of search filter behavi
 });
 
 test('unsupported fields and operators fail closed instead of falling back to an unbounded ID list', () => {
-  assert.throws(() => compileSearchPredicate({ unreviewedField: 1 } as never), /Unsupported search/);
-  assert.throws(() => compileSearchPredicate({ rating: { unreviewedOperator: 1 } } as never), /Unsupported search/);
+  assert.throws(
+    () => compileSearchPredicate({ unreviewedField: 1 } as never),
+    /Unsupported search/,
+  );
+  assert.throws(
+    () => compileSearchPredicate({ rating: { unreviewedOperator: 1 } } as never),
+    /Unsupported search/,
+  );
 });

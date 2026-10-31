@@ -1,3 +1,5 @@
+import { compileSearchPredicate } from './eagle-search-predicate';
+import { sampleImageSearch } from './eagle-search-preview';
 import { mediaRequeueData } from '@sekereagle/library-core';
 import { createEditRender, readEditRender, CreateEditRenderDto } from './eagle-edit-render';
 import { readSmartFolderPage } from './eagle-smart-folder-page';
@@ -542,17 +544,7 @@ export class EagleService {
       ownerId,
       libraryMode: this.libraryMode,
     });
-    const hasStructuredFilters = Object.entries(searchFilters).some(
-      ([key, value]) => key !== 'search' && key !== 'sort' && value !== undefined,
-    );
-    const eligibleAssetIds = hasStructuredFilters
-      ? (
-          await this.prisma.eagleAsset.findMany({
-            where: inLibrary(this.libraryMode, where),
-            select: { id: true },
-          })
-        ).map(({ id }) => id)
-      : undefined;
+    const eligibility = compileSearchPredicate(inLibrary(this.libraryMode, where));
     const ranked: Array<{ row: AssetListRecord; position: ImageSearchPosition }> = [];
     let after = startPosition;
     let exhausted = false;
@@ -566,7 +558,7 @@ export class EagleService {
         candidateBatchSize,
         includePrivate,
         trash,
-        eligibleAssetIds,
+        eligibility,
         query.sort,
       );
       const candidateIds = candidates.map((candidate) => candidate.assetId);
@@ -811,17 +803,13 @@ export class EagleService {
       return { count: null, semanticStatus: 'UNAVAILABLE', previewItems: [] };
     const threshold = EAGLE_SEMANTIC_THRESHOLDS[readEagleSemanticIntent(query)!.breadth];
     // Preview is explicitly sampled, never a truncated membership list or an asserted total.
-    const candidates = await this.prisma.$queryRaw<
-      Array<{ id: string; mediaRevision: number }>
-    >(Prisma.sql`
-      SELECT a.id, a."mediaRevision" FROM "EagleAssetEmbedding" e JOIN "EagleAsset" a
-        ON a.id=e."assetId" AND a."ownerId"=e."ownerId" AND a."libraryMode"=e."libraryMode" AND a."mediaRevision"=e."assetRevision"
-      WHERE a."ownerId"=${ownerId} AND a."libraryMode"=${this.libraryMode}::"LibraryMode"
-        AND a."deletedAt" IS NULL ${includePrivate ? Prisma.empty : Prisma.sql`AND NOT a."isPrivate"`}
-        AND e."spaceId"=${context.spaceId} AND e."isCurrent" AND e.status='READY'
-        AND e.embedding IS NOT NULL AND 1-(e.embedding <=> ${context.vector}::vector)>=${threshold}
-      ORDER BY e.embedding <=> ${context.vector}::vector, a.id DESC LIMIT 100
-    `);
+    const candidates = await sampleImageSearch(
+      this.prisma,
+      { ownerId, libraryMode: this.libraryMode },
+      context,
+      threshold,
+      includePrivate,
+    );
     const scope = {
       ownerId,
       libraryMode: this.libraryMode,
