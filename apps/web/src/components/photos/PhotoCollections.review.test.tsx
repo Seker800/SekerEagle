@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => ({
   suggest: vi.fn(),
   decide: vi.fn(),
   merge: vi.fn(),
+  options: vi.fn(),
 }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
+  listPhotoPeopleOptions: mocks.options,
   listPhotoPersonFaces: vi.fn().mockResolvedValue({ faces: [], nextCursor: null }),
   getPhotoPeopleSummary: mocks.summary,
   getPhotoPeopleReview: mocks.suggest,
@@ -274,4 +276,69 @@ it('initial request failures offer retry without pretending the library has no c
   fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
   await screen.findByRole('button', { name: '重试' });
   expect(screen.queryByText('暂时没有需要确认的相似人物。')).not.toBeInTheDocument();
+});
+
+it('orders the nine review cards by photo count before similarity', async () => {
+  const large = { ...person('large'), photoCount: 600 };
+  const medium = { ...person('medium'), photoCount: 300 };
+  const tiny = { ...person('tiny'), photoCount: 1 };
+  mocks.suggest.mockResolvedValue({
+    items: [
+      { key: 'tiny:medium', first: tiny, second: medium, similarity: 0.99 },
+      { key: 'large:medium', first: large, second: medium, similarity: 0.7 },
+    ],
+    nextCursor: null,
+  });
+  show();
+  fireEvent.click(await screen.findByRole('tab', { name: '待确认' }));
+  await screen.findByText('600 张照片');
+  expect(screen.getAllByRole('checkbox').map((el) => el.closest('article')?.textContent)).toEqual([
+    expect.stringContaining('600 张照片'),
+    expect.stringContaining('300 张照片'),
+    expect.stringContaining('1 张照片'),
+  ]);
+});
+it('selects unnamed groups across pages and merges into an existing named person in one request', async () => {
+  mocks.options.mockResolvedValue({
+    people: [{ id: b.id, name: b.name, rowVersion: 7, marksAssetsPrivate: false }],
+    nextCursor: null,
+  });
+  mocks.list.mockImplementation(
+    async (after: string | undefined, _signal: unknown, view: string) => ({
+      runtimeConfigured: true,
+      people: view === 'UNNAMED' ? [after ? c : a] : [b],
+      nextCursor: view === 'UNNAMED' && !after ? 'page2' : null,
+    }),
+  );
+  mocks.merge.mockResolvedValue({
+    id: b.id,
+    rowVersion: 8,
+    marksAssetsPrivate: false,
+    photoCount: 20,
+    mergedIds: [a.id, c.id],
+  });
+  show();
+  fireEvent.click(await screen.findByRole('tab', { name: /^待整理分组/ }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 a' }));
+  fireEvent.click(screen.getByRole('button', { name: '加载更多人物' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 c' }));
+  fireEvent.change(await screen.findByRole('combobox', { name: '合并到人物' }), {
+    target: { value: b.id },
+  });
+  const before = mocks.list.mock.calls.length;
+  fireEvent.click(screen.getByRole('button', { name: '合并所选分组' }));
+  await waitFor(() => expect(mocks.merge).toHaveBeenCalledTimes(1));
+  expect(mocks.merge).toHaveBeenCalledWith({
+    targetId: b.id,
+    people: [
+      { id: a.id, rowVersion: 1 },
+      { id: c.id, rowVersion: 1 },
+      { id: b.id, rowVersion: 7 },
+    ],
+  });
+  await waitFor(() =>
+    expect(screen.queryByRole('checkbox', { name: '选择分组 a' })).not.toBeInTheDocument(),
+  );
+  expect(screen.queryByRole('checkbox', { name: '选择分组 c' })).not.toBeInTheDocument();
+  expect(mocks.list).toHaveBeenCalledTimes(before);
 });

@@ -67,7 +67,7 @@ test('invalid, unsupported, same-photo and duplicate samples never create corrob
     1,
   );
 });
-test('quality outranks volume without discarding other candidates', () => {
+test('photo count outranks similarity without discarding other candidates', () => {
   const rows = qualifyPersonReviewPairs(
     [
       { ...pair, firstCount: 9999n },
@@ -76,7 +76,7 @@ test('quality outranks volume without discarding other candidates', () => {
     [sample('a', 'a', 1), sample('b', 'b', 0.7), sample('c', 'c', 0.9)],
   );
   assert.equal(rows.length, 2);
-  assert.equal(rows[0]?.secondId, 'c');
+  assert.equal(rows[0]?.secondId, 'b');
 });
 
 test('confidence and photo volume improve the rank without hiding weaker pairs', () => {

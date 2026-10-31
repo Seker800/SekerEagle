@@ -64,7 +64,13 @@ test('people cards bound media candidates and options do not fetch faces, EXIF o
   assert.equal(queries[0]!.select.faces!.select.asset.select.photoMetadata, false);
   assert.equal(queries[0]!.select.prototype, undefined);
   await service.people('owner', false, undefined, 'options');
-  assert.deepEqual(Object.keys(queries[1]!.select).sort(), ['createdAt', 'id', 'name']);
+  assert.deepEqual(Object.keys(queries[1]!.select).sort(), [
+    'createdAt',
+    'id',
+    'marksAssetsPrivate',
+    'name',
+    'rowVersion',
+  ]);
   assert.equal(queries[1]!.where.ownerId, 'owner');
   assert.equal(queries[1]!.where.libraryMode, 'PHOTO');
   assert.equal(queries[1]!.where.marksAssetsPrivate, false);
