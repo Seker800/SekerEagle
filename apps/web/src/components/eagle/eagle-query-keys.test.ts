@@ -54,3 +54,15 @@ it('recognizes only scoped asset pages, excluding counts, receipts and transient
   expect(isEagleOperationKey(keys.assets, 'owner', 'PHOTO')).toBe(false);
   expect(isEagleQuery(keys.assets, 'owner', 'PHOTO')).toBe(true);
 });
+
+it('owns photography namespaces with stable shapes and isolated privacy scopes', () => {
+  const keys = createEagleQueryKeys('owner', 'PHOTO');
+  expect(keys.photoStatistics(false, { grain: 'month' })).toEqual([
+    ...keys.root, 'statistics', false, { grain: 'month' },
+  ]);
+  expect(keys.photoAgent(true)).toEqual([...keys.root, 'agent', true]);
+  expect(keys.photoAgentTask(true, 'task')).toEqual([...keys.photoAgent(true), 'task', 'task']);
+  expect(keys.photoAgentHistory(false, 'task')).toEqual([...keys.photoAgent(false), 'history', 'task']);
+  expect(keys.photoAgent(false)).not.toEqual(keys.photoAgent(true));
+  expect(keys.pyramid('asset')).toEqual([...keys.root, 'pyramid', 'asset']);
+});

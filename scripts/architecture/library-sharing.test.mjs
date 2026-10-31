@@ -348,3 +348,21 @@ test('rejects duplicate provider and table ownership in the shared capability re
     'capability-ownership',
   );
 });
+
+for (const name of ['EagleUnownedFeature', 'EaglePhotoUnownedFeature', 'UnownedSession']) {
+  test(`rejects a new persisted model without an owner: ${name}`, () => {
+    rejectsMutation(
+      'apps/api/prisma/schema.prisma',
+      (s) => s + `\nmodel ${name} {\n id String @id\n}\n`,
+      'capability-ownership',
+    );
+  });
+}
+
+test('rejects removing a persisted model from its registered capability', () => {
+  rejectsMutation(
+    'apps/api/src/eagle/library-capabilities.ts',
+    (s) => s.replace("tables: ['EagleLibraryTransfer']", 'tables: []'),
+    'capability-ownership',
+  );
+});
