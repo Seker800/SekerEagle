@@ -1,10 +1,5 @@
 import { createHash } from 'node:crypto';
-import type {
-  Prisma,
-  LibraryMode,
-  EagleAssetOperation,
-  EagleAssetOperationItem,
-} from '@prisma/client';
+import type { LibraryMode, EagleAssetOperation, EagleAssetOperationItem } from '@prisma/client';
 import type { DuplicateGroup, DuplicateCandidate } from '@sekereagle/library-core';
 export const digest = (value: unknown) =>
   createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -18,21 +13,6 @@ export type CleanupSnapshot = {
 };
 export type ScanSnapshot = { kind: 'scan'; rows: Snapshot[] } | { kind: 'build' };
 export type Item = EagleAssetOperationItem & { operation: EagleAssetOperation };
-export const candidateSelect = {
-  id: true,
-  sha256: true,
-  byteSize: true,
-  mediaRevision: true,
-  rowVersion: true,
-  isPrivate: true,
-  width: true,
-  height: true,
-  rating: true,
-  libraryAddedAt: true,
-  mimeType: true,
-  lifecycleStatus: true,
-  duplicateFingerprint: true,
-} satisfies Prisma.EagleAssetSelect;
 export function signature(
   ownerId: string,
   mode: LibraryMode,

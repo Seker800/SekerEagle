@@ -351,6 +351,7 @@ test('60k library read, group pagination beyond the first page, and batch admiss
     });
     await db.eagleAsset.createMany({ data: rows });
   }
+  await db.$executeRaw`ANALYZE "EagleAsset"`;
   queries = 0;
   const start = performance.now(),
     page = await f.duplicate.list(f.ownerId, false, {}),
@@ -360,27 +361,40 @@ test('60k library read, group pagination beyond the first page, and batch admiss
   assert.equal(page.exactGroups, 100);
   assert.equal(page.groups.length, 24);
   assert.ok(readQueries <= 12);
-  // Real full-library admission must not expand the scoped fingerprint relation
-  // into 3 bind parameters per asset (60k exceeds Prisma's 32767 ceiling).
-  queries = 0;
+
+  // Exercise the real composite-relation ceiling on a full, unindexed library.
   const scanStart = performance.now();
   const scan = await f.duplicate.scan(f.principal, randomUUID());
   const scanMs = performance.now() - scanStart;
-  const planned = await db.eagleAssetOperation.findUniqueOrThrow({ where: { id: scan.operationId } });
-  assert.equal(planned.total, 60001, 'all 60k missing fingerprints plus final projection are queued');
+  const planned = await db.eagleAssetOperationItem.aggregate({
+    where: { operationId: scan.operationId },
+    _sum: { weight: true },
+  });
+  assert.equal(planned._sum.weight, 60001);
   await f.executor.cancel(f.principal, scan.operationId);
-  // A fully indexed large library must also reach the projection phase without
-  // Prisma materializing another oversized composite-relation parameter list.
+  // Populate current synthetic evidence to exercise full-library projection too.
   await db.$executeRaw`INSERT INTO "EagleDuplicateFingerprint"
     ("ownerId", "libraryMode", "assetId", "mediaRevision", "processorVersion", hash, colors, contrast, "updatedAt")
     SELECT "ownerId", "libraryMode", id, "mediaRevision", 'preview-dhash-rgb-v1',
       substring(md5(id),1,16), '[]'::jsonb, 0, now()
     FROM "EagleAsset" WHERE "ownerId"=${f.ownerId} AND "libraryMode"='MATERIAL'`;
+  await db.$executeRaw`ANALYZE "EagleDuplicateFingerprint"`;
   const indexed = await f.duplicate.scan(f.principal, randomUUID());
-  assert.equal((await db.eagleAssetOperation.findUniqueOrThrow({ where: { id: indexed.operationId } })).total, 1);
-  assert.equal((await f.drain(indexed.operationId)).failed, 0, 'full-library projection must finish');
-  assert.equal(f.reads(), 0, 'current fingerprints must not fetch previews again');
-  console.log(JSON.stringify({ library: 60000, scanMs, scanTotal: planned.total, indexedScanTotal: 1 }));
+  assert.equal(
+    (
+      await db.eagleAssetOperationItem.aggregate({
+        where: { operationId: indexed.operationId },
+        _sum: { weight: true },
+      })
+    )._sum.weight,
+    1,
+  );
+  assert.equal((await f.drain(indexed.operationId)).failed, 0);
+  assert.equal(f.reads(), 0);
+  console.log(
+    JSON.stringify({ library: 60000, scanMs, scanTotal: planned._sum.weight, indexedScanTotal: 1 }),
+  );
+
   let found = page.groups.length,
     next = page.nextCursor;
   while (next) {
@@ -464,7 +478,12 @@ test('a handed-off original retains exactly one active storage owner', async () 
   await assert.rejects(f.add({ originalObjectKey: source.originalObjectKey }), /Unique constraint/);
   await db.eagleAsset.update({
     where: { id: source.id },
-    data: { storageTransferredOut: true, deletedAt: new Date(), purgeAfter: new Date() },
+    data: {
+      storageTransferredOut: true,
+      deletedAt: new Date(),
+      purgeAfter: new Date(),
+      transferredAt: new Date(),
+    },
   });
   const target = await f.add({ libraryMode: 'PHOTO', originalObjectKey: source.originalObjectKey });
   assert.equal(target.originalObjectKey, source.originalObjectKey);
