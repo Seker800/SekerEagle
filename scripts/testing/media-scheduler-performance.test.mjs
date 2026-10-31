@@ -139,12 +139,20 @@ test('historical backlog discovery reads recent upload facts once even under a n
     { timeout: 60000 },
   );
   const uploadScans = [];
+  const policyScans = [];
   const visit = (node) => {
     if (node['Relation Name'] === 'UploadSession') uploadScans.push(node);
+    if (['EagleProcessingSetting', 'EagleTaskPolicy'].includes(node['Relation Name']))
+      policyScans.push(node);
     for (const child of node.Plans ?? []) visit(child);
   };
   visit(plan.Plan);
   assert.ok(uploadScans.length, 'the real query must consult upload freshness');
+  const owners = await db.user.count();
+  assert.ok(
+    policyScans.every((node) => node['Actual Loops'] <= owners * 40),
+    `policy reads must scale with owner/mode/family scopes, not queued rows: ${policyScans.map((node) => node['Actual Loops'])}`,
+  );
   assert.ok(
     uploadScans.every((node) => node['Actual Loops'] <= 1),
     `recent uploads must be read once, not per historical asset: ${uploadScans.map((node) => node['Actual Loops'])}`,

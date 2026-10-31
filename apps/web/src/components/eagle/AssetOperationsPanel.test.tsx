@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { AssetOperationSummary } from '@sekereagle/library-core';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
@@ -64,6 +64,22 @@ function show(
   );
   return client;
 }
+it('does not repeatedly poll both modes every 1.5 seconds during unchanged background work', async () => {
+  vi.useFakeTimers();
+  focusManager.setFocused(true);
+  let client: QueryClient | undefined;
+  try {
+    client = show('ALL', false, true);
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(3900));
+    expect(mocks.list).toHaveBeenCalledTimes(4);
+  } finally {
+    client?.clear();
+    focusManager.setFocused(undefined);
+    vi.useRealTimers();
+  }
+});
 it('shows useful progress, scopes private visibility to the active mode and cancels only through its API', async () => {
   show();
   const card = within(await screen.findByRole('article'));

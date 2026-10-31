@@ -7,6 +7,8 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { backgroundScheduleAllows } from '../../packages/library-core/dist/index.js';
 import { backgroundScheduleSql } from '../../packages/library-persistence/dist/index.js';
 import { EagleTaskCenterService } from '../../apps/api/dist/eagle/eagle-task-center.service.js';
+import { EagleProcessingService } from '../../apps/api/dist/eagle/eagle-processing.service.js';
+import { setEagleTrash } from '../../apps/api/dist/eagle/eagle-trash.js';
 import { runSmartFolderBuildStep } from '../../apps/worker/dist/smart-folder-build.js';
 import { claimNextScheduledTagBuild } from '../../apps/worker/dist/tag-build-lease.js';
 import { selectScheduledMediaCandidates } from '../../apps/worker/dist/scheduled-media-candidates.js';
@@ -61,6 +63,34 @@ async function fixture() {
     });
   return { owner, other, asset, job, service: new EagleTaskCenterService(prisma, 'PHOTO') };
 }
+
+test('trash retires pending and leased work atomically, fences stale publication and resumes only skipped work on restore', async () => {
+  const f = await fixture();
+  const a = await f.asset();
+  const queued = await f.job(a);
+  const active = await f.job(a, { kind: 'ANALYZE_PHOTO_FACES', status: 'PROCESSING', leaseVersion: 7, lockedAt: new Date() });
+  const completed = await f.job(a, { kind: 'EXTRACT_COLOR_PALETTE', status: 'COMPLETED' });
+  await prisma.$transaction(tx => setEagleTrash(tx, {ownerId:f.owner,libraryMode:'PHOTO'},[a.id],false));
+  for(const job of [queued,active]) {
+    const current = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:job.id}});
+    assert.equal(current.status, 'COMPLETED');
+    assert.equal(current.lastError, 'ASSET_TRASHED');
+    assert.equal(current.leaseVersion, job.leaseVersion+1);
+  }
+  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:completed.id}})).lastError,null);
+  await prisma.$transaction(tx => setEagleTrash(tx, {ownerId:f.owner,libraryMode:'PHOTO'},[a.id],true));
+  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:active.id}})).status,'PENDING');
+  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where:{id:completed.id}})).status,'COMPLETED');
+});
+
+test('processing summary excludes trashed and obsolete versions rather than advertising work that cannot run', async () => {
+  const f = await fixture();
+  await f.job(await f.asset());
+  await f.job(await f.asset({deletedAt:new Date()}));
+  await f.job(await f.asset(), {assetRevision:1});
+  const summary = await new EagleProcessingService(prisma,'PHOTO').summary(f.owner);
+  assert.equal(summary.counts.queued,1);
+});
 
 test('accepted and rejected approvals both appear in scoped completion history', async () => {
   const f = await fixture();
