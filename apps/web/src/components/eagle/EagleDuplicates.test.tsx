@@ -83,6 +83,27 @@ function render() {
   };
 }
 describe('duplicate cleanup review', () => {
+  it('shows direct comparison cards and binds all-results cleanup to the checked filters', async () => {
+    const page = await mocks.list();
+    mocks.list.mockResolvedValue({ ...page, verifiedGroups: 30, verifiedItems: 60, filteredItems: 60,
+      groups: [{ ...group, previews: ['one', 'two'].map(id => ({ id, displayName: id, originalName: id + '.jpg', format: 'jpeg', byteSize: 1000, width: 1200, height: 800, manualTags: [], renditions: [] })) }] });
+    render();
+    await screen.findByRole('button', { name: '保留 two' });
+    expect(mocks.members).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('checkbox', { name: '文件名相同' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '每张文件都小于' }));
+    await waitFor(() => expect(mocks.list).toHaveBeenLastCalledWith(expect.objectContaining({ sameName: 'true', maxBytes: '10485760', protectEdits: 'true' }), expect.anything()));
+    fireEvent.click(await screen.findByRole('button', { name: '保留 two' }));
+    fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledWith(expect.objectContaining({ allVerified: true, filters: expect.objectContaining({ sameName: 'true', maxBytes: '10485760' }), keepOverrides: [{ signature: group.signature, keepIds: ['two'] }] })));
+  });
+  it('changes filter scope without carrying selected groups into the new results', async () => {
+    render();
+    fireEvent.click(await screen.findByRole('checkbox', { name: '选择重复组 1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '尺寸相同' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '清理所选重复组' })).toBeDisabled());
+  });
   it('does not restart an attempted check on reopen, but permits an explicit check', async () => {
     mocks.list.mockResolvedValue({
       revision: 'b'.repeat(64),
