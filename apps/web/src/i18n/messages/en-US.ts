@@ -122,6 +122,7 @@ export const enUS = {
     'Eagle batch imports are managed by the importer and have no live status integration; historical records are excluded from running tasks here.',
   计算ing: 'Computing',
   排队ing: 'Queued',
+  '已部分完成（{{count}}项失败）': 'Partially completed ({{count}} failed)',
   '已停止（{{count}}项失败）': 'Stopped ({{count}} failed)',
   当前执行步骤: 'Current processing steps',
   生成编辑成片: 'Render edited photo',

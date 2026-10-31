@@ -199,7 +199,9 @@ services:
       context: ../..
       dockerfile: apps/worker/Dockerfile
     restart: unless-stopped
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      EAGLE_MEDIA_OUTPUT_RETENTION_MS: ${EAGLE_MEDIA_OUTPUT_RETENTION_MS:-86400000}
     depends_on:
       migrate:
         condition: service_completed_successfully

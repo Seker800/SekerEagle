@@ -237,7 +237,7 @@ export async function copyTransferFacts(
   targetMode: LibraryMode,
   targetId: string,
   source: Source,
-  detailsReady: boolean,
+  sourceDetailsReady: boolean,
 ) {
   const hasPrivateTag = await copyTags(tx, ownerId, targetMode, targetId, source);
   const archive =
@@ -257,6 +257,8 @@ export async function copyTransferFacts(
     source.editRecipe?.assetRevision === source.mediaRevision
       ? { recipe: source.editRecipe.recipe, baseMediaRevision: source.editRecipe.baseMediaRevision }
       : archive?.editRecipe;
+  // An existing edit rendition is not proof that photography metadata exists.
+  const detailsReady = sourceDetailsReady && (targetMode !== 'PHOTO' || Boolean(metadata));
   await tx.eagleAssetTransferFacts.create({
     data: {
       ownerId,
@@ -338,6 +340,5 @@ export async function copyTransferFacts(
     embeddingReady: copied.length > 0,
     paletteReady,
     detailsReady,
-    photoMetadataReady: Boolean(metadata),
   };
 }

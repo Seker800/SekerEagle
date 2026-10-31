@@ -184,7 +184,9 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     return this.prisma
       .$transaction(
         async (tx) => {
-          await lockOwnerPrivacyProjection(tx, principal.sub, this.libraryMode);
+          // Serialize retries of this intent, not all unrelated writes in the workspace.
+          // Permissions, versions and resource membership are authoritative at execution.
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-admission:${principal.sub}:${this.libraryMode}:${input.operationId}`}, 0))::text`;
           const existing = await tx.eagleAssetOperation.findUnique({
             where: { id: input.operationId, ownerId: principal.sub, libraryMode: this.libraryMode },
             include: { items: { select: { status: true, weight: true, errorCode: true } } },

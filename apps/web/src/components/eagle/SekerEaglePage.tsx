@@ -777,10 +777,19 @@ export function SekerEaglePage({
     assetsById,
     selectedAssetId,
   ]);
-  const selectedTransferAssets = selectedAssetIds.flatMap((id) => {
-    const asset = assetsById.get(id);
-    return asset ? [asset] : [];
-  });
+  const selectedAssetSet = useMemo(() => new Set(selectedAssetIds), [selectedAssetIds]);
+  const selectedAssetMenuKey = useMemo(
+    () => `${storeScope}:${[...selectedAssetIds].sort().join(',')}`,
+    [storeScope, selectedAssetIds],
+  );
+  const selectedTransferAssets = useMemo(
+    () =>
+      selectedAssetIds.flatMap((id) => {
+        const asset = assetsById.get(id);
+        return asset ? [asset] : [];
+      }),
+    [selectedAssetIds, assetsById],
+  );
   const contextMenuAsset =
     selectedAssetIds.length === 1 ? (assetsById.get(selectedAssetIds[0]) ?? null) : null;
   const imageClipboardAvailable = canCopyImageToClipboard();
@@ -794,19 +803,28 @@ export function SekerEaglePage({
   });
   const selectedAsset: EagleAsset | null = selectedAssetQuery.data ?? null;
   const isSelectedAssetReadOnly = libraryView === 'TRASH';
-  const selectedAssetVersions: EagleAssetVersion[] = selectedAssetIds.flatMap((assetId) => {
-    const listVersion = assetsById.get(assetId)?.rowVersion;
-    const detailVersion = assetId === selectedAsset?.id ? selectedAsset.rowVersion : undefined;
-    const versions = [listVersion, detailVersion].filter(
-      (version): version is number => version !== undefined,
-    );
-    return versions.length ? [{ assetId, rowVersion: Math.max(...versions) }] : [];
-  });
-  const selectedRating = selectedAssetIds.every(
-    (assetId) => assetsById.get(assetId)?.rating === assetsById.get(selectedAssetIds[0])?.rating,
-  )
-    ? assetsById.get(selectedAssetIds[0])?.rating
-    : undefined;
+  const selectedAssetVersions: EagleAssetVersion[] = useMemo(
+    () =>
+      selectedAssetIds.flatMap((assetId) => {
+        const listVersion = assetsById.get(assetId)?.rowVersion;
+        const detailVersion = assetId === selectedAsset?.id ? selectedAsset.rowVersion : undefined;
+        const versions = [listVersion, detailVersion].filter(
+          (version): version is number => version !== undefined,
+        );
+        return versions.length ? [{ assetId, rowVersion: Math.max(...versions) }] : [];
+      }),
+    [selectedAssetIds, assetsById, selectedAsset],
+  );
+  const selectedRating = useMemo(
+    () =>
+      selectedAssetIds.every(
+        (assetId) =>
+          assetsById.get(assetId)?.rating === assetsById.get(selectedAssetIds[0])?.rating,
+      )
+        ? assetsById.get(selectedAssetIds[0])?.rating
+        : undefined,
+    [selectedAssetIds, assetsById],
+  );
   const manualTags = manualTagsQuery.data ?? [];
   const selectedManualTagSummaries = useMemo(() => {
     const tagsById = new Map<
@@ -2354,7 +2372,7 @@ export function SekerEaglePage({
                       {visibleMasonryItems.map((masonryItem) => {
                         const asset = assetsById.get(masonryItem.id);
                         if (!asset) return null;
-                        const isSelected = selectedAssetIds.includes(asset.id);
+                        const isSelected = selectedAssetSet.has(asset.id);
                         const stack = photoStacks.find((entry) => entry.cover.id === asset.id);
                         return (
                           <button
@@ -2885,7 +2903,7 @@ export function SekerEaglePage({
             selectedTransferAssets.length === selectedAssetIds.length &&
             selectedTransferAssets.every((asset) => asset.mimeType.startsWith('image/')) && (
               <EagleSendAssetsMenuItem
-                key={`${storeScope}:${[...selectedAssetIds].sort().join(',')}`}
+                key={selectedAssetMenuKey}
                 assetIds={selectedAssetIds}
                 label={libraryMode === 'PHOTO' ? t('发送到素材') : t('发送到照片')}
                 disabled={selectedTransferAssets.some((asset) => asset.lifecycleStatus !== 'READY')}

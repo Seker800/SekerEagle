@@ -63,7 +63,9 @@ export function AssetOperationsPanel({
       : operation.queued
         ? t('排队中')
         : operation.failed
-          ? t('已停止（{{count}}项失败）', { count: operation.failed })
+          ? operation.completed
+            ? t('已部分完成（{{count}}项失败）', { count: operation.failed })
+            : t('已停止（{{count}}项失败）', { count: operation.failed })
           : operation.cancelled
             ? t('已停止')
             : t('已完成');
