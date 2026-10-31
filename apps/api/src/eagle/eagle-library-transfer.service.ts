@@ -312,6 +312,20 @@ export class EagleLibraryTransferService {
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
         checkExpected(sources);
         if (guard) await guard.beforePublish(tx);
+        // Release source storage ownership inside the same locked publication transaction.
+        // The partial unique index then permits exactly one independent target to take it;
+        // any later failure rolls this change back together with target publication.
+        if (handoff) {
+          const released = await tx.eagleAsset.updateMany({
+            where: {
+              ...this.libraryModeWhere(ownerId, sourceIds, includePrivate),
+              storageTransferredOut: false,
+            },
+            data: { storageTransferredOut: true },
+          });
+          if (released.count !== items.length)
+            throw new ConflictException('原件存储所有权已变化。');
+        }
         const liveIdentifiers = new Map<string, string>();
         for (const source of sources)
           if (source.livePhotoIdentifier && !liveIdentifiers.has(source.livePhotoIdentifier))

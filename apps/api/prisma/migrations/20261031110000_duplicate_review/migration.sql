@@ -1,3 +1,4 @@
+BEGIN;
 ALTER TABLE "EagleAssetOperation" DROP CONSTRAINT "EagleAssetOperation_kind_check";
 ALTER TABLE "EagleAssetOperation" ADD CONSTRAINT "EagleAssetOperation_kind_check" CHECK ("kind" IN ('SEND','TRASH','RESTORE','EMPTY_TRASH','DUPLICATE_SCAN','DUPLICATE_CLEANUP'));
 CREATE TABLE "EagleDuplicateFingerprint" (
@@ -17,3 +18,15 @@ CREATE TABLE "EagleDuplicateDismissal" (
 );
 CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EagleDuplicateFingerprint" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
 CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EagleDuplicateDismissal" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
+
+CREATE TABLE "EagleDuplicateGroup" (
+ "ownerId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+ "libraryMode" "LibraryMode" NOT NULL, "signature" TEXT NOT NULL,
+ "assetIds" TEXT[] NOT NULL, "rowVersions" INTEGER[] NOT NULL, "mediaRevisions" INTEGER[] NOT NULL,
+ "isPrivate" BOOLEAN NOT NULL, "removableBytes" BIGINT NOT NULL,
+ PRIMARY KEY ("ownerId","libraryMode","signature"),
+ CHECK (cardinality("assetIds") >= 2 AND cardinality("assetIds") = cardinality("rowVersions") AND cardinality("assetIds") = cardinality("mediaRevisions"))
+);
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EagleDuplicateGroup" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
+
+COMMIT;

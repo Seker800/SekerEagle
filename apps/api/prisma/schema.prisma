@@ -219,6 +219,7 @@ model EagleAssetOperationItem {
 
 model User {
   assetOperations EagleAssetOperation[]
+  duplicateGroups EagleDuplicateGroup[]
   duplicateDismissals EagleDuplicateDismissal[]
   photoAgentPreferences EaglePhotoAgentPreference[]
   photoMapStates EaglePhotoMapState[]
@@ -392,7 +393,7 @@ model EagleAsset {
   height                         Int?
   aspectRatio                    Float?                         @default(dbgenerated())
   durationMs                     Int?
-  originalObjectKey              String                         @unique
+  originalObjectKey              String
   lifecycleStatus                EagleAssetLifecycleStatus      @default(PROCESSING)
   mediaErrorCode                 String?
   mediaRevision                  Int                            @default(0)
@@ -1761,4 +1762,17 @@ model EagleDuplicateDismissal {
   createdAt DateTime @default(now())
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   @@id([ownerId, libraryMode, signature])
+}
+
+model EagleDuplicateGroup {
+ ownerId String
+ libraryMode LibraryMode
+ signature String
+ assetIds String[]
+ rowVersions Int[]
+ mediaRevisions Int[]
+ isPrivate Boolean
+ removableBytes BigInt
+ owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+ @@id([ownerId, libraryMode, signature])
 }
