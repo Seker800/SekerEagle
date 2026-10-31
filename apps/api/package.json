@@ -57,6 +57,6 @@
     "@types/pg": "8.23.1",
     "prisma": "6.19.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   }
 }
