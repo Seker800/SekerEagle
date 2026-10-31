@@ -29,7 +29,8 @@ const legacyTransferDb = prisma.$extends({
       upsert({ args, query }) {
         if (Array.isArray(args.create.plan))
           args.create.plan = args.create.plan.map((item) => {
-            const { storageAction: _action, ...legacy } = item;
+            const legacy = { ...item };
+            delete legacy.storageAction;
             const root = `users/${args.create.ownerId}/assets/${item.targetId}`;
             return {
               ...legacy,
@@ -2911,4 +2912,134 @@ test('public chronological search has a covering owner-mode-visibility index', a
     indexes[0].indexdef,
     /\("ownerId", "libraryMode", "isPrivate", "deletedAt", "chronologicalAt", id\)/,
   );
+});
+
+test('an abandoned ownership handoff never schedules source bytes for deletion', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const { EagleMaintenanceService } =
+    await import('../../apps/api/dist/eagle/eagle-maintenance.service.js');
+  const f = await fixtures();
+  const sender = new EagleLibraryTransferService(prisma, {}, 'PHOTO');
+  const operationId = randomUUID();
+  await assert.rejects(
+    sender.send(f.ownerId, { operationId, assetIds: [f.photo.id] }, false, undefined, {
+      componentIds: [f.photo.id],
+      beforePublish: async () => {
+        throw new Error('synthetic publication interruption');
+      },
+    }),
+    /synthetic publication interruption/,
+  );
+  await prisma.eagleLibraryTransfer.update({
+    where: { id: operationId },
+    data: { updatedAt: new Date('2020-01-01') },
+  });
+  assert.equal(await new EagleMaintenanceService(prisma, {}).expireLibraryTransfers(), 1);
+  assert.equal(await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }), 0);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.photo.id } })).deletedAt,
+    null,
+  );
+  assert.equal(
+    (await prisma.eagleLibraryTransfer.findUniqueOrThrow({ where: { id: operationId } })).status,
+    'ABANDONED',
+  );
+});
+
+test('handoff keeps exactly one storage owner through source purge and final target deletion', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const { prepareAssetPurge, drainObjectDeletion } =
+    await import('../../apps/worker/dist/asset-purge.js');
+  const { PYRAMID_PROCESSOR_VERSION } = await import('../../apps/api/dist/eagle/media-job-plan.js');
+  const f = await fixtures();
+  const root = `users/${f.ownerId}/assets/${f.photo.id}`;
+  const preview = `${root}/preview.webp`,
+    prefix = `${root}/pyramid`;
+  await prisma.eagleAssetRendition.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.photo.id,
+      kind: 'PREVIEW',
+      revision: f.photo.mediaRevision,
+      storageKey: preview,
+      mimeType: 'image/webp',
+      byteSize: 1,
+      status: 'READY',
+    },
+  });
+  await prisma.eagleImagePyramid.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.photo.id,
+      revision: f.photo.mediaRevision,
+      processorVersion: PYRAMID_PROCESSOR_VERSION,
+      status: 'READY',
+      storagePrefix: prefix,
+      width: 1,
+      height: 1,
+      maxLevel: 0,
+      tileCount: 1,
+      byteSize: 1,
+    },
+  });
+  const bytes = new Set([f.photo.originalObjectKey, preview, `${prefix}/0/0_0.webp`]);
+  const sent = await new EagleLibraryTransferService(prisma, {}, 'PHOTO').send(
+    f.ownerId,
+    { operationId: randomUUID(), assetIds: [f.photo.id] },
+    false,
+  );
+  const target = await prisma.eagleAsset.findUniqueOrThrow({
+    where: { id: sent.assets[0].assetId },
+  });
+  assert.equal(target.originalObjectKey, f.photo.originalObjectKey);
+  await assert.rejects(
+    prisma.eagleAsset.update({ where: { id: f.photo.id }, data: { storageTransferredOut: false } }),
+    { code: 'P2002' },
+  );
+  await assert.rejects(
+    prisma.eagleAsset.update({ where: { id: f.photo.id }, data: { deletedAt: null } }),
+  );
+  const purge = async (asset) => {
+    const job = await prisma.eagleAssetProcessingJob.create({
+      data: {
+        ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        assetRevision: asset.mediaRevision,
+        kind: 'PURGE_ASSET',
+        processorVersion: 'synthetic-purge',
+        status: 'PROCESSING',
+        leaseVersion: 1,
+      },
+    });
+    await prisma.$transaction((tx) => prepareAssetPurge(tx, job));
+  };
+  await purge(f.photo);
+  assert.equal(await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }), 0);
+  assert.equal(bytes.size, 3);
+  assert.equal(await prisma.eagleAssetRendition.count({ where: { assetId: target.id } }), 1);
+  assert.equal(await prisma.eagleImagePyramid.count({ where: { assetId: target.id } }), 1);
+  await prisma.eagleAsset.update({
+    where: { id: target.id },
+    data: { deletedAt: new Date(), purgeAfter: new Date() },
+  });
+  await purge(target);
+  const receipt = await prisma.eagleObjectDeletion.findFirstOrThrow({
+    where: { ownerId: f.ownerId },
+  });
+  assert.deepEqual(new Set(receipt.objectKeys), new Set([target.originalObjectKey, preview]));
+  assert.deepEqual(receipt.prefixes, [`${prefix}/`]);
+  await drainObjectDeletion(prisma, {
+    deleteObjects: async (keys) => {
+      for (const key of keys) bytes.delete(key);
+    },
+    deletePrefix: async (_owner, directory) => {
+      for (const key of bytes) if (key.startsWith(directory)) bytes.delete(key);
+    },
+  });
+  assert.equal(bytes.size, 0);
 });
