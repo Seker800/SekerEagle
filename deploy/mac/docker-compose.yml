@@ -128,6 +128,9 @@ services:
     environment:
       <<: *api-environment
       SEKEREAGLE_BACKUP_STATUS_FILE: /backup-status/status.json
+      EAGLE_OPERATION_BODY_LIMIT: ${EAGLE_OPERATION_BODY_LIMIT:-32mb}
+      EAGLE_OPERATION_ADMISSION_TIMEOUT_MS: ${EAGLE_OPERATION_ADMISSION_TIMEOUT_MS:-120000}
+      EAGLE_OPERATION_DB_BATCH_SIZE: ${EAGLE_OPERATION_DB_BATCH_SIZE:-512}
     volumes:
       - ../../.runtime/backup-status:/backup-status:ro
     depends_on:
@@ -147,6 +150,47 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: 2g
+
+  operations:
+    logging: *bounded-logging
+    platform: linux/arm64
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ['node', 'apps/api/dist/asset-operation-executor.js']
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/sekereagle?schema=public&connection_limit=${EAGLE_OPERATION_DB_CONNECTIONS:-6}
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: sekereagle-assets
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_MAX_SOCKETS: ${EAGLE_OPERATION_S3_MAX_SOCKETS:-8}
+      EAGLE_ASSET_OPERATIONS_ENABLED: ${EAGLE_ASSET_OPERATIONS_ENABLED:-true}
+      EAGLE_OPERATION_SEND_CONCURRENCY: ${EAGLE_OPERATION_SEND_CONCURRENCY:-4}
+      EAGLE_OPERATION_METADATA_BATCH_SIZE: ${EAGLE_OPERATION_METADATA_BATCH_SIZE:-32}
+      EAGLE_OPERATION_POLL_MS: ${EAGLE_OPERATION_POLL_MS:-1000}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "process.kill(Number(require('node:fs').readFileSync('/tmp/sekereagle-asset-operations-ready','utf8')),0)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    stop_grace_period: 90s
+    mem_limit: ${EAGLE_OPERATION_MEMORY_LIMIT:-512m}
 
   worker:
     logging: *bounded-logging

@@ -316,6 +316,7 @@ try {
   await s3.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
 
   child('apps/api/dist/main.js', env, 'api');
+  child('apps/api/dist/asset-operation-executor.js', env, 'operations');
   await waitFor(
     async () =>
       fetch(`${origin}/api/health/ready`)
@@ -903,6 +904,34 @@ try {
   }
   const sendCases = [];
   if (process.env.PHOTO_WORKBENCH_SEND === '1') {
+    const sendAndAwait = async (mode, input) => {
+      const receipt = await api(`/${mode}/assets/batch/send`, input);
+      assert.equal(receipt.id, input.operationId);
+      await waitFor(
+        async () => {
+          const current = (await api(`/${mode}/operations`)).find((row) => row.id === receipt.id);
+          if (current?.failed) throw new Error('Sending smoke operation failed');
+          return current?.completed === current?.total;
+        },
+        'independent send operation',
+        480,
+      );
+      const items = await db.eagleAssetOperationItem.findMany({
+        where: { operationId: receipt.id },
+        select: { id: true },
+      });
+      const transfers = await db.eagleLibraryTransfer.findMany({
+        where: { id: { in: items.map((row) => row.id) }, status: 'COMPLETED' },
+      });
+      const assets = transfers.flatMap((row) => row.result.assets);
+      return {
+        targetMode: transfers[0].targetMode,
+        movedCount: receipt.total,
+        componentCount: assets.length,
+        assets,
+      };
+    };
+
     const sample = liveCases.find((row) => row.mode === 'eagle' && row.name === 'apple-live.jpg');
     if (!sample) throw new Error('Sending smoke requires PHOTO_WORKBENCH_LIVE=1');
     const input = { operationId: randomUUID(), assetIds: [sample.assetId] };
@@ -924,10 +953,10 @@ try {
       (row) => row.mode === 'photos' && row.name === 'apple-live.jpg',
     );
     await api('/photos/assets/batch/trash', { assetIds: [existingPhoto.assetId] });
-    const result = await api('/eagle/assets/batch/send', input);
+    const result = await sendAndAwait('eagle', input);
     assert.equal(result.targetMode, 'PHOTO');
     assert.equal(result.componentCount, 2);
-    assert.deepEqual(await api('/eagle/assets/batch/send', input), result);
+    assert.deepEqual(await sendAndAwait('eagle', input), result);
     assert.equal(
       (
         await fetch(`${origin}/api/eagle/assets/${sample.assetId}`, {
@@ -968,7 +997,7 @@ try {
     );
     assert.equal(target.displayName, original.displayName);
     sendCases.push(result);
-    const reverse = await api('/photos/assets/batch/send', {
+    const reverse = await sendAndAwait('photos', {
       operationId: randomUUID(),
       assetIds: [targetId],
     });

@@ -405,7 +405,7 @@
           }
         },
         "responses": {
-          "201": {
+          "202": {
             "description": ""
           }
         },
@@ -3929,7 +3929,7 @@
           }
         },
         "responses": {
-          "201": {
+          "202": {
             "description": ""
           }
         },
@@ -8015,7 +8015,6 @@
             "enum": ["SEND", "TRASH", "RESTORE", "EMPTY_TRASH"]
           },
           "assetIds": {
-            "maxItems": 1000,
             "type": "array",
             "items": {
               "type": "string"
@@ -8028,7 +8027,6 @@
         "type": "object",
         "properties": {
           "assetIds": {
-            "maxItems": 100,
             "type": "array",
             "items": {
               "type": "string"

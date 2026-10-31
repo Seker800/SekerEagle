@@ -177,6 +177,42 @@ try {
     '/api/photos/photography/people/review',
   ])
     assert.equal((await fetch(`${origin}${path}`)).status, 401);
+  const operations = `${prefix}-operations`;
+  containers.push(operations);
+  const executorEnv = Object.entries(env)
+    .filter(([key]) => key === 'DATABASE_URL' || key.startsWith('S3_'))
+    .flatMap(([key, value]) => ['--env', `${key}=${value}`]);
+  run([
+    'run',
+    '--detach',
+    '--pull',
+    'never',
+    '--name',
+    operations,
+    '--network',
+    prefix,
+    ...executorEnv,
+    image,
+    'node',
+    'apps/api/dist/asset-operation-executor.js',
+  ]);
+  await waitFor(
+    () =>
+      spawnSync(
+        'docker',
+        [
+          'exec',
+          operations,
+          'node',
+          '-e',
+          "process.kill(Number(require('node:fs').readFileSync('/tmp/sekereagle-asset-operations-ready','utf8')),0)",
+        ],
+        { stdio: 'ignore', timeout: 3000 },
+      ).status === 0,
+    'independent operation executor in final image',
+  );
+  run(['stop', '--time', '90', operations]);
+  assert.equal(run(['inspect', '--format', '{{.State.ExitCode}}', operations]), '0');
   if (process.argv.includes('--storage-check')) {
     // Run the real-storage fixture without an API scheduler racing its explicit ticks.
     run(['stop', api]);
@@ -207,6 +243,8 @@ try {
       migrations: true,
       readiness: 200,
       unauthenticatedPeople: 401,
+      independentExecutorWithoutApiSecrets: true,
+      executorGracefulExit: 0,
     }) + '\n',
   );
 } catch (error) {

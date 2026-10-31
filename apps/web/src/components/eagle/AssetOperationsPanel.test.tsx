@@ -146,7 +146,7 @@ it('refreshes both libraries only after publication and never invalidates the po
   }
 });
 
-it('trash progress refreshes only its own lists and counts, with a final refresh for published results', async () => {
+it('trash progress marks its own workspace stale once without starting a foreground refresh', async () => {
   mocks.list.mockImplementation(async (mode) => (mode === 'PHOTO' ? [job({ kind: 'TRASH' })] : []));
   const client = show('ALL', false, true);
   await waitFor(() =>
@@ -159,6 +159,7 @@ it('trash progress refreshes only its own lists and counts, with a final refresh
   );
   await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
   const predicate = invalidate.mock.calls[0]![0]!.predicate!;
+  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('none');
   expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ALL', {}] } as never)).toBe(
     true,
   );
@@ -169,8 +170,6 @@ it('trash progress refreshes only its own lists and counts, with a final refresh
   ).toBe(true);
   for (const key of [
     ['eagle', 'owner', 'MATERIAL', 'assets', 'ALL', {}],
-    ['eagle', 'owner', 'PHOTO', 'manual-tags'],
-    ['eagle', 'owner', 'PHOTO', 'statistics'],
     ['eagle', 'owner', 'PHOTO', 'operations'],
   ])
     expect(predicate({ queryKey: key } as never)).toBe(false);
@@ -178,5 +177,5 @@ it('trash progress refreshes only its own lists and counts, with a final refresh
     ['eagle', 'owner', 'PHOTO', 'operations', false],
     [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'STOPPED' })],
   );
-  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+  expect(invalidate).toHaveBeenCalledTimes(1);
 });

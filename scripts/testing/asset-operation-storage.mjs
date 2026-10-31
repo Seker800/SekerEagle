@@ -22,6 +22,7 @@ import { EagleLibraryTransferService } from '../../apps/api/dist/eagle/eagle-lib
 import { ObjectStorageService } from '../../apps/api/dist/storage/object-storage.service.js';
 import { EagleAssetOperationService } from '../../apps/api/dist/eagle/eagle-asset-operations.service.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { prepareAssetPurge } from '../../apps/worker/dist/asset-purge.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
   s3Endpoint: process.env.S3_ENDPOINT,
@@ -113,7 +114,8 @@ try {
     fixtures.push(row);
   }
   let active = 0,
-    peak = 0;
+    peak = 0,
+    heads = 0;
   const instrumented = {
     copyObject: async (...args) => {
       active++;
@@ -124,7 +126,10 @@ try {
         active--;
       }
     },
-    headObject: (...args) => storage.headObject(...args),
+    headObject: (...args) => {
+      heads++;
+      return storage.headObject(...args);
+    },
   };
   const service = new EagleAssetOperationService(
     db,
@@ -149,7 +154,8 @@ try {
   const sendMilliseconds = performance.now() - start;
   const result = (await service.list(ownerId)).find((row) => row.id === receipt.id);
   assert.equal(result.completed, fixtures.length);
-  assert.equal(peak, 4);
+  assert.equal(peak, 0);
+  assert.equal(heads, 0);
   assert.equal(active, 0);
   const plans = await db.eagleLibraryTransfer.findMany({ where: { ownerId } });
   for (const plan of plans)
@@ -174,7 +180,29 @@ try {
     }),
     8,
   );
-  // Trashing and restoring all copied targets uses one batch each and preserves real bytes.
+  // Purging a retired source cannot delete bytes now owned by its independent target.
+  const sourceToPurge = fixtures[0];
+  const purgeJob = await db.eagleAssetProcessingJob.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: sourceToPurge.id,
+      assetRevision: sourceToPurge.mediaRevision,
+      kind: 'PURGE_ASSET',
+      processorVersion: 'synthetic-purge',
+      status: 'PROCESSING',
+      leaseVersion: 1,
+    },
+  });
+  await db.$transaction((tx) => prepareAssetPurge(tx, purgeJob));
+  const stillOwned = await s3.send(
+    new GetObjectCommand({ Bucket: bucket, Key: sourceToPurge.originalObjectKey }),
+  );
+  assert.equal(
+    digest(await stillOwned.Body.transformToByteArray()),
+    payloads.get(sourceToPurge.originalObjectKey),
+  );
+  // Trashing and restoring all targets uses one batch each and preserves real bytes.
   const material = new EagleAssetOperationService(
     db,
     undefined,
@@ -278,7 +306,7 @@ try {
       storage.headObject(key),
       (error) => error.$metadata?.httpStatusCode === 404,
     );
-  for (const row of fixtures) {
+  for (const row of fixtures.filter((row) => row.id !== sourceToPurge.id)) {
     const source = await db.eagleAsset.findUniqueOrThrow({ where: { id: row.id } });
     assert.ok(source.transferredAt);
     assert.ok(source.purgeAfter);
@@ -382,8 +410,39 @@ try {
   });
   assert(!middle.imagePyramids[0].storagePrefix.endsWith('/'));
   const retryId = randomUUID();
+  const legacyDb = db.$extends({
+    query: {
+      eagleLibraryTransfer: {
+        create({ args, query }) {
+          if (Array.isArray(args.data.plan))
+            args.data.plan = args.data.plan.map((item) => {
+              const legacy = { ...item };
+              delete legacy.storageAction;
+              const root = `users/${ownerId}/assets/${item.targetId}`;
+              return {
+                ...legacy,
+                targetKey: `${root}/original.webp`,
+                renditions: (item.renditions ?? []).map((r) => ({
+                  ...r,
+                  targetKey: `${root}/transfer/${r.id}`,
+                })),
+                ...(item.pyramid
+                  ? {
+                      pyramid: {
+                        ...item.pyramid,
+                        targetPrefix: `${root}/pyramids/1/transfer-${item.pyramid.id}/`,
+                      },
+                    }
+                  : {}),
+              };
+            });
+          return query(args);
+        },
+      },
+    },
+  });
   const interrupted = new EagleLibraryTransferService(
-    db,
+    legacyDb,
     {
       copyObject: async () => {
         throw new Error('synthetic copy interruption');
@@ -451,7 +510,9 @@ try {
     JSON.stringify({
       test: 'real-local-storage',
       sent: result.completed,
-      checkedCopies: 32,
+      checkedObjects: 32,
+      newSendStorageHeads: heads,
+      sourcePurgePreservedTargetBytes: true,
       roundTripTileReadable: true,
       legacyFrozenPlanResumed: true,
       retiredRoundTripObjectsAbsent: initialKeys.length + middleKeys.length,

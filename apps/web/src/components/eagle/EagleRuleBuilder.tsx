@@ -150,7 +150,6 @@ export function EagleRuleBuilder({
                 )}
                 fieldOptions={fieldOptions}
                 key={rule.id}
-                condition={condition}
                 rule={rule}
                 ruleIndex={ruleIndex}
                 manualTags={manualTags}
@@ -184,7 +183,6 @@ export function EagleRuleBuilder({
 interface RuleRowProps {
   semanticTaken: boolean;
   fieldOptions?: EagleFilterOptions;
-  condition: EagleFilterCondition;
   rule: EagleFilterRule;
   ruleIndex: number;
   manualTags: EagleManualTag[];
@@ -196,7 +194,6 @@ interface RuleRowProps {
 function RuleRow({
   semanticTaken,
   fieldOptions,
-  condition,
   rule,
   ruleIndex,
   manualTags,
