@@ -3,6 +3,7 @@ import test from 'node:test';
 import sharp from 'sharp';
 import { createHash } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { crc32 } from 'node:zlib';
 import { verifyDuplicateOriginal, withDuplicateOriginalSlot } from './eagle-duplicate-original';
 const verify = (bytes: Buffer, options = {}) =>
   verifyDuplicateOriginal(
@@ -74,4 +75,11 @@ test('both modes share a single decoder slot, and a failed job releases it', asy
   assert.equal(peak, 1);
   assert.equal(results[0]!.status, 'rejected');
   assert.equal(results[2]!.status, 'fulfilled');
+});
+test('an animated PNG declaration cannot be mistaken for an identical still image', async () => {
+  const png = await sharp({ create: { width: 3, height: 2, channels: 3, background: 'red' } }).png().toBuffer();
+  const control = Buffer.alloc(20); control.writeUInt32BE(8, 0); control.write('acTL', 4);
+  control.writeUInt32BE(2, 8); control.writeUInt32BE(crc32(control.subarray(4, 16)), 16);
+  const animated = Buffer.concat([png.subarray(0, 33), control, png.subarray(33)]);
+  assert.equal((await verify(animated)).status, 'UNSUPPORTED');
 });
