@@ -9,10 +9,11 @@ const mocks = vi.hoisted(() => ({
   scan: vi.fn(),
   cleanup: vi.fn(),
   ignore: vi.fn(),
+  operations: [] as Array<{ id: string; libraryMode: string; kind: string; running: boolean; queued: boolean; completed: number; total: number; failed: number }>,
 }));
 vi.mock('../../lib/eagle-duplicates-api', () => ({ createDuplicatesApi: () => mocks }));
 vi.mock('./useAssetOperations', () => ({
-  useAssetOperationList: () => [{ data: [] }, { data: [] }],
+  useAssetOperationList: () => [{ data: mocks.operations }, { data: [] }],
 }));
 vi.mock('./EagleAssetThumbnail', () => ({ EagleAssetThumbnail: () => <span>图片预览</span> }));
 const group = {
@@ -39,6 +40,7 @@ function render() {
 describe('duplicate cleanup review', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.operations = [];
     HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
       this.setAttribute('open', '');
     });
@@ -124,7 +126,7 @@ describe('duplicate cleanup review', () => {
     expect(screen.getByRole('button', { name: '保留 0 项，清理 2 项' })).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: '保留 two' }));
     fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
-    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(mocks.cleanup).toHaveBeenCalledWith(
         expect.objectContaining({ groups: [{ signature: group.signature, keepIds: ['two'] }] }),
@@ -194,12 +196,53 @@ describe('duplicate cleanup review', () => {
     expect(screen.getByRole('button', { name: '保留 3 项，清理 0 项' })).toBeDisabled();
     fireEvent.click(screen.getByRole('checkbox', { name: '保留 two' }));
     fireEvent.click(screen.getByRole('button', { name: '保留 2 项，清理 1 项' }));
-    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     await waitFor(() =>
       expect(mocks.cleanup).toHaveBeenCalledWith(
         expect.objectContaining({ groups: [{ signature: group.signature, removeIds: ['two'] }] }),
       ),
     );
+  });
+
+  it('continues to the next group after submission, prevents repeat submission, and updates completed results automatically', async () => {
+    const initial = await mocks.list();
+    const next = { ...group, signature: 'd'.repeat(64), previews: [] };
+    mocks.list.mockClear();
+    mocks.list.mockResolvedValue({ ...initial, totalGroups: 2, exactGroups: 2, groups: [group, next] });
+    mocks.members.mockResolvedValue({ signature: group.signature, total: 2, nextCursor: null,
+      items: ['one', 'two'].map(id => ({ id, displayName: id, format: 'jpeg', width: 1200, height: 800,
+        byteSize: 1000, libraryAddedAt: '2020-01-01', rating: null, manualTags: [], annotation: null,
+        renditions: [], mediaRevision: 1 })) });
+    const view = render();
+    fireEvent.click((await screen.findAllByRole('button', { name: /^文件完全相同/ }))[0]);
+    fireEvent.click(await screen.findByRole('button', { name: '保留 1 项，清理 1 项' }));
+    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[1]).toHaveAttribute('aria-expanded', 'true'));
+    expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[0]).toBeDisabled();
+    mocks.list.mockResolvedValue({ ...initial, groups: [next] });
+    mocks.operations = [{ id: 'cleanup', libraryMode: 'MATERIAL', kind: 'DUPLICATE_CLEANUP', running: false,
+      queued: false, completed: 1, total: 1, failed: 0 }];
+    // A local interaction produces the next render as operation polling does in the application.
+    fireEvent.click(screen.getByRole('checkbox', { name: '保留 two' }));
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(1));
+    expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();
+    view.unmount();
+  });
+  it('keeps a failed single-group choice visible and retries the same command', async () => {
+    mocks.cleanup.mockRejectedValueOnce(new Error('单组连接失败'));
+    mocks.members.mockResolvedValue({ signature: group.signature, total: 2, nextCursor: null,
+      items: ['one', 'two'].map(id => ({ id, displayName: id, format: 'jpeg', width: 1200, height: 800,
+        byteSize: 1000, libraryAddedAt: '2020-01-01', rating: null, manualTags: [], annotation: null,
+        renditions: [], mediaRevision: 1 })) });
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: /^文件完全相同/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '保留 1 项，清理 1 项' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('单组连接失败');
+    expect(screen.getByRole('checkbox', { name: '保留 one' })).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
+    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(2));
+    expect(mocks.cleanup.mock.calls[0]).toEqual(mocks.cleanup.mock.calls[1]);
   });
   it('permission revision changes hide old cached names immediately', async () => {
     const client = new QueryClient({
