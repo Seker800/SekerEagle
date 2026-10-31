@@ -20,3 +20,18 @@ describe('createEagleQueryKeys', () => {
     );
   });
 });
+
+it('shares count and operation namespaces without conflating list pages or privacy scopes', () => {
+  const keys = createEagleQueryKeys('owner', 'PHOTO') as ReturnType<typeof createEagleQueryKeys> & {
+    libraryCounts: readonly unknown[];
+    libraryCount: (visible: boolean, revision: number) => readonly unknown[];
+    operations: readonly unknown[];
+    operationList: (visible: boolean) => readonly unknown[];
+  };
+  expect(keys.libraryCounts).toEqual(['eagle', 'owner', 'PHOTO', 'assets', 'library-count']);
+  expect(keys.libraryCount(false, 2)).toEqual([...keys.libraryCounts, false, 2]);
+  expect(keys.libraryCount(false, 2)).not.toEqual(keys.libraryCount(true, 2));
+  expect(keys.libraryCount(false, 2)).not.toEqual(keys.libraryCount(false, 3));
+  expect(keys.operationList(false)).toEqual([...keys.operations, false]);
+  expect(keys.operationList(false)).not.toEqual(keys.operationList(true));
+});
