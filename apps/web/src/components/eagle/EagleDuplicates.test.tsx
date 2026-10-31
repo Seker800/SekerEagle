@@ -83,6 +83,21 @@ function render() {
   };
 }
 describe('duplicate cleanup review', () => {
+  it('does not restart an attempted check on reopen, but permits an explicit check', async () => {
+    mocks.list.mockResolvedValue({ revision: 'b'.repeat(64), exactRevision: 'b'.repeat(64),
+      algorithmVersion: 'original-pixels-v3', originalCheckCompleted: false, originalCheckAttempted: true,
+      outdatedGroups: 3, exactItems: 0, verifiedGroups: 0, verifiedItems: 0,
+      coverage: { total: 60000, indexed: 60000, waiting: 0 }, totalGroups: 0, exactGroups: 0,
+      similarGroups: 0, ignoredGroups: 0, removableBytes: 0, nextCursor: null, groups: [] });
+    const view = render();
+    await screen.findByRole('heading', { name: '查重规则尚未更新' });
+    expect(mocks.scan).not.toHaveBeenCalled();
+    view.hide(); view.reopen();
+    await screen.findByRole('heading', { name: '查重规则尚未更新' });
+    expect(mocks.scan).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
+    await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
+  });
   it('cleans thousands of verified copies in one request without opening member comparisons', async () => {
     mocks.list.mockResolvedValue({
       revision: 'b'.repeat(64),
