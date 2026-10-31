@@ -213,3 +213,9 @@ it('keeps the fresh restored photo-stack cover instead of an older cached copy',
     f.close();
   }
 });
+
+it('publishes a completed sixty-thousand image scan without downloading asset membership receipts',async()=>{
+ const f=fixture();mocks.results.mockClear();f.cache.operations.begin('op','DUPLICATE_SCAN',[]);
+ const invalidate=vi.spyOn(f.client,'invalidateQueries');await f.refresher.reconcile('PHOTO',{...summary('DUPLICATE_SCAN'),total:60001,completed:60001,failed:0,errors:[],state:'COMPLETED'});
+ expect(mocks.results).not.toHaveBeenCalled();expect(f.queryFn).not.toHaveBeenCalled();expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({queryKey:['eagle','owner','PHOTO','duplicates']}),expect.anything());f.close();
+});
