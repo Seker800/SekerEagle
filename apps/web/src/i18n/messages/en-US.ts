@@ -13,8 +13,8 @@ export const enUS = {
     'Exact duplicates require the same format, bytes, and hash. Find similar photos under Similar cleanup.',
   '当前分类没有待处理结果，可切换分类或检查新内容。':
     'This category has no pending results. Switch categories or check new content.',
-  '查看近似清理 {{count}} 组': 'View {{count}} similar groups',
-  '查看完全重复 {{count}} 组': 'View {{count}} exact duplicate groups',
+  '查看近似清理 {{value1}} 组': 'View {{value1}} similar groups',
+  '查看完全重复 {{value1}} 组': 'View {{value1}} exact duplicate groups',
 
   近似清理: 'Similar-image cleanup',
   '旧版近似结果已停用，正在按同格式、同尺寸规则更新。':

@@ -643,7 +643,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       setExpanded(null);
                     }}
                   >
-                    {t('查看近似清理 {{count}} 组', { count: data.similarGroups.toLocaleString() })}
+                    {t('查看近似清理 {{value1}} 组', {
+                      value1: data.similarGroups.toLocaleString(),
+                    })}
                   </button>
                 )}
                 {!showIgnored && kind === 'SIMILAR' && data.exactGroups > 0 && (
@@ -654,7 +656,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       setExpanded(null);
                     }}
                   >
-                    {t('查看完全重复 {{count}} 组', { count: data.exactGroups.toLocaleString() })}
+                    {t('查看完全重复 {{value1}} 组', { value1: data.exactGroups.toLocaleString() })}
                   </button>
                 )}
               </div>
