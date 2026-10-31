@@ -179,20 +179,13 @@ export class EagleImageSearchService {
       context.status === 'READY'
         ? Prisma.sql`
       UNION ALL
-      SELECT "assetId", 1::integer, similarity FROM semantic_scores WHERE similarity>=${threshold}
-    `
-        : Prisma.empty;
-    const semanticScores =
-      context.status === 'READY'
-        ? Prisma.sql`
-      semantic_scores AS MATERIALIZED (
-      SELECT asset.id AS "assetId", (1-(embedding.embedding <=> ${context.vector}::vector))::double precision AS similarity
+      SELECT asset.id, 1::integer, (1-(embedding.embedding <=> ${context.vector}::vector))::double precision
       FROM "EagleAssetEmbedding" AS embedding
       JOIN "EagleAsset" AS asset ON asset.id=embedding."assetId" AND asset."ownerId"=embedding."ownerId" AND asset."libraryMode"=embedding."libraryMode"
       WHERE ${visible} AND embedding."ownerId"=${ownerId} AND embedding."libraryMode"=${this.libraryMode}::"LibraryMode"
         AND embedding."spaceId"=${context.spaceId} AND embedding.status='READY' AND embedding."isCurrent"=true
         AND embedding."assetRevision"=asset."mediaRevision" AND embedding.embedding IS NOT NULL
-      ),
+        AND 1-(embedding.embedding <=> ${context.vector}::vector)>=${threshold}
     `
         : Prisma.empty;
     const dateColumn = Prisma.sql`asset."libraryAddedAt"`;
@@ -203,7 +196,7 @@ export class EagleImageSearchService {
     const rows = await this.prisma.$queryRaw<
       Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
     >(Prisma.sql`
-      WITH ${semanticScores} candidates("assetId",tier,similarity) AS (
+      WITH candidates("assetId",tier,similarity) AS (
         SELECT asset.id, 3::integer, 1::double precision FROM "EagleAsset" AS asset
         WHERE ${visible} AND (asset."normalizedDisplayName" LIKE ${pattern} OR asset."originalName" ILIKE ${pattern})
         UNION ALL

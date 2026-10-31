@@ -1,5 +1,8 @@
+import { EAGLE_FILTER_FIELDS } from '../../packages/eagle-filter-core/dist/index.js';
+import { sampleImageSearch } from '../../apps/api/dist/eagle/eagle-search-preview.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { setImmediate } from 'node:timers/promises';
 import { before, after, test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
@@ -14,7 +17,12 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+let measuring = false;
+const measuredQueries = [];
+db.$on('query', ({ query }) => {
+  if (measuring) measuredQueries.push(query);
+});
 const ownerId = randomUUID(),
   otherOwner = randomUUID();
 const ids = {
@@ -341,6 +349,13 @@ const cases = {
   ],
 };
 test('every ordinary shared filter field/operator preserves Prisma membership, nulls and negation in SQL', async () => {
+  assert.deepEqual(
+    Object.keys(cases).sort(),
+    EAGLE_FILTER_FIELDS.filter(({ field }) => field !== 'SEMANTIC')
+      .map(({ field }) => field)
+      .sort(),
+    'new filter fields require SQL parity coverage',
+  );
   let comparisons = 0;
   for (const [field, variants] of Object.entries(cases))
     for (const [operator, raw] of variants) {
@@ -377,7 +392,7 @@ test('every ordinary shared filter field/operator preserves Prisma membership, n
     { OR: [{ rating: null }, { width: { gt: 1200 } }] },
   ])
     await parity({ ownerId, libraryMode: 'PHOTO', ...special });
-  console.log(JSON.stringify({ test: 'canonical-search-filter-parity', comparisons }));
+  assert.equal(comparisons, 134);
 });
 test('semantic folder readiness and nested owner/mode relations stay inside the same scoped SQL', async () => {
   const membership = smartFolderMatchWhere({ ownerId, libraryMode: 'PHOTO' }, ids.folder);
@@ -434,7 +449,7 @@ test('literal text matching, filtered relevance and both date orders retain the 
     [rows[2].id],
   );
 });
-test('filtered results are complete past 1000 matches and cursor pages remain disjoint and ordered', async () => {
+test('filtered results are complete past 1000 matches and cursor pages remain disjoint and ordered', async (t) => {
   const newIds = Array.from({ length: 1053 }, () => randomUUID());
   await db.eagleAsset.createMany({
     data: newIds.map((id) => ({
@@ -464,12 +479,30 @@ test('filtered results are complete past 1000 matches and cursor pages remain di
   let cursor,
     seen = [];
   do {
+    if (!cursor) {
+      await setImmediate();
+      measuring = true;
+    }
     const result = await service.listAssets(ownerId, {
       search: 'unmatched-text',
       rating: 5,
       limit: 40,
       ...(cursor ? { cursor } : {}),
     });
+    if (!cursor) {
+      await setImmediate();
+      measuring = false;
+      t.diagnostic(
+        JSON.stringify({
+          fixture: 'material-search-first-page',
+          items: result.items.length,
+          sql: measuredQueries.length,
+          explicitTransactions: measuredQueries.filter((query) => query === 'BEGIN').length,
+          preparedVector: true,
+          s3: 0,
+        }),
+      );
+    }
     seen.push(...result.items.map((row) => row.id));
     cursor = result.nextCursor;
   } while (cursor);
@@ -490,4 +523,68 @@ test('filtered results are complete past 1000 matches and cursor pages remain di
     expected.map((row) => row.id),
   );
   assert.ok(seen.length > 1000);
+});
+
+test('sampled ANN previews enforce owner, mode, privacy and current media revision without leaking transaction settings', async () => {
+  const [before] = await db.$queryRawUnsafe('SHOW hnsw.ef_search');
+  const sample = await sampleImageSearch(
+    db,
+    { ownerId, libraryMode: 'PHOTO' },
+    context,
+    0.25,
+    false,
+  );
+  const allowed = new Set(
+    rows
+      .filter(
+        (row) =>
+          row.ownerId === ownerId &&
+          row.libraryMode === 'PHOTO' &&
+          !row.isPrivate &&
+          !row.deletedAt,
+      )
+      .map((row) => row.id),
+  );
+  assert.ok(sample.length > 0);
+  assert.ok(sample.every((row) => allowed.has(row.id)));
+  const [after] = await db.$queryRawUnsafe('SHOW hnsw.ef_search');
+  assert.deepEqual(after, before);
+});
+
+test('semantic reads exclude stale vectors and preserve explicitly unlocked private and trash scopes', async () => {
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  const stale = rows[1];
+  await db.eagleAsset.update({ where: { id: stale.id }, data: { mediaRevision: 2 } });
+  try {
+    const actual = await ranker.rankPage(
+      ownerId,
+      'unmatched-text',
+      context,
+      undefined,
+      100,
+      true,
+      false,
+    );
+    assert.ok(!actual.some((row) => row.assetId === stale.id));
+    assert.ok(
+      actual.some((row) => row.assetId === rows[11].id),
+      'explicitly unlocked private reads remain available',
+    );
+    assert.ok(actual.every((row) => row.assetId !== rows[12].id));
+    const trashed = await ranker.rankPage(
+      ownerId,
+      'unmatched-text',
+      context,
+      undefined,
+      100,
+      true,
+      true,
+    );
+    assert.deepEqual(
+      trashed.map((row) => row.assetId),
+      [rows[12].id],
+    );
+  } finally {
+    await db.eagleAsset.update({ where: { id: stale.id }, data: { mediaRevision: 1 } });
+  }
 });

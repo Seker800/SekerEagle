@@ -202,6 +202,23 @@ try {
       stdio: 'inherit',
     },
   );
+  // The search fixture reuses the canonical embedding space after the isolation tests create it.
+  run(
+    process.execPath,
+    [
+      '--experimental-test-coverage',
+      '--test-coverage-include=apps/api/dist/eagle/eagle-search-predicate.js',
+      '--test-coverage-include=apps/api/dist/eagle/eagle-search-preview.js',
+      '--test-coverage-lines=80',
+      '--test-coverage-branches=80',
+      '--test-coverage-functions=80',
+      '--test',
+      'apps/api/dist/eagle/eagle-search-predicate.test.js',
+      'apps/api/dist/eagle/eagle-search-preview.test.js',
+      'scripts/testing/search-query.test.mjs',
+    ],
+    { env, stdio: 'inherit' },
+  );
   run(process.execPath, ['--test', 'scripts/testing/asset-operation-executor.test.mjs'], {
     env,
     stdio: 'inherit',
