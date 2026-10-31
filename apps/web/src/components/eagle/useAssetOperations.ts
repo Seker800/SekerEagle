@@ -74,6 +74,7 @@ export function useAssetOperationProgress(includePrivate: boolean, enabled: bool
       const before = previous.current[index];
       if (!before) return;
       for (const row of rows ?? []) {
+        if (row.kind === 'DUPLICATE_SCAN') continue;
         const old = before.find((candidate) => candidate.id === row.id);
         const published = row.completed > (old?.completed ?? 0);
         if (published) publishedOperations.current.add(row.id);

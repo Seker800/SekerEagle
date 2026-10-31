@@ -1,3 +1,4 @@
+import { EagleDuplicateService } from './eagle/eagle-duplicates.service';
 import 'reflect-metadata';
 import { ConfigService } from '@nestjs/config';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
@@ -20,6 +21,7 @@ export function createAssetOperationExecutors(
         new EagleLibraryTransferService(prisma, storage, mode),
         new EagleService(prisma, undefined, mode),
         mode,
+        new EagleDuplicateService(prisma, storage, mode),
       ),
   );
 }

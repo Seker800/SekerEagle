@@ -1,3 +1,4 @@
+import { EagleDuplicateService } from './eagle-duplicates.service';
 import {
   OPERATION_DB_BATCH_SIZE,
   OPERATION_SEND_CONCURRENCY,
@@ -45,7 +46,8 @@ const SEND_CONCURRENCY = OPERATION_SEND_CONCURRENCY;
 // Transfer publication may hold the shared privacy lock for up to 30 seconds.
 // Leave a bounded write budget after that wait, inside the 120-second lease.
 const METADATA_TRANSACTION_TIMEOUT_MS = 45_000;
-type OperationLane = 'SEND' | 'METADATA';
+type OperationLane = 'SEND' | 'METADATA' | 'SCAN';
+const laneKind = (lane: OperationLane) => lane === 'SEND' ? 'SEND' : lane === 'SCAN' ? 'DUPLICATE_SCAN' : {notIn: ['SEND', 'DUPLICATE_SCAN']};
 type ClaimedItem = EagleAssetOperationItem & { operation: EagleAssetOperation };
 class OperationAccessError extends Error {
   constructor(readonly code: string) {
@@ -66,6 +68,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     private readonly transfers: EagleLibraryTransferService,
     private readonly eagle: EagleService,
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Optional() private readonly duplicates?: EagleDuplicateService,
   ) {}
   startExecutor() {
     if (process.env.EAGLE_ASSET_OPERATIONS_ENABLED === 'false') return;
@@ -175,6 +178,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     return operation;
   }
   async enqueue(principal: AuthPrincipal, input: EnqueueAssetOperationDto) {
+    if (input.kind === 'DUPLICATE_SCAN' || input.kind === 'DUPLICATE_CLEANUP') throw new BadRequestException('请从查重入口提交操作。');
     const ids = [...new Set(input.assetIds)].sort();
     if (
       ids.length !== input.assetIds.length ||
@@ -452,7 +456,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     const candidate = await this.prisma.eagleAssetOperationItem.findFirst({
       where: {
         libraryMode: this.libraryMode,
-        operation: { kind: lane === 'SEND' ? 'SEND' : { not: 'SEND' } },
+        operation: { kind: laneKind(lane) },
         OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: new Date() } }],
       },
       select: { id: true },
@@ -461,7 +465,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`asset-operations:${this.libraryMode}`}))`;
       const now = new Date();
-      const operation = { kind: lane === 'SEND' ? 'SEND' : { not: 'SEND' } };
+      const operation = { kind: laneKind(lane) };
       if (
         await tx.eagleAssetOperationItem.count({
           where: {
@@ -485,7 +489,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       // Only one command is batched: owner, authorization, kind and frozen selection
       // stay together. Persisted per-resource receipts and retry identities are unchanged.
       const candidates =
-        first.operation.kind === 'EMPTY_TRASH'
+        ['EMPTY_TRASH', 'DUPLICATE_SCAN', 'DUPLICATE_CLEANUP'].includes(first.operation.kind)
           ? [first]
           : await tx.eagleAssetOperationItem.findMany({
               where: {
@@ -590,7 +594,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     };
   }
   async tick() {
-    const results = await Promise.allSettled([this.tickLane('SEND'), this.tickLane('METADATA')]);
+    const results = await Promise.allSettled([this.tickLane('SEND'), this.tickLane('METADATA'), this.tickLane('SCAN')]);
     const failed = results.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
   }
@@ -644,6 +648,11 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     const { operation } = item;
     const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
     try {
+      if (operation.kind === 'DUPLICATE_SCAN' || operation.kind === 'DUPLICATE_CLEANUP') {
+        if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
+        for (const entry of items) await this.duplicates.execute(entry, tx => this.assertActor(tx, operation, [entry]));
+        return;
+      }
       // Publication is authoritative even if a crash delayed the queue receipt.
       // Recording an already committed result performs no resource write and
       // must not misreport success as failure after a later credential change.

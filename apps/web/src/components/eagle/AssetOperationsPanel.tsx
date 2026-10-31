@@ -46,7 +46,7 @@ export function AssetOperationsPanel({
   );
   const history = operations.filter((operation) => !active.includes(operation));
   const titles = (operation: AssetOperationSummary) =>
-    operation.kind === 'SEND'
+    operation.kind === 'DUPLICATE_SCAN' ? t('检查重复图片') : operation.kind === 'DUPLICATE_CLEANUP' ? t('清理重复项') : operation.kind === 'SEND'
       ? operation.libraryMode === 'PHOTO'
         ? t('发送到素材')
         : t('发送到照片')

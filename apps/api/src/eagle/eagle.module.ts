@@ -1,3 +1,4 @@
+import { EagleDuplicateService } from './eagle-duplicates.service';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { EagleImageSearchService } from './eagle-image-search.service';
@@ -36,6 +37,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
 
 export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
   EagleAssetOperationService,
+  EagleDuplicateService,
   EagleLibraryTransferService,
   EagleService,
   EagleImageSearchService,
