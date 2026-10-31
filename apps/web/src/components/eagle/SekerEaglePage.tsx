@@ -384,14 +384,14 @@ export function SekerEaglePage({
   );
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
-  const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250);
+  const [filterResetKey, setFilterResetKey] = useState(0);
+  const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250, filterResetKey);
   const [quickFilters, setQuickFilters] = useState(
     () =>
       (!privateVisible && workspaceCache.browse?.quickFilters) ||
       createEmptyEagleQuickFilterState(),
   );
-  const [quickFilterResetKey, setQuickFilterResetKey] = useState(0);
-  const deferredQuickFilters = useDebouncedValue(quickFilters, 150, quickFilterResetKey);
+  const deferredQuickFilters = useDebouncedValue(quickFilters, 150, filterResetKey);
   const filterInputsPending =
     hashKey([quickFilters]) !== hashKey([deferredQuickFilters]) ||
     search.normalize('NFKC').trim() !== deferredSearch;
@@ -1085,7 +1085,6 @@ export function SekerEaglePage({
   ]);
   const resetFilters = () => {
     setQuickFilters(createEmptyEagleQuickFilterState());
-    setQuickFilterResetKey((key) => key + 1);
   };
   const navigateLibrary = (
     destination:
@@ -1094,6 +1093,7 @@ export function SekerEaglePage({
   ) => {
     const folder = destination.view === 'SMART_FOLDER' ? destination.folder : null;
     const view = destination.view === 'SMART_FOLDER' ? 'ACTIVE' : destination.view;
+    setFilterResetKey((key) => key + 1);
     assetLocator.clearLocation();
     setTimelineCursor('');
     setLibraryView(view);
