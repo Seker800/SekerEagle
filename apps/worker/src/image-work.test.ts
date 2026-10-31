@@ -114,3 +114,14 @@ test('the photo browse producer enforces its compact envelope without changing m
   assert.doesNotThrow(() => encodeImageWork(result, { ...work, detailsOnly: true }));
   assert.doesNotThrow(() => encodeImageWork(result, { ...work, mode: 'MATERIAL' }));
 });
+
+test('remote color results must prove the current palette processor version before publication', async () => {
+  const bytes=await sharp({create:{width:30,height:20,channels:3,background:'#ffffff'}}).png().toBuffer();
+  const work={assetMimeType:'image/png',sourceMimeType:'image/png',kind:'EXTRACT_COLOR_PALETTE',processorVersion:'color-v4-eagle-basic',mode:'MATERIAL',detailsOnly:false,verifiesOriginalHash:false} as const;
+  const result=await processImageWork((async function*(){yield bytes;})(),work);
+  const decoded=await decodeImageWork(encodeImageWork(result),work);
+  assert.equal(decoded.result.palette?.[0]?.hex,'#fcfcfc');
+  const old=structuredClone(result);
+  delete (old.result as {paletteVersion?:string}).paletteVersion;
+  await assert.rejects(decodeImageWork(encodeImageWork(old),work),/COLOR_PROCESSOR_VERSION_MISMATCH/);
+});
