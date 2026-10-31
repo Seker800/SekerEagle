@@ -360,6 +360,27 @@ test('60k library read, group pagination beyond the first page, and batch admiss
   assert.equal(page.exactGroups, 100);
   assert.equal(page.groups.length, 24);
   assert.ok(readQueries <= 12);
+  // Real full-library admission must not expand the scoped fingerprint relation
+  // into 3 bind parameters per asset (60k exceeds Prisma's 32767 ceiling).
+  queries = 0;
+  const scanStart = performance.now();
+  const scan = await f.duplicate.scan(f.principal, randomUUID());
+  const scanMs = performance.now() - scanStart;
+  const planned = await db.eagleAssetOperation.findUniqueOrThrow({ where: { id: scan.operationId } });
+  assert.equal(planned.total, 60001, 'all 60k missing fingerprints plus final projection are queued');
+  await f.executor.cancel(f.principal, scan.operationId);
+  // A fully indexed large library must also reach the projection phase without
+  // Prisma materializing another oversized composite-relation parameter list.
+  await db.$executeRaw`INSERT INTO "EagleDuplicateFingerprint"
+    ("ownerId", "libraryMode", "assetId", "mediaRevision", "processorVersion", hash, colors, contrast, "updatedAt")
+    SELECT "ownerId", "libraryMode", id, "mediaRevision", 'preview-dhash-rgb-v1',
+      substring(md5(id),1,16), '[]'::jsonb, 0, now()
+    FROM "EagleAsset" WHERE "ownerId"=${f.ownerId} AND "libraryMode"='MATERIAL'`;
+  const indexed = await f.duplicate.scan(f.principal, randomUUID());
+  assert.equal((await db.eagleAssetOperation.findUniqueOrThrow({ where: { id: indexed.operationId } })).total, 1);
+  assert.equal((await f.drain(indexed.operationId)).failed, 0, 'full-library projection must finish');
+  assert.equal(f.reads(), 0, 'current fingerprints must not fetch previews again');
+  console.log(JSON.stringify({ library: 60000, scanMs, scanTotal: planned.total, indexedScanTotal: 1 }));
   let found = page.groups.length,
     next = page.nextCursor;
   while (next) {
