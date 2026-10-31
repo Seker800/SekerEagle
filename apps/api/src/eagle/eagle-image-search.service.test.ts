@@ -285,3 +285,14 @@ test('empty eligibility stays empty and explicit private trash reads retain thei
   assert.doesNotMatch(sql, /asset\."isPrivate"=false/);
   assert.match(sql, /asset\.id = ANY/);
 });
+
+
+test('literal name and tag matching uses indexable predicates without making percent or underscore wildcards', async () => {
+  let query: { sql: string; values: unknown[] } | undefined;
+  const service = new EagleImageSearchService({ $queryRaw: async (sql: typeof query) => { query = sql; return []; } } as never, {} as never);
+  await service.rankPage('owner', '100%_cat', { status: 'UNAVAILABLE', spaceId: space.id }, undefined, 40, false, false);
+  assert.ok(query);
+  assert.doesNotMatch(query.sql, /strpos|lower\(asset\."originalName"\)/);
+  assert.match(query.sql, /asset\."originalName" ILIKE/);
+  assert.ok(query.values.includes('%100\\%\\_cat%'));
+});
