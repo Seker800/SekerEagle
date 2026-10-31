@@ -3048,3 +3048,114 @@ test('handoff keeps exactly one storage owner through source purge and final tar
   });
   assert.equal(bytes.size, 0);
 });
+
+test('handoff adopts freshly published immutable derivatives without changing the frozen source version', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const { PYRAMID_PROCESSOR_VERSION } = await import('../../apps/api/dist/eagle/media-job-plan.js');
+  for (const editSource of [false, true]) {
+    const f = await fixtures(),
+      operationId = randomUUID();
+    const root = `users/${f.ownerId}/assets/${f.photo.id}`;
+    const previousKey = `${root}/renditions/0/old.webp`,
+      freshKey = `${root}/renditions/0/attempts/new/preview.webp`;
+    const previousPrefix = `${root}/pyramids/0/pyramid-v1`,
+      freshPrefix = `${root}/pyramids/0/attempts/new`;
+    const rendition = await prisma.eagleAssetRendition.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: f.photo.id,
+        revision: 0,
+        kind: 'PREVIEW',
+        status: 'READY',
+        storageKey: previousKey,
+        mimeType: 'image/webp',
+        byteSize: 1,
+      },
+    });
+    const pyramid = await prisma.eagleImagePyramid.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: f.photo.id,
+        revision: 0,
+        processorVersion: PYRAMID_PROCESSOR_VERSION,
+        status: 'READY',
+        storagePrefix: previousPrefix,
+        width: 1,
+        height: 1,
+        maxLevel: 0,
+        tileCount: 1,
+        byteSize: 1,
+      },
+    });
+    const publishing = prisma.$extends({
+      query: {
+        eagleLibraryTransfer: {
+          async create({ args, query }) {
+            const planned = await query(args);
+            await prisma.eagleAssetRendition.update({
+              where: { id: rendition.id },
+              data: { storageKey: freshKey, byteSize: 3 },
+            });
+            await prisma.eagleImagePyramid.update({
+              where: { id: pyramid.id },
+              data: { storagePrefix: freshPrefix, byteSize: 3 },
+            });
+            await prisma.eagleObjectDeletion.create({
+              data: {
+                ownerId: f.ownerId,
+                libraryMode: 'PHOTO',
+                objectKeys: [previousKey],
+                prefixes: [`${previousPrefix}/`],
+              },
+            });
+            if (editSource)
+              await prisma.eagleAsset.update({
+                where: { id: f.photo.id },
+                data: { rowVersion: { increment: 1 } },
+              });
+            return planned;
+          },
+        },
+      },
+    });
+    const send = () =>
+      new EagleLibraryTransferService(publishing, {}, 'PHOTO').send(
+        f.ownerId,
+        { operationId, assetIds: [f.photo.id] },
+        false,
+      );
+    if (editSource) {
+      await assert.rejects(send(), /变化/);
+      assert.equal(
+        await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+        1,
+      );
+      assert.equal(
+        (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.photo.id } })).deletedAt,
+        null,
+      );
+    } else {
+      const result = await send();
+      const target = await prisma.eagleAsset.findUniqueOrThrow({
+        where: { id: result.assets[0].assetId },
+        include: { renditions: true, imagePyramids: true },
+      });
+      assert.equal(target.renditions[0].storageKey, freshKey);
+      assert.equal(target.imagePyramids[0].storagePrefix, freshPrefix);
+      const journal = await prisma.eagleLibraryTransfer.findUniqueOrThrow({
+        where: { id: operationId },
+      });
+      assert.equal(journal.plan[0].renditions[0].sourceKey, freshKey);
+      assert.equal(journal.plan[0].pyramid.storagePrefix, freshPrefix);
+      const cleanup = await prisma.eagleObjectDeletion.findMany({ where: { ownerId: f.ownerId } });
+      assert(
+        !cleanup.some(
+          (row) => row.objectKeys.includes(freshKey) || row.prefixes.includes(`${freshPrefix}/`),
+        ),
+      );
+    }
+  }
+});
