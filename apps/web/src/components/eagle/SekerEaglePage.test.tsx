@@ -2877,12 +2877,19 @@ describe('SekerEaglePage', () => {
       const before = listEagleAssetsMock.mock.calls.length;
       vi.useFakeTimers();
       try {
+        fireEvent.change(
+          screen.getByRole('searchbox', { name: mode === 'PHOTO' ? '搜索照片' : '搜索素材' }),
+          {
+            target: { value: '北京' },
+          },
+        );
         await act(async () => {
           fireEvent.click(screen.getByRole('button', { name: '即时集合' }));
         });
         expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
         expect(listEagleAssetsMock.mock.lastCall?.[1]).toMatchObject({
           smartFolderId: 'immediate-folder',
+          search: '北京',
           rules: undefined,
         });
         await act(async () => {
