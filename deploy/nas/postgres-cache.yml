@@ -1,0 +1,13 @@
+# Optional NAS profile. Add after the complete current Compose chain only during
+# an authorized maintenance window: changing shared_buffers restarts PostgreSQL.
+# Real resource: PostgreSQL memory inside the container, not a user/product quota.
+services:
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=${EAGLE_POSTGRES_SHARED_BUFFERS:-1GB}
+      - -c
+      - effective_cache_size=${EAGLE_POSTGRES_EFFECTIVE_CACHE_SIZE:-2GB}
+    mem_limit: ${EAGLE_POSTGRES_MEMORY_LIMIT:-3g}
+    shm_size: ${EAGLE_POSTGRES_SHM_SIZE:-512m}

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -530,3 +531,63 @@ test('undo and result inputs reject scope escalation and malformed cursor values
   );
   assert.equal(query.cursor, 512);
 });
+
+for (const timeout of [false, true])
+  test(`operation failures persist safe diagnostics (timeout=${timeout})`, async () => {
+    const error = timeout
+      ? new Prisma.PrismaClientKnownRequestError('secret-path-and-credentials', {
+          code: 'P2028',
+          clientVersion: '6.19.3',
+        })
+      : new Error('secret-path-and-credentials');
+    const writes: unknown[] = [];
+    const logs: unknown[] = [];
+    const service = new EagleAssetOperationService(
+      {
+        eagleAssetOperationItem: {
+          updateMany: async (input: unknown) => {
+            writes.push(input);
+            return { count: 1 };
+          },
+        },
+      } as never,
+      {
+        send: async () => {
+          throw error;
+        },
+      } as never,
+      {} as never,
+      'PHOTO',
+    );
+    Reflect.set(service, 'logger', { error: (input: unknown) => logs.push(input) });
+    const entry = {
+      id: 'item',
+      ownerId: 'owner',
+      leaseVersion: 3,
+      assetIds: ['source'],
+      snapshots: [],
+      operation: { id: 'operation', ownerId: 'owner', kind: 'SEND', isPrivate: false },
+    };
+    await (service as unknown as { execute(items: unknown[]): Promise<void> }).execute([entry]);
+    assert.deepEqual(writes, [
+      {
+        where: {
+          libraryMode: 'PHOTO',
+          ownerId: 'owner',
+          status: 'RUNNING',
+          OR: [{ id: 'item', leaseVersion: 3 }],
+        },
+        data: {
+          status: 'FAILED',
+          errorCode: timeout ? 'TRANSACTION_TIMEOUT' : 'OPERATION_FAILED',
+          leaseUntil: null,
+        },
+      },
+    ]);
+    assert.equal(logs.length, 1);
+    assert.ok(!JSON.stringify(logs).includes('secret-path-and-credentials'));
+    assert.equal(
+      (logs[0] as { databaseCode?: string }).databaseCode,
+      timeout ? 'P2028' : undefined,
+    );
+  });

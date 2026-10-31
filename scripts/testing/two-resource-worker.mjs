@@ -36,12 +36,14 @@ const nasGate = new Promise((resolve) => {
   releaseNas = resolve;
 });
 let healthChecks = 0,
-  modelRequests = 0;
+  modelRequests = 0,
+  storedReads = 0;
 let detailRanges = [],
   detailPreviewReads = 0;
 const detailOriginalSize = 20_000_000;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
+  if (url.pathname.includes('/stored-')) storedReads++;
   if (url.pathname === '/healthz') {
     healthChecks++;
     res.setHeader('content-type', 'application/json');
@@ -121,11 +123,11 @@ try {
   await db.eagleProcessingSetting.create({
     data: { ownerId, libraryMode: 'MATERIAL', mode: 'ALWAYS' },
   });
-  const makeAsset = async (name) =>
+  const makeAsset = async (name, libraryMode = 'MATERIAL') =>
     db.eagleAsset.create({
       data: {
         ownerId,
-        libraryMode: 'MATERIAL',
+        libraryMode,
         originalName: 'synthetic.jpg',
         displayName: 'Synthetic',
         normalizedDisplayName: 'synthetic',
@@ -402,6 +404,71 @@ try {
   assert.equal(detailPublished.lifecycleStatus, 'READY');
   log(
     'Real photo details passed: one preview read, bounded JPEG header, original EXIF/hash/dimensions preserved.',
+  );
+  // Exercise the actual standalone worker, not only its publication helper.
+  // Other synthetic inference retries are parked so every request in this phase is attributable.
+  await db.eagleAssetProcessingJob.updateMany({
+    where: { ownerId, kind: 'GENERATE_EMBEDDING', status: 'PENDING' },
+    data: { availableAt: new Date('2100-01-01Z') },
+  });
+  const storedJobs = [];
+  for (const libraryMode of ['MATERIAL', 'PHOTO']) {
+    const asset = await makeAsset(`stored-${libraryMode}`, libraryMode);
+    const embedding = `[1,${Array(1023).fill(0).join(',')}]`;
+    await db.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES (${randomUUID()},${ownerId},${libraryMode}::"LibraryMode",${asset.id},1,${spaceId},'PENDING',false,${embedding}::vector,1,now())`;
+    storedJobs.push(
+      await db.eagleAssetProcessingJob.create({
+        data: {
+          ownerId,
+          libraryMode,
+          assetId: asset.id,
+          assetRevision: 1,
+          kind: 'GENERATE_EMBEDDING',
+          processorVersion: 'qwen3-vl-embedding-2b-1024-v1',
+          lane: 'BACKGROUND',
+          availableAt: new Date(0),
+        },
+      }),
+    );
+  }
+  const beforeStoredInference = modelRequests;
+  worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
+    env: { ...env, EAGLE_PROCESSING_JOB_KINDS: 'GENERATE_EMBEDDING' },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  worker.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+  await waitFor(
+    async () =>
+      (await db.eagleAssetProcessingJob.count({
+        where: { id: { in: storedJobs.map((job) => job.id) }, status: 'COMPLETED' },
+      })) === 2,
+  );
+  const finishedStored = once(worker, 'exit');
+  worker.kill('SIGTERM');
+  await finishedStored;
+  assert.equal(storedReads, 0);
+  assert.equal(modelRequests, beforeStoredInference);
+  assert.equal(
+    await db.eagleAssetEmbedding.count({
+      where: {
+        ownerId,
+        assetId: { in: storedJobs.map((job) => job.assetId) },
+        status: 'READY',
+        isCurrent: true,
+      },
+    }),
+    2,
+  );
+  log(
+    JSON.stringify({
+      test: 'standalone-worker-stored-vector',
+      modes: 2,
+      objectReads: storedReads,
+      inferenceCalls: modelRequests - beforeStoredInference,
+      indexed: 2,
+    }),
   );
 } finally {
   releaseNas();
