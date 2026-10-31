@@ -45,3 +45,12 @@ test('CIEDE2000 matches published Sharma reference pairs', () => {
     assert.ok(Math.abs(deltaE2000(a as [number,number,number], b as [number,number,number])-expected)<0.0001);
   }
 });
+
+test('palette quantization preserves Eagle bin centers and avoids exact-white accent matches', async () => {
+  const { extractSearchColors } = await import('./color-palette');
+  const pixels=Uint8Array.from(Array.from({length:10000},(_,i)=>i<500?[255,255,255,255]:[0,0,0,255]).flat());
+  const palette=extractSearchColors(pixels,4,10000);
+  assert.deepEqual(palette.map(({hex,weight})=>({hex,weight})),[{hex:'#040404',weight:0.95},{hex:'#fcfcfc',weight:0.05}]);
+  assert.equal(paletteColorScore('#ffffff',palette),null);
+  assert.deepEqual(extractSearchColors(Uint8Array.from([255,255,255,169]),4,1),[]);
+});
