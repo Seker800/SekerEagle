@@ -1449,6 +1449,37 @@ try {
   }
   if (process.env.PHOTO_WORKBENCH_DUPLICATES === '1') {
     const { verifyDuplicatesHttp } = await import('./duplicates-http.mjs');
+    // Opt-in, synthetic-only review set: independent byte-verified originals and
+    // real previews exercise a crowded result list without personal photographs.
+    if (process.env.PHOTO_WORKBENCH_DUPLICATE_REVIEW === '1') {
+      for (let index = 0; index < 8; index++) {
+        const bytes = await sharp(sharpPhoto)
+          .modulate({ hue: (index + 1) * 37 })
+          .jpeg({ quality: 70 + index })
+          .toBuffer();
+        const sample = await upload(
+          'photos',
+          bytes,
+          `京都旅行_相机原片_第${index + 1}组_长文件名比较样图.jpg`,
+        );
+        await waitFor(
+          async () =>
+            (await db.eagleAssetRendition.count({
+              where: { assetId: sample.assetId, status: 'READY', kind: 'THUMBNAIL' },
+            })) > 0,
+          'duplicate review preview',
+        );
+        await verifyDuplicatesHttp({
+          db,
+          origin,
+          accessToken,
+          ownerId: owner.id,
+          assetId: sample.assetId,
+          s3,
+          bucket: storageBucket,
+        });
+      }
+    }
     console.log(
       JSON.stringify({
         duplicatesHttp: await verifyDuplicatesHttp({

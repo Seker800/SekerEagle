@@ -326,6 +326,48 @@ describe('duplicate cleanup review', () => {
     view.update();
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
   });
+  it('refresh preserves loaded result pages and the current keep selection', async () => {
+    const initial = await mocks.list();
+    mocks.list.mockClear();
+    const next = { ...group, signature: 'e'.repeat(64) };
+    mocks.list.mockImplementation((query: { cursor?: string }) =>
+      Promise.resolve({
+        ...initial,
+        groups: [query.cursor ? next : group],
+        nextCursor: query.cursor ? null : '24',
+      }),
+    );
+    mocks.members.mockResolvedValue({
+      signature: next.signature,
+      total: 2,
+      nextCursor: null,
+      items: ['one', 'two'].map((id) => ({
+        id,
+        displayName: id,
+        format: 'jpeg',
+        width: 1200,
+        height: 800,
+        byteSize: 1000,
+        libraryAddedAt: '2020-01-01',
+        rating: null,
+        manualTags: [],
+        annotation: null,
+        renditions: [],
+        mediaRevision: 1,
+      })),
+    });
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: '加载更多组' }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(2),
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: /^文件完全相同/ })[1]);
+    fireEvent.click(await screen.findByRole('checkbox', { name: '保留 two' }));
+    fireEvent.click(screen.getByRole('button', { name: '刷新结果' }));
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(4));
+    expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(2);
+    expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();
+  });
   it('permission revision changes hide old cached names immediately', async () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

@@ -414,14 +414,16 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                     ))}
                   </div>
                   <div>
-                    <strong>
-                      {group.kind === 'EXACT' ? t('文件完全相同') : t('画面近似，待确认')} ·{' '}
-                      {group.count} {t('项')}
-                    </strong>
+                    <div className={styles.groupSummary}>
+                      <strong>
+                        {group.kind === 'EXACT' ? t('文件完全相同') : t('画面近似，待确认')} ·{' '}
+                        {group.count} {t('项')}
+                      </strong>
+                      <small>
+                        {t('保留一项后可清理 {{size}} 文件', { size: bytes(group.removableBytes) })}
+                      </small>
+                    </div>
                     <p>{group.previews[0]?.displayName}</p>
-                    <small>
-                      {t('保留一项后可清理 {{size}} 文件', { size: bytes(group.removableBytes) })}
-                    </small>
                   </div>
                   <span>
                     {submitted[group.signature]
@@ -521,10 +523,6 @@ function DuplicateComparison({
   const [keepIds, setKeepIds] = useState([group.recommendedId]);
   const [removeIds, setRemoveIds] = useState<string[]>([]);
   const actionBar = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    actionBar.current?.scrollIntoView?.({ block: 'nearest' });
-    actionBar.current?.querySelector('button')?.focus({ preventScroll: true });
-  }, []);
   const isKept = (id: string) =>
     group.kind === 'EXACT' ? keepIds.includes(id) : !removeIds.includes(id);
   const members = useInfiniteQuery({
@@ -538,6 +536,11 @@ function DuplicateComparison({
     mutationFn: () => api.ignore(group.signature, !ignored),
     onSuccess: onIgnored,
   });
+  useEffect(() => {
+    if (members.isPending) return;
+    actionBar.current?.closest('article')?.scrollIntoView?.({ block: 'start' });
+    actionBar.current?.querySelector('button')?.focus({ preventScroll: true });
+  }, [members.isPending]);
   const items = members.data?.pages.flatMap((p) => p.items) ?? [];
   const removeCount = group.kind === 'EXACT' ? group.count - keepIds.length : removeIds.length;
   const keepCount = group.count - removeCount;
