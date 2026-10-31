@@ -688,7 +688,33 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             await beforeWrite(tx);
             const ids = snapshots.map((row) => row.id).sort();
             await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-            await this.checkSnapshots(tx, operation, snapshots);
+            try {
+              await this.checkSnapshots(tx, operation, snapshots);
+            } catch (error) {
+              // A queued deletion is idempotent when its previously owned resources
+              // have all disappeared. Changed active/private resources still fail.
+              if (
+                operation.kind !== 'TRASH' ||
+                items.length !== 1 ||
+                !(error instanceof NotFoundException || error instanceof ConflictException)
+              )
+                throw error;
+              const remaining = await tx.eagleAsset.findMany({
+                where: {
+                  ownerId: operation.ownerId,
+                  libraryMode: this.libraryMode,
+                  id: { in: ids },
+                },
+                select: { deletedAt: true },
+              });
+              if (remaining.some((row) => row.deletedAt === null)) throw error;
+              this.assertPrivateGrant(operation);
+              await tx.eagleAssetOperationItem.updateMany({
+                where: { ...libraryModeIdentity },
+                data: { status: 'SKIPPED', leaseUntil: null },
+              });
+              return;
+            }
             const current = await resolveEagleTrashTargets(
               tx,
               { ownerId: operation.ownerId, libraryMode: this.libraryMode },
