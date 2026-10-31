@@ -1,5 +1,11 @@
 # 现用运行状态与交接
 
+> **2026-11-01 全业务分支整合与架构收拢已上线（覆盖下方应用／worker版本快照）**：40个业务引用和17个工作区（含detached HEAD）均已包含于main，未遗漏已提交或未提交源码；17个Dependabot自动依赖升级提案继续单独保留。运行源码固定为`75173cec9445cb1243e076052ea4ff2ec9db90b9`，API／网页／独立operations为`sekereagle/{api,web}:main-release-75173cec9445`，三个服务healthy／零重启。Mac旧业务worker已退出，新不可变`worker-75173cec9445`现场PID35472、worker ID `worker-f41c4368-deaa-4308-b95c-8bbc4a849174`且心跳新鲜；后续仍现场核验。源码此前已推送main，后续发布记录提交不改变运行代码。
+>
+> 全仓检查、最终API镜像的启动／高频认证／真实S3验收和Mac原生候选DB／HTTP联调通过；生产Chrome双模式14条导航、缓存返回、删除零列表重取、撤销／恢复、双向发送与失效项混合删除通过，真实Electron双模式删除／撤销通过，两端页面异常零。合成主体及16个对象清理，66张所属表和用户行为空；四份有效原件清理前哈希保持。全部74项迁移无新增，数据库、对象存储、网关、协调器、中继及停止的NAS worker容器身份保持，用户暂停／时段、计算策略和Mac工具／模型路径保持。
+>
+> 新备份867996126字节已SHA校验并完整解析；完整Compose链只追加`maintenance/main-release-20261101/images.json`，网关签名Host与APK哈希／Range206保持。回退镜像、旧LaunchAgent、完整配置与验收证据见[本次发布记录](production-main-release-2026-11-01.md)。
+
 > **2026-11-01 编辑照片保存修复已上线（覆盖下方web／网关快照）**：web为`sekereagle/web:photo-save-c7643383a7d9`，固定源码c7643383a7d9dc52758c2767070a012ac99de22e。生产API使用公开地址签名、网关却转发为loopback Host，实际上传403 SignatureDoesNotMatch；现已与实际S3_PUBLIC_ENDPOINT的host对齐，保留签名与权限校验，仅nginx校验／reload。共享编辑器显示上传阶段具体错误，保留同一文件及会话重试。真实Chrome照片保存2804毫秒，真实Electron素材保存1389毫秒，无页面异常；存储读回验证独立PNG、像素变化及原件哈希／版本保持。
 >
 > API仍87b73b650960、独立operations仍9de9bb766fb0，无API镜像／迁移／计算策略变更；原完整Compose链仅追加`maintenance/photo-save-20261101/web-final/images.json`。完整检查、11项部署配置和43项编辑器回归通过；模拟一次PUT失败后明确显示403原因，重试成功且仅一个上传会话／一次原图读取。合成主体、成片、对象和未完成multipart均清理，66张所属表及用户行零；三个应用healthy零重启，74项迁移和原Mac心跳／用户策略保持。回退网页时仍须保留与当前API签名地址一致的网关Host；备份、验收及限制见[编辑保存修复](photo-editor-save-2026-11-01.md)。
