@@ -1,22 +1,24 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-export async function readUnnamedPeoplePage(
+export async function readPeopleCountPage(
   tx: Prisma.TransactionClient,
   ownerId: string,
   includePrivate: boolean,
-  after?: string,
+  after: string | undefined,
+  view: 'ALL' | 'UNNAMED',
 ) {
-  let cursor: { id: string; photos: number } | undefined;
+  let cursor: { id: string; photos: number; named: boolean } | undefined;
   if (after) {
     try {
       const raw: unknown = JSON.parse(Buffer.from(after, 'base64url').toString());
       if (!raw || typeof raw !== 'object') throw Error();
       const v = raw as Record<string, unknown>;
       if (
-        v.version !== 1 ||
+        v.version !== (view === 'ALL' ? 2 : 1) ||
         v.ownerId !== ownerId ||
         v.includePrivate !== includePrivate ||
-        v.view !== 'UNNAMED' ||
+        v.view !== view ||
+        (view === 'ALL' && typeof v.named !== 'boolean') ||
         typeof v.id !== 'string' ||
         v.id.length > 80 ||
         typeof v.photos !== 'number' ||
@@ -24,20 +26,23 @@ export async function readUnnamedPeoplePage(
         v.photos < 0
       )
         throw Error();
-      cursor = { id: v.id, photos: v.photos };
+      cursor = { id: v.id, photos: v.photos, named: view === 'ALL' && v.named === true };
     } catch {
       throw new BadRequestException('人物分页游标无效。');
     }
   }
   const rows = await tx.$queryRaw<
-    Array<{ id: string; photos: bigint; faceId: string | null }>
+    Array<{ id: string; photos: bigint; faceId: string | null; named: boolean }>
   >`WITH counts AS (
- SELECT p.id,count(DISTINCT a.id) AS photos,(array_agg(f.id ORDER BY f.confidence DESC,f.id) FILTER(WHERE a.id IS NOT NULL))[1] AS "faceId" FROM "EaglePhotoPerson" p
+ SELECT p.id,(p.name IS NOT NULL) AS named,count(DISTINCT a.id) AS photos,(array_agg(f.id ORDER BY f.confidence DESC,f.id) FILTER(WHERE a.id IS NOT NULL))[1] AS "faceId" FROM "EaglePhotoPerson" p
  LEFT JOIN "EaglePhotoFace" f ON f."personId"=p.id AND f."ownerId"=p."ownerId" AND f."libraryMode"=p."libraryMode" AND f."isCurrent"
  LEFT JOIN "EagleAsset" a ON a.id=f."assetId" AND a."ownerId"=f."ownerId" AND a."libraryMode"=f."libraryMode" AND a."mediaRevision"=f."assetRevision" AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
- WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO' AND p.name IS NULL AND (${includePrivate} OR NOT p."marksAssetsPrivate")
+ WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO' AND (${view === 'ALL'} OR p.name IS NULL) AND (${includePrivate} OR NOT p."marksAssetsPrivate")
  GROUP BY p.id HAVING count(DISTINCT a.id)>0 OR (${includePrivate} AND p."marksAssetsPrivate")
- ) SELECT id,photos,"faceId" FROM counts WHERE ${!cursor} OR photos<${cursor?.photos ?? 0} OR (photos=${cursor?.photos ?? 0} AND id>${cursor?.id ?? ''}) ORDER BY photos DESC,id LIMIT 25`;
+ ) SELECT id,named,photos,"faceId" FROM counts
+ WHERE ${!cursor} OR named<${cursor?.named ?? false}
+   OR (named=${cursor?.named ?? false} AND (photos<${cursor?.photos ?? 0} OR (photos=${cursor?.photos ?? 0} AND id>${cursor?.id ?? ''})))
+ ORDER BY named DESC,photos DESC,id LIMIT 25`;
   const page = rows.slice(0, 24);
   const last = page.at(-1);
   return {
@@ -48,8 +53,9 @@ export async function readUnnamedPeoplePage(
             JSON.stringify({
               ownerId,
               includePrivate,
-              view: 'UNNAMED',
-              version: 1,
+              view,
+              version: view === 'ALL' ? 2 : 1,
+              named: last.named,
               id: last.id,
               photos: Number(last.photos),
             }),

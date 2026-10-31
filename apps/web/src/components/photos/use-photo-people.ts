@@ -9,7 +9,15 @@ export function usePhotoPeople(
   view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
 ) {
   const query = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate, view, 'cards'],
+    queryKey: [
+      'eagle',
+      ownerId,
+      'PHOTO',
+      'people',
+      includePrivate,
+      view,
+      view === 'ALL' ? 'cards-ranked-v2' : 'cards',
+    ],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPeople(pageParam, signal, view),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
@@ -27,9 +35,13 @@ export function usePhotoPeople(
               query.data.pages.flatMap((page) => page.people).map((person) => [person.id, person]),
             ).values(),
           ].sort((a, b) =>
-            view === 'UNNAMED'
-              ? (b.photoCount ?? 0) - (a.photoCount ?? 0) || a.id.localeCompare(b.id)
-              : 0,
+            view === 'ALL'
+              ? Number(b.name !== null) - Number(a.name !== null) ||
+                (b.photoCount ?? 0) - (a.photoCount ?? 0) ||
+                a.id.localeCompare(b.id)
+              : view === 'UNNAMED'
+                ? (b.photoCount ?? 0) - (a.photoCount ?? 0) || a.id.localeCompare(b.id)
+                : 0,
           ),
         }
       : undefined,

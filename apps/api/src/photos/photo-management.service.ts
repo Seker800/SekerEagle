@@ -1,4 +1,4 @@
-import { readUnnamedPeoplePage } from './photo-person-count-page';
+import { readPeopleCountPage } from './photo-person-count-page';
 import { representativePhotoFace } from '@sekereagle/library-core';
 import {
   BadRequestException,
@@ -86,10 +86,17 @@ export class PhotoManagementService {
     const category = view === 'NAMED' || view === 'UNNAMED' ? view : 'ALL';
     const representation =
       view === 'cards' || view === 'options' || view === 'full' ? view : projection;
-    if (category === 'UNNAMED')
+    // The explicit card projection has a ranked cursor; legacy full/options keep their protocol.
+    if (category === 'UNNAMED' || (view === 'ALL' && representation === 'cards'))
       return this.prisma.$transaction(
         async (tx) => {
-          const page = await readUnnamedPeoplePage(tx, ownerId, includePrivate, after);
+          const page = await readPeopleCountPage(
+            tx,
+            ownerId,
+            includePrivate,
+            after,
+            category === 'UNNAMED' ? 'UNNAMED' : 'ALL',
+          );
           const ids = page.rows.map((row) => row.id);
           if (representation === 'options') {
             const rows = await tx.eaglePhotoPerson.findMany({

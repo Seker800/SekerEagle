@@ -38,7 +38,7 @@ export function PhotoCollections({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
-  const [view, setView] = useState<'NAMED' | 'UNNAMED' | 'REVIEW'>('NAMED');
+  const [view, setView] = useState<'NAMED' | 'ALL' | 'REVIEW'>('NAMED');
   const summary = useQuery({
     queryKey: ['eagle', ownerId, 'PHOTO', 'people-summary', includePrivate],
     queryFn: getPhotoPeopleSummary,
@@ -160,7 +160,7 @@ export function PhotoCollections({
               [
                 ['NAMED', t('已命名人物')],
                 ['REVIEW', t('待确认')],
-                ['UNNAMED', t('待整理分组')],
+                ['ALL', t('所有人')],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -177,8 +177,8 @@ export function PhotoCollections({
                 {label}
                 {id === 'NAMED' && summary.data
                   ? ` (${summary.data.named})`
-                  : id === 'UNNAMED' && summary.data
-                    ? ` (${summary.data.unnamed})`
+                  : id === 'ALL' && summary.data
+                    ? ` (${summary.data.named + summary.data.unnamed})`
                     : ''}
               </button>
             ))}
@@ -206,7 +206,7 @@ export function PhotoCollections({
             />
           ) : (
             <>
-              {view === 'UNNAMED' && (
+              {view === 'ALL' && (
                 <PhotoPersonMergeSelection
                   key={`${ownerId}:${includePrivate}:${scopeRevision}:${selectionEpoch}`}
                   ownerId={ownerId}
@@ -239,7 +239,7 @@ export function PhotoCollections({
                     src = face ? thumbnail(face.asset) : null;
                   return (
                     <article key={person.id} className="photo-person-selection-card">
-                      {view === 'UNNAMED' && (
+                      {view === 'ALL' && (
                         <input
                           type="checkbox"
                           aria-label={t('选择分组 {{value1}}', {
@@ -318,8 +318,8 @@ export function PhotoCollections({
             people.data.people.length === 0 && (
               <p>
                 {view === 'NAMED'
-                  ? t('还没有已命名人物。可从待整理分组中命名，或先确认相似人物。')
-                  : t('暂无待整理分组。')}
+                  ? t('还没有已命名人物。可从所有人中命名，或先确认相似人物。')
+                  : t('暂无人物。')}
               </p>
             )}
         </>

@@ -350,13 +350,17 @@ it('all people includes named people ahead of unnamed groups ordered by photo co
   const small = { ...c, photoCount: 2 };
   const named = { ...b, photoCount: 1 };
   mocks.list.mockImplementation(async (_after: unknown, _signal: unknown, view: string) => ({
-    runtimeConfigured: true, people: view === 'ALL' ? [small, large, named] : [named], nextCursor: null,
+    runtimeConfigured: true,
+    people: view === 'ALL' ? [small, large, named] : [named],
+    nextCursor: null,
   }));
   show();
   fireEvent.click(await screen.findByRole('tab', { name: '所有人 (3001)' }));
   await screen.findByText('100 张照片');
   expect(mocks.list).toHaveBeenLastCalledWith(undefined, expect.any(AbortSignal), 'ALL');
-  expect(screen.getAllByRole('checkbox').map(el => el.closest('article')?.textContent)).toEqual([
-    expect.stringContaining('小明'), expect.stringContaining('100 张照片'), expect.stringContaining('2 张照片'),
+  expect(screen.getAllByRole('checkbox').map((el) => el.closest('article')?.textContent)).toEqual([
+    expect.stringContaining('小明'),
+    expect.stringContaining('100 张照片'),
+    expect.stringContaining('2 张照片'),
   ]);
 });

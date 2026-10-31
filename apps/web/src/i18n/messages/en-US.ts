@@ -216,13 +216,13 @@ export const enUS = {
   '按相似程度、检测可信度和照片数量排序，由你决定是否合并。':
     'Ranked by similarity, detection confidence, and photo count. You decide whether to merge.',
   '已记住：不是同一个人。': 'Remembered: different people.',
-  '暂无待整理分组。': 'No unorganized groups.',
-  '还没有已命名人物。可从待整理分组中命名，或先确认相似人物。':
+  '暂无人物。': 'No people yet.',
+  '还没有已命名人物。可从所有人中命名，或先确认相似人物。':
     'No named people yet. Name a person or review similar people.',
   开始确认人物: 'Review similar people',
   '有 {{value1}} 个自动分组待整理，同一个人可能出现在多个分组中；这不是实际人数。':
     '{{value1}} automatic groups to organize. One person may appear in several groups; this is not a person count.',
-  待整理分组: 'Unorganized groups',
+  所有人: 'All people',
   已命名人物: 'Named people',
   人物整理: 'Organize people',
   '正在准备首批地图位置，无需等待照片分析完成。':

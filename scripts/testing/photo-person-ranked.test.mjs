@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import console from 'node:console';
 import assert from 'node:assert/strict';
@@ -285,25 +286,91 @@ test('count-sorted unnamed pages and atomic multi-person merge preserve scope an
     // The all-person directory ranks named people globally before large unnamed groups.
     await db.eaglePhotoPerson.update({ where: { id: groups[0].id }, data: { name: 'Named one' } });
     await db.eaglePhotoPerson.update({ where: { id: groups[1].id }, data: { name: 'Named two' } });
-    await db.eaglePhotoPerson.update({ where: { id: groups[2].id }, data: { marksAssetsPrivate: true } });
+    await db.eaglePhotoPerson.update({
+      where: { id: groups[2].id },
+      data: { marksAssetsPrivate: true },
+    });
+    await flushEvents();
+    const directorySqlStart = queryCount,
+      directoryTime = performance.now();
     const all = await service.people(owner, false, undefined, 'ALL', 'cards');
+    await flushEvents();
+    console.log(
+      JSON.stringify({
+        allPeople: {
+          sql: queryCount - directorySqlStart,
+          ms: performance.now() - directoryTime,
+          cards: all.people.length,
+          s3: 0,
+        },
+      }),
+    );
     assert.equal(all.people.length, 24);
-    assert.deepEqual(all.people.slice(0, 2).map(p => p.id), [groups[1].id, groups[0].id]);
+    assert.deepEqual(
+      all.people.slice(0, 2).map((p) => p.id),
+      [groups[1].id, groups[0].id],
+    );
     assert.equal(all.people[2].photoCount, 30);
     assert(all.nextCursor);
     const rest = await service.people(owner, false, all.nextCursor, 'ALL', 'cards');
     const combined = [...all.people, ...rest.people];
     assert.equal(combined.length, 29);
-    assert.equal(new Set(combined.map(p => p.id)).size, 29);
-    assert(!combined.some(p => p.id === groups[2].id || p.id === outsider.id));
-    assert.deepEqual(combined.slice(2).map(p => p.photoCount), Array.from({length: 27}, (_, i) => 30-i));
+    assert.equal(new Set(combined.map((p) => p.id)).size, 29);
+    assert(!combined.some((p) => p.id === groups[2].id || p.id === outsider.id));
+    assert.deepEqual(
+      combined.slice(2).map((p) => p.photoCount),
+      Array.from({ length: 27 }, (_, i) => 30 - i),
+    );
     assert.equal(rest.nextCursor, null);
-    for (const [id, privacy, view] of [[foreign, false, 'ALL'], [owner, true, 'ALL'], [owner, false, 'UNNAMED']])
+    for (const [id, privacy, view] of [
+      [foreign, false, 'ALL'],
+      [owner, true, 'ALL'],
+      [owner, false, 'UNNAMED'],
+    ])
       await assert.rejects(service.people(id, privacy, all.nextCursor, view, 'cards'), /游标无效/);
     const visiblePrivate = await service.people(owner, true, undefined, 'ALL', 'cards');
-    const privateRest = await service.people(owner, true, visiblePrivate.nextCursor, 'ALL', 'cards');
-    assert([...visiblePrivate.people, ...privateRest.people].some(p => p.id === groups[2].id));
-    await db.eaglePhotoPerson.updateMany({ where: { id: {in:[groups[0].id,groups[1].id,groups[2].id]} }, data: {name:null,marksAssetsPrivate:false} });
+    const privateRest = await service.people(
+      owner,
+      true,
+      visiblePrivate.nextCursor,
+      'ALL',
+      'cards',
+    );
+    assert([...visiblePrivate.people, ...privateRest.people].some((p) => p.id === groups[2].id));
+    const parsed = JSON.parse(Buffer.from(all.nextCursor, 'base64url').toString());
+    for (const value of [
+      null,
+      { ...parsed, version: 1 },
+      { ...parsed, named: 'true' },
+      { ...parsed, photos: -1 },
+      { ...parsed, id: 'x'.repeat(81) },
+    ])
+      await assert.rejects(
+        service.people(
+          owner,
+          false,
+          Buffer.from(JSON.stringify(value)).toString('base64url'),
+          'ALL',
+          'cards',
+        ),
+        /游标无效/,
+      );
+    await assert.rejects(service.people(owner, false, 'invalid', 'ALL', 'cards'), /游标无效/);
+    await db.eaglePhotoPerson.updateMany({
+      where: { id: { in: groups.slice(0, 26).map((p) => p.id) } },
+      data: { name: 'Named' },
+    });
+    const namedPage = await service.people(owner, false, undefined, 'ALL', 'cards');
+    assert(namedPage.people.every((p) => p.name !== null));
+    const crossing = await service.people(owner, false, namedPage.nextCursor, 'ALL', 'cards');
+    assert.equal(crossing.people[0].id, groups[0].id);
+    assert(crossing.people.slice(1).every((p) => p.name === null));
+    assert.equal(crossing.people[1].photoCount, 30);
+    assert.equal(new Set([...namedPage.people, ...crossing.people].map((p) => p.id)).size, 29);
+    await db.eaglePhotoPerson.updateMany({
+      where: { id: { in: groups.slice(0, 26).map((p) => p.id) } },
+      data: { name: null, marksAssetsPrivate: false },
+    });
     const target = groups[29].id,
       sources = [groups[28].id, groups[27].id];
     const selection = [target, ...sources].map((id) => ({ id, rowVersion: 1 }));
