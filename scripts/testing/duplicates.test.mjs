@@ -142,7 +142,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     );
     await f.duplicate.ignore(f.ownerId, false, { signature, ignored: false });
     page = await f.duplicate.list(f.ownerId, false, {});
-    const input = { operationId: randomUUID(), revision: page.revision, allExact: true };
+    const input = { operationId: randomUUID(), revision: page.exactRevision, allExact: true };
     const result = await f.duplicate.cleanup(f.principal, input);
     assert.deepEqual(await f.duplicate.cleanup(f.principal, input), result);
     assert.equal(
@@ -242,6 +242,9 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const next = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(next.operationId);
     assert.equal(f.reads(), 2, 'repeat checks reuse versioned fingerprints');
+    await db.eagleAsset.update({where:{id:a.id},data:{displayName:'renamed after review',rowVersion:{increment:1}}});
+    const renamed=await f.duplicate.list(f.ownerId,false,{});assert.equal(renamed.similarGroups,1,'metadata edits must not discard pixel evidence');
+    assert.notEqual(renamed.groups[0].signature,page.groups[0].signature,'review still freezes current metadata versions');
     await db.eagleAsset.update({
       where: { id: a.id },
       data: { mediaRevision: { increment: 1 }, rowVersion: { increment: 1 } },
@@ -352,7 +355,7 @@ test('60k library read, group pagination beyond the first page, and batch admiss
   queries = 0;
   const admitted = await f.duplicate.cleanup(f.principal, {
       operationId: randomUUID(),
-      revision: page.revision,
+      revision: page.exactRevision,
       allExact: true,
     }),
     admissionQueries = queries;
@@ -426,4 +429,68 @@ test('a handed-off original retains exactly one active storage owner', async () 
   const target = await f.add({ libraryMode: 'PHOTO', originalObjectKey: source.originalObjectKey });
   assert.equal(target.originalObjectKey, source.originalObjectKey);
   await assert.rejects(f.add({ originalObjectKey: source.originalObjectKey }), /Unique constraint/);
+});
+
+test('one large duplicate group is processed as one review with internal database chunks', async () => {
+  const f = await fixture('MATERIAL');
+  const rows = Array.from({ length: 1201 }, () => {
+    const id = randomUUID();
+    return {
+      id,
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'copy.jpg',
+      displayName: 'copy',
+      normalizedDisplayName: 'copy',
+      format: 'jpeg',
+      mimeType: 'image/jpeg',
+      byteSize: 1000n,
+      sha256: hash('1201-identical-copies'),
+      mediaRevision: 1,
+      lifecycleStatus: 'READY',
+      originalObjectKey: `users/${f.ownerId}/assets/${id}/original`,
+    };
+  });
+  for (let offset = 0; offset < rows.length; offset += 500)
+    await db.eagleAsset.createMany({ data: rows.slice(offset, offset + 500) });
+  const page = await f.duplicate.list(f.ownerId, false, {});
+  assert.equal(page.groups[0].count, 1201);
+  const operation = await f.duplicate.cleanup(f.principal, {
+    operationId: randomUUID(),
+    allExact: true,
+    revision: page.exactRevision,
+  });
+  const state = await f.drain(operation.operationId);
+  assert.equal(state.completed, 1200);
+  assert.equal(state.failed, 0);
+  assert.equal(await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: null } }), 1);
+});
+
+test('visual cleanup removes only explicitly unchecked members, including partially viewed groups', async () => {
+  const f = await fixture('PHOTO'),
+    rows = [await f.add(), await f.add(), await f.add()];
+  await db.eagleDuplicateFingerprint.createMany({
+    data: rows.map((row) => ({
+      assetId: row.id,
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      mediaRevision: 1,
+      processorVersion: 'preview-dhash-rgb-v1',
+      hash: '0123456789abcdef',
+      colors: Array(48).fill(100),
+      contrast: 30,
+    })),
+  });
+  const scan = await f.duplicate.scan(f.principal, randomUUID());
+  await f.drain(scan.operationId);
+  const page = await f.duplicate.list(f.ownerId, false, {});
+  assert.equal(page.similarGroups, 1);
+  const operation = await f.duplicate.cleanup(f.principal, {
+    operationId: randomUUID(),
+    groups: [{ signature: page.groups[0].signature, removeIds: [rows[1].id] }],
+  });
+  assert.equal((await f.drain(operation.operationId)).failed, 0);
+  assert.equal((await db.eagleAsset.findUnique({ where: { id: rows[0].id } })).deletedAt, null);
+  assert.equal((await db.eagleAsset.findUnique({ where: { id: rows[2].id } })).deletedAt, null);
+  assert.ok((await db.eagleAsset.findUnique({ where: { id: rows[1].id } })).deletedAt);
 });
