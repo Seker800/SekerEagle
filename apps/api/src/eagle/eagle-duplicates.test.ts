@@ -27,3 +27,20 @@ test('preview fingerprints survive image encoding changes and do not consume ori
   assert.ok(a.colors.every((v, i) => Math.abs(v - b.colors[i]!) < 10));
   await assert.rejects(fingerprintPreview(Buffer.from('invalid')));
 });
+
+import { EagleDuplicateService } from './eagle-duplicates.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { ObjectStorageService } from '../storage/object-storage.service';
+test('duplicate read projection derives ownership and excludes trash, private and transferred resources', async () => {
+  const calls: unknown[] = [];
+  const tx = {
+    eagleAsset: {findMany: async (args: unknown) => {calls.push(args); return [];}},
+    eagleDuplicateDismissal: {findMany: async () => []},
+  };
+  const prisma = {$transaction: async (fn: (client: typeof tx) => unknown) => fn(tx)};
+  const service = new EagleDuplicateService(prisma as unknown as PrismaService, {} as ObjectStorageService, 'PHOTO');
+  const result = await service.list('owner', false, {});
+  assert.equal(result.totalGroups, 0);
+  const query = calls[0] as {where: Record<string, unknown>};
+  assert.deepEqual(query.where, {ownerId: 'owner', libraryMode: 'PHOTO', deletedAt: null, purgeAfter: null, storageTransferredOut: false, isPrivate: false});
+});
