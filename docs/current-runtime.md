@@ -1,5 +1,7 @@
 # 现用运行状态与交接
 
+> **2026-10-31 23:08 查重空状态修复已上线（仅覆盖下方web镜像）**：web为`sekereagle/web:duplicates-empty-917535878082`，固定源码91753587808219924fe8611431c02bd98e7199cd。区分当前分类为空、后台检查／规则更新和未完成视觉检查，完全重复0组时可直达已有近似候选；不再以一句“没有结果”代表全库。实库只读核验PHOTO有2635组近似候选、0组完全重复、60072项有效指纹，无旧版投影。完整CI、20项查重组件测试及生产Chrome实际分类切换／自动重建／清理回归通过，合成主体及80所属对象已清理。仅追加`maintenance/duplicates-empty-20261031/compact-web.json`，API／operations仍a6ffa551、73迁移不变；其他容器身份、用户策略、Mac原worker与APK保持。详见[空状态修复验收](duplicates-empty-state-2026-10-31.md)。
+
 > **2026-10-31 22:49 人物九宫格与查重规则更新已上线（覆盖下方应用镜像）**：API／独立operations为`sekereagle/api:people-cleanup-a6ffa551e9ad`；web为`sekereagle/web:people-cleanup-b01fc9eb64ec`，源码分别固定a6ffa551e9ada50792709e301f50cf244a90838f与b01fc9eb64ec6689a6f708b786beac208d176613。73项迁移完成；三个应用healthy且零重启。九宫格一次多选合并、待整理按照片数量排序；旧查重分组版本立即停用，首次打开自动通过原独立队列按同格式同尺寸规则重建，完成自动更新，不下载整库扫描回执或重置图库分页。
 >
 > 完整CI、隔离历史升级／完整恢复、最终API镜像启动与真实存储验收通过。生产Chrome新缓存、4倍CPU、20Mbps／40毫秒下九张头像417毫秒，三次合并242–444毫秒，候选页重放0，自动重建／结果更新与实际清理通过；临时账号、所属资源／对象均清理。真实2887人物只读两页798／343毫秒，不能当冷缓存p95。新备份867671518字节已校验与完整解析，位于`maintenance/people-review-cleanup-20261031/before.dump`；完整Compose链末尾追加该目录`images.json`、`compact-web.json`。唯一Mac业务worker仍原d0ad3b6d941b release／现场PID81038与新鲜心跳，NAS worker停止；其他容器身份、暂停／时段、计算修订66与APK0.9.13保持。详见[本次修复与限制](people-review-duplicates-2026-10-31.md)。
