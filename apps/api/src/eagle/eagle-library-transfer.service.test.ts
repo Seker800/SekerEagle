@@ -330,12 +330,32 @@ for (const sourceMode of ['PHOTO', 'MATERIAL'] as const)
       );
     });
 
-
 test('completed sends normalize IDs and replay selections larger than 100 without new writes', async () => {
   const ids = Array.from({ length: 101 }, (_, n) => `asset-${n}`).sort();
-  const result = { targetMode: 'MATERIAL', movedCount: ids.length, componentCount: ids.length, assets: [] };
-  const service = new EagleLibraryTransferService({ eagleLibraryTransfer: {
-    findUnique: async () => ({ id: 'journal', ownerId: 'owner', sourceMode: 'PHOTO', sourceIds: ids, status: 'COMPLETED', result }),
-  } } as never, {} as never, 'PHOTO');
-  assert.deepEqual(await service.send('owner', { operationId: 'journal', assetIds: [...ids, ids[0]!] }, false), result);
+  const result = {
+    targetMode: 'MATERIAL',
+    movedCount: ids.length,
+    componentCount: ids.length,
+    assets: [],
+  };
+  const service = new EagleLibraryTransferService(
+    {
+      eagleLibraryTransfer: {
+        findUnique: async () => ({
+          id: 'journal',
+          ownerId: 'owner',
+          sourceMode: 'PHOTO',
+          sourceIds: ids,
+          status: 'COMPLETED',
+          result,
+        }),
+      },
+    } as never,
+    {} as never,
+    'PHOTO',
+  );
+  assert.deepEqual(
+    await service.send('owner', { operationId: 'journal', assetIds: [...ids, ids[0]!] }, false),
+    result,
+  );
 });

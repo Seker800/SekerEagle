@@ -6,7 +6,6 @@ import {
   type EaglePhotoLocation,
   type EagleManualTag,
 } from '@prisma/client';
-import { matchSmartFoldersForEmbedding } from '@sekereagle/library-persistence';
 import { COLOR_THUMBNAIL_PROCESSOR_VERSION } from './media-job-plan';
 
 export const transferFactIncludes = {
@@ -323,9 +322,9 @@ export async function copyTransferFacts(
     });
     paletteReady = true;
   }
-  const copied = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+  await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
     INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","startedAt","completedAt","updatedAt")
-    SELECT gen_random_uuid()::text,${ownerId},${targetMode}::"LibraryMode",${targetId},1,e."spaceId",'READY',true,e.embedding,e."l2Norm",e."startedAt",e."completedAt",now()
+    SELECT gen_random_uuid()::text,${ownerId},${targetMode}::"LibraryMode",${targetId},1,e."spaceId",'PENDING',false,e.embedding,e."l2Norm",e."startedAt",e."completedAt",now()
     FROM "EagleAssetEmbedding" e JOIN "EagleEmbeddingSpace" s ON s.id=e."spaceId"
     WHERE e."ownerId"=${ownerId} AND e."libraryMode"=${source.libraryMode}::"LibraryMode" AND e."assetId"=${source.id}
       AND e."assetRevision"=${source.mediaRevision} AND e.status='READY' AND e."isCurrent" AND e.embedding IS NOT NULL
@@ -333,11 +332,11 @@ export async function copyTransferFacts(
       AND s."instructionVersion"='image-retrieval-v1' AND s."preprocessingVersion"='preview-webp-v1'  AND e."l2Norm" BETWEEN 0.99 AND 1.01
     RETURNING id
   `);
-  for (const row of copied)
-    await matchSmartFoldersForEmbedding(tx, { ownerId, libraryMode: targetMode }, row.id);
   return {
     hasPrivateTag,
-    embeddingReady: copied.length > 0,
+    // Preserve the compatible vector without inserting into HNSW under the send/privacy locks.
+    // The existing independent GENERATE_EMBEDDING job activates it without S3 or inference.
+    embeddingReady: false,
     paletteReady,
     detailsReady,
   };

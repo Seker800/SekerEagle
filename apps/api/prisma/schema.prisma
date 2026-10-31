@@ -192,12 +192,14 @@ model EagleAssetOperation {
   authVersion Int
   privateUntil DateTime?
   isPrivate Boolean @default(false)
+  lastClaimedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items EagleAssetOperationItem[]
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, createdAt])
+  @@index([libraryMode, kind, lastClaimedAt, createdAt])
 }
 
 model EagleAssetOperationItem {

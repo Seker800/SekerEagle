@@ -19,7 +19,7 @@ import { SmartFolderBuildRunner } from './smart-folder-runner';
 import { publishImage } from './image-publication';
 import { MediaOutputAttempt } from './media-output-attempt';
 import { publishPyramid } from './pyramid-publication';
-import { publishEmbedding } from './embedding-publication';
+import { publishEmbedding, publishStoredEmbedding } from './embedding-publication';
 import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
 import {
@@ -417,6 +417,26 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
     });
   }
 
+  // The same queue, policy and lease guard handle both inference and stored-vector activation.
+  // Check before selecting or reading an object: a SEND must not download or infer again.
+  if (
+    job.kind === 'GENERATE_EMBEDDING' &&
+    (await publishStoredEmbedding(
+      prisma,
+      job,
+      {
+        id: embeddingSpaceId,
+        model: embeddingModel,
+        revision: embeddingRevision,
+        dimensions: embeddingDimensions,
+        normalized: true,
+        instructionVersion: 'image-retrieval-v1',
+        preprocessingVersion: 'preview-webp-v1',
+      },
+      createTopSuggestion,
+    ))
+  )
+    return;
   if (asset.mimeType.startsWith('image/')) {
     if (asset.byteSize > BigInt(CAMERA_MAX_IMAGE_BYTES))
       throw new PermanentMediaValidationError(

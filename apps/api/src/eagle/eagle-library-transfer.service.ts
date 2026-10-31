@@ -50,6 +50,21 @@ export interface LibraryTransferResult {
   componentCount: number;
   assets: Array<{ sourceId: string; assetId: string }>;
 }
+export interface TransferRequest {
+  input: SendEagleAssetsDto;
+  expected?: ReadonlyMap<string, { mediaRevision: number; rowVersion: number }>;
+  guard?: {
+    beforePublish: (tx: Prisma.TransactionClient) => Promise<void>;
+    beforeCopy?: () => Promise<void>;
+    afterPublish?: (tx: Prisma.TransactionClient) => Promise<void>;
+    componentIds: readonly string[];
+  };
+}
+type PublishTransfer = (
+  tx: Prisma.TransactionClient,
+  context: { privacyLocked: boolean },
+) => Promise<LibraryTransferResult>;
+
 @Injectable()
 export class EagleLibraryTransferService {
   constructor(
@@ -97,17 +112,58 @@ export class EagleLibraryTransferService {
     ownerId: string,
     input: SendEagleAssetsDto,
     includePrivate: boolean,
-    expected?: ReadonlyMap<string, { mediaRevision: number; rowVersion: number }>,
-    guard?: {
-      beforePublish: (tx: Prisma.TransactionClient) => Promise<void>;
-      beforeCopy?: () => Promise<void>;
-      afterPublish?: (tx: Prisma.TransactionClient) => Promise<void>;
-      componentIds: readonly string[];
-    },
+    expected?: TransferRequest['expected'],
+    guard?: TransferRequest['guard'],
   ): Promise<LibraryTransferResult> {
+    const [result] = await this.sendBatch(ownerId, [{ input, expected, guard }], includePrivate);
+    return result!;
+  }
+
+  /** Preparation may copy legacy objects concurrently; publication commits one bounded quantum. */
+  async sendBatch(ownerId: string, requests: readonly TransferRequest[], includePrivate: boolean) {
+    const prepared: Array<LibraryTransferResult | PublishTransfer> = [];
+    await runTransferWork(
+      requests.map((request, index) => ({ request, index })),
+      async ({ request, index }) => {
+        prepared[index] = await this.prepare(
+          ownerId,
+          request.input,
+          includePrivate,
+          request.expected,
+          request.guard,
+        );
+      },
+    );
+    if (prepared.every((value) => typeof value !== 'function'))
+      return prepared as LibraryTransferResult[];
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Lock all journals in deterministic order before the shared privacy locks.
+        // Each item keeps its own durable identity, so partial retries never change selection.
+        const ids = requests
+          .filter((_, index) => typeof prepared[index] === 'function')
+          .map((request) => request.input.operationId)
+          .sort();
+        await tx.$queryRaw`SELECT id FROM "EagleLibraryTransfer" WHERE "ownerId"=${ownerId} AND "sourceMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
+        const context = { privacyLocked: false };
+        const results: LibraryTransferResult[] = [];
+        for (const value of prepared)
+          results.push(typeof value === 'function' ? await value(tx, context) : value);
+        return results;
+      },
+      { timeout: 30000 },
+    );
+  }
+
+  private async prepare(
+    ownerId: string,
+    input: SendEagleAssetsDto,
+    includePrivate: boolean,
+    expected?: TransferRequest['expected'],
+    guard?: TransferRequest['guard'],
+  ): Promise<LibraryTransferResult | PublishTransfer> {
     const ids = [...new Set(input.assetIds)].sort();
-    if (!ids.length || ids.length !== input.assetIds.length || ids.length > 100)
-      throw new BadRequestException('请选择不重复的图片。');
+    if (!ids.length) throw new BadRequestException('请选择图片。');
     let operation = await this.prisma.eagleLibraryTransfer.findUnique({
       where: { id: input.operationId, ownerId, sourceMode: this.sourceMode },
     });
@@ -243,7 +299,7 @@ export class EagleLibraryTransferService {
         return operation.result as unknown as LibraryTransferResult;
     }
     const planItems = operation.plan as unknown as TransferItem[];
-    if (!Array.isArray(planItems) || !planItems.length || planItems.length > 200)
+    if (!Array.isArray(planItems) || !planItems.length)
       throw new ConflictException('发送计划无效。');
     const handoff = planItems.every((item) => item.storageAction === 'HANDOFF');
     if (
@@ -319,330 +375,328 @@ export class EagleLibraryTransferService {
         if (item.pyramid) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
       }
     }
-    return this.prisma.$transaction(
-      async (tx) => {
-        let items = planItems;
-        await tx.$queryRaw`SELECT id FROM "EagleLibraryTransfer" WHERE id=${operation.id} AND "ownerId"=${ownerId} FOR UPDATE`;
-        const currentOperation = await tx.eagleLibraryTransfer.findUniqueOrThrow({
-          where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
-        });
-        this.checkOperation(currentOperation, ownerId, ids);
-        if (currentOperation.status === 'COMPLETED')
-          return currentOperation.result as unknown as LibraryTransferResult;
-        // Match tag mutation lock order before taking asset row locks.
+    return async (tx, context) => {
+      let items = planItems;
+      await tx.$queryRaw`SELECT id FROM "EagleLibraryTransfer" WHERE id=${operation.id} AND "ownerId"=${ownerId} FOR UPDATE`;
+      const currentOperation = await tx.eagleLibraryTransfer.findUniqueOrThrow({
+        where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
+      });
+      this.checkOperation(currentOperation, ownerId, ids);
+      if (currentOperation.status === 'COMPLETED')
+        return currentOperation.result as unknown as LibraryTransferResult;
+      // Match tag mutation lock order before taking asset row locks.
+      if (!context.privacyLocked) {
         for (const mode of ['MATERIAL', 'PHOTO'] as const)
           await lockOwnerPrivacyProjection(tx, ownerId, mode);
-        const sourceIds = items.map((item) => item.sourceId).sort();
-        await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${sourceIds}::text[]) ORDER BY id FOR UPDATE`;
-        const sources = await tx.eagleAsset.findMany({
-          where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-          include: transferFactIncludes,
-        });
-        if (sources.length !== items.length)
-          throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
-        checkExpected(sources);
-        if (guard) await guard.beforePublish(tx);
-        if (handoff) {
-          // The user freezes original content and metadata, not the completion time
-          // of background derivatives. Adopt the current immutable READY outputs.
-          items = items.map((item) => {
-            const source = sources.find((row) => row.id === item.sourceId)!;
-            const pyramid = planTransferPyramid(
+        context.privacyLocked = true;
+      }
+      const sourceIds = items.map((item) => item.sourceId).sort();
+      await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${sourceIds}::text[]) ORDER BY id FOR UPDATE`;
+      const sources = await tx.eagleAsset.findMany({
+        where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
+        include: transferFactIncludes,
+      });
+      if (sources.length !== items.length)
+        throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+      checkExpected(sources);
+      if (guard) await guard.beforePublish(tx);
+      if (handoff) {
+        // The user freezes original content and metadata, not the completion time
+        // of background derivatives. Adopt the current immutable READY outputs.
+        items = items.map((item) => {
+          const source = sources.find((row) => row.id === item.sourceId)!;
+          const pyramid = planTransferPyramid(
+            ownerId,
+            item.targetId,
+            item.revision,
+            source.imagePyramids,
+          );
+          return {
+            ...item,
+            renditions: planTransferRenditions(
               ownerId,
               item.targetId,
               item.revision,
-              source.imagePyramids,
-            );
-            return {
-              ...item,
-              renditions: planTransferRenditions(
-                ownerId,
-                item.targetId,
-                item.revision,
-                source.renditions,
-              ).map((r) => ({ ...r, targetKey: r.sourceKey })),
-              pyramid: pyramid
-                ? { ...pyramid, targetPrefix: `${pyramidStoragePrefix(pyramid.storagePrefix)}/` }
-                : undefined,
-            };
-          });
-        }
-        const processingFacts = new Map(
-          (await readMediaProcessingFacts(tx, ownerId, this.sourceMode, sourceIds)).map((fact) => [
-            fact.assetId,
-            fact,
-          ]),
-        );
-        // Release exclusive storage ownership only inside the publishing transaction.
-        // Any subsequent failure rolls back both the source retirement and new records.
-        const retiredAt = new Date();
-        const retireSources = async () => {
-          const retired = await tx.eagleAsset.updateMany({
-            where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-            data: {
-              deletedAt: retiredAt,
-              purgeAfter: retiredAt,
-              transferredAt: retiredAt,
-              storageTransferredOut: handoff,
-              rowVersion: { increment: 1 },
-            },
-          });
-          if (retired.count !== items.length)
-            throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
-        };
-        if (handoff) {
-          await retireSources();
-          const renditionIds = items.flatMap((item) => (item.renditions ?? []).map((r) => r.id));
-          const pyramidIds = items.flatMap((item) => (item.pyramid ? [item.pyramid.id] : []));
-          // The frozen transfer plan preserves provenance; only target records own READY outputs.
-          if (renditionIds.length)
-            await tx.eagleAssetRendition.deleteMany({
-              where: {
-                ownerId,
-                libraryMode: this.sourceMode,
-                assetId: { in: sourceIds },
-                id: { in: renditionIds },
-              },
-            });
-          if (pyramidIds.length)
-            await tx.eagleImagePyramid.deleteMany({
-              where: {
-                ownerId,
-                libraryMode: this.sourceMode,
-                assetId: { in: sourceIds },
-                id: { in: pyramidIds },
-              },
-            });
-        }
-        const liveIdentifiers = new Map<string, string>();
-        for (const source of sources)
-          if (source.livePhotoIdentifier && !liveIdentifiers.has(source.livePhotoIdentifier))
-            liveIdentifiers.set(
-              source.livePhotoIdentifier,
-              items.find((item) => item.sourceId === source.id)!.targetId,
-            );
-        for (const item of items) {
-          const source = sources.find((row) => row.id === item.sourceId)!;
-          if (
-            source.mediaRevision !== item.revision ||
-            source.rowVersion !== item.rowVersion ||
-            source.originalObjectKey !== item.sourceKey ||
-            source.lifecycleStatus !== 'READY'
-          )
-            throw new ConflictException('图片已变化，请刷新后重新发送。');
-          const copiedRenditions = item.renditions ?? [];
-          if (
-            copiedRenditions.some(
-              (r) =>
-                !source.renditions.some(
-                  (current) =>
-                    current.id === r.id &&
-                    current.revision === item.revision &&
-                    current.status === 'READY' &&
-                    current.storageKey === r.sourceKey &&
-                    String(current.byteSize) === r.size,
-                ),
-            )
-          )
-            throw new ConflictException('预览已变化，请重新发送。');
-          if (
-            item.pyramid &&
-            !source.imagePyramids.some(
-              (p) =>
-                p.id === item.pyramid!.id &&
-                p.revision === item.revision &&
-                p.status === 'READY' &&
-                pyramidStoragePrefix(p.storagePrefix) ===
-                  pyramidStoragePrefix(item.pyramid!.storagePrefix) &&
-                String(p.byteSize) === item.pyramid!.size,
-            )
-          )
-            throw new ConflictException('切片已变化，请重新发送。');
-          const browsingReady =
-            source.mimeType.startsWith('image/') && transferredBrowsingReady(copiedRenditions);
-          const motionReady =
-            source.livePhotoRole === 'MOTION' &&
-            copiedRenditions.some((r) => r.kind === 'PREVIEW' && r.mimeType === 'video/mp4');
-          await tx.eagleAsset.create({
-            data: {
-              id: item.targetId,
-              ownerId,
-              libraryMode: targetMode,
-              originalName: source.originalName,
-              displayName: source.displayName,
-              normalizedDisplayName: source.normalizedDisplayName,
-              mimeType: source.mimeType,
-              format: source.format,
-              byteSize: source.byteSize,
-              sha256: source.sha256,
-              originalObjectKey: item.targetKey,
-              width: source.width,
-              height: source.height,
-              durationMs: source.durationMs,
-              rating: source.rating,
-              chronologicalAt: source.chronologicalAt,
-              livePhotoIdentifier: source.livePhotoIdentifier
-                ? liveIdentifiers.get(source.livePhotoIdentifier)
-                : null,
-              livePhotoRole: source.livePhotoRole,
-              isPrivate: source.isPrivate,
-              mediaRevision: 1,
-              lifecycleStatus: browsingReady || motionReady ? 'READY' : 'PROCESSING',
-            },
-          });
-          if (copiedRenditions.length)
-            await tx.eagleAssetRendition.createMany({
-              data: copiedRenditions.map((r) => ({
-                ownerId,
-                libraryMode: targetMode,
-                assetId: item.targetId,
-                kind: r.kind,
-                variant: r.variant,
-                revision: 1,
-                storageKey: r.targetKey,
-                mimeType: r.mimeType,
-                byteSize: BigInt(r.size),
-                width: r.width,
-                height: r.height,
-                status: 'READY',
-              })),
-            });
-          if (item.pyramid) {
-            const p = item.pyramid;
-            await tx.eagleImagePyramid.create({
-              data: {
-                ownerId,
-                libraryMode: targetMode,
-                assetId: item.targetId,
-                revision: 1,
-                processorVersion: p.processorVersion,
-                status: 'READY',
-                storagePrefix: pyramidStoragePrefix(p.targetPrefix),
-                tileSize: p.tileSize,
-                overlap: p.overlap,
-                format: p.format,
-                width: p.width,
-                height: p.height,
-                maxLevel: p.maxLevel,
-                tileCount: p.tileCount,
-                byteSize: BigInt(p.size),
-                completedAt: p.completedAt,
-              },
-            });
-          }
-          const facts = await copyTransferFacts(
-            tx,
-            ownerId,
-            targetMode,
-            item.targetId,
-            source,
-            Boolean(processingFacts.get(source.id)?.detailsReady),
-          );
-          if (source.isPrivate && !facts.hasPrivateTag) {
-            const tagId = await this.targetPrivacyTag(tx, ownerId, targetMode);
-            await tx.eagleAssetManualTag.create({
-              data: { ownerId, libraryMode: targetMode, assetId: item.targetId, tagId },
-            });
-          }
-          if (source.annotation)
-            await tx.eagleAssetAnnotation.create({
-              data: {
-                ownerId,
-                libraryMode: targetMode,
-                assetId: item.targetId,
-                color: source.annotation.color,
-                description: source.annotation.description,
-                sourceUrl: source.annotation.sourceUrl,
-              },
-            });
-          const jobs = source.mimeType.startsWith('image/')
-            ? buildImageProcessingJobs({
-                ownerId,
-                assetId: item.targetId,
-                assetRevision: 1,
-                width: source.width,
-                height: source.height,
-                renditionsReady: browsingReady,
-                needsDetails: targetMode === 'PHOTO' || isCameraRawMime(source.mimeType),
-                detailsReady: facts.detailsReady,
-                embeddingReady: facts.embeddingReady,
-                paletteReady: facts.paletteReady,
-                pyramidReady: Boolean(item.pyramid),
-              })
-            : motionReady
-              ? []
-              : [
-                  {
-                    ownerId,
-                    assetId: item.targetId,
-                    assetRevision: 1,
-                    kind: 'GENERATE_THUMBNAIL' as const,
-                    lane: 'INTERACTIVE' as const,
-                    processorVersion: 'camera-video-preview-v2',
-                  },
-                ];
-          await tx.eagleAssetProcessingJob.createMany({
-            data: jobs.map((job) => ({ ...job, libraryMode: targetMode })),
-          });
-        }
-        // Publishing the independent target and retiring the source are atomic.
-        // Keep the non-restorable source identity for approval history and privacy checks.
-        // Only objects still owned by the retired source enter the deletion outbox.
-        // A handoff transfers exclusive storage lifetime to the independent target.
-        if (!handoff) await retireSources();
-        const retainedKeys = new Set(
-          handoff
-            ? items.flatMap((item) => [
-                item.sourceKey,
-                ...(item.renditions ?? []).map((r) => r.sourceKey),
-              ])
-            : [],
-        );
-        const retainedPrefixes = new Set(
-          handoff
-            ? items.flatMap((item) =>
-                item.pyramid ? [`${pyramidStoragePrefix(item.pyramid.storagePrefix)}/`] : [],
-              )
-            : [],
-        );
-        const objectKeys = [
-          ...new Set(
-            sources.flatMap((source) => [
-              source.originalObjectKey,
-              ...source.renditions.map((r) => r.storageKey),
-            ]),
-          ),
-        ].filter((key) => !retainedKeys.has(key));
-        const prefixes = sources
-          .flatMap((source) =>
-            source.imagePyramids.map((p) => `${pyramidStoragePrefix(p.storagePrefix)}/`),
-          )
-          .filter((prefix) => !retainedPrefixes.has(prefix));
-        for (const key of [...objectKeys, ...prefixes]) assertOwnedObjectKey(ownerId, key);
-        if (objectKeys.length || prefixes.length)
-          await tx.eagleObjectDeletion.create({
-            data: { ownerId, libraryMode: this.sourceMode, objectKeys, prefixes },
-          });
-        const result: LibraryTransferResult = {
-          targetMode,
-          movedCount: ids.length,
-          componentCount: items.length,
-          assets: items.map((item) => ({ sourceId: item.sourceId, assetId: item.targetId })),
-        };
-        await tx.eagleLibraryTransfer.update({
-          where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
+              source.renditions,
+            ).map((r) => ({ ...r, targetKey: r.sourceKey })),
+            pyramid: pyramid
+              ? { ...pyramid, targetPrefix: `${pyramidStoragePrefix(pyramid.storagePrefix)}/` }
+              : undefined,
+          };
+        });
+      }
+      const processingFacts = new Map(
+        (await readMediaProcessingFacts(tx, ownerId, this.sourceMode, sourceIds)).map((fact) => [
+          fact.assetId,
+          fact,
+        ]),
+      );
+      // Release exclusive storage ownership only inside the publishing transaction.
+      // Any subsequent failure rolls back both the source retirement and new records.
+      const retiredAt = new Date();
+      const retireSources = async () => {
+        const retired = await tx.eagleAsset.updateMany({
+          where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
           data: {
-            status: 'COMPLETED',
-            result: result as unknown as Prisma.InputJsonValue,
-            ...(handoff
-              ? { plan: JSON.parse(JSON.stringify(items)) as Prisma.InputJsonValue }
-              : {}),
+            deletedAt: retiredAt,
+            purgeAfter: retiredAt,
+            transferredAt: retiredAt,
+            storageTransferredOut: handoff,
+            rowVersion: { increment: 1 },
           },
         });
-        await guard?.afterPublish?.(tx);
-        return result;
-      },
-      { timeout: 30000 },
-    );
+        if (retired.count !== items.length)
+          throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+      };
+      if (handoff) {
+        await retireSources();
+        const renditionIds = items.flatMap((item) => (item.renditions ?? []).map((r) => r.id));
+        const pyramidIds = items.flatMap((item) => (item.pyramid ? [item.pyramid.id] : []));
+        // The frozen transfer plan preserves provenance; only target records own READY outputs.
+        if (renditionIds.length)
+          await tx.eagleAssetRendition.deleteMany({
+            where: {
+              ownerId,
+              libraryMode: this.sourceMode,
+              assetId: { in: sourceIds },
+              id: { in: renditionIds },
+            },
+          });
+        if (pyramidIds.length)
+          await tx.eagleImagePyramid.deleteMany({
+            where: {
+              ownerId,
+              libraryMode: this.sourceMode,
+              assetId: { in: sourceIds },
+              id: { in: pyramidIds },
+            },
+          });
+      }
+      const liveIdentifiers = new Map<string, string>();
+      for (const source of sources)
+        if (source.livePhotoIdentifier && !liveIdentifiers.has(source.livePhotoIdentifier))
+          liveIdentifiers.set(
+            source.livePhotoIdentifier,
+            items.find((item) => item.sourceId === source.id)!.targetId,
+          );
+      for (const item of items) {
+        const source = sources.find((row) => row.id === item.sourceId)!;
+        if (
+          source.mediaRevision !== item.revision ||
+          source.rowVersion !== item.rowVersion ||
+          source.originalObjectKey !== item.sourceKey ||
+          source.lifecycleStatus !== 'READY'
+        )
+          throw new ConflictException('图片已变化，请刷新后重新发送。');
+        const copiedRenditions = item.renditions ?? [];
+        if (
+          copiedRenditions.some(
+            (r) =>
+              !source.renditions.some(
+                (current) =>
+                  current.id === r.id &&
+                  current.revision === item.revision &&
+                  current.status === 'READY' &&
+                  current.storageKey === r.sourceKey &&
+                  String(current.byteSize) === r.size,
+              ),
+          )
+        )
+          throw new ConflictException('预览已变化，请重新发送。');
+        if (
+          item.pyramid &&
+          !source.imagePyramids.some(
+            (p) =>
+              p.id === item.pyramid!.id &&
+              p.revision === item.revision &&
+              p.status === 'READY' &&
+              pyramidStoragePrefix(p.storagePrefix) ===
+                pyramidStoragePrefix(item.pyramid!.storagePrefix) &&
+              String(p.byteSize) === item.pyramid!.size,
+          )
+        )
+          throw new ConflictException('切片已变化，请重新发送。');
+        const browsingReady =
+          source.mimeType.startsWith('image/') && transferredBrowsingReady(copiedRenditions);
+        const motionReady =
+          source.livePhotoRole === 'MOTION' &&
+          copiedRenditions.some((r) => r.kind === 'PREVIEW' && r.mimeType === 'video/mp4');
+        await tx.eagleAsset.create({
+          data: {
+            id: item.targetId,
+            ownerId,
+            libraryMode: targetMode,
+            originalName: source.originalName,
+            displayName: source.displayName,
+            normalizedDisplayName: source.normalizedDisplayName,
+            mimeType: source.mimeType,
+            format: source.format,
+            byteSize: source.byteSize,
+            sha256: source.sha256,
+            originalObjectKey: item.targetKey,
+            width: source.width,
+            height: source.height,
+            durationMs: source.durationMs,
+            rating: source.rating,
+            chronologicalAt: source.chronologicalAt,
+            livePhotoIdentifier: source.livePhotoIdentifier
+              ? liveIdentifiers.get(source.livePhotoIdentifier)
+              : null,
+            livePhotoRole: source.livePhotoRole,
+            isPrivate: source.isPrivate,
+            mediaRevision: 1,
+            lifecycleStatus: browsingReady || motionReady ? 'READY' : 'PROCESSING',
+          },
+        });
+        if (copiedRenditions.length)
+          await tx.eagleAssetRendition.createMany({
+            data: copiedRenditions.map((r) => ({
+              ownerId,
+              libraryMode: targetMode,
+              assetId: item.targetId,
+              kind: r.kind,
+              variant: r.variant,
+              revision: 1,
+              storageKey: r.targetKey,
+              mimeType: r.mimeType,
+              byteSize: BigInt(r.size),
+              width: r.width,
+              height: r.height,
+              status: 'READY',
+            })),
+          });
+        if (item.pyramid) {
+          const p = item.pyramid;
+          await tx.eagleImagePyramid.create({
+            data: {
+              ownerId,
+              libraryMode: targetMode,
+              assetId: item.targetId,
+              revision: 1,
+              processorVersion: p.processorVersion,
+              status: 'READY',
+              storagePrefix: pyramidStoragePrefix(p.targetPrefix),
+              tileSize: p.tileSize,
+              overlap: p.overlap,
+              format: p.format,
+              width: p.width,
+              height: p.height,
+              maxLevel: p.maxLevel,
+              tileCount: p.tileCount,
+              byteSize: BigInt(p.size),
+              completedAt: p.completedAt,
+            },
+          });
+        }
+        const facts = await copyTransferFacts(
+          tx,
+          ownerId,
+          targetMode,
+          item.targetId,
+          source,
+          Boolean(processingFacts.get(source.id)?.detailsReady),
+        );
+        if (source.isPrivate && !facts.hasPrivateTag) {
+          const tagId = await this.targetPrivacyTag(tx, ownerId, targetMode);
+          await tx.eagleAssetManualTag.create({
+            data: { ownerId, libraryMode: targetMode, assetId: item.targetId, tagId },
+          });
+        }
+        if (source.annotation)
+          await tx.eagleAssetAnnotation.create({
+            data: {
+              ownerId,
+              libraryMode: targetMode,
+              assetId: item.targetId,
+              color: source.annotation.color,
+              description: source.annotation.description,
+              sourceUrl: source.annotation.sourceUrl,
+            },
+          });
+        const jobs = source.mimeType.startsWith('image/')
+          ? buildImageProcessingJobs({
+              ownerId,
+              assetId: item.targetId,
+              assetRevision: 1,
+              width: source.width,
+              height: source.height,
+              renditionsReady: browsingReady,
+              needsDetails: targetMode === 'PHOTO' || isCameraRawMime(source.mimeType),
+              detailsReady: facts.detailsReady,
+              embeddingReady: facts.embeddingReady,
+              paletteReady: facts.paletteReady,
+              pyramidReady: Boolean(item.pyramid),
+            })
+          : motionReady
+            ? []
+            : [
+                {
+                  ownerId,
+                  assetId: item.targetId,
+                  assetRevision: 1,
+                  kind: 'GENERATE_THUMBNAIL' as const,
+                  lane: 'INTERACTIVE' as const,
+                  processorVersion: 'camera-video-preview-v2',
+                },
+              ];
+        await tx.eagleAssetProcessingJob.createMany({
+          data: jobs.map((job) => ({ ...job, libraryMode: targetMode })),
+        });
+      }
+      // Publishing the independent target and retiring the source are atomic.
+      // Keep the non-restorable source identity for approval history and privacy checks.
+      // Only objects still owned by the retired source enter the deletion outbox.
+      // A handoff transfers exclusive storage lifetime to the independent target.
+      if (!handoff) await retireSources();
+      const retainedKeys = new Set(
+        handoff
+          ? items.flatMap((item) => [
+              item.sourceKey,
+              ...(item.renditions ?? []).map((r) => r.sourceKey),
+            ])
+          : [],
+      );
+      const retainedPrefixes = new Set(
+        handoff
+          ? items.flatMap((item) =>
+              item.pyramid ? [`${pyramidStoragePrefix(item.pyramid.storagePrefix)}/`] : [],
+            )
+          : [],
+      );
+      const objectKeys = [
+        ...new Set(
+          sources.flatMap((source) => [
+            source.originalObjectKey,
+            ...source.renditions.map((r) => r.storageKey),
+          ]),
+        ),
+      ].filter((key) => !retainedKeys.has(key));
+      const prefixes = sources
+        .flatMap((source) =>
+          source.imagePyramids.map((p) => `${pyramidStoragePrefix(p.storagePrefix)}/`),
+        )
+        .filter((prefix) => !retainedPrefixes.has(prefix));
+      for (const key of [...objectKeys, ...prefixes]) assertOwnedObjectKey(ownerId, key);
+      if (objectKeys.length || prefixes.length)
+        await tx.eagleObjectDeletion.create({
+          data: { ownerId, libraryMode: this.sourceMode, objectKeys, prefixes },
+        });
+      const result: LibraryTransferResult = {
+        targetMode,
+        movedCount: ids.length,
+        componentCount: items.length,
+        assets: items.map((item) => ({ sourceId: item.sourceId, assetId: item.targetId })),
+      };
+      await tx.eagleLibraryTransfer.update({
+        where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
+        data: {
+          status: 'COMPLETED',
+          result: result as unknown as Prisma.InputJsonValue,
+          ...(handoff ? { plan: JSON.parse(JSON.stringify(items)) as Prisma.InputJsonValue } : {}),
+        },
+      });
+      await guard?.afterPublish?.(tx);
+      return result;
+    };
   }
 }
