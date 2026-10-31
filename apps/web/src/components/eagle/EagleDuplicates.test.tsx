@@ -132,6 +132,57 @@ describe('duplicate cleanup review', () => {
       return { operationId: input.operationId };
     });
   });
+  it('distinguishes an empty exact category from available similar results and links to them', async () => {
+    const similar = { ...group, kind: 'SIMILAR' };
+    mocks.list.mockImplementation(async ({ kind }: { kind: string }) => ({
+      revision: 'b'.repeat(64),
+      coverage: { total: 60000, indexed: 60000, waiting: 0 },
+      totalGroups: kind === 'EXACT' ? 0 : 1,
+      exactGroups: 0,
+      similarGroups: 2635,
+      ignoredGroups: 0,
+      removableBytes: 0,
+      nextCursor: null,
+      groups: kind === 'EXACT' ? [] : [similar],
+    }));
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: '完全重复 0' }));
+    await screen.findByRole('heading', { name: '没有完全重复的文件' });
+    expect(screen.queryByText('当前没有待处理的查重结果')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '查看近似清理 2,635 组' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '近似清理 2635' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      ),
+    );
+  });
+  it('does not announce no duplicates while a background check is running', async () => {
+    const base = await mocks.list();
+    mocks.list.mockResolvedValue({ ...base, groups: [], totalGroups: 0, exactGroups: 0 });
+    mocks.operations = [
+      {
+        id: 'scan',
+        libraryMode: 'MATERIAL',
+        kind: 'DUPLICATE_SCAN',
+        queued: true,
+        running: false,
+        completed: 0,
+        total: 1,
+        failed: 0,
+      },
+    ];
+    render();
+    await screen.findByRole('heading', { name: '正在检查查重结果…' });
+    expect(screen.queryByText('新图片入库后，可以再次检查。')).not.toBeInTheDocument();
+  });
+  it('does not treat missing fingerprints as a completed empty visual check', async () => {
+    const base = await mocks.list();
+    mocks.list.mockResolvedValue({ ...base, groups: [], totalGroups: 0, exactGroups: 0 });
+    render();
+    await screen.findByRole('heading', { name: '视觉检查尚未完成' });
+    expect(screen.queryByText('新图片入库后，可以再次检查。')).not.toBeInTheDocument();
+  });
   it('shows incomplete indexing honestly and starts a durable incremental scan', async () => {
     render();
     await screen.findByRole('button', { name: '清理全部完全重复项' });
