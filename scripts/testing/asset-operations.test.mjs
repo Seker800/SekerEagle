@@ -1264,3 +1264,52 @@ test('a failed atomic send receipt rolls back target and source retirement, then
     plan.plan[0].targetId,
   );
 });
+
+test('large admission does not hold the owner privacy mutex or block unrelated workspace writes', async () => {
+  const f = await fixture(),
+    source = await f.add();
+  const entered = deferred(),
+    release = deferred();
+  const holder = prisma.$transaction(
+    async (tx) => {
+      await lockOwnerPrivacyProjection(tx, f.ownerId, f.mode);
+      entered.resolve();
+      await release.promise;
+    },
+    { timeout: 30000 },
+  );
+  await entered.promise;
+  let admitted = false,
+    blocked = false,
+    failure;
+  const admission = f.enqueue('SEND', [source]).then(
+    () => {
+      admitted = true;
+    },
+    (error) => {
+      failure = error;
+    },
+  );
+  try {
+    for (let check = 0; check < 200 && !admitted; check++) {
+      const [waiting] =
+        await prisma.$queryRaw`SELECT count(*)::int AS count FROM pg_locks WHERE locktype='advisory' AND NOT granted`;
+      if (waiting.count) {
+        blocked = true;
+        break;
+      }
+      await delay(5);
+    }
+    assert.equal(
+      blocked,
+      false,
+      'preparing a queue intent must not wait for or retain the workspace privacy lock',
+    );
+    assert.equal(admitted, true);
+  } finally {
+    release.resolve();
+    await holder;
+    await admission;
+    if (failure) throw failure;
+  }
+});
