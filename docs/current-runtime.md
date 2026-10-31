@@ -1,5 +1,9 @@
 # 现用运行状态与交接
 
+> **2026-10-31 21:05 全业务分支整合已上线（覆盖下方早期候选与镜像快照）**：40个业务引用及17个工作区进度全部归入并推送main，运行源码 `d0ad3b6d941bfe2b1c1b6dbaefff8a6c134b3d40`；API／独立operations与网页现为 `sekereagle/{api,web}:integrated-d0ad3b6d941b`，均healthy、零重启。71项迁移完成；Mac旧业务进程正常排空退出，新不可变worker-d0ad3b6d941b／现场PID81038心跳新鲜，私有placement检查点已同步。NAS媒体worker继续停止，数据库／对象存储／网关／协调器／中继容器身份、用户暂停时段和计算修订66保持，未启用可选PG缓存配置。
+>
+> 完整CI、契约、隔离历史升级／完整恢复、最终API成品高频认证与S3验收、Mac原生候选DB／HTTP验收通过；生产Chrome双模式14条导航、删除零资产列表重取、撤销、双向发送、混合失效删除与恢复通过，零页面异常。合成验收账号与16个所属对象已清理、所属行剩余零。新备份867670548字节经SHA与完整解析核验；APK哈希及Range保持。完整Compose链仅追加 `maintenance/main-release-20261031/images.json`，回退保留兼容worker／operations。17个Dependabot大版本升级提案另行保留；DeepSeek后台审查只记已启动。详见[本次发布与回退记录](production-main-release-2026-10-31.md)。
+
 > **2026-10-31 18:26 查重扫描参数溢出修复已上线**：API与独立operations现为 `sekereagle/api:duplicate-scan-089c53d4e46b`，运行源码固定 `089c53d4e46bc8a52a5119069bfbbab5befd2146`。修复六万图库扫描及最终分组的Prisma复合关联参数展开，改为同owner／模式／可见性及当前媒体版本的SQL关联，不加用户数量限制。两服务healthy、零重启，旧执行器正常排空退出；网页继续delete-auto-f4154139fe87，数据库／MinIO／网关／协调器／中继及停止中的NAS媒体worker容器身份不变，未操作Mac媒体worker。68项迁移保持，处理暂停及设置前后逐项一致。
 >
 > 六万项真实隔离数据库回归及最终API成品启动／对象存储验收通过；生产HTTPS普通测试账号在两模式完成首次扫描与指纹复用，匿名401／owner注入400／错误Origin403通过，4份原件哈希保持。验收主体与16个所属合成对象已清理；没有替用户启动真实图库扫描或清理照片。完整Compose链仅追加 `maintenance/duplicate-scan-bind-20261031/images.json`，旧镜像与回滚覆盖保留；未混入其他任务尚未提交的删除／撤销改动。详见[本次故障修复与验证](duplicate-scan-hotfix-2026-10-31.md)。
