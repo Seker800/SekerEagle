@@ -129,6 +129,7 @@ it('merges selected cards in one versioned request and does not wait for a candi
     rowVersion: 2,
     photoCount: 6,
     marksAssetsPrivate: false,
+    mergedIds: ['a'],
   });
   show();
   fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
@@ -202,6 +203,7 @@ it('persists different-person answers and uses returned current versions for a l
     rowVersion: 3,
     photoCount: 2,
     marksAssetsPrivate: false,
+    mergedIds: ['a'],
   });
   show();
   fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
@@ -239,7 +241,7 @@ it('allows an explicit retained target, opens its photo and blocks duplicate sub
   fireEvent.click(screen.getByRole('button', { name: '合并所选人物' }));
   expect(screen.getByRole('button', { name: '正在合并…' })).toBeDisabled();
   expect(mocks.merge).toHaveBeenCalledTimes(1);
-  finish({ id: 'a', rowVersion: 2, photoCount: 2, marksAssetsPrivate: false });
+  finish({ id: 'a', rowVersion: 2, photoCount: 2, marksAssetsPrivate: false, mergedIds: ['b'] });
   await screen.findByText('人物已合并');
   expect(screen.queryByRole('checkbox', { name: '选择 小明' })).not.toBeInTheDocument();
 });
@@ -319,9 +321,9 @@ it('selects unnamed groups across pages and merges into an existing named person
   });
   show();
   fireEvent.click(await screen.findByRole('tab', { name: /^待整理分组/ }));
-  fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 a' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 1' }));
   fireEvent.click(screen.getByRole('button', { name: '加载更多人物' }));
-  fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 c' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择分组 2' }));
   fireEvent.change(await screen.findByRole('combobox', { name: '合并到人物' }), {
     target: { value: b.id },
   });
@@ -337,8 +339,8 @@ it('selects unnamed groups across pages and merges into an existing named person
     ],
   });
   await waitFor(() =>
-    expect(screen.queryByRole('checkbox', { name: '选择分组 a' })).not.toBeInTheDocument(),
+    expect(screen.queryByRole('checkbox', { name: '选择分组 1' })).not.toBeInTheDocument(),
   );
-  expect(screen.queryByRole('checkbox', { name: '选择分组 c' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: '选择分组 2' })).not.toBeInTheDocument();
   expect(mocks.list).toHaveBeenCalledTimes(before);
 });

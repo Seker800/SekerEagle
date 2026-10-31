@@ -1,4 +1,12 @@
 export const enUS = {
+  合并分组: 'Merge groups',
+  '已选择 {{value1}} 个分组': '{{value1}} groups selected',
+  加载更多目标人物: 'Load more target people',
+  '分组已变化，请清除选择后重新选择。':
+    'The groups have changed. Clear your selection and choose again.',
+  合并所选分组: 'Merge selected groups',
+  '选择分组 {{value1}}': 'Select group {{value1}}',
+
   '正在检查查重结果…': 'Checking duplicate results…',
   查重规则尚未更新: 'Duplicate rules have not been updated yet',
   没有完全重复的文件: 'No exact duplicate files',

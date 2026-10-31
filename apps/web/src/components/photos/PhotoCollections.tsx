@@ -1,6 +1,8 @@
+import { PhotoPersonMergeSelection } from './PhotoPersonMergeSelection';
+import { applyPhotoPersonMerge } from './photo-person-merge-cache';
 import { usePhotoPeople } from './use-photo-people';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PhotoFaceImage, facePreview, representativeFace } from './PhotoFaceImage';
 import { PhotoPeopleReview } from './PhotoPeopleReview';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -48,6 +50,21 @@ export function PhotoCollections({
     true,
     view === 'REVIEW' ? 'NAMED' : view,
   );
+  const directoryScope = `${ownerId}:${includePrivate}:${scopeRevision}`;
+  const [selectionState, setSelectionState] = useState<{
+    scope: string;
+    people: Record<string, PhotoPerson>;
+  }>({ scope: directoryScope, people: {} });
+  const directorySelection = selectionState.scope === directoryScope ? selectionState.people : {};
+  const [selectionEpoch, setSelectionEpoch] = useState(0);
+  const clearDirectorySelection = () => {
+    setSelectionState({ scope: directoryScope, people: {} });
+    setSelectionEpoch((value) => value + 1);
+  };
+  useEffect(() => {
+    setSelectionState({ scope: directoryScope, people: {} });
+    setPending(false);
+  }, [directoryScope]);
   const actionPending = useRef(false);
   async function perform(
     action: () => Promise<unknown>,
@@ -96,7 +113,6 @@ export function PhotoCollections({
   async function afterReviewChange(changesPrivacy: boolean) {
     if (changesPrivacy) return perform(async () => {}, true, false);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people'] }),
       queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people-summary'] }),
       queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
     ]);
@@ -151,6 +167,7 @@ export function PhotoCollections({
                 type="button"
                 role="tab"
                 aria-selected={view === id}
+                disabled={pending}
                 key={id}
                 onClick={() => {
                   setView(id);
@@ -189,26 +206,74 @@ export function PhotoCollections({
             />
           ) : (
             <>
+              {view === 'UNNAMED' && (
+                <PhotoPersonMergeSelection
+                  key={`${ownerId}:${includePrivate}:${scopeRevision}:${selectionEpoch}`}
+                  ownerId={ownerId}
+                  includePrivate={includePrivate}
+                  scopeRevision={scopeRevision}
+                  selected={Object.values(directorySelection)}
+                  onClear={clearDirectorySelection}
+                  onPendingChange={setPending}
+                  onConflict={() =>
+                    queryClient.invalidateQueries({
+                      queryKey: ['eagle', ownerId, 'PHOTO', 'people'],
+                    })
+                  }
+                  onMerged={(result, privacy) => {
+                    applyPhotoPersonMerge(queryClient, ownerId, result);
+                    clearDirectorySelection();
+                    setSelectedPerson((current) =>
+                      result.mergedIds.includes(current ?? '') ? null : current,
+                    );
+                    setFeedback(t('人物已合并'));
+                    void afterReviewChange(privacy).catch((reason) =>
+                      setError(reason instanceof Error ? reason.message : t('操作失败')),
+                    );
+                  }}
+                />
+              )}
               <div className="photo-person-grid">
                 {people.data?.people.map((person, index) => {
                   const face = representativeFace(person),
                     src = face ? thumbnail(face.asset) : null;
                   return (
-                    <button
-                      type="button"
-                      key={person.id}
-                      className="photo-person-card"
-                      onClick={() => setSelectedPerson(person.id)}
-                      aria-pressed={selectedPerson === person.id}
-                    >
-                      {src && face && <PhotoFaceImage face={face} url={thumbnail} />}
-                      <strong>
-                        {person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 })}
-                      </strong>
-                      {person.photoCount !== undefined && (
-                        <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
+                    <article key={person.id} className="photo-person-selection-card">
+                      {view === 'UNNAMED' && (
+                        <input
+                          type="checkbox"
+                          aria-label={t('选择分组 {{value1}}', {
+                            value1: person.name ?? index + 1,
+                          })}
+                          checked={Boolean(directorySelection[person.id])}
+                          disabled={pending}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setSelectionState((current) => {
+                              const next =
+                                current.scope === directoryScope ? { ...current.people } : {};
+                              if (checked) next[person.id] = person;
+                              else delete next[person.id];
+                              return { scope: directoryScope, people: next };
+                            });
+                          }}
+                        />
                       )}
-                    </button>
+                      <button
+                        type="button"
+                        className="photo-person-card"
+                        onClick={() => setSelectedPerson(person.id)}
+                        aria-pressed={selectedPerson === person.id}
+                      >
+                        {src && face && <PhotoFaceImage face={face} url={thumbnail} />}
+                        <strong>
+                          {person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 })}
+                        </strong>
+                        {person.photoCount !== undefined && (
+                          <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
+                        )}
+                      </button>
+                    </article>
                   );
                 })}
               </div>

@@ -170,7 +170,8 @@ test('count-sorted unnamed pages and atomic multi-person merge preserve scope an
       ownerId: owner,
       libraryMode: 'PHOTO',
       modelVersion: PHOTO_FACE_MODEL_VERSION,
-      prototype: [1, ...Array(127).fill(0)],
+      prototype:
+        i === 28 ? [0.7, Math.sqrt(0.51), ...Array(126).fill(0)] : [1, ...Array(127).fill(0)],
       count: i + 1,
     }));
     const outsider = {
@@ -219,13 +220,41 @@ test('count-sorted unnamed pages and atomic multi-person merge preserve scope an
           assetRevision: 1,
           personId: p.id,
           modelVersion: PHOTO_FACE_MODEL_VERSION,
-          embedding: [1, ...Array(127).fill(0)],
+          embedding: p.prototype,
           box: [0.1, 0.1, 0.2, 0.2],
           confidence: 0.99,
         });
       }
     await db.eagleAsset.createMany({ data: assets });
     await db.eaglePhotoFace.createMany({ data: faces });
+    await db.eagleAssetRendition.createMany({
+      data: assets.map((a) => ({
+        ownerId: owner,
+        libraryMode: 'PHOTO',
+        assetId: a.id,
+        kind: 'PREVIEW',
+        variant: 'default',
+        revision: 1,
+        status: 'READY',
+        storageKey: `synthetic/${a.id}/preview.webp`,
+        mimeType: 'image/webp',
+        byteSize: 1,
+        width: 500,
+        height: 500,
+      })),
+    });
+    const review = await new PhotoPersonReviewService(db, {}).suggestions(owner, false);
+    assert.equal(review.items[0].first.photoCount, 30);
+    assert.equal(
+      review.items[0].second.photoCount,
+      29,
+      'a large group outranks closer singleton matches',
+    );
+    assert(
+      review.items.every(
+        (p, i, rows) => i === 0 || rows[i - 1].first.photoCount >= p.first.photoCount,
+      ),
+    );
     // One photo with two current detections is still one photo, and obsolete faces are excluded.
     await db.eaglePhotoFace.createMany({
       data: [
@@ -364,7 +393,16 @@ test('count-sorted unnamed pages and atomic multi-person merge preserve scope an
       }),
     );
     const options = await service.people(owner, true, undefined, 'UNNAMED', 'options');
-    assert(options.people.every((p) => !('faces' in p) && !('prototype' in p)));
+    assert(
+      options.people.every(
+        (p) => !('faces' in p) && !('prototype' in p) && Number.isInteger(p.rowVersion),
+      ),
+    );
+    await db.eaglePhotoPerson.update({ where: { id: target }, data: { name: 'Synthetic target' } });
+    const namedOptions = await service.people(owner, false, undefined, 'NAMED', 'options');
+    assert.deepEqual(namedOptions.people, [
+      { id: target, name: 'Synthetic target', rowVersion: 2, marksAssetsPrivate: false },
+    ]);
   } finally {
     await db.eaglePhotoPersonSeparation.deleteMany({ where: { ownerId: { in: accounts } } });
     await db.eaglePhotoFace.deleteMany({ where: { ownerId: { in: accounts } } });

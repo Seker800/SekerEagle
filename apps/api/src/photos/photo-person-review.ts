@@ -23,7 +23,7 @@ export function reviewCursor(
     if (
       v.ownerId !== ownerId ||
       v.includePrivate !== includePrivate ||
-      v.version !== 2 ||
+      v.version !== 3 ||
       typeof v.id !== 'string' ||
       !/^[-a-zA-Z0-9]{0,80}$/.test(v.id) ||
       typeof v.round !== 'number' ||
@@ -48,7 +48,7 @@ export const encodeReviewCursor = (
   ownerId: string,
   includePrivate: boolean,
 ) =>
-  Buffer.from(JSON.stringify({ ...cursor, ownerId, includePrivate, version: 2 })).toString(
+  Buffer.from(JSON.stringify({ ...cursor, ownerId, includePrivate, version: 3 })).toString(
     'base64url',
   );
 /** Each wave examines the next neighbours for every anchor; no confidence or similarity cutoff. */
@@ -94,7 +94,7 @@ FROM work a LEFT JOIN cooccurring c ON c.anchor=a.id LEFT JOIN LATERAL (
    OR (a.photos=e.photos AND a.confidence=e.confidence AND a.id<e.id)) AND e."modelVersion"=a."modelVersion"
  AND NOT(e.id=ANY(COALESCE(c.candidates,ARRAY[]::text[])))
  AND NOT EXISTS(SELECT 1 FROM "EaglePhotoPersonSeparation" d WHERE d."ownerId"=${ownerId} AND d."libraryMode"='PHOTO' AND d."firstId"=LEAST(a.id,e.id) AND d."secondId"=GREATEST(a.id,e.id))
- ORDER BY a.prototype <=> e.prototype,e.photos DESC,e.confidence DESC,e.id
+ ORDER BY e.photos DESC,a.prototype <=> e.prototype,e.confidence DESC,e.id
  LIMIT ${PERSON_REVIEW_CANDIDATES_PER_ROUND} OFFSET ${after.round * PERSON_REVIEW_CANDIDATES_PER_ROUND}
 ) b ON true ORDER BY a.photos DESC,a.confidence DESC,a.id,b.score DESC NULLS LAST,b.id`;
 }

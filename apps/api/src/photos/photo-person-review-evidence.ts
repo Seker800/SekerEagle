@@ -77,10 +77,9 @@ export function qualifyPersonReviewPairs<T extends ReviewPair>(
   }
   qualified.sort(
     (a, b) =>
+      Number((b.firstCount ?? 0n) - (a.firstCount ?? 0n)) ||
+      Number((b.secondCount ?? 0n) - (a.secondCount ?? 0n)) ||
       b.rank - a.rank ||
-      Number(
-        (b.firstCount ?? 0n) + (b.secondCount ?? 0n) - (a.firstCount ?? 0n) - (a.secondCount ?? 0n),
-      ) ||
       a.firstId.localeCompare(b.firstId) ||
       a.secondId.localeCompare(b.secondId),
   );

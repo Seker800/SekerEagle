@@ -1500,3 +1500,33 @@ select:focus-visible {
   padding: 4px 8px;
   margin-top: 6px;
 }
+
+.photo-person-selection-card {
+  position: relative;
+  min-width: 0;
+}
+.photo-person-selection-card > .photo-person-card {
+  width: 100%;
+}
+.photo-person-selection-card > input {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  left: 8px;
+  width: 20px;
+  height: 20px;
+}
+.photo-person-merge-selection {
+  position: sticky;
+  top: 8px;
+  z-index: 2;
+  background: var(--ui-panel);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
+}

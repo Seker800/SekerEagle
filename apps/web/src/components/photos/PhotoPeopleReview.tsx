@@ -1,3 +1,4 @@
+import { applyPhotoPersonMerge } from './photo-person-merge-cache';
 import { ApiError } from '../../lib/api-error';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -40,7 +41,15 @@ export function PhotoPeopleReview({
   preview: (asset: EagleAssetListItem) => string | null;
 }) {
   const client = useQueryClient();
-  const queryKey = ['eagle', ownerId, 'PHOTO', 'person-review', includePrivate, scopeRevision];
+  const queryKey = [
+    'eagle',
+    ownerId,
+    'PHOTO',
+    'person-review',
+    includePrivate,
+    scopeRevision,
+    'count-first-v3',
+  ];
   const query = useInfiniteQuery({
     queryKey,
     initialPageParam: undefined as string | undefined,
@@ -85,7 +94,9 @@ export function PhotoPeopleReview({
         );
       }
     }
-    return [...distinct.values()].filter((person) => !visited.has(person.id));
+    return [...distinct.values()]
+      .filter((person) => !visited.has(person.id))
+      .sort((a, b) => (b.photoCount ?? 0) - (a.photoCount ?? 0) || a.id.localeCompare(b.id));
   }, [query.data, batchIndex, visited, edits]);
   const cards = people.slice(0, PAGE_SIZE);
   const chosen = cards.filter((p) => selected.has(p.id));
@@ -191,9 +202,8 @@ export function PhotoPeopleReview({
           targetId: target.id,
           people: chosen.map((p) => ({ id: p.id, rowVersion: p.rowVersion })),
         });
-        const removed = new Set(chosen.filter((p) => p.id !== target.id).map((p) => p.id));
-        updatePeople(removed, new Map([[target.id, { ...merged }]]));
-        privacy = chosen.some((p) => p.marksAssetsPrivate) !== target.marksAssetsPrivate;
+        applyPhotoPersonMerge(client, ownerId, merged);
+        privacy = merged.marksAssetsPrivate && chosen.some((p) => !p.marksAssetsPrivate);
         setResult(t('人物已合并'));
       } else {
         if (chosen.length !== 2) return;

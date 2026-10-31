@@ -44,9 +44,17 @@ export const listPhotoPeople = (
     `${base}/people?view=${view}&projection=cards${after ? `&after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
-export const listPhotoPeopleOptions = (after?: string, signal?: AbortSignal) =>
-  request<{ people: Array<Pick<PhotoPerson, 'id' | 'name'>>; nextCursor: string | null }>(
-    `${base}/people?view=options${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+export type PhotoPersonOption = Pick<
+  PhotoPerson,
+  'id' | 'name' | 'rowVersion' | 'marksAssetsPrivate'
+>;
+export const listPhotoPeopleOptions = (
+  after?: string,
+  signal?: AbortSignal,
+  view: 'ALL' | 'NAMED' = 'ALL',
+) =>
+  request<{ people: PhotoPersonOption[]; nextCursor: string | null }>(
+    `${base}/people?view=${view === 'NAMED' ? 'NAMED&projection=options' : 'options'}${after ? `&after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
 export const listPhotoPersonFaces = (personId: string, after?: string, signal?: AbortSignal) =>
@@ -73,17 +81,21 @@ export const mergePhotoPeople = (id: string, targetId: string) =>
     method: 'POST',
     body: JSON.stringify({ targetId }),
   });
+export interface PhotoPersonMergeResult {
+  id: string;
+  rowVersion: number;
+  photoCount: number;
+  marksAssetsPrivate: boolean;
+  mergedIds: string[];
+}
 export const mergeSelectedPhotoPeople = (input: {
   targetId: string;
   people: Array<{ id: string; rowVersion: number }>;
 }) =>
-  request<{
-    id: string;
-    rowVersion: number;
-    photoCount: number;
-    marksAssetsPrivate: boolean;
-    mergedIds: string[];
-  }>(`${base}/people/merge-selected`, { method: 'POST', body: JSON.stringify(input) });
+  request<PhotoPersonMergeResult>(`${base}/people/merge-selected`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 export const splitPhotoFace = (id: string) =>
   request(`${base}/faces/${encodeURIComponent(id)}/person`, {
     method: 'PATCH',

@@ -94,7 +94,7 @@ export class PhotoManagementService {
           if (representation === 'options') {
             const rows = await tx.eaglePhotoPerson.findMany({
               where: { ownerId, libraryMode: 'PHOTO', id: { in: ids } },
-              select: { id: true, name: true },
+              select: { id: true, name: true, rowVersion: true, marksAssetsPrivate: true },
             });
             const names = new Map(rows.map((row) => [row.id, row]));
             return {
@@ -183,11 +183,22 @@ export class PhotoManagementService {
     if (representation === 'options') {
       const rows = await this.prisma.eaglePhotoPerson.findMany({
         ...pageQuery,
-        select: { id: true, name: true, createdAt: true },
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          rowVersion: true,
+          marksAssetsPrivate: true,
+        },
       });
       return {
         ...page(rows),
-        people: rows.slice(0, pageSize).map(({ id, name }) => ({ id, name })),
+        people: rows.slice(0, pageSize).map(({ id, name, rowVersion, marksAssetsPrivate }) => ({
+          id,
+          name,
+          rowVersion,
+          marksAssetsPrivate,
+        })),
       };
     }
     const rows = await this.prisma.eaglePhotoPerson.findMany({

@@ -26,7 +26,11 @@ export function usePhotoPeople(
             ...new Map(
               query.data.pages.flatMap((page) => page.people).map((person) => [person.id, person]),
             ).values(),
-          ],
+          ].sort((a, b) =>
+            view === 'UNNAMED'
+              ? (b.photoCount ?? 0) - (a.photoCount ?? 0) || a.id.localeCompare(b.id)
+              : 0,
+          ),
         }
       : undefined,
   };
