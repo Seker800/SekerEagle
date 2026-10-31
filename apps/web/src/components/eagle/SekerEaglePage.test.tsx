@@ -1,3 +1,4 @@
+import { AssetOperationRefresher } from './asset-operation-refresh';
 import { renderInWorkspace as render } from '../../test/render-in-workspace';
 import type { OriginalFileTarget } from '../../lib/original-file-export';
 import type * as PrivacyApiModule from '../../lib/eagle-privacy-api';
@@ -679,6 +680,20 @@ describe('SekerEaglePage', () => {
     expect(
       view.client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-b'] }),
     ).not.toHaveLength(0);
+  });
+
+  it('keeps browsing stable when background operations publish and refreshes only on request', async () => {
+    const view = renderPage('background-owner');
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    const calls = listEagleAssetsMock.mock.calls.length;
+    const progress = new AssetOperationRefresher(view.client, 'background-owner');
+    act(() => progress.schedule('MATERIAL', false));
+    expect(await screen.findByText('后台内容已更新，当前浏览位置保持不变。')).toBeVisible();
+    expect(listEagleAssetsMock).toHaveBeenCalledTimes(calls);
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '加载更新' }));
+    await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(calls + 1));
+    progress.dispose();
   });
 
   it('releases the context menu after accepting a send without hiding an unpublished source', async () => {

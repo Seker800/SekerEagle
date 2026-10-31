@@ -292,3 +292,8 @@ test('batch trash skips owned retired entries and isolates unavailable entries w
   ]);
   assert.equal(written.find((row) => row.status === 'FAILED')?.errorCode, 'NOT_FOUND');
 });
+
+test('constructing the HTTP provider exposes no Nest lifecycle that starts background execution', () => {
+  const service = new EagleAssetOperationService({} as never, {} as never, {} as never);
+  assert.equal(Reflect.get(service, 'onModuleInit'), undefined);
+});
