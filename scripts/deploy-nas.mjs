@@ -21,7 +21,7 @@ export function createNasStagingCompose(base, { revision }) {
     service.platform = 'linux/amd64';
     delete service.ports;
     if (service.build) {
-      service.image = `sekereagle/${name === 'migrate' ? 'api' : name}:nas-${revision}`;
+      service.image = `sekereagle/${['migrate', 'operations'].includes(name) ? 'api' : name}:nas-${revision}`;
       delete service.build;
     }
   }
@@ -39,9 +39,10 @@ export function createNasStagingCompose(base, { revision }) {
     'http://localhost:9000/minio/health/live',
   ];
   services['minio-init'].image = 'sekereagle/mc:nas-20250416';
-  for (const name of ['api', 'worker', 'migrate']) {
+  for (const name of ['api', 'worker', 'migrate', 'operations']) {
     const env = services[name].environment;
     env.DATABASE_URL = env.DATABASE_URL.replace('/sekereagle?', '/sekereagle_test?');
+    if (name === 'operations') continue;
     env.CANONICAL_ORIGIN = canonicalOrigin;
     env.S3_PUBLIC_ENDPOINT = canonicalOrigin;
     env.BROWSER_TRUSTED_ORIGINS = '';
