@@ -682,17 +682,26 @@ describe('SekerEaglePage', () => {
     ).not.toHaveLength(0);
   });
 
-  it('keeps browsing stable when background operations publish and refreshes only on request', async () => {
+  it('automatically removes published deletions while keeping surviving cards and scroll', async () => {
+    const survivor = { ...asset, id: 'survivor', displayName: 'Surviving photo' };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, survivor], nextCursor: null });
     const view = renderPage('background-owner');
     await screen.findByRole('button', { name: /Owl Reference/ });
+    const region = screen.getByRole('region', { name: '素材瀑布流' });
+    region.scrollTop = 1200;
+    fireEvent.scroll(region);
+    const refresh = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
+    listEagleAssetsMock.mockReturnValue(refresh.promise);
     const calls = listEagleAssetsMock.mock.calls.length;
     const progress = new AssetOperationRefresher(view.client, 'background-owner');
-    act(() => progress.schedule('MATERIAL', false));
-    expect(await screen.findByText('后台内容已更新，当前浏览位置保持不变。')).toBeVisible();
-    expect(listEagleAssetsMock).toHaveBeenCalledTimes(calls);
-    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: '加载更新' }));
+    act(() => progress.schedule('MATERIAL', true));
     await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(calls + 1));
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '加载更新' })).not.toBeInTheDocument();
+    await act(async () => refresh.resolve({ items: [survivor], nextCursor: null }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /Surviving photo/ })).toBeInTheDocument();
+    expect(region.scrollTop).toBe(1200);
     progress.dispose();
   });
 
