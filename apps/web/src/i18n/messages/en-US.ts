@@ -1,4 +1,21 @@
 export const enUS = {
+  '正在检查查重结果…': 'Checking duplicate results…',
+  查重规则尚未更新: 'Duplicate rules have not been updated yet',
+  没有完全重复的文件: 'No exact duplicate files',
+  视觉检查尚未完成: 'Visual checking is not complete',
+  未发现符合当前规则的近似项: 'No similar items matching the current rules',
+  未发现符合当前规则的重复项: 'No duplicates matching the current rules',
+  '后台检查完成后会自动显示结果，可以继续浏览。':
+    'Results will appear automatically when the background check finishes. You can keep browsing.',
+  '旧规则结果已停用，请等待更新完成；失败时可重新检查。':
+    'Old-rule results are disabled. Wait for the update to finish, or check again if it fails.',
+  '完全重复要求同格式、相同字节和哈希；近似照片在“近似清理”中查看。':
+    'Exact duplicates require the same format, bytes, and hash. Find similar photos under Similar cleanup.',
+  '当前分类没有待处理结果，可切换分类或检查新内容。':
+    'This category has no pending results. Switch categories or check new content.',
+  '查看近似清理 {{count}} 组': 'View {{count}} similar groups',
+  '查看完全重复 {{count}} 组': 'View {{count}} exact duplicate groups',
+
   近似清理: 'Similar-image cleanup',
   '旧版近似结果已停用，正在按同格式、同尺寸规则更新。':
     'Older visual matches are hidden. Rebuilding matches for the same format and dimensions.',

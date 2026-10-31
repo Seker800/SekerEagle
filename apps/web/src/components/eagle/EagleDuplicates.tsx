@@ -608,13 +608,55 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
             ))}
             {data && !groups.length && !results.error && (
               <div className={styles.empty}>
-                <IconCheck size={35} />
-                <h3>{showIgnored ? t('没有已忽略的结果') : t('当前没有待处理的查重结果')}</h3>
+                {!scanning && !scan.isPending && !data.outdatedGroups && <IconCheck size={35} />}
+                <h3>
+                  {scanning || scan.isPending
+                    ? t('正在检查查重结果…')
+                    : data.outdatedGroups
+                      ? t('查重规则尚未更新')
+                      : showIgnored
+                        ? t('没有已忽略的结果')
+                        : kind === 'EXACT'
+                          ? t('没有完全重复的文件')
+                          : data.coverage.indexed < data.coverage.total
+                            ? t('视觉检查尚未完成')
+                            : kind === 'SIMILAR'
+                              ? t('未发现符合当前规则的近似项')
+                              : t('未发现符合当前规则的重复项')}
+                </h3>
                 <p>
-                  {data.coverage.indexed < data.coverage.total
-                    ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
-                    : t('新图片入库后，可以再次检查。')}
+                  {scanning || scan.isPending
+                    ? t('后台检查完成后会自动显示结果，可以继续浏览。')
+                    : data.outdatedGroups
+                      ? t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
+                      : kind === 'EXACT' && !showIgnored
+                        ? t('完全重复要求同格式、相同字节和哈希；近似照片在“近似清理”中查看。')
+                        : data.coverage.indexed < data.coverage.total
+                          ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
+                          : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
                 </p>
+                {!showIgnored && kind === 'EXACT' && data.similarGroups > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKind('SIMILAR');
+                      setExpanded(null);
+                    }}
+                  >
+                    {t('查看近似清理 {{count}} 组', { count: data.similarGroups.toLocaleString() })}
+                  </button>
+                )}
+                {!showIgnored && kind === 'SIMILAR' && data.exactGroups > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKind('EXACT');
+                      setExpanded(null);
+                    }}
+                  >
+                    {t('查看完全重复 {{count}} 组', { count: data.exactGroups.toLocaleString() })}
+                  </button>
+                )}
               </div>
             )}
             {results.hasNextPage && (
