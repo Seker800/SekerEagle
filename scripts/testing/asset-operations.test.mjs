@@ -1494,3 +1494,28 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal(authorized.membership.find((row) => row.id === hidden.id).state, 'TRASH');
   });
 }
+
+
+test('SEND publishes a quantum in one transaction while retaining independent per-item journals', async () => {
+  const f = await fixture();
+  const rows = await Promise.all(Array.from({ length: OPERATION_SEND_CONCURRENCY }, () => f.add()));
+  const receipt = await f.enqueue('SEND', rows);
+  const before = transactionCount;
+  await f.service.tick();
+  assert.equal((await f.state(receipt.id)).completed, rows.length);
+  assert.equal(transactionCount - before, 2, 'one claim and one publication transaction');
+  const journals = await prisma.eagleLibraryTransfer.findMany({ where: { ownerId: f.ownerId } });
+  assert.equal(journals.length, rows.length);
+  assert.ok(journals.every(row => row.sourceIds.length === 1 && row.status === 'COMPLETED'));
+});
+
+test('SEND rotates to a newer operation after one quantum, including after executor restart', async () => {
+  const f = await fixture();
+  const rows = await Promise.all(Array.from({ length: OPERATION_SEND_CONCURRENCY * 3 }, () => f.add()));
+  const first = await f.enqueue('SEND', rows);
+  await f.service.tick();
+  const second = await f.enqueue('SEND', [await f.add()]);
+  await f.createService().tick();
+  assert.equal((await f.state(second.id)).completed, 1);
+  assert.equal((await f.state(first.id)).completed, OPERATION_SEND_CONCURRENCY);
+});

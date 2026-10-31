@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { publishEmbedding } from './embedding-publication';
+import { publishEmbedding, publishStoredEmbedding } from './embedding-publication';
 
 const job = {
   id: 'job-1',
@@ -100,4 +100,27 @@ test('a superseded media revision cannot publish into smart folders', async () =
   const f = fixture(1, 1, false);
   await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
   assert.deepEqual(f.calls, []);
+});
+
+
+test('stored-vector activation preserves compatibility, scope and lease without re-inference', async () => {
+  const sql: string[] = [];
+  let suggestions = 0;
+  const identity = { id: 'space', model: 'model', revision: 'revision', dimensions: 1024, normalized: true, instructionVersion: 'image-retrieval-v1', preprocessingVersion: 'preview-webp-v1' };
+  const tx = {
+    $queryRaw: async (query: { sql: string }) => {
+      sql.push(query.sql);
+      if (query.sql.includes('FROM "EagleAsset"')) return [{ id: job.assetId }];
+      return [{ id: 'stored', status: 'PENDING', isCurrent: false }];
+    },
+    eagleAssetProcessingJob: { updateMany: async () => ({ count: 1 }) },
+    eagleAssetEmbedding: { updateMany: async () => ({ count: 1 }) },
+    $executeRaw: async (query: { sql: string }) => { sql.push(query.sql); return 1; },
+  };
+  const reused = await publishStoredEmbedding({ $transaction: async (work: (tx: unknown) => Promise<boolean>) => work(tx) } as never, job, identity, async () => { suggestions++; });
+  assert.equal(reused, true);
+  assert.equal(suggestions, 1);
+  const lookup = sql.find(x => x.includes('JOIN "EagleEmbeddingSpace"'))!;
+  for (const field of ['"ownerId"', '"libraryMode"', '"assetRevision"', '"isCurrent"', 'revision', '"preprocessingVersion"', '"instructionVersion"', 'dimensions', 'normalized']) assert.ok(lookup.includes(field), field);
+  assert.ok(sql[0]!.includes('"deletedAt" IS NULL'));
 });
