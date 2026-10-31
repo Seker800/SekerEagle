@@ -357,6 +357,7 @@ test('60k library read, group pagination beyond the first page, and batch admiss
     });
     await db.eagleAsset.createMany({ data: rows });
   }
+  await db.$executeRaw`ANALYZE "EagleAsset"`;
   // Prisma query events are delivered asynchronously; exclude the preceding seed/cleanup.
   await flushQueryEvents();
   queries = 0;
@@ -369,6 +370,40 @@ test('60k library read, group pagination beyond the first page, and batch admiss
   assert.equal(page.exactGroups, 100);
   assert.equal(page.groups.length, 24);
   assert.ok(readQueries <= 12);
+
+  // Exercise the real composite-relation ceiling on a full, unindexed library.
+  const scanStart = performance.now();
+  const scan = await f.duplicate.scan(f.principal, randomUUID());
+  const scanMs = performance.now() - scanStart;
+  const planned = await db.eagleAssetOperationItem.aggregate({
+    where: { operationId: scan.operationId },
+    _sum: { weight: true },
+  });
+  assert.equal(planned._sum.weight, 60001);
+  await f.executor.cancel(f.principal, scan.operationId);
+  // Populate current synthetic evidence to exercise full-library projection too.
+  await db.$executeRaw`INSERT INTO "EagleDuplicateFingerprint"
+    ("ownerId", "libraryMode", "assetId", "mediaRevision", "processorVersion", hash, colors, contrast, "updatedAt")
+    SELECT "ownerId", "libraryMode", id, "mediaRevision", 'preview-dhash-rgb-v1',
+      substring(md5(id),1,16), '[]'::jsonb, 0, now()
+    FROM "EagleAsset" WHERE "ownerId"=${f.ownerId} AND "libraryMode"='MATERIAL'`;
+  await db.$executeRaw`ANALYZE "EagleDuplicateFingerprint"`;
+  const indexed = await f.duplicate.scan(f.principal, randomUUID());
+  assert.equal(
+    (
+      await db.eagleAssetOperationItem.aggregate({
+        where: { operationId: indexed.operationId },
+        _sum: { weight: true },
+      })
+    )._sum.weight,
+    1,
+  );
+  assert.equal((await f.drain(indexed.operationId)).failed, 0);
+  assert.equal(f.reads(), 0);
+  console.log(
+    JSON.stringify({ library: 60000, scanMs, scanTotal: planned._sum.weight, indexedScanTotal: 1 }),
+  );
+
   let found = page.groups.length,
     next = page.nextCursor;
   while (next) {

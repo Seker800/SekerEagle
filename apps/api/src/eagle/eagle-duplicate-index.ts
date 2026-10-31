@@ -1,15 +1,11 @@
+import { readDuplicateCandidates } from './eagle-duplicate-candidates';
 import { ConflictException } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
-import {
-  findDuplicateGroups,
-  type DuplicateCandidate,
-  type DuplicateFingerprint,
-} from '@sekereagle/library-core';
+import { findDuplicateGroups, type DuplicateFingerprint } from '@sekereagle/library-core';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ObjectStorageService } from '../storage/object-storage.service';
 import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
 import {
-  candidateSelect,
   signature,
   inDuplicateLibrary,
   type Item,
@@ -22,24 +18,12 @@ async function buildProjection(
   item: Item,
   assertActor: (tx: Prisma.TransactionClient) => Promise<void>,
 ) {
-  const raw = await prisma.eagleAsset.findMany({
-    where: inDuplicateLibrary(item.ownerId, libraryMode, item.operation.isPrivate),
-    select: candidateSelect,
-  });
-  const candidates: DuplicateCandidate[] = raw.map((row) => ({
-    ...row,
-    byteSize: Number(row.byteSize),
-    libraryAddedAt: row.libraryAddedAt.toISOString(),
-    fingerprint:
-      row.duplicateFingerprint?.mediaRevision === row.mediaRevision &&
-      row.duplicateFingerprint.processorVersion === DUPLICATE_FINGERPRINT_VERSION
-        ? {
-            hash: row.duplicateFingerprint.hash,
-            colors: row.duplicateFingerprint.colors as number[],
-            contrast: row.duplicateFingerprint.contrast,
-          }
-        : null,
-  }));
+  const candidates = await readDuplicateCandidates(
+    prisma,
+    item.ownerId,
+    libraryMode,
+    item.operation.isPrivate,
+  );
   const byId = new Map(candidates.map((row) => [row.id, row]));
   const groups = findDuplicateGroups(candidates).filter((group) => group.kind === 'SIMILAR');
   await prisma.$transaction(

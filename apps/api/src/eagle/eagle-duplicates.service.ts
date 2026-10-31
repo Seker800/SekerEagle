@@ -1,3 +1,4 @@
+import { readMissingDuplicateFingerprints } from './eagle-duplicate-candidates';
 import { readDuplicateReview } from './eagle-duplicate-read';
 import { executeDuplicateIndex, completeDuplicateItem } from './eagle-duplicate-index';
 import {
@@ -26,7 +27,6 @@ import { LIBRARY_MODE } from './library-mode';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from './eagle-privacy.service';
 import { assetListInclude, serializeAssetList } from './eagle.service';
 import { resolveEagleTrashTargets, setEagleTrash } from './eagle-trash';
-import { DUPLICATE_FINGERPRINT_VERSION } from './eagle-duplicate-fingerprint';
 import type {
   DuplicateActionDto,
   DuplicateIgnoreDto,
@@ -286,25 +286,11 @@ export class EagleDuplicateService {
           },
         });
         if (active) return { operationId: active.id };
-        const rows = await tx.eagleAsset.findMany({
-          where: {
-            ...this.inLibrary(principal.sub, principal.canViewPrivate),
-            mimeType: { startsWith: 'image/' },
-            lifecycleStatus: 'READY',
-          },
-          select: {
-            id: true,
-            rowVersion: true,
-            mediaRevision: true,
-            isPrivate: true,
-            duplicateFingerprint: { select: { mediaRevision: true, processorVersion: true } },
-          },
-          orderBy: { id: 'asc' },
-        });
-        const missing = rows.filter(
-          (row) =>
-            row.duplicateFingerprint?.mediaRevision !== row.mediaRevision ||
-            row.duplicateFingerprint.processorVersion !== DUPLICATE_FINGERPRINT_VERSION,
+        const missing = await readMissingDuplicateFingerprints(
+          tx,
+          principal.sub,
+          this.libraryMode,
+          principal.canViewPrivate,
         );
         const items: Array<{ assetIds: string[]; snapshots: ScanSnapshot; weight: number }> = [];
         for (let offset = 0; offset < missing.length; offset += BATCH) {
