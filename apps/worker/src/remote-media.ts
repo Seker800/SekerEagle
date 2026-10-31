@@ -48,10 +48,37 @@ import {
 import {
   PermanentMediaValidationError,
   isPermanentMediaValidationError,
+  type PermanentMediaValidationCode,
 } from './media-validation-error';
 export class RemoteMediaUnavailableError extends Error {
   constructor(readonly deferResource = true) {
     super('WAITING_REMOTE_MEDIA_CAPACITY');
+  }
+}
+const validationCodes: readonly PermanentMediaValidationCode[] = [
+  'IMAGE_PIXEL_LIMIT_EXCEEDED',
+  'IMAGE_CONTENT_MISMATCH',
+  'IMAGE_DECODE_FAILED',
+  'CONTENT_SHA256_MISMATCH',
+  'UNSUPPORTED_MEDIA_TYPE',
+];
+
+async function remoteValidationCode(
+  response: Response,
+): Promise<PermanentMediaValidationCode | undefined> {
+  const maximum = Number(process.env.REMOTE_MEDIA_ERROR_MAX_BYTES ?? '4096');
+  if (!Number.isSafeInteger(maximum) || maximum < 1)
+    throw new Error('INVALID_REMOTE_MEDIA_ERROR_MAX_BYTES');
+  try {
+    if (!response.body) return undefined;
+    const value = JSON.parse(
+      (await body(response.body, maximum)).toString(),
+    ) as { error?: unknown };
+    return validationCodes.find((code) => code === value.error);
+  } catch {
+    return undefined;
+  } finally {
+    await response.body?.cancel().catch(() => undefined);
   }
 }
 async function body(stream: AsyncIterable<Uint8Array>, limit: number) {
@@ -257,7 +284,7 @@ export function createRemoteMediaServer(
               ? 400
               : 500,
         {
-          error: 'MEDIA_COMPUTATION_FAILED',
+          error: e instanceof PermanentMediaValidationError ? e.code : 'MEDIA_COMPUTATION_FAILED',
         },
       );
     } finally {
@@ -316,17 +343,21 @@ export class RemoteMediaClient {
         throw new RemoteMediaUnavailableError();
       }
       if (!response.ok) {
-        await response.body?.cancel();
+        const validationCode = [413, 415, 422].includes(response.status)
+          ? await remoteValidationCode(response)
+          : undefined;
+        if (!response.bodyUsed) await response.body?.cancel();
         if ([408, 429, 502, 503, 504].includes(response.status))
           throw new RemoteMediaUnavailableError(
             response.headers.get('x-compute-backpressure') !== 'node',
           );
-        if ([413, 415, 422].includes(response.status))
+        if (validationCode || [415, 422].includes(response.status))
           throw new PermanentMediaValidationError(
-            'IMAGE_CONTENT_MISMATCH',
+            validationCode ??
+              (response.status === 415 ? 'UNSUPPORTED_MEDIA_TYPE' : 'IMAGE_CONTENT_MISMATCH'),
             'Remote media rejected invalid input.',
           );
-        throw new Error('REMOTE_MEDIA_REQUEST_REJECTED');
+        throw new Error(`REMOTE_MEDIA_HTTP_${response.status}`);
       }
       if (!response.body) throw new Error('MEDIA_RESPONSE_EMPTY');
       if (path.endsWith('/pyramid') || path.endsWith('/video'))

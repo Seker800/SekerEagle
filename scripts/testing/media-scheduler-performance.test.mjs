@@ -168,7 +168,7 @@ test('historical backlog discovery reads recent upload facts once even under a n
     data: { completedAt: new Date() },
   });
   const reference = query.text
-    .replace(/WITH recent_uploads AS MATERIALIZED \([\s\S]*?\)\s*SELECT job\.\*/, 'SELECT job.*')
+    .replace(/,\s*recent_uploads AS MATERIALIZED \([\s\S]*?\)\s*SELECT job\.\*/, ' SELECT job.*')
     .replace('LEFT JOIN recent_uploads current_upload', 'LEFT JOIN "UploadSession" current_upload');
   assert.notEqual(reference, query.text, 'the reference must use the original upload join');
   const expected = await db.$queryRawUnsafe(reference, ...query.values);

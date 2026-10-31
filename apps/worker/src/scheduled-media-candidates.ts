@@ -13,6 +13,7 @@ import {
   taskPolicyAllowsSql,
   taskPrioritySql,
   mediaTaskFamilySql,
+  taskPolicySnapshotSql,
 } from '@sekereagle/library-persistence';
 import type { MediaQueueAge } from './media-queue-policy';
 import type { ClaimFindManyInput } from './job-claim';
@@ -50,15 +51,16 @@ export function selectScheduledMediaCandidates(
   // cheaper than rereading every recent upload on each claim.
   const recentUploads = options.candidateIds
     ? Prisma.empty
-    : Prisma.sql`WITH recent_uploads AS MATERIALIZED (
+    : Prisma.sql`recent_uploads AS MATERIALIZED (
         SELECT "objectKey", "uploaderId", "libraryMode", "completedAt", status
         FROM "UploadSession"
         WHERE "completedAt">=now()-interval '24 hours' AND status='COMPLETED'
       )`;
   const uploads = options.candidateIds ? Prisma.sql`"UploadSession"` : Prisma.sql`recent_uploads`;
   return client.$queryRaw<EagleAssetProcessingJob[]>(Prisma.sql`
-    ${recentUploads}
+    ${options.candidateIds ? Prisma.empty : Prisma.sql`WITH ${taskPolicySnapshotSql()}, ${recentUploads}`}
     SELECT job.* FROM "EagleMediaJob" job JOIN "EagleAsset" a ON a.id=job."assetId" AND a."ownerId"=job."ownerId" AND a."libraryMode"=job."libraryMode"
+    ${options.candidateIds ? Prisma.empty : Prisma.sql`JOIN task_policy_snapshot eligibility ON eligibility."ownerId"=job."ownerId" AND eligibility."libraryMode"=job."libraryMode"`}
     LEFT JOIN ${uploads} current_upload ON current_upload."objectKey"=a."originalObjectKey"
       AND current_upload."completedAt">=now()-interval '24 hours'
       AND current_upload."uploaderId"=a."ownerId" AND current_upload."libraryMode"=a."libraryMode" AND current_upload.status='COMPLETED'
@@ -79,12 +81,14 @@ export function selectScheduledMediaCandidates(
       AND (job.status='PENDING' OR (job.status='PROCESSING' AND job."lockedAt"<${mediaStaleBeforeSql()}))
       AND job."assetRevision"=a."mediaRevision" AND (a."deletedAt" IS NULL OR job.kind='PURGE_ASSET')
       AND ${taskRunnableSql({
-        paused: Prisma.sql`NOT (${taskPolicyAllowsSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`, family)})`,
+        paused: options.candidateIds
+          ? Prisma.sql`NOT (${taskPolicyAllowsSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`, family)})`
+          : Prisma.sql`${family}=ANY(eligibility.paused)`,
         modelOffline: embeddingUnavailable
           ? Prisma.sql`job.kind='GENERATE_EMBEDDING'`
           : Prisma.sql`false`,
         ...mediaTaskFactsSql(Prisma.sql`job`, Prisma.sql`dependency`),
-        outsideSchedule: Prisma.sql`${backgroundFamilySql(family)} AND NOT (${backgroundScheduleSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`)})`,
+        outsideSchedule: Prisma.sql`${backgroundFamilySql(family)} AND NOT (${options.candidateIds ? backgroundScheduleSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`) : Prisma.sql`eligibility."inSchedule"`})`,
       })}
       ${typeof kind === 'string' ? Prisma.sql`AND job.kind=${kind}::"EagleMediaJobKind"` : Prisma.empty}
       ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind<>${kind.not}::"EagleMediaJobKind"` : Prisma.empty}

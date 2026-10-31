@@ -6,6 +6,7 @@ import type { AssetOperationKind, AssetOperationSummary } from '@sekereagle/libr
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getAssetOperationRefresher } from './asset-operation-refresh';
+import { createOperationPollSchedule } from './asset-operation-polling';
 
 export function useEnqueueAssetOperation() {
   const { ownerId, libraryMode } = useLibraryWorkspace();
@@ -45,6 +46,10 @@ export function useEnqueueAssetOperation() {
 export function useAssetOperationList(includePrivate: boolean, enabled = true) {
   const client = useQueryClient();
   const { ownerId, libraryMode } = useLibraryWorkspace();
+  const schedules = useMemo(
+    () => ({ MATERIAL: createOperationPollSchedule(), PHOTO: createOperationPollSchedule() }),
+    [ownerId, includePrivate, libraryMode],
+  );
   const apis = useMemo(
     () => ({
       MATERIAL: createAssetOperationsApi('MATERIAL'),
@@ -60,11 +65,15 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
         queryFn: ({ signal }: { signal: AbortSignal }) => apis[mode].list(visible, signal),
         enabled,
         staleTime: 1000,
-        refetchInterval: (query: { state: { data?: AssetOperationSummary[] } }) =>
-          getEagleWorkspaceCache(client, ownerId, mode).operations.hasPending() ||
-          query.state.data?.some((operation) => operation.running || operation.queued)
-            ? 1500
-            : 60000,
+        retry: false,
+        refetchInterval: (query: {
+          state: { data?: AssetOperationSummary[]; error: unknown; errorUpdateCount: number };
+        }) =>
+          schedules[mode](
+            query.state.data,
+            getEagleWorkspaceCache(client, ownerId, mode).operations.hasPending(),
+            query.state.error ? query.state.errorUpdateCount : 0,
+          ),
         refetchIntervalInBackground: false,
       };
     }),

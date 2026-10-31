@@ -44,7 +44,10 @@ export async function setEagleTrash(
       where: {
         ownerId,
         libraryMode: libraryMode,
-        assetId: { in: resourceIds },
+        OR: resources.map(({ id, mediaRevision }) => ({
+          assetId: id,
+          assetRevision: mediaRevision,
+        })),
         status: 'COMPLETED',
         lastError: 'ASSET_TRASHED',
         kind: { not: 'PURGE_ASSET' },

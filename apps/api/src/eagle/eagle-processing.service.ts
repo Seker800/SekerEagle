@@ -21,79 +21,57 @@ export class EagleProcessingService {
   ) {}
 
   async summary(ownerId: string, includePrivate = false) {
-    const visibleAsset = includePrivate ? {} : { isPrivate: false };
+    const visibleAsset = {
+      deletedAt: null,
+      ...(includePrivate ? {} : { isPrivate: false as const }),
+    };
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const onlineSince = new Date(Date.now() - 45_000);
-    const [workers, running, queued, failed, completedLast24Hours, grouped, coverage, settings] =
-      await Promise.all([
-        this.prisma.eagleProcessingWorkerHeartbeat.findMany({
-          where: { heartbeatAt: { gte: onlineSince } },
-        }),
-        this.prisma.eagleAssetProcessingJob.count({
-          where: {
-            ownerId,
-            status: 'PROCESSING',
-            asset: visibleAsset,
-            kind: { not: 'GENERATE_AI_TAGS' },
-            libraryMode: this.libraryMode,
-          },
-        }),
-        this.prisma.eagleAssetProcessingJob.count({
-          where: {
-            ownerId,
-            status: 'PENDING',
-            asset: visibleAsset,
-            kind: { not: 'GENERATE_AI_TAGS' },
-            libraryMode: this.libraryMode,
-          },
-        }),
-        this.prisma.eagleAssetProcessingJob.count({
-          where: {
-            ownerId,
-            status: 'FAILED',
-            asset: visibleAsset,
-            kind: { not: 'GENERATE_AI_TAGS' },
-            libraryMode: this.libraryMode,
-          },
-        }),
-        this.prisma.eagleAssetProcessingJob.count({
-          where: {
-            ownerId,
-            status: 'COMPLETED',
-            completedAt: { gte: since },
-            asset: visibleAsset,
-            kind: { not: 'GENERATE_AI_TAGS' },
-            libraryMode: this.libraryMode,
-          },
-        }),
-        this.prisma.eagleAssetProcessingJob.groupBy({
-          by: ['lane', 'status'],
-          where: {
-            ownerId,
-            asset: visibleAsset,
-            kind: { not: 'GENERATE_AI_TAGS' },
-            libraryMode: this.libraryMode,
-          },
-          _count: true,
-        }),
-        this.prisma.eagleAssetColorAnalysis.groupBy({
-          by: ['status'],
-          where: {
-            ownerId,
-            isCurrent: true,
-            asset: visibleAsset,
-            libraryMode: this.libraryMode,
-          },
-          _count: true,
-        }),
-        this.getSettings(ownerId),
-      ]);
+    const [workers, jobCounts, coverage, settings] = await Promise.all([
+      this.prisma.eagleProcessingWorkerHeartbeat.findMany({
+        where: { heartbeatAt: { gte: onlineSince } },
+      }),
+      this.prisma.$queryRaw<
+        Array<{ lane: string; status: string; count: bigint; recent: bigint }>
+      >(Prisma.sql`
+          SELECT j.lane::text,j.status::text,count(*) AS count,
+            count(*) FILTER (WHERE j."completedAt">=${since}) AS recent
+          FROM "EagleMediaJob" j JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode"
+          WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${this.libraryMode}::"LibraryMode"
+            AND j.kind<>'GENERATE_AI_TAGS' AND j."assetRevision"=a."mediaRevision"
+            AND (a."deletedAt" IS NULL OR j.kind='PURGE_ASSET') AND (${includePrivate} OR NOT a."isPrivate")
+          GROUP BY j.lane,j.status
+        `),
+      this.prisma.eagleAssetColorAnalysis.groupBy({
+        by: ['status'],
+        where: {
+          ownerId,
+          isCurrent: true,
+          asset: visibleAsset,
+          libraryMode: this.libraryMode,
+        },
+        _count: true,
+      }),
+      this.getSettings(ownerId),
+    ]);
+    const grouped = jobCounts.map((row) => ({
+      lane: row.lane,
+      status: row.status,
+      _count: Number(row.count),
+    }));
+    const countJobs = (status: string) =>
+      jobCounts.filter((row) => row.status === status).reduce((n, row) => n + Number(row.count), 0);
+    const running = countJobs('PROCESSING'),
+      queued = countJobs('PENDING'),
+      failed = countJobs('FAILED');
+    const completedLast24Hours = jobCounts
+      .filter((row) => row.status === 'COMPLETED')
+      .reduce((n, row) => n + Number(row.recent), 0);
     const countColor = (status: string) =>
       coverage.find((row) => row.status === status)?._count ?? 0;
     const eligible = await this.prisma.eagleAsset.count({
       where: {
         ownerId,
-        deletedAt: null,
         mimeType: { startsWith: 'image/' },
         ...visibleAsset,
         libraryMode: this.libraryMode,

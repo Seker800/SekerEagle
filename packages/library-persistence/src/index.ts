@@ -8,6 +8,7 @@ export { inheritPhotoEditedCopy } from './photo-edited-copy';
 import { Prisma, type LibraryMode } from '@prisma/client';
 export { backgroundScheduleSql } from './background-schedule';
 export { taskPolicyAllowsSql, taskPrioritySql, mediaTaskFamilySql } from './task-policy';
+export { taskPolicySnapshotSql } from './task-policy-snapshot';
 
 export async function syncAssetPrivacy(
   transaction: Prisma.TransactionClient,

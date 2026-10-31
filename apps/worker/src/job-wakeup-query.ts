@@ -1,10 +1,11 @@
 import { MEDIA_LEASE_MS } from '@sekereagle/library-core';
 import { Prisma, type EagleMediaJobKind } from '@prisma/client';
-import { taskPolicyAllowsSql, mediaTaskFamilySql } from '@sekereagle/library-persistence';
+import { taskPolicySnapshotSql, mediaTaskFamilySql } from '@sekereagle/library-persistence';
 
 /** Match the claim profile so paused jobs cannot cause an idle worker to spin. */
 export function buildMediaWakeQuery(allowedJobKinds?: readonly EagleMediaJobKind[]) {
   return Prisma.sql`
+      WITH ${taskPolicySnapshotSql()}
       SELECT candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind, candidate."processorVersion",
              MIN(candidate."availableAt") AS "availableAt"
       FROM (
@@ -24,7 +25,8 @@ export function buildMediaWakeQuery(allowedJobKinds?: readonly EagleMediaJobKind
         WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL
           AND job."assetRevision"=asset."mediaRevision" AND (asset."deletedAt" IS NULL OR job.kind='PURGE_ASSET')
       ) AS candidate
-      WHERE candidate.kind<>'GENERATE_AI_TAGS' AND ${taskPolicyAllowsSql(Prisma.sql`candidate."ownerId"`, Prisma.sql`candidate."libraryMode"`, mediaTaskFamilySql(Prisma.sql`candidate.kind`, Prisma.sql`candidate."processorVersion"`))}
+      JOIN task_policy_snapshot eligibility ON eligibility."ownerId"=candidate."ownerId" AND eligibility."libraryMode"=candidate."libraryMode"
+      WHERE candidate.kind<>'GENERATE_AI_TAGS' AND NOT (${mediaTaskFamilySql(Prisma.sql`candidate.kind`, Prisma.sql`candidate."processorVersion"`)}=ANY(eligibility.paused))
       ${
         allowedJobKinds === undefined
           ? Prisma.empty
