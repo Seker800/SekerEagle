@@ -231,7 +231,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
   test(`${mode}: visual indexing persists, resumes without re-reading current previews and invalidates stale groups`, async () => {
     const f = await fixture(mode),
       a = await f.add(),
-      b = await f.add({ width: 2400, height: 1600 });
+      b = await f.add({ rating: 5 });
     const pixels = Buffer.alloc(96 * 64 * 3);
     for (let y = 0; y < 64; y++)
       for (let x = 0; x < 96; x++) {
@@ -259,6 +259,20 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const next = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(next.operationId);
     assert.equal(f.reads(), 2, 'repeat checks reuse versioned fingerprints');
+    await db.eagleDuplicateGroup.updateMany({
+      where: { ownerId: f.ownerId },
+      data: { algorithmVersion: 'legacy' },
+    });
+    const obsolete = await f.duplicate.list(f.ownerId, false, {});
+    assert.equal(obsolete.similarGroups, 0);
+    assert.equal(obsolete.outdatedGroups, 1);
+    const rebuild = await f.duplicate.scan(f.principal, randomUUID());
+    await f.drain(rebuild.operationId);
+    assert.equal(f.reads(), 2, 'algorithm-only rebuild reuses all existing current fingerprints');
+    const renewed = await f.duplicate.list(f.ownerId, false, {});
+    assert.equal(renewed.outdatedGroups, 0);
+    assert.equal(renewed.similarGroups, 1);
+
     await db.eagleAsset.update({
       where: { id: a.id },
       data: { displayName: 'renamed after review', rowVersion: { increment: 1 } },

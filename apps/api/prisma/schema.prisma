@@ -1770,6 +1770,7 @@ model EagleDuplicateDismissal {
 }
 
 model EagleDuplicateGroup {
+ algorithmVersion String @default("legacy")
  ownerId String
  libraryMode LibraryMode
  signature String

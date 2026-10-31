@@ -14,7 +14,12 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const profile = [];
+let profiling = false;
+const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+db.$on('query', (e) => {
+  if (profiling) profile.push({ sql: e.query.slice(0, 100), ms: e.duration });
+});
 after(() => db.$disconnect());
 const vector = (x, y) => [x, y, ...Array(126).fill(0)];
 test('similarity reviews are global, private-scoped, persistent, versioned and survive merges', async () => {
@@ -333,16 +338,89 @@ test('two thousand identities yield bounded recommendations including a target b
         confidence: 0.99,
       })),
     });
+    // Reproduce large identities sharing many photos; a one-face-per-person fixture
+    // cannot expose repeated cooccurrence scans inside each candidate comparison.
+    await db.eaglePhotoFace.createMany({
+      data: records.slice(1, 601).map((p) => ({
+        id: randomUUID(),
+        ownerId,
+        libraryMode: 'PHOTO',
+        assetId: p.assetId,
+        assetRevision: 1,
+        personId: records[0].id,
+        embedding: records[0].prototype,
+        modelVersion,
+        box: [0.55, 0.1, 0.4, 0.4],
+        confidence: 0.99,
+      })),
+    });
     const service = new PhotoPersonReviewService(db, new PhotoManagementService(db));
+    profiling = true;
     const start = performance.now();
     const result = await service.suggestions(ownerId, false);
     const elapsed = performance.now() - start;
+    assert(
+      elapsed < 2500,
+      'interactive review must not spend seconds compiling plans or hydrating redundant membership',
+    );
+    profiling = false;
+    log(JSON.stringify({ stageTimings: profile }));
     assert(
       result.items.some(
         (p) =>
           [p.first.id, p.second.id].includes(records[0].id) &&
           [p.first.id, p.second.id].includes(records.at(-1).id),
       ),
+    );
+    const { personReviewCandidatesSql, reviewCursor } =
+      await import('../../apps/api/dist/photos/photo-person-review.js');
+    const query = personReviewCandidatesSql(
+      ownerId,
+      false,
+      reviewCursor(undefined, ownerId, false),
+    );
+    const [explain] = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('jit','off',true)`;
+      return tx.$queryRawUnsafe('EXPLAIN (ANALYZE,FORMAT JSON) ' + query.text, ...query.values);
+    });
+    const repeated = [];
+    function inspect(node) {
+      if (node['CTE Name'] === 'cooccurring') repeated.push(node['Actual Loops']);
+      for (const child of node.Plans ?? []) inspect(child);
+    }
+    inspect(explain['QUERY PLAN'][0].Plan);
+    const nodes = [];
+    function timing(node) {
+      nodes.push({
+        type: node['Node Type'],
+        cte: node['CTE Name'],
+        relation: node['Relation Name'],
+        rows: node['Actual Rows'],
+        loops: node['Actual Loops'],
+        ms: node['Actual Total Time'],
+      });
+      for (const child of node.Plans ?? []) timing(child);
+    }
+    timing(explain['QUERY PLAN'][0].Plan);
+    log(
+      JSON.stringify({
+        candidatePlanMs: explain['QUERY PLAN'][0]['Execution Time'],
+        topNodes: nodes.sort((a, b) => b.ms * b.loops - a.ms * a.loops).slice(0, 10),
+      }),
+    );
+
+    assert(
+      repeated.every((loops) => loops <= 8),
+      'cooccurrence projection must not be scanned per candidate',
+    );
+    log(
+      JSON.stringify({
+        syntheticOnly: true,
+        identities: count,
+        sharedPhotoFaces: 600,
+        cooccurrenceReadLoops: repeated,
+        productionTiming: false,
+      }),
     );
     assert(result.nextCursor);
     assert(result.items.length <= 32);

@@ -1,3 +1,10 @@
+export const DUPLICATE_GROUPING_VERSION = 'same-format-size-v2';
+export function canonicalDuplicateFormat(format: string) {
+  const v = format.trim().toLowerCase();
+  return (
+    ({ jpg: 'jpeg', jpe: 'jpeg', tif: 'tiff', heif: 'heic' } as Record<string, string>)[v] ?? v
+  );
+}
 /** Pixel evidence is deliberately independent of semantic search and photo burst grouping. */
 export interface DuplicateFingerprint {
   hash: string;
@@ -48,8 +55,16 @@ function validFingerprint(value: DuplicateFingerprint | null): value is Duplicat
   );
 }
 function visuallyMatches(a: DuplicateCandidate, b: DuplicateCandidate) {
-  if (!a.width || !a.height || !b.width || !b.height) return false;
-  if (Math.abs(a.width / a.height / (b.width / b.height) - 1) > 0.02) return false;
+  if (
+    !a.width ||
+    !a.height ||
+    a.width !== b.width ||
+    a.height !== b.height ||
+    a.isEdited ||
+    b.isEdited ||
+    canonicalDuplicateFormat(a.format) !== canonicalDuplicateFormat(b.format)
+  )
+    return false;
   const left = a.fingerprint!,
     right = b.fingerprint!;
   const rms = Math.sqrt(
@@ -81,7 +96,7 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
   };
   for (const row of rows) {
     if (!row.sha256) continue;
-    const key = `${row.isPrivate}:${row.sha256}:${row.byteSize}`;
+    const key = `${row.isPrivate}:${canonicalDuplicateFormat(row.format)}:${row.sha256}:${row.byteSize}`;
     const members = exact.get(key) ?? [];
     members.push(row);
     exact.set(key, members);
@@ -115,7 +130,7 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
       high[index] = parts[0];
       low[index] = parts[1];
       ranges.forEach(([start, end], band) => {
-        const key = hash.slice(start, end),
+        const key = `${canonicalDuplicateFormat(row.format)}:${row.width}:${row.height}:${hash.slice(start, end)}`,
           bucket = bands[band]!.get(key) ?? [];
         bucket.push(index);
         bands[band]!.set(key, bucket);
@@ -128,8 +143,9 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
       const reference = eligible[index]!,
         matches: number[] = [];
       ranges.forEach(([start, end], band) => {
-        for (const candidate of bands[band]!.get(reference.fingerprint!.hash.slice(start, end)) ??
-          []) {
+        for (const candidate of bands[band]!.get(
+          `${canonicalDuplicateFormat(reference.format)}:${reference.width}:${reference.height}:${reference.fingerprint!.hash.slice(start, end)}`,
+        ) ?? []) {
           if (candidate === index || assigned[candidate] || visited[candidate] === index + 1)
             continue;
           visited[candidate] = index + 1;

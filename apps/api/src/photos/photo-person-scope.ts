@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { previewSelect, serializePreview } from './photo-preview';
+import { facePreviewSelect, serializePreview } from './photo-preview';
 export const visiblePhotoAssets = (
   ownerId: string,
   includePrivate: boolean,
@@ -45,7 +45,7 @@ export const personPreviewSelect = (
         box: true,
         confidence: true,
         assetId: true,
-        asset: { select: previewSelect },
+        asset: { select: facePreviewSelect },
       },
       take: facesPerPerson,
       orderBy: { confidence: 'desc' as const },

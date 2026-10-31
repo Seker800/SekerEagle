@@ -489,12 +489,34 @@ describe('duplicate cleanup review', () => {
     view.rerender(show('after'));
     expect(screen.queryByText('old-public-name')).not.toBeInTheDocument();
   });
- it('can refresh current results without starting another scan and preserves keep choices',async()=>{
-  render();await screen.findByText('1 组待检查');const before=mocks.list.mock.calls.length;
-  fireEvent.click(screen.getByRole('button',{name:'刷新结果'}));await waitFor(()=>expect(mocks.list).toHaveBeenCalledTimes(before+1));expect(mocks.scan).not.toHaveBeenCalled();
- });
- it('refreshes results when checking finds an already completed index',async()=>{
-  mocks.scan.mockResolvedValue({operationId:null});render();await screen.findByText('1 组待检查');const before=mocks.list.mock.calls.length;fireEvent.click(screen.getByRole('button',{name:'检查新内容'}));await waitFor(()=>expect(mocks.list.mock.calls.length).toBeGreaterThan(before));
- });
-
+  it('can refresh current results without starting another scan and preserves keep choices', async () => {
+    render();
+    await screen.findByText('1 组待检查');
+    const before = mocks.list.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: '刷新结果' }));
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(before + 1));
+    expect(mocks.scan).not.toHaveBeenCalled();
+  });
+  it('refreshes results when checking finds an already completed index', async () => {
+    mocks.scan.mockResolvedValue({ operationId: null });
+    render();
+    await screen.findByText('1 组待检查');
+    const before = mocks.list.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
+    await waitFor(() => expect(mocks.list.mock.calls.length).toBeGreaterThan(before));
+  });
+  it('rebuilds an outdated algorithm projection once on opening through the durable scan API', async () => {
+    const page = await mocks.list();
+    mocks.list.mockClear();
+    mocks.list.mockResolvedValue({
+      ...page,
+      outdatedGroups: 12,
+      algorithmVersion: 'same-format-size-v2',
+    });
+    render();
+    await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText('旧版近似结果已停用，正在按同格式、同尺寸规则更新。'),
+    ).toBeVisible();
+  });
 });

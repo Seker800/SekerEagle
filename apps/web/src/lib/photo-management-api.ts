@@ -8,6 +8,7 @@ export interface PhotoFace {
   asset: EagleAssetListItem;
 }
 export interface PhotoPerson {
+  photoCount?: number;
   id: string;
   name: string | null;
   rowVersion: number;
@@ -72,6 +73,17 @@ export const mergePhotoPeople = (id: string, targetId: string) =>
     method: 'POST',
     body: JSON.stringify({ targetId }),
   });
+export const mergeSelectedPhotoPeople = (input: {
+  targetId: string;
+  people: Array<{ id: string; rowVersion: number }>;
+}) =>
+  request<{
+    id: string;
+    rowVersion: number;
+    photoCount: number;
+    marksAssetsPrivate: boolean;
+    mergedIds: string[];
+  }>(`${base}/people/merge-selected`, { method: 'POST', body: JSON.stringify(input) });
 export const splitPhotoFace = (id: string) =>
   request(`${base}/faces/${encodeURIComponent(id)}/person`, {
     method: 'PATCH',
@@ -189,4 +201,8 @@ export const decidePhotoPeople = (input: {
   firstVersion: number;
   secondVersion: number;
   decision: 'SAME' | 'DIFFERENT';
-}) => request(`${base}/people/review`, { method: 'POST', body: JSON.stringify(input) });
+}) =>
+  request<{ saved: true; people: Array<{ id: string; rowVersion: number }> }>(
+    `${base}/people/review`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );

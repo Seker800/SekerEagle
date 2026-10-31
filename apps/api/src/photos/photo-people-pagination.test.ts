@@ -169,6 +169,7 @@ test('named directory pagination composes with lightweight projections and isola
   const queries: Array<{ where: { name: unknown }; take: number; select: { faces?: unknown } }> =
     [];
   const service = new PhotoManagementService({
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn({}),
     eaglePhotoPerson: {
       findMany: async (query: (typeof queries)[number]) => {
         queries.push(query);

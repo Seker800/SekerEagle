@@ -1,7 +1,11 @@
 import { readDuplicateCandidates } from './eagle-duplicate-candidates';
 import { ConflictException } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
-import { findDuplicateGroups, type DuplicateFingerprint } from '@sekereagle/library-core';
+import {
+  findDuplicateGroups,
+  DUPLICATE_GROUPING_VERSION,
+  type DuplicateFingerprint,
+} from '@sekereagle/library-core';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ObjectStorageService } from '../storage/object-storage.service';
 import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
@@ -43,6 +47,7 @@ async function buildProjection(
             ownerId: item.ownerId,
             libraryMode: libraryMode,
             signature: signature(item.ownerId, libraryMode, group, byId),
+            algorithmVersion: DUPLICATE_GROUPING_VERSION,
             assetIds: group.assetIds,
             rowVersions: group.assetIds.map((id) => byId.get(id)!.rowVersion),
             mediaRevisions: group.assetIds.map((id) => byId.get(id)!.mediaRevision),

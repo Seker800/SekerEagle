@@ -109,6 +109,17 @@ export class AssetOperationRefresher {
       return;
     this.reading.add(key);
     try {
+      if (summary.kind === 'DUPLICATE_SCAN' && summary.total > 0) {
+        // Scanning changes only its result projection, never asset membership.
+        // The authenticated terminal summary is sufficient; no per-asset receipt replay.
+        changes.finish(summary.id, summary.kind, [], summary, [], readRevision);
+        done.set(summary.id, `${epoch}:${intentVersion}:${signature}`);
+        await this.client.invalidateQueries(
+          { queryKey: ['eagle', this.ownerId, mode, 'duplicates'] },
+          { cancelRefetch: false },
+        );
+        return;
+      }
       const api = createAssetOperationsApi(mode);
       const receipts: AssetOperationReceipt[] = [];
       const membership = new Map<string, AssetMembershipFact>();

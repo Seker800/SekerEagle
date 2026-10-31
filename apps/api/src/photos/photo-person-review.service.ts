@@ -5,7 +5,6 @@ import { PhotoManagementService } from './photo-management.service';
 import {
   personPreviewSelect,
   serializePersonPreview,
-  visiblePhotoPeople,
   requireVisiblePerson,
 } from './photo-person-scope';
 import { encodeReviewCursor, personReviewCandidatesSql, reviewCursor } from './photo-person-review';
@@ -46,7 +45,7 @@ export class PhotoPersonReviewService {
     const cursor = reviewCursor(after, ownerId, includePrivate);
     return this.prisma.$transaction(
       async (tx) => {
-        await tx.$executeRaw`SET LOCAL statement_timeout = '8s'`;
+        await tx.$executeRaw`SELECT set_config('statement_timeout','8s',true),set_config('jit','off',true)`;
         const rows = await tx.$queryRaw<
           Array<{
             anchorId: string;
@@ -80,7 +79,14 @@ export class PhotoPersonReviewService {
         const ids = [...new Set(qualified.flatMap((p) => [p.firstId, p.secondId]))];
         const people = ids.length
           ? await tx.eaglePhotoPerson.findMany({
-              where: { ...visiblePhotoPeople(ownerId, includePrivate), id: { in: ids } },
+              // IDs and selected faces were authorized earlier in this RepeatableRead
+              // snapshot; do not run the broad per-person face EXISTS again.
+              where: {
+                ownerId,
+                libraryMode: 'PHOTO',
+                id: { in: ids },
+                ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
+              },
               select: personPreviewSelect(
                 ownerId,
                 includePrivate,
@@ -170,7 +176,14 @@ export class PhotoPersonReviewService {
           },
         },
       });
-      if (existing) return { saved: true };
+      if (existing)
+        return {
+          saved: true,
+          people: [
+            { id: first.id, rowVersion: first.rowVersion },
+            { id: second.id, rowVersion: second.rowVersion },
+          ],
+        };
       if (first.rowVersion !== input.firstVersion || second.rowVersion !== input.secondVersion)
         throw new ConflictException('人物已变化，请刷新后重试。');
       await tx.eaglePhotoPersonSeparation.createMany({
@@ -181,7 +194,13 @@ export class PhotoPersonReviewService {
         where: { ownerId, libraryMode: 'PHOTO', id: { in: [firstId, secondId] } },
         data: { rowVersion: { increment: 1 } },
       });
-      return { saved: true };
+      return {
+        saved: true,
+        people: [
+          { id: first.id, rowVersion: first.rowVersion + 1 },
+          { id: second.id, rowVersion: second.rowVersion + 1 },
+        ],
+      };
     });
   }
 }

@@ -19,11 +19,13 @@ import type { EagleAssetListItem } from '../../lib/eagle-api';
 
 export function PhotoCollections({
   includePrivate,
+  scopeRevision = '',
   onOpen,
   onPerson,
   onPrivacyRulesChange,
 }: {
   includePrivate: boolean;
+  scopeRevision?: string;
   onPrivacyRulesChange: () => void;
   onOpen: (asset: EagleAssetListItem) => void;
   onPerson: (personId: string) => void;
@@ -47,7 +49,11 @@ export function PhotoCollections({
     view === 'REVIEW' ? 'NAMED' : view,
   );
   const actionPending = useRef(false);
-  async function perform(action: () => Promise<unknown>, changesPrivacy = false) {
+  async function perform(
+    action: () => Promise<unknown>,
+    changesPrivacy = false,
+    refreshReview = true,
+  ) {
     if (actionPending.current) return false;
     actionPending.current = true;
     setError(null);
@@ -69,7 +75,13 @@ export function PhotoCollections({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people'] }),
         summary.refetch(),
-        queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-review'] }),
+        ...(refreshReview
+          ? [
+              queryClient.invalidateQueries({
+                queryKey: ['eagle', ownerId, 'PHOTO', 'person-review'],
+              }),
+            ]
+          : []),
         queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
       ]);
       return true;
@@ -80,6 +92,14 @@ export function PhotoCollections({
       actionPending.current = false;
       setPending(false);
     }
+  }
+  async function afterReviewChange(changesPrivacy: boolean) {
+    if (changesPrivacy) return perform(async () => {}, true, false);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people'] }),
+      queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people-summary'] }),
+      queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
+    ]);
   }
   const thumbnail = (asset: EagleAssetListItem) => {
     const rendition = facePreview(asset);
@@ -158,11 +178,12 @@ export function PhotoCollections({
           )}
           {view === 'REVIEW' ? (
             <PhotoPeopleReview
-              key={`${ownerId}:${includePrivate}`}
+              key={`${ownerId}:${includePrivate}:${scopeRevision}`}
               ownerId={ownerId}
+              scopeRevision={scopeRevision}
               includePrivate={includePrivate}
               pending={pending}
-              onChanged={(privacy) => perform(async () => {}, privacy)}
+              onChanged={afterReviewChange}
               onOpen={onOpen}
               preview={thumbnail}
             />
@@ -184,6 +205,9 @@ export function PhotoCollections({
                       <strong>
                         {person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 })}
                       </strong>
+                      {person.photoCount !== undefined && (
+                        <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
+                      )}
                     </button>
                   );
                 })}

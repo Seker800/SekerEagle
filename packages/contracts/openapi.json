@@ -6849,6 +6849,28 @@
         "tags": ["photo-management"]
       }
     },
+    "/api/photos/photography/people/merge-selected": {
+      "post": {
+        "operationId": "PhotoManagementController_mergeSelected",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeSelectedPeopleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
     "/api/photos/photography/people/{id}/merge": {
       "post": {
         "operationId": "PhotoManagementController_merge",
@@ -9476,6 +9498,35 @@
           }
         },
         "required": ["marksAssetsPrivate", "rowVersion"]
+      },
+      "PersonMergeMemberDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rowVersion": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "rowVersion"]
+      },
+      "MergeSelectedPeopleDto": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonMergeMemberDto"
+            }
+          }
+        },
+        "required": ["targetId", "people"]
       },
       "MergePeopleDto": {
         "type": "object",

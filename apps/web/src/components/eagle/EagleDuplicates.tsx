@@ -1,3 +1,4 @@
+import { DUPLICATE_GROUPING_VERSION } from '@sekereagle/library-core';
 import { useAssetOperationActions } from './useAssetOperationActions';
 import { ApiError } from '../../lib/api-error';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -94,6 +95,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     scopeRevision,
     kind,
     showIgnored,
+    DUPLICATE_GROUPING_VERSION,
   ];
   const results = useInfiniteQuery({
     queryKey,
@@ -127,6 +129,27 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       );
   const active = operations.filter((op) => op.running || op.queued),
     scanning = active.some((op) => op.kind === 'DUPLICATE_SCAN');
+  const terminalScan = operations
+    .filter(
+      (op) =>
+        op.kind === 'DUPLICATE_SCAN' &&
+        !op.running &&
+        !op.queued &&
+        !changes.entries.some((row) => row.id === op.id),
+    )
+    .map((op) => `${op.id}:${op.completed}:${op.failed}`)
+    .sort()
+    .join('|');
+  const observedScan = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (terminalScan && observedScan.current !== terminalScan) {
+      observedScan.current = terminalScan;
+      void client.invalidateQueries(
+        { queryKey: ['eagle', ownerId, libraryMode, 'duplicates'] },
+        { cancelRefetch: false },
+      );
+    }
+  }, [terminalScan, client, ownerId, libraryMode]);
   const invalidate = () =>
     client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
   const scan = useMutation({
@@ -136,6 +159,10 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       return api.scan(scanId.current);
     },
     onSuccess: (result) => {
+      if (result.operationId && scanId.current && result.operationId !== scanId.current) {
+        changes.finish(scanId.current, 'DUPLICATE_SCAN', []);
+        cache.beginOperation(result.operationId, 'DUPLICATE_SCAN', []);
+      }
       if (!result.operationId && scanId.current)
         changes.finish(scanId.current, 'DUPLICATE_SCAN', []);
       scanId.current = null;
@@ -145,8 +172,23 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           : t('现有可用图片都已检查，新图片处理完成后可再次检查。'),
       );
       void invalidate();
+      // A check also renews the visible projection, even when there is no new work.
+      if (!result.operationId) void results.refetch({ cancelRefetch: false });
     },
   });
+  const attemptedUpgrade = useRef<string | null>(null);
+  const upgradeKey = `${ownerId}:${libraryMode}:${includePrivate}:${DUPLICATE_GROUPING_VERSION}`;
+  useEffect(() => {
+    if (
+      data?.outdatedGroups &&
+      attemptedUpgrade.current !== upgradeKey &&
+      !scanning &&
+      !scan.isPending
+    ) {
+      attemptedUpgrade.current = upgradeKey;
+      scan.mutate();
+    }
+  }, [data?.outdatedGroups, upgradeKey, scanning, scan.isPending, scan.mutate]);
   const cleanup = useMutation({
     mutationFn: async (input: DuplicateCleanupInput) => {
       const signatures =
@@ -312,7 +354,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               {[
                 ['ALL', t('全部')],
                 ['EXACT', t('完全重复')],
-                ['SIMILAR', t('画面近似')],
+                ['SIMILAR', t('近似清理')],
               ].map(([value, label]) => (
                 <button
                   key={value}
@@ -333,6 +375,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               ))}
             </div>
             <div className={styles.actions}>
+              <button type="button" disabled={results.isFetching} onClick={() => void refresh()}>
+                {results.isFetching ? t('正在读取查重结果…') : t('刷新结果')}
+              </button>
               <button
                 type="button"
                 disabled={scan.isPending || scanning}
@@ -343,6 +388,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
             </div>
           </div>
           <div className={styles.content}>
+            {!!data?.outdatedGroups && (
+              <p role="status">{t('旧版近似结果已停用，正在按同格式、同尺寸规则更新。')}</p>
+            )}
             {data && (
               <div className={styles.coverage}>
                 <strong>{t('{{count}} 组待检查', { count: data.totalGroups })}</strong>

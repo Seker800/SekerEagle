@@ -71,9 +71,24 @@ test('missing and malformed fingerprints are not duplicate evidence', () => {
   );
 });
 
-test('new cleanup scope excludes cross-format, resized and edited versions',()=>{
- const fingerprint={hash:'0123456789abcdef',colors:Array(48).fill(100),contrast:30};
- const rows=[item('jpeg-a',{format:'jpeg',fingerprint}),item('jpeg-b',{format:'jpg',fingerprint}),item('raw',{format:'nef',fingerprint}),item('small',{format:'jpeg',width:500,height:400,fingerprint}),item('edited',{format:'jpeg',isEdited:true,fingerprint})];
- assert.deepEqual(findDuplicateGroups(rows).map(g=>g.assetIds),[['jpeg-a','jpeg-b']]);
- assert.deepEqual(findDuplicateGroups([item('jpeg',{format:'jpeg',sha256:'same'}),item('raw',{format:'nef',sha256:'same'})]),[]);
+test('new cleanup scope excludes cross-format, resized and edited versions', () => {
+  const fingerprint = { hash: '0123456789abcdef', colors: Array(48).fill(100), contrast: 30 };
+  const rows = [
+    item('jpeg-a', { format: 'jpeg', fingerprint }),
+    item('jpeg-b', { format: 'jpg', fingerprint }),
+    item('raw', { format: 'nef', fingerprint }),
+    item('small', { format: 'jpeg', width: 500, height: 400, fingerprint }),
+    item('edited', { format: 'jpeg', isEdited: true, fingerprint }),
+  ];
+  assert.deepEqual(
+    findDuplicateGroups(rows).map((g) => g.assetIds),
+    [['jpeg-a', 'jpeg-b']],
+  );
+  assert.deepEqual(
+    findDuplicateGroups([
+      item('jpeg', { format: 'jpeg', sha256: 'same' }),
+      item('raw', { format: 'nef', sha256: 'same' }),
+    ]),
+    [],
+  );
 });

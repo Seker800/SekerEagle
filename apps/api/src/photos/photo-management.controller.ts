@@ -10,8 +10,10 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Type } from 'class-transformer';
 import { ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ValidateNested,
   IsIn,
   IsInt,
   Min,
@@ -68,6 +70,19 @@ class RenamePersonDto {
 }
 class MergePeopleDto {
   @ApiProperty({ format: 'uuid' }) @IsUUID('4') targetId!: string;
+}
+export class PersonMergeMemberDto {
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') id!: string;
+  @ApiProperty() @IsInt() @Min(1) rowVersion!: number;
+}
+export class MergeSelectedPeopleDto {
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') targetId!: string;
+  @ApiProperty({ type: [PersonMergeMemberDto] })
+  @IsArray()
+  @ArrayMinSize(2)
+  @ValidateNested({ each: true })
+  @Type(() => PersonMergeMemberDto)
+  people!: PersonMergeMemberDto[];
 }
 class ReassignFaceDto {
   @ApiPropertyOptional({ type: String, format: 'uuid', nullable: true })
@@ -172,6 +187,12 @@ export class PhotoManagementController {
       dto.rowVersion,
       p.canViewPrivate,
     );
+  }
+  @Post('people/merge-selected') @UseGuards(BrowserOriginGuard) mergeSelected(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Body() dto: MergeSelectedPeopleDto,
+  ) {
+    return this.photos.mergeSelection(p.sub, p.canViewPrivate, dto.targetId, dto.people);
   }
   @Post('people/:id/merge') @UseGuards(BrowserOriginGuard) merge(
     @CurrentPrincipal() p: AuthPrincipal,

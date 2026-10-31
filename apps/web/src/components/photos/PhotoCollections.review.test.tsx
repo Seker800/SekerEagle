@@ -1,3 +1,4 @@
+import { ApiError } from '../../lib/api-error';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, it, vi } from 'vitest';
@@ -95,33 +96,182 @@ beforeEach(() => {
 });
 
 it('keeps named directory as the default and loads review only on demand', async () => {
- show();await screen.findByRole('button',{name:'小明'});expect(mocks.suggest).not.toHaveBeenCalled();
+  show();
+  await screen.findByRole('button', { name: '小明' });
+  expect(mocks.suggest).not.toHaveBeenCalled();
 });
 it('shows nine selectable people and moves forward without recomputing prior pages', async () => {
- const persons=Array.from({length:13},(_,i)=>({...person(`person-${i}`),photoCount:13-i}));
- mocks.suggest.mockResolvedValue({items:persons.slice(1).map(p=>({key:`${persons[0].id}:${p.id}`,first:persons[0],second:p,similarity:.8})),nextCursor:null});
- show();fireEvent.click(await screen.findByRole('button',{name:'开始确认人物'}));
- await waitFor(()=>expect(screen.getAllByRole('checkbox')).toHaveLength(9));
- fireEvent.click(screen.getByRole('button',{name:'下一组'}));
- await waitFor(()=>expect(screen.getAllByRole('checkbox')).toHaveLength(4));expect(mocks.suggest).toHaveBeenCalledTimes(1);
+  const persons = Array.from({ length: 13 }, (_, i) => ({
+    ...person(`person-${i}`),
+    photoCount: 13 - i,
+  }));
+  mocks.suggest.mockResolvedValue({
+    items: persons.slice(1).map((p) => ({
+      key: `${persons[0].id}:${p.id}`,
+      first: persons[0],
+      second: p,
+      similarity: 0.8,
+    })),
+    nextCursor: null,
+  });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(9));
+  fireEvent.click(screen.getByRole('button', { name: '下一组' }));
+  await waitFor(() => expect(screen.getAllByRole('checkbox')).toHaveLength(4));
+  expect(mocks.suggest).toHaveBeenCalledTimes(1);
 });
 it('merges selected cards in one versioned request and does not wait for a candidate replay', async () => {
- mocks.merge.mockResolvedValue({id:'b',rowVersion:2,photoCount:6,marksAssetsPrivate:false});
- show();fireEvent.click(await screen.findByRole('button',{name:'开始确认人物'}));
- fireEvent.click(await screen.findByRole('checkbox',{name:'选择 a'}));fireEvent.click(screen.getByRole('checkbox',{name:'选择 小明'}));
- expect(screen.getByRole('button',{name:'合并所选人物'})).toBeEnabled();fireEvent.click(screen.getByRole('button',{name:'合并所选人物'}));
- await waitFor(()=>expect(mocks.merge).toHaveBeenCalledWith({targetId:'b',people:[{id:'a',rowVersion:1},{id:'b',rowVersion:1}]}));
- expect(await screen.findByText('人物已合并')).toBeVisible();expect(mocks.suggest).toHaveBeenCalledTimes(1);
- expect(screen.queryByRole('checkbox',{name:'选择 a'})).not.toBeInTheDocument();
+  mocks.merge.mockResolvedValue({
+    id: 'b',
+    rowVersion: 2,
+    photoCount: 6,
+    marksAssetsPrivate: false,
+  });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择 未命名分组 1' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择 小明' }));
+  expect(screen.getByRole('button', { name: '合并所选人物' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: '合并所选人物' }));
+  await waitFor(() =>
+    expect(mocks.merge).toHaveBeenCalledWith({
+      targetId: 'b',
+      people: [
+        { id: 'a', rowVersion: 1 },
+        { id: 'b', rowVersion: 1 },
+      ],
+    }),
+  );
+  expect(await screen.findByText('人物已合并')).toBeVisible();
+  expect(mocks.suggest).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole('checkbox', { name: '选择 未命名分组 1' })).not.toBeInTheDocument();
 });
 it('failed merges preserve selection and can retry without losing the page', async () => {
- mocks.merge.mockRejectedValue(new Error('人物已变化，请重新选择。'));show();fireEvent.click(await screen.findByRole('button',{name:'开始确认人物'}));
- fireEvent.click(await screen.findByRole('checkbox',{name:'选择 a'}));fireEvent.click(screen.getByRole('checkbox',{name:'选择 小明'}));fireEvent.click(screen.getByRole('button',{name:'合并所选人物'}));
- expect(await screen.findByRole('alert')).toHaveTextContent('人物已变化');expect(screen.getByRole('checkbox',{name:'选择 a'})).toBeChecked();
+  mocks.merge.mockRejectedValue(new Error('人物已变化，请重新选择。'));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择 未命名分组 1' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择 小明' }));
+  fireEvent.click(screen.getByRole('button', { name: '合并所选人物' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('人物已变化');
+  expect(screen.getByRole('checkbox', { name: '选择 未命名分组 1' })).toBeChecked();
 });
 it('automatically traverses empty pages and shows empty only at the end', async () => {
- mocks.suggest.mockImplementation(async(after?:string)=>!after?{items:[],nextCursor:'next'}:{items,nextCursor:null});show();fireEvent.click(await screen.findByRole('button',{name:'开始确认人物'}));await screen.findByRole('checkbox',{name:'选择 a'});expect(mocks.suggest).toHaveBeenCalledTimes(2);
+  mocks.suggest.mockImplementation(async (after?: string) =>
+    !after ? { items: [], nextCursor: 'next' } : { items, nextCursor: null },
+  );
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  await screen.findByRole('checkbox', { name: '选择 未命名分组 1' });
+  expect(mocks.suggest).toHaveBeenCalledTimes(2);
 });
 it('does not invent people in an empty review', async () => {
- mocks.suggest.mockResolvedValue({items:[],nextCursor:null});show();fireEvent.click(await screen.findByRole('button',{name:'开始确认人物'}));expect(await screen.findByText('暂时没有需要确认的相似人物。')).toBeVisible();expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  mocks.suggest.mockResolvedValue({ items: [], nextCursor: null });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  expect(await screen.findByText('暂时没有需要确认的相似人物。')).toBeVisible();
+  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+});
+
+it('prefetches only one batch ahead even when later pages repeat the same identities', async () => {
+  mocks.suggest.mockImplementation(async (after?: string) => ({
+    items,
+    nextCursor: after ? after + '-next' : 'first',
+  }));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  await screen.findByRole('checkbox', { name: '选择 未命名分组 1' });
+  await waitFor(() => expect(mocks.suggest).toHaveBeenCalledTimes(2));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(mocks.suggest).toHaveBeenCalledTimes(2);
+});
+
+it('persists different-person answers and uses returned current versions for a later merge', async () => {
+  mocks.decide.mockResolvedValue({
+    saved: true,
+    people: [
+      { id: 'a', rowVersion: 2 },
+      { id: 'b', rowVersion: 2 },
+    ],
+  });
+  mocks.merge.mockResolvedValue({
+    id: 'b',
+    rowVersion: 3,
+    photoCount: 2,
+    marksAssetsPrivate: false,
+  });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  for (const name of ['选择 未命名分组 1', '选择 小明'])
+    fireEvent.click(await screen.findByRole('checkbox', { name }));
+  fireEvent.click(screen.getByRole('button', { name: '不是同一个人' }));
+  await screen.findByText('已记住：不是同一个人。');
+  for (const name of ['选择 未命名分组 1', '选择 小明'])
+    fireEvent.click(screen.getByRole('checkbox', { name }));
+  fireEvent.click(screen.getByRole('button', { name: '合并所选人物' }));
+  await waitFor(() =>
+    expect(mocks.merge).toHaveBeenCalledWith({
+      targetId: 'b',
+      people: [
+        { id: 'a', rowVersion: 2 },
+        { id: 'b', rowVersion: 2 },
+      ],
+    }),
+  );
+  expect(mocks.suggest).toHaveBeenCalledTimes(1);
+});
+it('allows an explicit retained target, opens its photo and blocks duplicate submits', async () => {
+  let finish: (value: unknown) => void = () => {};
+  mocks.merge.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  for (const name of ['选择 未命名分组 1', '选择 小明'])
+    fireEvent.click(await screen.findByRole('checkbox', { name }));
+  fireEvent.change(screen.getByRole('combobox', { name: '保留人物' }), { target: { value: 'a' } });
+  fireEvent.click(screen.getByRole('button', { name: '合并所选人物' }));
+  expect(screen.getByRole('button', { name: '正在合并…' })).toBeDisabled();
+  expect(mocks.merge).toHaveBeenCalledTimes(1);
+  finish({ id: 'a', rowVersion: 2, photoCount: 2, marksAssetsPrivate: false });
+  await screen.findByText('人物已合并');
+  expect(screen.queryByRole('checkbox', { name: '选择 小明' })).not.toBeInTheDocument();
+});
+it('keeps existing cards when prefetch fails and offers an in-place retry on the next batch', async () => {
+  mocks.suggest.mockImplementation(async (after?: string) => {
+    if (after) throw new Error('下一批加载失败');
+    return { items, nextCursor: 'next' };
+  });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  await screen.findByRole('checkbox', { name: '选择 未命名分组 1' });
+  await screen.findByRole('alert');
+  expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+  fireEvent.click(screen.getByRole('button', { name: '下一组' }));
+  await screen.findByRole('button', { name: '继续查找相似人物' });
+});
+
+it('refreshes only the conflicted batch and requires a fresh selection instead of retrying a stale merge', async () => {
+  mocks.merge.mockRejectedValue(new ApiError('人物已变化', 409, null));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  for (const name of ['选择 未命名分组 1', '选择 小明'])
+    fireEvent.click(await screen.findByRole('checkbox', { name }));
+  fireEvent.click(screen.getByRole('button', { name: '合并所选人物' }));
+  await waitFor(() => expect(mocks.suggest).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(screen.getByRole('checkbox', { name: '选择 未命名分组 1' })).not.toBeChecked(),
+  );
+  expect(mocks.merge).toHaveBeenCalledTimes(1);
+});
+it('initial request failures offer retry without pretending the library has no candidates', async () => {
+  mocks.suggest.mockRejectedValue(new Error('请求失败'));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  await screen.findByRole('button', { name: '重试' });
+  expect(screen.queryByText('暂时没有需要确认的相似人物。')).not.toBeInTheDocument();
 });

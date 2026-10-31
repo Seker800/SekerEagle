@@ -10,6 +10,8 @@ export interface DuplicateGroupSummary {
   previews: EagleAssetListItem[];
 }
 export interface DuplicateResults {
+  outdatedGroups?: number;
+  algorithmVersion?: string;
   revision: string;
   exactRevision: string;
   exactItems: number;

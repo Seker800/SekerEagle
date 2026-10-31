@@ -2820,6 +2820,22 @@ export interface paths {
     patch: operations['PhotoManagementController_privacy'];
     trace?: never;
   };
+  '/api/photos/photography/people/merge-selected': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoManagementController_mergeSelected'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/photography/people/{id}/merge': {
     parameters: {
       query?: never;
@@ -4152,6 +4168,16 @@ export interface components {
     PersonPrivacyDto: {
       marksAssetsPrivate: boolean;
       rowVersion: number;
+    };
+    PersonMergeMemberDto: {
+      /** Format: uuid */
+      id: string;
+      rowVersion: number;
+    };
+    MergeSelectedPeopleDto: {
+      /** Format: uuid */
+      targetId: string;
+      people: components['schemas']['PersonMergeMemberDto'][];
     };
     MergePeopleDto: {
       /** Format: uuid */
@@ -8712,6 +8738,27 @@ export interface operations {
     };
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_mergeSelected: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MergeSelectedPeopleDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };

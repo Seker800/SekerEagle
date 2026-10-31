@@ -64,15 +64,17 @@ WITH visible_faces AS MATERIALIZED (
  WHERE f."ownerId"=${ownerId} AND f."libraryMode"='PHOTO' AND f."isCurrent" AND f."assetRevision"=a."mediaRevision"
  AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
  AND EXISTS(SELECT 1 FROM "EagleAssetRendition" r WHERE r."ownerId"=a."ownerId" AND r."libraryMode"='PHOTO' AND r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='PREVIEW' AND r.status='READY' AND r.variant='default')
+), face_counts AS MATERIALIZED (
+ SELECT "personId","modelVersion",count(DISTINCT "assetId") AS photos,
+ COALESCE(max(confidence) FILTER(WHERE confidence BETWEEN 0 AND 1),0) AS confidence
+ FROM visible_faces GROUP BY "personId","modelVersion"
 ), eligible AS MATERIALIZED (
- SELECT p.id,p.name,p.prototype::vector AS prototype,p."modelVersion",count(DISTINCT f."assetId") AS photos,
- COALESCE(max(f.confidence) FILTER (WHERE f.confidence BETWEEN 0 AND 1),0) AS confidence
- FROM "EaglePhotoPerson" p JOIN visible_faces f ON f."personId"=p.id AND f."modelVersion"=p."modelVersion"
+ SELECT p.id,p.name,p.prototype::vector AS prototype,p."modelVersion",f.photos,f.confidence
+ FROM "EaglePhotoPerson" p JOIN face_counts f ON f."personId"=p.id AND f."modelVersion"=p."modelVersion"
  WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO' AND p."modelVersion"=${PHOTO_FACE_MODEL_VERSION}
  AND (${includePrivate} OR NOT p."marksAssetsPrivate") AND cardinality(p.prototype)=128
  AND NOT EXISTS (SELECT 1 FROM unnest(p.prototype) v WHERE v IS NULL OR v NOT BETWEEN -1.001 AND 1.001)
  AND EXISTS (SELECT 1 FROM unnest(p.prototype) v WHERE abs(v)>0.000001)
- GROUP BY p.id
 ), anchors AS MATERIALIZED (
  SELECT * FROM eligible
  WHERE ${!after.id} OR photos<${after.photos} OR (photos=${after.photos} AND confidence<${after.confidence})
@@ -80,16 +82,17 @@ WITH visible_faces AS MATERIALIZED (
  ORDER BY photos DESC,confidence DESC,id LIMIT ${PERSON_REVIEW_ANCHORS + 1}
 ), work AS MATERIALIZED (SELECT * FROM anchors ORDER BY photos DESC,confidence DESC,id LIMIT ${PERSON_REVIEW_ANCHORS}),
 cooccurring AS MATERIALIZED (
- SELECT DISTINCT w.id AS anchor,f2."personId" AS candidate FROM work w
+ SELECT w.id AS anchor,array_agg(DISTINCT f2."personId") AS candidates FROM work w
  JOIN visible_faces f1 ON f1."personId"=w.id JOIN visible_faces f2 ON f2."assetId"=f1."assetId" AND f2."assetRevision"=f1."assetRevision"
+ GROUP BY w.id
 )
 SELECT a.id AS "anchorId",a.photos AS "anchorPhotos",a.confidence AS "anchorConfidence",b.id AS "candidateId",b.photos AS "candidatePhotos",b.score,
  (SELECT count(*)>${PERSON_REVIEW_ANCHORS} FROM anchors) AS "hasMore"
-FROM work a LEFT JOIN LATERAL (
+FROM work a LEFT JOIN cooccurring c ON c.anchor=a.id LEFT JOIN LATERAL (
  SELECT e.id,e.photos,1-(a.prototype <=> e.prototype) AS score FROM eligible e
  WHERE (a.photos>e.photos OR (a.photos=e.photos AND a.confidence>e.confidence)
    OR (a.photos=e.photos AND a.confidence=e.confidence AND a.id<e.id)) AND e."modelVersion"=a."modelVersion"
- AND NOT EXISTS(SELECT 1 FROM cooccurring c WHERE c.anchor=a.id AND c.candidate=e.id)
+ AND NOT(e.id=ANY(COALESCE(c.candidates,ARRAY[]::text[])))
  AND NOT EXISTS(SELECT 1 FROM "EaglePhotoPersonSeparation" d WHERE d."ownerId"=${ownerId} AND d."libraryMode"='PHOTO' AND d."firstId"=LEAST(a.id,e.id) AND d."secondId"=GREATEST(a.id,e.id))
  ORDER BY a.prototype <=> e.prototype,e.photos DESC,e.confidence DESC,e.id
  LIMIT ${PERSON_REVIEW_CANDIDATES_PER_ROUND} OFFSET ${after.round * PERSON_REVIEW_CANDIDATES_PER_ROUND}

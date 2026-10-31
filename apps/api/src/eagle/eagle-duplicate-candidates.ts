@@ -39,7 +39,8 @@ export async function readDuplicateCandidates(
       }
     >
   >`SELECT a.id,a.sha256,a."byteSize",a."rowVersion",a."mediaRevision",a."isPrivate",
-    a.width,a.height,a.rating,a."libraryAddedAt",
+    a.format,a.width,a.height,a.rating,a."libraryAddedAt",
+    EXISTS(SELECT 1 FROM "EagleAssetEditRecipe" e WHERE e."assetId"=a.id AND e."ownerId"=a."ownerId" AND e."libraryMode"=a."libraryMode" AND e."baseAssetId" IS NOT NULL) AS "isEdited",
     CASE WHEN f."assetId" IS NULL THEN NULL ELSE
       jsonb_build_object('hash',f.hash,'colors',f.colors,'contrast',f.contrast) END AS fingerprint
     FROM "EagleAsset" a LEFT JOIN "EagleDuplicateFingerprint" f

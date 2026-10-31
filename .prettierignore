@@ -16,3 +16,6 @@ apps/android/**/build/
 apps/android/.gradle/
 apps/android/gradle/
 apps/android/gradlew*
+
+# Preserve verbatim generated independent review reports.
+docs/deepseek-reviews/

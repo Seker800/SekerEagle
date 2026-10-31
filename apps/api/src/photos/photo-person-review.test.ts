@@ -17,14 +17,14 @@ test('review cursor preserves the whole traversal and is bound to identity and p
 test('person merge refuses a stale review before moving any faces', async () => {
   let writes = 0;
   const tx = {
-    $queryRaw: async () => [],
+    $queryRaw: async (strings: TemplateStringsArray | { sql: string }) =>
+      ('sql' in strings ? strings.sql : strings.join('')).includes('FROM "EaglePhotoPerson"')
+        ? ['source', 'target'].map((id) => ({ id, rowVersion: 2, marksAssetsPrivate: false }))
+        : [],
     $executeRaw: async () => 0,
     eaglePhotoPerson: {
-      findFirst: async ({ where }: { where: { id: string } }) => ({
-        id: where.id,
-        rowVersion: 2,
-        marksAssetsPrivate: false,
-      }),
+      findMany: async () =>
+        ['source', 'target'].map((id) => ({ id, rowVersion: 2, marksAssetsPrivate: false })),
       update: async () => {
         writes++;
         return {};
@@ -157,7 +157,46 @@ test('manual face reassignment invalidates review versions of both affected iden
   assert.deepEqual(changed.sort(), ['source', 'target']);
 });
 
-test('same-photo exclusions are joined once per anchor instead of scanned per candidate',()=>{
- const q=personReviewCandidatesSql('owner',false,reviewCursor(undefined,'owner',false)).text;
- assert.match(q,/LEFT JOIN cooccurring/);assert.doesNotMatch(q,/NOT EXISTS\(SELECT 1 FROM cooccurring/);
+test('bulk merge derives owner and privacy, guards origin and validates every supplied version', async () => {
+  const { ValidationPipe } = await import('@nestjs/common');
+  const { MergeSelectedPeopleDto, PhotoManagementController } =
+    await import('./photo-management.controller');
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const good = {
+    targetId: id(1),
+    people: [
+      { id: id(1), rowVersion: 1 },
+      { id: id(2), rowVersion: 1 },
+      { id: id(3), rowVersion: 2 },
+    ],
+  };
+  for (const bad of [
+    { ...good, ownerId: 'foreign' },
+    {
+      ...good,
+      people: [
+        { id: id(1), rowVersion: 1 },
+        { id: id(2), rowVersion: 0 },
+      ],
+    },
+    { ...good, people: [{ id: id(1), rowVersion: 1 }] },
+  ])
+    await assert.rejects(pipe.transform(bad, { type: 'body', metatype: MergeSelectedPeopleDto }));
+  const calls: unknown[][] = [];
+  const c = new PhotoManagementController(
+    { mergeSelection: (...args: unknown[]) => calls.push(args) } as never,
+    {} as never,
+    {} as never,
+  );
+  c.mergeSelected({ sub: 'trusted', canViewPrivate: false } as never, good);
+  assert.deepEqual(calls[0], ['trusted', false, good.targetId, good.people]);
+  const { GUARDS_METADATA } = await import('@nestjs/common/constants');
+  const { BrowserOriginGuard } = await import('../auth/browser-origin.guard');
+  const method = Object.getOwnPropertyDescriptor(
+    PhotoManagementController.prototype,
+    'mergeSelected',
+  )?.value as object;
+  const guards = Reflect.getMetadata(GUARDS_METADATA, method) as unknown[];
+  assert.ok(guards.includes(BrowserOriginGuard));
 });

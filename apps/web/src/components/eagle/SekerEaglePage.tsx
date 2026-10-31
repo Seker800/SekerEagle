@@ -2270,6 +2270,7 @@ export function SekerEaglePage({
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections
+                  scopeRevision={editingScope}
                   onPrivacyRulesChange={onPrivacyRulesChange ?? resetAssetPrivacyState}
                   includePrivate={privateVisible}
                   onOpen={openAssetPreview}

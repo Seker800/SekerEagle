@@ -1,5 +1,8 @@
+import { performance } from 'node:perf_hooks';
+import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { setImmediate as flushEvents } from 'node:timers/promises';
 import test, { after } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
@@ -12,7 +15,13 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+let queryCount = 0,
+  transactionCount = 0;
+const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+db.$on('query', (event) => {
+  queryCount++;
+  if (event.query === 'BEGIN') transactionCount++;
+});
 after(() => db.$disconnect());
 test('all ranked waves retain weak matches and scope while decisions stay excluded', async () => {
   const owner = randomUUID(),
@@ -145,5 +154,222 @@ test('all ranked waves retain weak matches and scope while decisions stay exclud
     await db.eaglePhotoPerson.deleteMany({ where: { ownerId: { in: [owner, other] } } });
     await db.eagleAsset.deleteMany({ where: { ownerId: { in: [owner, other] } } });
     await db.user.deleteMany({ where: { id: { in: [owner, other] } } });
+  }
+});
+
+test('count-sorted unnamed pages and atomic multi-person merge preserve scope and versions', async () => {
+  const owner = randomUUID(),
+    foreign = randomUUID();
+  const accounts = [owner, foreign];
+  await db.user.createMany({
+    data: accounts.map((id) => ({ id, email: `${id}@example.invalid`, passwordHash: 'synthetic' })),
+  });
+  try {
+    const groups = Array.from({ length: 30 }, (_, i) => ({
+      id: randomUUID(),
+      ownerId: owner,
+      libraryMode: 'PHOTO',
+      modelVersion: PHOTO_FACE_MODEL_VERSION,
+      prototype: [1, ...Array(127).fill(0)],
+      count: i + 1,
+    }));
+    const outsider = {
+      id: randomUUID(),
+      ownerId: foreign,
+      libraryMode: 'PHOTO',
+      modelVersion: PHOTO_FACE_MODEL_VERSION,
+      prototype: [1, ...Array(127).fill(0)],
+    };
+    await db.eaglePhotoPerson.createMany({
+      data: [
+        ...groups.map((p) => ({
+          id: p.id,
+          ownerId: p.ownerId,
+          libraryMode: p.libraryMode,
+          modelVersion: p.modelVersion,
+          prototype: p.prototype,
+        })),
+        outsider,
+      ],
+    });
+    const assets = [],
+      faces = [];
+    for (const p of groups)
+      for (let i = 0; i < p.count; i++) {
+        const id = randomUUID();
+        assets.push({
+          id,
+          ownerId: owner,
+          libraryMode: 'PHOTO',
+          originalName: 'synthetic.jpg',
+          displayName: 'synthetic',
+          normalizedDisplayName: 'synthetic',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          mediaRevision: 1,
+          lifecycleStatus: 'READY',
+          originalObjectKey: `synthetic/${id}`,
+        });
+        faces.push({
+          id: randomUUID(),
+          ownerId: owner,
+          libraryMode: 'PHOTO',
+          assetId: id,
+          assetRevision: 1,
+          personId: p.id,
+          modelVersion: PHOTO_FACE_MODEL_VERSION,
+          embedding: [1, ...Array(127).fill(0)],
+          box: [0.1, 0.1, 0.2, 0.2],
+          confidence: 0.99,
+        });
+      }
+    await db.eagleAsset.createMany({ data: assets });
+    await db.eaglePhotoFace.createMany({ data: faces });
+    // One photo with two current detections is still one photo, and obsolete faces are excluded.
+    await db.eaglePhotoFace.createMany({
+      data: [
+        { ...faces[0], id: randomUUID() },
+        { ...faces[0], id: randomUUID(), assetRevision: 0 },
+      ],
+    });
+    const { PhotoManagementService } =
+      await import('../../apps/api/dist/photos/photo-management.service.js');
+    const service = new PhotoManagementService(db);
+    const first = await service.people(owner, false, undefined, 'UNNAMED', 'cards');
+    assert.deepEqual(
+      first.people.map((p) => p.photoCount),
+      Array.from({ length: 24 }, (_, i) => 30 - i),
+    );
+    assert(first.nextCursor);
+    const next = await service.people(owner, false, first.nextCursor, 'UNNAMED', 'cards');
+    assert.deepEqual(
+      next.people.map((p) => p.photoCount),
+      [6, 5, 4, 3, 2, 1],
+    );
+    assert.equal(next.nextCursor, null);
+    assert.equal(new Set([...first.people, ...next.people].map((p) => p.id)).size, 30);
+    await assert.rejects(
+      service.people(foreign, false, first.nextCursor, 'UNNAMED', 'cards'),
+      /游标无效/,
+    );
+    const target = groups[29].id,
+      sources = [groups[28].id, groups[27].id];
+    const selection = [target, ...sources].map((id) => ({ id, rowVersion: 1 }));
+    await assert.rejects(
+      service.mergeSelection(owner, false, target, [
+        { id: outsider.id, rowVersion: 1 },
+        ...selection,
+      ]),
+      /不存在/,
+    );
+    assert.equal(await db.eaglePhotoPerson.count({ where: { ownerId: owner } }), 30);
+    await assert.rejects(
+      service.mergeSelection(
+        owner,
+        false,
+        target,
+        selection.map((p) => ({ ...p, rowVersion: p.id === sources[0] ? 2 : 1 })),
+      ),
+      /变化/,
+    );
+    assert.equal(await db.eaglePhotoPerson.count({ where: { ownerId: owner } }), 30);
+    await flushEvents();
+    queryCount = 0;
+    transactionCount = 0;
+    const started = performance.now();
+    const result = await service.mergeSelection(owner, false, target, selection);
+    await flushEvents();
+    console.log(
+      JSON.stringify({
+        batchMerge: {
+          selected: 3,
+          sql: queryCount,
+          transactions: transactionCount,
+          ms: performance.now() - started,
+          s3: 0,
+        },
+      }),
+    );
+    assert(queryCount <= 12, 'batch merge amortizes metadata work');
+    assert.equal(transactionCount, 1);
+    assert.equal(result.photoCount, 87);
+    assert.equal(result.rowVersion, 2);
+    assert.equal(await db.eaglePhotoPerson.count({ where: { ownerId: owner } }), 28);
+    assert.equal(
+      await db.eaglePhotoFace.count({ where: { ownerId: owner, personId: { in: sources } } }),
+      0,
+    );
+    assert.equal(
+      await db.eaglePhotoFace.count({
+        where: { ownerId: owner, personId: target, userAssigned: true },
+      }),
+      57,
+    );
+    assert.equal(
+      (await service.people(owner, false, undefined, 'UNNAMED', 'cards')).people[0].id,
+      target,
+    );
+    await assert.rejects(
+      service.mergeSelection(owner, false, target, [{ id: target, rowVersion: 2 }]),
+      /请选择/,
+    );
+    await assert.rejects(
+      service.mergeSelection(owner, false, target, [
+        { id: groups[3].id, rowVersion: 1 },
+        { id: groups[4].id, rowVersion: 1 },
+      ]),
+      /请选择/,
+    );
+    const hidden = groups[0].id,
+      publicSource = groups[2].id,
+      unrelated = groups[5].id;
+    await service.setPersonPrivacy(owner, hidden, true, 1, false);
+    await assert.rejects(
+      service.mergeSelection(owner, false, hidden, [
+        { id: hidden, rowVersion: 2 },
+        { id: publicSource, rowVersion: 1 },
+      ]),
+      /不存在/,
+    );
+    const ordered = [publicSource, unrelated].sort();
+    await db.eaglePhotoPersonSeparation.create({
+      data: { ownerId: owner, libraryMode: 'PHOTO', firstId: ordered[0], secondId: ordered[1] },
+    });
+    const internal = [hidden, publicSource].sort();
+    await db.eaglePhotoPersonSeparation.create({
+      data: { ownerId: owner, libraryMode: 'PHOTO', firstId: internal[0], secondId: internal[1] },
+    });
+    const mixed = await service.mergeSelection(owner, true, hidden, [
+      { id: hidden, rowVersion: 2 },
+      { id: publicSource, rowVersion: 1 },
+    ]);
+    assert.equal(mixed.marksAssetsPrivate, true);
+    assert.equal(mixed.photoCount, 4);
+    assert.equal(
+      await db.eaglePhotoFace.count({ where: { personId: hidden, asset: { isPrivate: false } } }),
+      0,
+    );
+    const inherited = [hidden, unrelated].sort();
+    assert(
+      await db.eaglePhotoPersonSeparation.findUnique({
+        where: {
+          ownerId_libraryMode_firstId_secondId: {
+            ownerId: owner,
+            libraryMode: 'PHOTO',
+            firstId: inherited[0],
+            secondId: inherited[1],
+          },
+        },
+      }),
+    );
+    const options = await service.people(owner, true, undefined, 'UNNAMED', 'options');
+    assert(options.people.every((p) => !('faces' in p) && !('prototype' in p)));
+  } finally {
+    await db.eaglePhotoPersonSeparation.deleteMany({ where: { ownerId: { in: accounts } } });
+    await db.eaglePhotoFace.deleteMany({ where: { ownerId: { in: accounts } } });
+    await db.eaglePhotoPerson.deleteMany({ where: { ownerId: { in: accounts } } });
+    await db.eagleAsset.deleteMany({ where: { ownerId: { in: accounts } } });
+    await db.user.deleteMany({ where: { id: { in: accounts } } });
   }
 });

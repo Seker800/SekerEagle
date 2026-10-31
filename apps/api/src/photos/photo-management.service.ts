@@ -1,3 +1,4 @@
+import { readUnnamedPeoplePage } from './photo-person-count-page';
 import { representativePhotoFace } from '@sekereagle/library-core';
 import {
   BadRequestException,
@@ -16,8 +17,13 @@ import {
 } from '@sekereagle/library-persistence';
 import { facePreviewSelect, previewSelect, serializePreview } from './photo-preview';
 import { suggestPhotoGroups } from './photo-grouping';
-import { visiblePhotoAssets, requireVisiblePerson } from './photo-person-scope';
-import { carryPersonSeparations } from './photo-person-review';
+import {
+  visiblePhotoAssets,
+  requireVisiblePerson,
+  personPreviewSelect,
+  serializePersonPreview,
+} from './photo-person-scope';
+import { mergeSelectedPeople } from './photo-person-merge';
 
 const visible = visiblePhotoAssets;
 
@@ -80,6 +86,60 @@ export class PhotoManagementService {
     const category = view === 'NAMED' || view === 'UNNAMED' ? view : 'ALL';
     const representation =
       view === 'cards' || view === 'options' || view === 'full' ? view : projection;
+    if (category === 'UNNAMED')
+      return this.prisma.$transaction(
+        async (tx) => {
+          const page = await readUnnamedPeoplePage(tx, ownerId, includePrivate, after);
+          const ids = page.rows.map((row) => row.id);
+          if (representation === 'options') {
+            const rows = await tx.eaglePhotoPerson.findMany({
+              where: { ownerId, libraryMode: 'PHOTO', id: { in: ids } },
+              select: { id: true, name: true },
+            });
+            const names = new Map(rows.map((row) => [row.id, row]));
+            return {
+              runtimeConfigured: Boolean(
+                process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR,
+              ),
+              limits: { people: 24, facesPerPerson: 0 },
+              nextCursor: page.nextCursor,
+              people: page.rows.flatMap((row) => {
+                const person = names.get(row.id);
+                return person ? [{ ...person, photoCount: Number(row.photos) }] : [];
+              }),
+            };
+          }
+
+          const rows = ids.length
+            ? await tx.eaglePhotoPerson.findMany({
+                where: { ownerId, libraryMode: 'PHOTO', id: { in: ids } },
+                select: personPreviewSelect(
+                  ownerId,
+                  includePrivate,
+                  representation === 'cards' ? 1 : 20,
+                  representation === 'cards'
+                    ? page.rows.flatMap((row) => (row.faceId ? [row.faceId] : []))
+                    : undefined,
+                ),
+              })
+            : [];
+          const byId = new Map(rows.map((row) => [row.id, row]));
+          return {
+            runtimeConfigured: Boolean(
+              process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR,
+            ),
+            limits: { people: 24, facesPerPerson: representation === 'cards' ? 1 : 20 },
+            nextCursor: page.nextCursor,
+            people: page.rows.flatMap((row) => {
+              const person = byId.get(row.id);
+              return person
+                ? [{ ...serializePersonPreview(person), photoCount: Number(row.photos) }]
+                : [];
+            }),
+          };
+        },
+        { isolationLevel: 'RepeatableRead', timeout: 12000 },
+      );
     const pageSize = category === 'ALL' ? 200 : 24;
     const cursorScope = category === 'ALL' ? ownerId : `${ownerId}:${category}`;
     const cursor = after ? decodePeopleCursor(after, cursorScope, includePrivate) : null;
@@ -87,11 +147,7 @@ export class PhotoManagementService {
       where: {
         ownerId,
         libraryMode: 'PHOTO' as const,
-        ...(category === 'NAMED'
-          ? { name: { not: null } }
-          : category === 'UNNAMED'
-            ? { name: null }
-            : {}),
+        ...(category === 'NAMED' ? { name: { not: null } } : {}),
         ...(cursor
           ? {
               AND: [
@@ -272,28 +328,22 @@ export class PhotoManagementService {
     return this.prisma.$transaction(async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
-      const source = await this.requirePerson(tx, ownerId, sourceId, includePrivate);
-      const target = await this.requirePerson(tx, ownerId, targetId, includePrivate);
-      if (
-        versions &&
-        (source.rowVersion !== versions.source || target.rowVersion !== versions.target)
-      )
-        throw new ConflictException('人物已变化，请刷新后重试。');
-      await carryPersonSeparations(tx, ownerId, sourceId, targetId);
-      await tx.eaglePhotoPerson.update({
-        where: { id: targetId },
-        data: {
-          marksAssetsPrivate: source.marksAssetsPrivate || target.marksAssetsPrivate,
-          rowVersion: { increment: 1 },
-        },
-      });
-      await tx.eaglePhotoFace.updateMany({
-        where: { ownerId, libraryMode: 'PHOTO', personId: sourceId },
-        data: { personId: targetId, userAssigned: true },
-      });
-      await tx.eaglePhotoPerson.delete({ where: { id: sourceId } });
-      await syncAssetPrivacy(tx, ownerId, undefined, 'PHOTO');
-      return { id: targetId };
+      return mergeSelectedPeople(tx, ownerId, includePrivate, targetId, [
+        { id: sourceId, rowVersion: versions?.source },
+        { id: targetId, rowVersion: versions?.target },
+      ]);
+    });
+  }
+  async mergeSelection(
+    ownerId: string,
+    includePrivate: boolean,
+    targetId: string,
+    people: readonly { id: string; rowVersion: number }[],
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
+      return mergeSelectedPeople(tx, ownerId, includePrivate, targetId, people);
     });
   }
   async reassignFace(

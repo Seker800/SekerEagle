@@ -84,6 +84,8 @@ export class EagleDuplicateService {
             .filter((g) => g.kind === 'EXACT' && !state.ignored.has(g.signature))
             .reduce((n, g) => n + g.assetIds.length - 1, 0),
           coverage: state.coverage,
+          outdatedGroups: state.outdatedGroups,
+          algorithmVersion: state.algorithmVersion,
           totalGroups: visible.length,
           exactGroups: state.groups.filter(
             (g) => g.kind === 'EXACT' && !state.ignored.has(g.signature),

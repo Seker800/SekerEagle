@@ -1,4 +1,14 @@
 export const enUS = {
+  近似清理: 'Similar-image cleanup',
+  '旧版近似结果已停用，正在按同格式、同尺寸规则更新。':
+    'Older visual matches are hidden. Rebuilding matches for the same format and dimensions.',
+  '选择属于同一个人的分组，合并到保留的人物。每页显示 9 个分组。':
+    'Select groups belonging to the same person, then merge into the retained person. Nine groups per page.',
+  查看照片: 'View photo',
+  保留人物: 'Keep person',
+  '正在合并…': 'Merging…',
+  合并所选人物: 'Merge selected people',
+
   确认永久删除: 'Permanently delete',
   '将永久删除当前图库回收站中的全部项目，包括尚未加载的项目。此操作无法撤销。':
     'Permanently delete every item in this library’s Trash, including items not yet loaded. This cannot be undone.',
