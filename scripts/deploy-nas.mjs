@@ -66,12 +66,20 @@ export function createNasStagingCompose(base, { revision }) {
   return compose;
 }
 
-export function createNasGateway(source) {
+export function createNasGateway(
+  source,
+  {
+    operationTimeoutSeconds = Number(process.env.EAGLE_OPERATION_PROXY_TIMEOUT_SECONDS ?? 150),
+  } = {},
+) {
+  if (!Number.isSafeInteger(operationTimeoutSeconds) || operationTimeoutSeconds <= 0)
+    throw new Error('EAGLE_OPERATION_PROXY_TIMEOUT_SECONDS must be a positive integer');
   const marker = 'proxy_set_header Host localhost:8180;';
   if (source.split(marker).length !== 2) throw new Error('Upload gateway host contract changed');
   return source
     .replace(marker, 'proxy_set_header Host localhost:8181;')
-    .replace('loopback identity', 'canonical identity');
+    .replace('loopback identity', 'canonical identity')
+    .replace('proxy_read_timeout 150s;', `proxy_read_timeout ${operationTimeoutSeconds}s;`);
 }
 
 export async function prepareNasPackage(directory, revision) {

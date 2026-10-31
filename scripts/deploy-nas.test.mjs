@@ -151,7 +151,6 @@ test('explicit NAS search connection requires dedicated credentials and cannot e
   assert.deepEqual(defaults.services.worker.profiles, ['processing']);
 });
 
-
 test('NAS operation executor uses the application image and isolated database without API or model secrets', async () => {
   const { services } = await render();
   const executor = services.operations;
@@ -163,7 +162,6 @@ test('NAS operation executor uses the application image and isolated database wi
   assert.deepEqual(executor.command, ['node', 'apps/api/dist/asset-operation-executor.js']);
   assert.equal(executor.mem_limit, '${EAGLE_OPERATION_MEMORY_LIMIT:-512m}');
 });
-
 
 test('large operation admission has its own adjustable gateway deadline', async () => {
   const { createNasGateway } = await import('./deploy-nas.mjs');
@@ -177,5 +175,8 @@ test('large operation admission has its own adjustable gateway deadline', async 
   }
   assert.equal(pattern.test('/api/auth/me'), false);
   assert.match(route[2], /proxy_read_timeout 150s;/u);
-  assert.match(createNasGateway(source, { operationTimeoutSeconds: 180 }), /proxy_read_timeout 180s;/u);
+  assert.match(
+    createNasGateway(source, { operationTimeoutSeconds: 180 }),
+    /proxy_read_timeout 180s;/u,
+  );
 });

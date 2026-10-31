@@ -214,7 +214,6 @@ it('logout waits for an in-flight refresh and fences its protected retry', async
   expect(calls).toEqual(['/api/eagle/assets', '/api/auth/refresh', '/api/auth/logout']);
 });
 
-
 it('operation admission and legacy sending outlive the admission transaction without widening reads', async () => {
   const deadlines = vi.spyOn(AbortSignal, 'timeout');
   vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({}));
@@ -224,5 +223,7 @@ it('operation admission and legacy sending outlive the admission transaction wit
     await createEagleApi(mode).sendEagleAssets('', { operationId: 'op', assetIds: ['asset'] });
     await api.list();
   }
-  expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([150_000, 150_000, 30_000, 150_000, 150_000, 30_000]);
+  expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([
+    150_000, 150_000, 30_000, 150_000, 150_000, 30_000,
+  ]);
 });

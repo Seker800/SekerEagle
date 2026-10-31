@@ -1,3 +1,4 @@
+import { EAGLE_OPERATION_REQUEST_TIMEOUT_MS } from './eagle-operation-request';
 import { getBrowserSessionSignal } from './api-client';
 import type { AssetOperationSummary, PhotoEditRecipe } from '@sekereagle/library-core';
 import type { components } from '@sekereagle/contracts';
@@ -297,7 +298,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       declaration: string;
     }
   >();
-  async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  async function api<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
     const response = await fetchWithBrowserSession(
       libraryApiPath(`/api${path}`, libraryMode),
       {
@@ -306,7 +307,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
           ? { 'content-type': 'application/json', ...init.headers }
           : init?.headers,
       },
-      /^\/eagle\/uploads\/[a-fA-F0-9-]{36}\/complete$/.test(path) ? 660_000 : undefined,
+      timeoutMs ??
+        (/^\/eagle\/uploads\/[a-fA-F0-9-]{36}\/complete$/.test(path) ? 660_000 : undefined),
     );
     if (!response.ok) {
       throw await errorFromResponse(response, '请求失败（{{value1}}）');
@@ -378,10 +380,14 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     _token: string,
     input: { assetIds: string[]; operationId: string },
   ) {
-    return api<AssetOperationSummary>('/eagle/assets/batch/send', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    return api<AssetOperationSummary>(
+      '/eagle/assets/batch/send',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      EAGLE_OPERATION_REQUEST_TIMEOUT_MS,
+    );
   }
 
   async function getEagleAssetLocation(_token: string, id: string, signal?: AbortSignal) {
