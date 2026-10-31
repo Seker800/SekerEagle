@@ -44,11 +44,10 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const [confirm, setConfirm] = useState<{
     input: DuplicateCleanupInput;
     count: number;
-    removeCount?: number;
-    size: number;
-    exact: boolean;
+    removeCount: number;
   } | null>(null);
   const [notice, setNotice] = useState('');
+  const [submitted, setSubmitted] = useState<Record<string, string>>({});
   const hadConfirmation = useRef(false);
   useEffect(() => {
     if (confirm) {
@@ -102,17 +101,36 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       );
   const active = operations.filter((op) => op.running || op.queued),
     scanning = active.some((op) => op.kind === 'DUPLICATE_SCAN');
-  const previousActive = useRef('');
+  const previousActive = useRef(new Set<string>());
+  const refreshing = useRef(new Set<string>());
+  const acceptedScan = useRef<string | null>(null);
+  const refetchResults = results.refetch;
   useEffect(() => {
-    const key = active
-      .map((op) => op.id)
-      .sort()
-      .join(':');
-    if (previousActive.current && previousActive.current !== key) {
-      setNotice(t('后台处理状态已更新，刷新即可查看最新结果。'));
-    }
-    previousActive.current = key;
-  }, [active]);
+    active.forEach((op) => refreshing.current.delete(op.id));
+    const finished = operations.filter(
+      (op) =>
+        !op.running &&
+        !op.queued &&
+        !refreshing.current.has(op.id) &&
+        (previousActive.current.has(op.id) ||
+          acceptedScan.current === op.id ||
+          Object.values(submitted).includes(op.id)),
+    );
+    previousActive.current = new Set(active.map((op) => op.id));
+    if (!finished.length) return;
+    const ids = new Set(finished.map((op) => op.id));
+    ids.forEach((id) => refreshing.current.add(id));
+    // Infinite-query refetch follows fresh cursors and retains loaded pages and scroll.
+    // The main gallery still uses its existing background-stale refresh contract.
+    void refetchResults().then((result) => {
+      if (!result.isError) {
+        if (acceptedScan.current && ids.has(acceptedScan.current)) acceptedScan.current = null;
+        setSubmitted((current) =>
+          Object.fromEntries(Object.entries(current).filter(([, id]) => !ids.has(id))),
+        );
+      }
+    });
+  }, [operations, active, submitted, refetchResults]);
   const invalidate = () =>
     client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
   const scan = useMutation({
@@ -122,6 +140,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     },
     onSuccess: (result) => {
       scanId.current = null;
+      acceptedScan.current = result.operationId;
       setNotice(
         result.operationId
           ? t('检查已加入后台任务，关闭此窗口后仍会继续。')
@@ -132,9 +151,19 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   });
   const cleanup = useMutation({
     mutationFn: (input: DuplicateCleanupInput) => api.cleanup(input),
-    onSuccess: (result) => {
+    onSuccess: (result, input) => {
       setConfirm(null);
-      setExpanded(null);
+      const signatures = input.allExact
+        ? groups.filter((group) => group.kind === 'EXACT').map((group) => group.signature)
+        : (input.groups?.map((group) => group.signature) ?? []);
+      if (result.operationId) {
+        const operationId = result.operationId;
+        setSubmitted((current) => ({
+          ...current,
+          ...Object.fromEntries(signatures.map((sig) => [sig, operationId])),
+        }));
+      }
+      advance(signatures);
       setNotice(
         result.operationId
           ? t('清理已加入后台任务，可在任务中心查看进度。完成后可从回收站恢复。')
@@ -143,10 +172,29 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       void invalidate();
     },
   });
+  const advance = (signatures: string[]) => {
+    setExpanded((current) => {
+      if (current && !signatures.includes(current)) return current;
+      const index = groups.findIndex((group) => group.signature === current);
+      const remaining = [...groups.slice(index + 1), ...groups.slice(0, index + 1)];
+      return (
+        remaining.find(
+          (group) => !signatures.includes(group.signature) && !submitted[group.signature],
+        )?.signature ?? null
+      );
+    });
+  };
   const refresh = async () => {
-    setExpanded(null);
-    await client.resetQueries({ queryKey, exact: true });
-    setNotice('');
+    const result = await results.refetch();
+    if (!result.isError) {
+      const finishedIds = new Set(
+        operations.filter((op) => !op.running && !op.queued).map((op) => op.id),
+      );
+      setSubmitted((current) =>
+        Object.fromEntries(Object.entries(current).filter(([, id]) => !finishedIds.has(id))),
+      );
+      setNotice('');
+    }
   };
   const confirmAll = () => {
     if (!data) return;
@@ -154,8 +202,6 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       input: { operationId: crypto.randomUUID(), allExact: true, revision: data.exactRevision },
       count: data.exactGroups,
       removeCount: data.exactItems,
-      size: data.removableBytes,
-      exact: true,
     });
   };
   return (
@@ -186,26 +232,18 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       </header>
       {confirm ? (
         <section className={styles.confirm} role="alertdialog" aria-label={t('确认清理')}>
-          <h3>
-            {confirm.input.allExact
-              ? t('清理 {{count}} 组完全重复项', { count: confirm.count })
-              : t('清理 {{count}} 项', { count: confirm.count })}
-          </h3>
-          {confirm.input.allExact && (
-            <p>
-              {t('保留 {{keep}} 项，清理 {{remove}} 项', {
-                keep: confirm.count,
-                remove: confirm.removeCount ?? 0,
-              })}
-            </p>
-          )}
-          <p>{t('每组保留已选择的内容，其余项目移入回收站，可以恢复。')}</p>
+          <h3>{t('清理 {{count}} 组完全重复项', { count: confirm.count })}</h3>
           <p>
-            {confirm.exact
-              ? t(
-                  '完全重复项的独有标签和最高评分会合并到保留项。说明、来源和编辑关系仍保存在原项目中，请先检查需要保留的信息。',
-                )
-              : t('画面近似不能证明文件重复。请确认已比较清晰度、构图、表情以及原片与成片。')}
+            {t('保留 {{keep}} 项，清理 {{remove}} 项', {
+              keep: confirm.count,
+              remove: confirm.removeCount,
+            })}
+          </p>
+          <p>{t('每组按推荐保留一项，其余移入回收站，可以恢复。')}</p>
+          <p>
+            {t(
+              '完全重复项的独有标签和最高评分会合并到保留项。说明、来源和编辑关系仍保存在原项目中，请先检查需要保留的信息。',
+            )}
           </p>
           <p>{t('现在不会释放磁盘空间，清空回收站后才会释放实际占用。')}</p>
           {cleanup.error && <p role="alert">{cleanup.error.message}</p>}
@@ -276,11 +314,15 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                     ? ` · ${t('{{count}} 张等待预览', { count: data.coverage.waiting })}`
                     : ''}
                 </span>
-                <p>
-                  {t(
-                    '完全重复依据文件内容；画面近似依据像素特征，需要人工确认。未完成视觉检查不代表没有重复。',
-                  )}
-                </p>
+                <details className={styles.help}>
+                  <summary>{t('查重依据与空间说明')}</summary>
+                  <p>
+                    {t(
+                      '完全重复依据文件内容；画面近似依据像素特征，需要人工确认。未完成视觉检查不代表没有重复。',
+                    )}
+                  </p>
+                  <p>{t('现在不会释放磁盘空间，清空回收站后才会释放实际占用。')}</p>
+                </details>
               </div>
             )}
             {active.map((op) => (
@@ -335,7 +377,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 {!showIgnored && data.exactGroups > 0 && (
                   <button
                     type="button"
-                    disabled={!!active.some((op) => op.kind === 'DUPLICATE_CLEANUP')}
+                    disabled={
+                      cleanup.isPending ||
+                      Object.keys(submitted).length > 0 ||
+                      active.some((op) => op.kind === 'DUPLICATE_CLEANUP')
+                    }
                     onClick={confirmAll}
                   >
                     {t('清理全部完全重复项')}
@@ -348,6 +394,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 <button
                   className={styles.groupHeader}
                   type="button"
+                  disabled={!!submitted[group.signature]}
                   aria-expanded={expanded === group.signature}
                   onClick={() =>
                     setExpanded((current) => (current === group.signature ? null : group.signature))
@@ -376,7 +423,13 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       {t('保留一项后可清理 {{size}} 文件', { size: bytes(group.removableBytes) })}
                     </small>
                   </div>
-                  <span>{expanded === group.signature ? t('收起') : t('比较并选择')}</span>
+                  <span>
+                    {submitted[group.signature]
+                      ? t('已提交清理')
+                      : expanded === group.signature
+                        ? t('收起')
+                        : t('比较并选择')}
+                  </span>
                 </button>
                 {expanded === group.signature && (
                   <DuplicateComparison
@@ -387,21 +440,29 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                     scheduler={scheduler}
                     loadService={loadService}
                     scopeRevision={scopeRevision}
-                    onIgnored={() => {
-                      setExpanded(null);
-                      void refresh();
-                    }}
-                    onCleanup={(selection, count, size) =>
-                      setConfirm({
-                        input: {
-                          operationId: crypto.randomUUID(),
-                          groups: [{ signature: group.signature, ...selection }],
-                        },
-                        count,
-                        size,
-                        exact: group.kind === 'EXACT',
-                      })
+                    submitting={cleanup.isPending}
+                    cleanupError={
+                      !confirm &&
+                      cleanup.variables?.groups?.some(
+                        (selected) => selected.signature === group.signature,
+                      )
+                        ? cleanup.error?.message
+                        : undefined
                     }
+                    onIgnored={() => {
+                      advance([group.signature]);
+                      void results.refetch();
+                    }}
+                    onCleanup={(selection) => {
+                      const selectedGroups = [{ signature: group.signature, ...selection }];
+                      const previous = cleanup.variables;
+                      cleanup.mutate(
+                        cleanup.error &&
+                          JSON.stringify(previous?.groups) === JSON.stringify(selectedGroups)
+                          ? previous!
+                          : { operationId: crypto.randomUUID(), groups: selectedGroups },
+                      );
+                    }}
                   />
                 )}
               </article>
@@ -439,6 +500,8 @@ function DuplicateComparison({
   scheduler,
   loadService,
   scopeRevision,
+  submitting,
+  cleanupError,
   onIgnored,
   onCleanup,
 }: {
@@ -448,17 +511,20 @@ function DuplicateComparison({
   scheduler: MediaLoadScheduler;
   loadService: ThumbnailLoadService;
   scopeRevision: string;
+  submitting: boolean;
+  cleanupError?: string;
   onIgnored: () => void;
-  onCleanup: (
-    selection: { keepIds: string[] } | { removeIds: string[] },
-    count: number,
-    size: number,
-  ) => void;
+  onCleanup: (selection: { keepIds: string[] } | { removeIds: string[] }) => void;
 }) {
   const { ownerId, libraryMode, api: workspaceApi } = useLibraryWorkspace();
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [keepIds, setKeepIds] = useState([group.recommendedId]);
   const [removeIds, setRemoveIds] = useState<string[]>([]);
+  const actionBar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    actionBar.current?.scrollIntoView?.({ block: 'nearest' });
+    actionBar.current?.querySelector('button')?.focus({ preventScroll: true });
+  }, []);
   const isKept = (id: string) =>
     group.kind === 'EXACT' ? keepIds.includes(id) : !removeIds.includes(id);
   const members = useInfiniteQuery({
@@ -472,8 +538,7 @@ function DuplicateComparison({
     mutationFn: () => api.ignore(group.signature, !ignored),
     onSuccess: onIgnored,
   });
-  const items = members.data?.pages.flatMap((p) => p.items) ?? [],
-    selected = items.filter((item) => !isKept(item.id));
+  const items = members.data?.pages.flatMap((p) => p.items) ?? [];
   const removeCount = group.kind === 'EXACT' ? group.count - keepIds.length : removeIds.length;
   const keepCount = group.count - removeCount;
   const preview = previewIndex === null ? undefined : items[previewIndex];
@@ -496,7 +561,7 @@ function DuplicateComparison({
     <div className={styles.comparison}>
       <p>
         {group.kind === 'EXACT'
-          ? t('推荐优先保留有评分的项目，其次为尺寸、文件大小和较早入库时间。可自行更改保留项。')
+          ? t('完全重复项合并标签和最高评分；说明、来源及编辑关系保留在回收站原项中。')
           : t('近似图片默认全部保留。取消勾选才会清理；未加载的图片继续保留。请放大比较细节。')}
       </p>
       {members.isPending && <p role="status">{t('正在读取组内图片…')}</p>}
@@ -508,6 +573,38 @@ function DuplicateComparison({
           </button>
         </p>
       )}
+      <div ref={actionBar} className={styles.reviewActions}>
+        <button
+          type="button"
+          disabled={ignore.isPending || submitting}
+          onClick={() => ignore.mutate()}
+        >
+          {ignored ? t('重新检查这组') : t('忽略这组')}
+        </button>
+        <span className={styles.recovery}>{t('清理项移入回收站，可恢复')}</span>
+        {!ignored && (
+          <button
+            type="button"
+            className={styles.danger}
+            disabled={
+              submitting ||
+              ignore.isPending ||
+              !keepCount ||
+              removeCount === 0 ||
+              !members.data ||
+              !!members.error
+            }
+            onClick={() => onCleanup(group.kind === 'EXACT' ? { keepIds } : { removeIds })}
+          >
+            {t('保留 {{keep}} 项，清理 {{remove}} 项', {
+              keep: keepCount,
+              remove: removeCount,
+            })}
+          </button>
+        )}
+      </div>
+      {!keepCount && <p role="alert">{t('每组至少保留一项。')}</p>}
+      {cleanupError && <p role="alert">{cleanupError}</p>}
       <div className={styles.members}>
         {items.map((item, index) => (
           <article
@@ -556,12 +653,13 @@ function DuplicateComparison({
               <span>
                 {t('入库')} {new Date(item.libraryAddedAt).toLocaleDateString()}{' '}
                 {item.rating ? `· ${'★'.repeat(item.rating)}` : ''}
+                {item.photoMetadata?.capturedAt && (
+                  <>
+                    {' '}
+                    · {t('拍摄')} {new Date(item.photoMetadata.capturedAt).toLocaleString()}
+                  </>
+                )}
               </span>
-              {item.photoMetadata?.capturedAt && (
-                <span>
-                  {t('拍摄')} {new Date(item.photoMetadata.capturedAt).toLocaleString()}
-                </span>
-              )}
               {item.manualTags.length > 0 && (
                 <span>
                   {t('标签')}：{item.manualTags.map((tag) => tag.name).join('、')}
@@ -600,31 +698,6 @@ function DuplicateComparison({
           {t('加载更多组内图片')}
         </button>
       )}
-      <div className={styles.actions}>
-        <button type="button" disabled={ignore.isPending} onClick={() => ignore.mutate()}>
-          {ignored ? t('重新检查这组') : t('忽略这组')}
-        </button>
-        {!ignored && (
-          <button
-            type="button"
-            className={styles.danger}
-            disabled={!keepCount || removeCount === 0 || !members.data || !!members.error}
-            onClick={() =>
-              onCleanup(
-                group.kind === 'EXACT' ? { keepIds } : { removeIds },
-                removeCount,
-                selected.reduce((n, item) => n + item.byteSize, 0),
-              )
-            }
-          >
-            {t('保留 {{keep}} 项，清理 {{remove}} 项', {
-              keep: keepCount,
-              remove: removeCount,
-            })}
-          </button>
-        )}
-      </div>
-      {!keepCount && <p role="alert">{t('每组至少保留一项。')}</p>}
       {preview && previewUrl && (
         <EagleImageViewer
           asset={preview}

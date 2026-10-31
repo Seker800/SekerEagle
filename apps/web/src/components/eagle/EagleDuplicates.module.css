@@ -48,7 +48,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 24px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--ui-line);
   flex-shrink: 0;
 }
@@ -69,7 +69,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
+  padding: 10px 20px;
   gap: 12px;
   border-bottom: 1px solid var(--ui-line);
   flex-shrink: 0;
@@ -89,19 +89,32 @@
 .content {
   overflow: auto;
   min-height: 0;
-  padding: 20px 24px 36px;
+  padding: 12px 20px 24px;
+  scroll-padding-top: 12px;
 }
 .coverage {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 .coverage span,
 .coverage p {
   color: var(--ui-muted);
   font-size: 13px;
+}
+.help {
+  width: 100%;
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+.help summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.help p {
+  margin: 6px 0;
 }
 .coverage p {
   width: 100%;
@@ -113,7 +126,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: 18px 0;
+  margin: 10px 0;
 }
 .resultTools label {
   display: flex;
@@ -124,14 +137,13 @@
 .group {
   border: 1px solid var(--ui-line);
   border-radius: var(--ui-radius-control);
-  margin-bottom: 14px;
-  overflow: hidden;
+  margin-bottom: 8px;
 }
 .groupHeader {
   display: flex !important;
   width: 100%;
-  padding: 14px !important;
-  gap: 16px !important;
+  padding: 9px 12px !important;
+  gap: 12px !important;
   text-align: left;
   justify-content: flex-start !important;
   border: 0 !important;
@@ -164,8 +176,8 @@
   gap: 5px;
 }
 .previews > div {
-  width: 90px;
-  height: 66px;
+  width: 72px;
+  height: 52px;
   overflow: hidden;
   border-radius: 5px;
   background: #0004;
@@ -176,7 +188,7 @@
   object-fit: contain;
 }
 .comparison {
-  padding: 16px;
+  padding: 10px 12px 12px;
   border-top: 1px solid var(--ui-line);
 }
 .comparison > p {
@@ -187,10 +199,10 @@
 }
 .members {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(270px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   align-items: start;
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 .member {
   border: 1px solid var(--ui-line);
@@ -201,7 +213,7 @@
   border-color: var(--ui-accent);
 }
 .image {
-  height: 230px;
+  height: clamp(140px, 20vh, 190px);
   background: #0005;
   display: flex;
   align-items: center;
@@ -213,10 +225,10 @@
   object-fit: contain;
 }
 .memberBody {
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -238,6 +250,24 @@
 .memberBody p {
   margin: 0;
   line-height: 1.5;
+}
+.reviewActions {
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  margin-bottom: 10px;
+  background: var(--ui-panel, #1b1d21);
+  border-bottom: 1px solid var(--ui-line);
+}
+.recovery {
+  flex: 1;
+  color: var(--ui-muted);
+  font-size: 12px;
 }
 .memberBody button {
   align-self: flex-start;

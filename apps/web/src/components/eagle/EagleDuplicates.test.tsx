@@ -9,7 +9,16 @@ const mocks = vi.hoisted(() => ({
   scan: vi.fn(),
   cleanup: vi.fn(),
   ignore: vi.fn(),
-  operations: [] as Array<{ id: string; libraryMode: string; kind: string; running: boolean; queued: boolean; completed: number; total: number; failed: number }>,
+  operations: [] as Array<{
+    id: string;
+    libraryMode: string;
+    kind: string;
+    running: boolean;
+    queued: boolean;
+    completed: number;
+    total: number;
+    failed: number;
+  }>,
 }));
 vi.mock('../../lib/eagle-duplicates-api', () => ({ createDuplicatesApi: () => mocks }));
 vi.mock('./useAssetOperations', () => ({
@@ -25,17 +34,16 @@ const group = {
   previews: [],
 };
 function render() {
-  return renderInWorkspace(
-    <QueryClientProvider
-      client={
-        new QueryClient({
-          defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-        })
-      }
-    >
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const show = () => (
+    <QueryClientProvider client={client}>
       <EagleDuplicates includePrivate={false} onClose={() => {}} />
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
+  const view = renderInWorkspace(show());
+  return { ...view, update: () => view.rerender(show()) };
 }
 describe('duplicate cleanup review', () => {
   beforeEach(() => {
@@ -208,41 +216,115 @@ describe('duplicate cleanup review', () => {
     const initial = await mocks.list();
     const next = { ...group, signature: 'd'.repeat(64), previews: [] };
     mocks.list.mockClear();
-    mocks.list.mockResolvedValue({ ...initial, totalGroups: 2, exactGroups: 2, groups: [group, next] });
-    mocks.members.mockResolvedValue({ signature: group.signature, total: 2, nextCursor: null,
-      items: ['one', 'two'].map(id => ({ id, displayName: id, format: 'jpeg', width: 1200, height: 800,
-        byteSize: 1000, libraryAddedAt: '2020-01-01', rating: null, manualTags: [], annotation: null,
-        renditions: [], mediaRevision: 1 })) });
+    mocks.list.mockResolvedValue({
+      ...initial,
+      totalGroups: 2,
+      exactGroups: 2,
+      groups: [group, next],
+    });
+    mocks.members.mockResolvedValue({
+      signature: group.signature,
+      total: 2,
+      nextCursor: null,
+      items: ['one', 'two'].map((id) => ({
+        id,
+        displayName: id,
+        format: 'jpeg',
+        width: 1200,
+        height: 800,
+        byteSize: 1000,
+        libraryAddedAt: '2020-01-01',
+        rating: null,
+        manualTags: [],
+        annotation: null,
+        renditions: [],
+        mediaRevision: 1,
+      })),
+    });
     const view = render();
     fireEvent.click((await screen.findAllByRole('button', { name: /^文件完全相同/ }))[0]);
-    fireEvent.click(await screen.findByRole('button', { name: '保留 1 项，清理 1 项' }));
+    await screen.findByRole('checkbox', { name: '保留 one' });
+    fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[1]).toHaveAttribute('aria-expanded', 'true'));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[1]).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      ),
+    );
     expect(screen.getAllByRole('button', { name: /^文件完全相同/ })[0]).toBeDisabled();
     mocks.list.mockResolvedValue({ ...initial, groups: [next] });
-    mocks.operations = [{ id: 'cleanup', libraryMode: 'MATERIAL', kind: 'DUPLICATE_CLEANUP', running: false,
-      queued: false, completed: 1, total: 1, failed: 0 }];
-    // A local interaction produces the next render as operation polling does in the application.
+    mocks.operations = [
+      {
+        id: 'cleanup',
+        libraryMode: 'MATERIAL',
+        kind: 'DUPLICATE_CLEANUP',
+        running: false,
+        queued: false,
+        completed: 1,
+        total: 1,
+        failed: 0,
+      },
+    ];
+    // Preserve an in-progress choice while the operation-poll response rerenders the parent.
     fireEvent.click(screen.getByRole('checkbox', { name: '保留 two' }));
+    view.update();
     await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(1));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /^文件完全相同/ })).toHaveLength(1),
+    );
     expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();
     view.unmount();
   });
   it('keeps a failed single-group choice visible and retries the same command', async () => {
     mocks.cleanup.mockRejectedValueOnce(new Error('单组连接失败'));
-    mocks.members.mockResolvedValue({ signature: group.signature, total: 2, nextCursor: null,
-      items: ['one', 'two'].map(id => ({ id, displayName: id, format: 'jpeg', width: 1200, height: 800,
-        byteSize: 1000, libraryAddedAt: '2020-01-01', rating: null, manualTags: [], annotation: null,
-        renditions: [], mediaRevision: 1 })) });
+    mocks.members.mockResolvedValue({
+      signature: group.signature,
+      total: 2,
+      nextCursor: null,
+      items: ['one', 'two'].map((id) => ({
+        id,
+        displayName: id,
+        format: 'jpeg',
+        width: 1200,
+        height: 800,
+        byteSize: 1000,
+        libraryAddedAt: '2020-01-01',
+        rating: null,
+        manualTags: [],
+        annotation: null,
+        renditions: [],
+        mediaRevision: 1,
+      })),
+    });
     render();
     fireEvent.click(await screen.findByRole('button', { name: /^文件完全相同/ }));
-    fireEvent.click(await screen.findByRole('button', { name: '保留 1 项，清理 1 项' }));
+    await screen.findByRole('checkbox', { name: '保留 one' });
+    fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('单组连接失败');
     expect(screen.getByRole('checkbox', { name: '保留 one' })).toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: '保留 1 项，清理 1 项' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(2));
     expect(mocks.cleanup.mock.calls[0]).toEqual(mocks.cleanup.mock.calls[1]);
+  });
+  it('refreshes even when an accepted scan finishes before its first progress poll', async () => {
+    const view = render();
+    fireEvent.click(await screen.findByRole('button', { name: '检查新内容' }));
+    await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
+    mocks.operations = [
+      {
+        id: 'scan',
+        libraryMode: 'MATERIAL',
+        kind: 'DUPLICATE_SCAN',
+        running: false,
+        queued: false,
+        completed: 2,
+        total: 2,
+        failed: 0,
+      },
+    ];
+    view.update();
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(2));
   });
   it('permission revision changes hide old cached names immediately', async () => {
     const client = new QueryClient({

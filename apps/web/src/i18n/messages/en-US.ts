@@ -1,4 +1,12 @@
 export const enUS = {
+  '每组按推荐保留一项，其余移入回收站，可以恢复。':
+    'Keep the recommended item in each group and move the others to Trash, where they can be restored.',
+  已提交清理: 'Cleanup queued',
+  '清理项移入回收站，可恢复': 'Removed items go to Trash and can be restored',
+  查重依据与空间说明: 'Detection and storage details',
+  '完全重复项合并标签和最高评分；说明、来源及编辑关系保留在回收站原项中。':
+    'Exact duplicates merge tags and the highest rating. Notes, sources and edit relationships stay on the original items in Trash.',
+
   '检查当前图库全部可访问内容，不含回收站': 'All accessible items in this library, excluding Trash',
   '近似图片默认全部保留。取消勾选才会清理；未加载的图片继续保留。请放大比较细节。':
     'Visual matches are all kept by default. Uncheck only the images you want to remove; unloaded images remain kept. Enlarge images to compare details.',
