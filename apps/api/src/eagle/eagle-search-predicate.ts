@@ -1,4 +1,13 @@
 import { Prisma } from '@prisma/client';
+import { colorScoreSql } from './eagle-color-sql';
+
+/** Internal search AST. Prisma leaves remain canonical; color is an explicit SQL leaf. */
+export interface AssetSearchWhere extends Prisma.EagleAssetWhereInput {
+  AND?: AssetSearchWhere | AssetSearchWhere[];
+  OR?: AssetSearchWhere[];
+  NOT?: AssetSearchWhere | AssetSearchWhere[];
+  colorMatch?: string;
+}
 
 interface Relation {
   model: string;
@@ -178,7 +187,7 @@ function scalar(
 }
 
 /** Keep eligibility inside PostgreSQL instead of materializing an entire library's IDs in Node. */
-export function compileSearchPredicate(where: Prisma.EagleAssetWhereInput): Prisma.Sql {
+export function compileSearchPredicate(where: AssetSearchWhere): Prisma.Sql {
   let sequence = 0;
   const visit = (name: string, alias: string, input: unknown, preserveNull = false): Prisma.Sql => {
     const definition = models[name]!;
@@ -198,6 +207,9 @@ export function compileSearchPredicate(where: Prisma.EagleAssetWhereInput): Pris
               )
             : combine(entries, key),
         );
+      } else if (key === 'colorMatch' && name === 'asset') {
+        if (typeof value !== 'string') throw new Error('Unsupported search color');
+        parts.push(Prisma.sql`${colorScoreSql(value, alias)} IS NOT NULL`);
       } else if (definition.fields.has(key)) {
         parts.push(scalar(column(key), value, definition.enums[key]));
       } else {
