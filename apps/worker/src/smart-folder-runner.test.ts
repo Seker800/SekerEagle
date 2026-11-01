@@ -31,7 +31,7 @@ test('committed batches release and reacquire the maintenance grant promptly, th
     await flush();
     assert.equal(steps, 2);
     assert.deepEqual(order, ['grant', 'step', 'release', 'grant', 'step', 'release']);
-    t.mock.timers.tick(4999);
+    t.mock.timers.tick(29999);
     await flush();
     assert.equal(steps, 2);
     runner.stop();
@@ -61,7 +61,7 @@ test('a denied maintenance grant never spins or bypasses model eligibility', asy
     runner.wake();
     await flush();
     assert.equal(steps, 0);
-    t.mock.timers.tick(4999);
+    t.mock.timers.tick(29999);
     await flush();
     assert.equal(grants, 1);
     t.mock.timers.tick(1);
