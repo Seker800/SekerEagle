@@ -23,6 +23,7 @@ import { publishPyramid } from './pyramid-publication';
 import { EmbeddingProcessor } from './embedding-job';
 import {
   createTopEmbeddingSuggestion,
+  activateEmbeddingSuggestionGeneration,
   unreviewedSuggestionEvidenceSql,
 } from './embedding-suggestions';
 import { buildMediaWakeQuery } from './job-wakeup-query';
@@ -984,16 +985,7 @@ async function recomputeSuggestionGeneration(
         data: { currentSnapshotId: candidateSnapshotId, lastGeneratedAt: new Date() },
       });
     }
-    await transaction.eagleVectorTagSuggestion.updateMany({
-      where: {
-        ownerId: build.ownerId,
-        libraryMode: build.libraryMode,
-        generationId,
-        status: 'PENDING',
-        invalidatedAt: null,
-      },
-      data: { isActive: true },
-    });
+    await activateEmbeddingSuggestionGeneration(transaction, build, generationId);
     await transaction.eagleTagSemanticBuild.updateMany({
       where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
       data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },

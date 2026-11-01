@@ -66,3 +66,34 @@ export function unreviewedSuggestionEvidenceSql(
       AND (reviewed."reviewedAt" IS NOT NULL OR reviewed.status IN ('ACCEPTED', 'REJECTED'))
   )`;
 }
+
+/** Staging can outlive review or media replacement; activate only evidence still applicable now. */
+export async function activateEmbeddingSuggestionGeneration(
+  tx: Prisma.TransactionClient,
+  scope: { ownerId: string; libraryMode: LibraryMode },
+  generationId: string,
+): Promise<number> {
+  return tx.$executeRaw(Prisma.sql`
+    UPDATE "EagleVectorTagSuggestion" suggestion SET "isActive"=true, "updatedAt"=now()
+    FROM "EagleAssetEmbedding" embedding
+    JOIN "EagleAsset" asset ON asset.id=embedding."assetId" AND asset."ownerId"=embedding."ownerId"
+      AND asset."libraryMode"=embedding."libraryMode" AND asset."mediaRevision"=embedding."assetRevision"
+    JOIN "EagleEmbeddingSpace" space ON space.id=embedding."spaceId" AND space."isCurrent"
+    JOIN "EagleTagPrototypeSnapshot" snapshot ON snapshot."ownerId"=embedding."ownerId"
+      AND snapshot."libraryMode"=embedding."libraryMode" AND snapshot."spaceId"=embedding."spaceId"
+    JOIN "EagleManualTagSemanticConfig" config ON config."ownerId"=snapshot."ownerId"
+      AND config."libraryMode"=snapshot."libraryMode" AND config."tagId"=snapshot."tagId"
+    WHERE suggestion."ownerId"=${scope.ownerId} AND suggestion."libraryMode"=${scope.libraryMode}::"LibraryMode"
+      AND suggestion."generationId"=${generationId} AND suggestion.status='PENDING' AND suggestion."invalidatedAt" IS NULL
+      AND embedding.id=suggestion."embeddingId" AND embedding."ownerId"=suggestion."ownerId"
+      AND embedding."libraryMode"=suggestion."libraryMode" AND embedding."assetId"=suggestion."assetId"
+      AND embedding."isCurrent" AND embedding.status='READY' AND embedding.embedding IS NOT NULL
+      AND asset."deletedAt" IS NULL AND NOT asset."storageTransferredOut"
+      AND snapshot.id=suggestion."snapshotId" AND snapshot."isCurrent" AND snapshot.status='ACTIVE'
+      AND config."recommendationEnabled" AND snapshot."tagId"=suggestion."suggestedTagId"
+      AND ${unreviewedSuggestionEvidenceSql(scope, Prisma.sql`embedding.id`, Prisma.sql`suggestion."suggestedTagId"`)}
+      AND NOT EXISTS (SELECT 1 FROM "EagleAssetManualTag" manual
+        WHERE manual."ownerId"=suggestion."ownerId" AND manual."libraryMode"=suggestion."libraryMode"
+          AND manual."assetId"=suggestion."assetId")
+  `);
+}

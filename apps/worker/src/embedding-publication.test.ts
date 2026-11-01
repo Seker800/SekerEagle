@@ -297,9 +297,23 @@ test('stored identity mismatch is an unavailable cache fact and leaves inference
   const calls: string[] = [];
   const tx = {
     $queryRaw: async () => [{ id: job.assetId, spaceId: null }],
-    eagleAssetProcessingJob: { updateMany: async () => { calls.push('complete'); return { count: 1 }; } },
+    eagleAssetProcessingJob: {
+      updateMany: async () => {
+        calls.push('complete');
+        return { count: 1 };
+      },
+    },
   };
-  assert.equal(await publishStoredEmbedding({ $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never,
-    job, identity, async () => { calls.push('suggest'); }), false);
+  assert.equal(
+    await publishStoredEmbedding(
+      { $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never,
+      job,
+      identity,
+      async () => {
+        calls.push('suggest');
+      },
+    ),
+    false,
+  );
   assert.deepEqual(calls, []);
 });
