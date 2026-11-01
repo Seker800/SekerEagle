@@ -129,3 +129,117 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     }
   });
 }
+
+for (const mode of ['MATERIAL', 'PHOTO'])
+  test(`${mode} authorization revoked after the set write rolls back assets, jobs and events`, async () => {
+    const f = await fixture(mode);
+    await f.locker.query('COMMIT');
+    let checks = 0;
+    const revoked = new Error('synthetic lease/private grant expired');
+    try {
+      await assert.rejects(
+        f.service.emptyTrash(f.ownerId, false, new Date(), async () => {
+          if (++checks === 2) throw revoked;
+        }),
+        (error) => error === revoked,
+      );
+      assert.equal(checks, 2);
+      assert.equal(
+        (await db.eagleAsset.findUniqueOrThrow({ where: { id: f.id } })).purgeAfter,
+        null,
+      );
+      assert.equal(await db.eagleAssetProcessingJob.count({ where: { ownerId: f.ownerId } }), 0);
+      assert.equal(await db.eagleMediaJobEvent.count({ where: { ownerId: f.ownerId } }), 0);
+    } finally {
+      await f.close();
+    }
+  });
+
+for (const mode of ['MATERIAL', 'PHOTO'])
+  test(`${mode} a clear command checkpoints bounded batches and retry retains already committed work`, async () => {
+    const f = await fixture(mode);
+    await f.locker.query('COMMIT');
+    const previous = process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS;
+    let release;
+    try {
+      const base = await db.eagleAsset.findUniqueOrThrow({ where: { id: f.id } });
+      await db.eagleAsset.createMany({
+        data: Array.from({ length: 512 }, (_, n) => ({
+          id: randomUUID(),
+          ownerId: f.ownerId,
+          libraryMode: mode,
+          originalName: 'step.jpg',
+          displayName: String(n),
+          normalizedDisplayName: String(n),
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          originalObjectKey: `users/${f.ownerId}/${randomUUID()}`,
+          deletedAt: base.deletedAt,
+        })),
+      });
+      const principal = {
+        sub: f.ownerId,
+        authVersion: 0,
+        canViewPrivate: false,
+        privacyVisibleUntil: null,
+      };
+      const make = () => new EagleAssetOperationService(db, {}, f.service, mode);
+      const command = await make().enqueue(principal, {
+        operationId: randomUUID(),
+        kind: 'EMPTY_TRASH',
+        assetIds: [],
+      });
+      await make().tick();
+      assert.equal(
+        await db.eagleAsset.count({ where: { ownerId: f.ownerId, purgeAfter: { not: null } } }),
+        512,
+      );
+      const progress = (await make().list(f.ownerId))[0];
+      assert.equal(progress.completed, 0, 'one committed batch is not the complete cutoff command');
+      assert.equal(progress.queued, 1);
+      const remaining = await db.eagleAsset.findFirstOrThrow({
+        where: { ownerId: f.ownerId, purgeAfter: null },
+      });
+      const later = await db.eagleAsset.create({
+        data: {
+          id: randomUUID(),
+          ownerId: f.ownerId,
+          libraryMode: mode,
+          originalName: 'later.jpg',
+          displayName: 'later',
+          normalizedDisplayName: 'later',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          originalObjectKey: `users/${f.ownerId}/${randomUUID()}`,
+          deletedAt: new Date(Date.now() + 1000),
+        },
+      });
+      await f.locker.query('BEGIN');
+      await f.locker.query('SELECT id FROM "EagleAsset" WHERE id=$1 FOR UPDATE', [remaining.id]);
+      release = delay(3000).then(() => f.locker.query('COMMIT'));
+      process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS = '1000';
+      await make().tick();
+      const failed = (await make().list(f.ownerId))[0];
+      assert.equal(failed.failed, 1);
+      assert.deepEqual(failed.errors, [{ code: 'TRANSACTION_TIMEOUT', count: 1 }]);
+      assert.equal(await db.eagleAssetProcessingJob.count({ where: { ownerId: f.ownerId } }), 512);
+      await release;
+      await make().retry(principal, command.id);
+      await make().tick();
+      await make().tick();
+      assert.equal((await make().list(f.ownerId))[0].completed, 1);
+      assert.equal(await db.eagleAssetProcessingJob.count({ where: { ownerId: f.ownerId } }), 513);
+      assert.equal(await db.eagleMediaJobEvent.count({ where: { ownerId: f.ownerId } }), 513);
+      assert.equal(
+        (await db.eagleAsset.findUniqueOrThrow({ where: { id: later.id } })).purgeAfter,
+        null,
+      );
+    } finally {
+      if (previous === undefined) delete process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS;
+      else process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS = previous;
+      await release;
+      await f.close();
+    }
+  });

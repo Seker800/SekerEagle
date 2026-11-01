@@ -720,3 +720,32 @@ test('direct service admission rejects unknown and specialized kinds before open
     );
   assert.equal(transactions, 0);
 });
+
+for (const method of ['emptyTrash', 'emptyTrashCompat'] as const)
+  test(`${method} admits one durable clear command without executing the clear in API`, async () => {
+    const calls: unknown[] = [];
+    const summary = { id: randomUUID(), kind: 'EMPTY_TRASH', state: 'QUEUED' };
+    const controller = new EagleController(
+      undefined as never,
+      { emptyTrash: () => assert.fail('API performed the purge write') } as never,
+      undefined as never,
+      undefined as never,
+      {
+        enqueue: async (principal: unknown, input: unknown) => {
+          calls.push([principal, input]);
+          return summary;
+        },
+      } as never,
+    );
+    const principal = { sub: 'owner', canViewPrivate: false } as AuthPrincipal;
+    assert.equal(await controller[method](principal), summary);
+    assert.equal(calls.length, 1);
+    const [actor, input] = calls[0] as [
+      unknown,
+      { kind: string; assetIds: string[]; operationId: string },
+    ];
+    assert.equal(actor, principal);
+    assert.equal(input.kind, 'EMPTY_TRASH');
+    assert.deepEqual(input.assetIds, []);
+    assert.match(input.operationId, /^[a-f0-9-]{36}$/);
+  });
