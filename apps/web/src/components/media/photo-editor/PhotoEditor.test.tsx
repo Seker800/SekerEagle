@@ -514,6 +514,37 @@ describe('photo editor interactions', () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1][0]).toBe(save.mock.calls[0][0]);
   });
+  it('offers reload when a preview fails after a save failure', async () => {
+    let failPreview = false;
+    const module = await import('./photo-editor-render');
+    vi.spyOn(module, 'createPhotoRenderer').mockReturnValue({
+      render: async () => {
+        if (failPreview) throw new Error('preview failed');
+        return document.createElement('canvas');
+      },
+      dispose: vi.fn(),
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
+      callback(new Blob(['png'], { type: 'image/png' })),
+    );
+    render(
+      <PhotoEditor
+        source="/photo.png"
+        name="Photo.png"
+        onClose={vi.fn()}
+        onSave={vi.fn().mockRejectedValue(new Error('save failed'))}
+      />,
+    );
+    const save = screen.getByRole('button', { name: '保存到相册' });
+    await waitFor(() => expect(save).toBeEnabled());
+    fireEvent.click(save);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('save failed'));
+    failPreview = true;
+    fireEvent.change(screen.getByRole('slider', { name: '曝光' }), { target: { value: '0.3' } });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('照片处理失败'));
+    expect(screen.getByRole('button', { name: '重新加载' })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: '重试保存' })).toBeNull();
+  });
   it('supports adjustments, undo, redo and reset without closing the photo', async () => {
     render(<PhotoEditor onSave={vi.fn()} source="/photo.png" name="Photo.png" onClose={vi.fn()} />);
     const exposure = screen.getByRole('slider', { name: '曝光' });
