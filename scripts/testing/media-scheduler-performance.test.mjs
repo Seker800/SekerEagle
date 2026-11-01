@@ -616,3 +616,25 @@ test('restricting upload freshness preserves recent/history ordering, replacemen
     data: { status: 'COMPLETED', completedAt: new Date() },
   });
 });
+
+test('queue wake discovery skips unrelated job history when pending work has no dependency', async () => {
+  const { buildMediaWakeQuery } = await import('../../apps/worker/dist/job-wakeup-query.js');
+  const pending = await fixture(12000), history = await fixture(36000);
+  try {
+    await db.eagleAssetProcessingJob.updateMany({ where: { ownerId: history.owner }, data: { status: 'COMPLETED' } });
+    const plan = await withIsolatedMediaQueue([pending.owner, history.owner], async tx => {
+      const rows = await tx.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${buildMediaWakeQuery()}`);
+      return rows[0]['QUERY PLAN'][0];
+    });
+    const flat = node => [node, ...(node.Plans ?? []).flatMap(flat)];
+    const visited = flat(plan.Plan).filter(node => node['Relation Name'] === 'EagleMediaJob')
+      .reduce((sum, node) => sum + ((node['Actual Rows'] ?? 0) + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops'], 0);
+    console.log(JSON.stringify({ wakeDiscovery: true, jobs: 48000, visited, ms: plan['Execution Time'] }));
+    assert.ok(visited < 26000, `independent pending work must not read retired dependency history; visited ${visited}`);
+  } finally {
+    for (const item of [pending, history]) {
+      await db.eagleAsset.deleteMany({ where: { ownerId: item.owner } });
+      await db.user.delete({ where: { id: item.owner } });
+    }
+  }
+});
