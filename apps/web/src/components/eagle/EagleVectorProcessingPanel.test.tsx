@@ -1,6 +1,6 @@
 import { renderInWorkspace as render } from '../../test/render-in-workspace';
-import { fireEvent, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../lib/eagle-vector-api';
 import { EagleVectorProcessingPanel } from './EagleVectorProcessingPanel';
 
@@ -14,6 +14,7 @@ vi.mock('../../lib/eagle-vector-api', () => {
 });
 
 describe('EagleVectorProcessingPanel', () => {
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.fetchEagleVectorSummary).mockResolvedValue({
@@ -58,5 +59,26 @@ describe('EagleVectorProcessingPanel', () => {
     expect(screen.queryByText('标签推荐设置')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '扫描缺失向量' }));
     expect(await screen.findByRole('status')).toHaveTextContent('已排队 5 个缺失图片向量');
+  });
+
+  it('observes queued work until its final result, then stops', async () => {
+    vi.useFakeTimers();
+    const summary = await api.fetchEagleVectorSummary();
+    vi.mocked(api.fetchEagleVectorSummary).mockClear().mockResolvedValue({
+      ...summary,
+      embeddingCoverage: { ...summary.embeddingCoverage, running: 0, queued: 1 },
+    });
+    const view = render(<EagleVectorProcessingPanel />);
+    await act(async () => {});
+    expect(api.fetchEagleVectorSummary).toHaveBeenCalledTimes(1);
+    vi.mocked(api.fetchEagleVectorSummary).mockResolvedValue({
+      ...summary,
+      embeddingCoverage: { ...summary.embeddingCoverage, running: 0, queued: 0 },
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(api.fetchEagleVectorSummary).toHaveBeenCalledTimes(2);
+    await act(async () => vi.advanceTimersByTimeAsync(600_000));
+    expect(api.fetchEagleVectorSummary).toHaveBeenCalledTimes(2);
+    view.unmount();
   });
 });

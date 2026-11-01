@@ -65,6 +65,16 @@ test('committed changes are discovered without scanning resources and private wr
       'private owner must discover its own committed changes',
     );
     assert.deepEqual((await service.snapshot(other, true)).scopes, initial.scopes);
+    const privateGroup = await db.eaglePhotoGroup.create({
+      data: { ownerId, libraryMode: 'PHOTO', kind: 'BURST', sourceKey: randomUUID() },
+    });
+    await db.eaglePhotoGroupMember.create({
+      data: { ownerId, libraryMode: 'PHOTO', groupId: privateGroup.id, assetId: asset.id },
+    });
+    await db.eaglePhotoGroup.update({ where: { id: privateGroup.id }, data: { title: 'private' } });
+    await barrier();
+    assert.deepEqual(await service.snapshot(ownerId, false), initial,
+      'private group creation and edits must not wake public observers');
     await db.eagleAsset.update({ where: { id: asset.id }, data: { isPrivate: false } });
     await barrier();
     assert.notEqual(
