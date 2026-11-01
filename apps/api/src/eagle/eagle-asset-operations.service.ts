@@ -1,3 +1,4 @@
+import { operationIdlePollDelay } from './operation-idle-schedule';
 import { EagleDuplicateService } from './eagle-duplicates.service';
 import {
   OPERATION_SEND_CONCURRENCY,
@@ -114,16 +115,25 @@ export class EagleAssetOperationService implements OnModuleDestroy {
   get mode() {
     return this.libraryMode;
   }
+  private idlePolls = 0;
+  private scheduleRecoveryPoll() {
+    if (this.stopping) return;
+    this.timer = setTimeout(
+      () => {
+        void this.tick(false).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
+        this.scheduleRecoveryPoll();
+      },
+      operationIdlePollDelay(OPERATION_POLL_MS, this.idlePolls),
+    );
+    this.timer.unref();
+  }
   startExecutor() {
     if (process.env.EAGLE_ASSET_OPERATIONS_ENABLED === 'false') return;
-    this.timer = setInterval(
-      () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
-      OPERATION_POLL_MS,
-    );
+    this.scheduleRecoveryPoll();
   }
   onModuleDestroy() {
     this.stopping = true;
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
   }
 
   async drain() {
@@ -930,7 +940,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       OR: items.map(({ id, leaseVersion }) => ({ id, leaseVersion })),
     };
   }
-  async tick() {
+  async tick(wake = true) {
+    if (wake) this.idlePolls = 0;
     const results = await Promise.allSettled([
       this.tickLane('SEND'),
       this.tickLane('METADATA'),
@@ -938,20 +949,24 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     ]);
     const failed = results.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
+    this.idlePolls = results.some((result) => result.status === 'fulfilled' && result.value)
+      ? 0
+      : this.idlePolls + 1;
   }
   private async tickLane(lane: OperationLane) {
-    if (this.stopping) return;
+    if (this.stopping) return false;
     if (this.running.has(lane)) {
       this.pendingWake.add(lane);
-      return;
+      return false;
     }
     this.running.add(lane);
     let heartbeat: NodeJS.Timeout | undefined;
     let processed = false;
     try {
       const items = await this.claim(lane);
-      if (!items.length) return;
+      if (!items.length) return false;
       processed = true;
+      this.idlePolls = 0;
       heartbeat = setInterval(() => {
         void this.prisma.eagleAssetOperationItem
           .updateMany({
@@ -966,6 +981,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       }, 5000);
       heartbeat.unref();
       await this.execute(items);
+      return true;
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       this.running.delete(lane);
