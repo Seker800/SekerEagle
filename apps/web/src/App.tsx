@@ -308,59 +308,62 @@ export function App() {
     );
   }
   return (
-    <LibraryWorkspaceProvider
-      key={`${user.id}:${libraryMode}`}
-      libraryMode={libraryMode}
-      ownerId={user.id}
-    >
-      <div className="standalone-eagle-shell">
-        <WorkspaceRefresh ownerId={user.id} includePrivate={privacyVisibility.enabled} />
-        {connectionButton}
-        <AsyncViewBoundary>
-          <SekerEaglePage
-            modeSwitcher={
-              <LibraryModeControl
-                value={libraryMode}
-                onChange={(mode) => {
-                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-                  setLibraryMode(mode);
-                }}
-              />
-            }
-            accountSummary={{ email: user.email, onLogout: () => void logout() }}
-            ownerId={user.id}
-            canManageProcessing={user.role === 'ADMIN'}
-            privacyVisibility={privacyVisibility}
-            privacyRulesRevision={privacyRulesRevision}
-            onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-            accountView={
-              <AsyncViewBoundary>
-                <AccountHome
-                  user={user}
-                  onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
-                  onLogout={() => void logout()}
-                  privacyVisibility={privacyVisibility}
-                  onPrivacyVisibilityChange={(value) => {
-                    if (modeRef.current === libraryMode) {
-                      privacyVisibilityEpoch.current++;
-                      setPrivacyVisibility(value);
-                    }
+    <>
+      <WorkspaceRefresh ownerId={user.id} includePrivate={privacyVisibility.enabled} />
+      <LibraryWorkspaceProvider
+        key={`${user.id}:${libraryMode}`}
+        libraryMode={libraryMode}
+        ownerId={user.id}
+        includePrivate={privacyVisibility.enabled}
+      >
+        <div className="standalone-eagle-shell">
+          {connectionButton}
+          <AsyncViewBoundary>
+            <SekerEaglePage
+              modeSwitcher={
+                <LibraryModeControl
+                  value={libraryMode}
+                  onChange={(mode) => {
+                    setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+                    setLibraryMode(mode);
                   }}
-                  privacyExtras={
-                    libraryMode === 'PHOTO' ? (
-                      <PhotoPrivatePeopleSettings
-                        includePrivate={privacyVisibility?.enabled === true}
-                        onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-                      />
-                    ) : undefined
-                  }
-                  onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
                 />
-              </AsyncViewBoundary>
-            }
-          />
-        </AsyncViewBoundary>
-      </div>
-    </LibraryWorkspaceProvider>
+              }
+              accountSummary={{ email: user.email, onLogout: () => void logout() }}
+              ownerId={user.id}
+              canManageProcessing={user.role === 'ADMIN'}
+              privacyVisibility={privacyVisibility}
+              privacyRulesRevision={privacyRulesRevision}
+              onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+              accountView={
+                <AsyncViewBoundary>
+                  <AccountHome
+                    user={user}
+                    onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
+                    onLogout={() => void logout()}
+                    privacyVisibility={privacyVisibility}
+                    onPrivacyVisibilityChange={(value) => {
+                      if (modeRef.current === libraryMode) {
+                        privacyVisibilityEpoch.current++;
+                        setPrivacyVisibility(value);
+                      }
+                    }}
+                    privacyExtras={
+                      libraryMode === 'PHOTO' ? (
+                        <PhotoPrivatePeopleSettings
+                          includePrivate={privacyVisibility?.enabled === true}
+                          onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                        />
+                      ) : undefined
+                    }
+                    onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                  />
+                </AsyncViewBoundary>
+              }
+            />
+          </AsyncViewBoundary>
+        </div>
+      </LibraryWorkspaceProvider>
+    </>
   );
 }

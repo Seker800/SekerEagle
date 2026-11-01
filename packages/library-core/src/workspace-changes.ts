@@ -32,7 +32,7 @@ export function parseWorkspaceChange(value: string): WorkspaceChangeEvent | null
       typeof event.public === 'boolean' &&
       Array.isArray(event.kinds) &&
       event.kinds.length > 0 &&
-      event.kinds.every((kind) => WORKSPACE_CHANGE_KINDS.includes(kind))
+      event.kinds.every((kind) => WORKSPACE_CHANGE_KINDS.some((known) => known === kind))
       ? event
       : null;
   } catch {

@@ -1,3 +1,4 @@
+import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { TaskTransitionHistory } from './TaskTransitionHistory';
 import { TaskQueueBrowser } from './TaskQueueBrowser';
 import { AssetOperationsPanel } from './AssetOperationsPanel';
@@ -46,6 +47,21 @@ export function EagleTaskCenter({
   const otherMode = libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
   const otherApi = useMemo(() => createEagleTaskCenterApi(otherMode), [otherMode]);
   const apiFor = (mode: LibraryMode) => (mode === libraryMode ? api : otherApi);
+  const hasWork = (value: TaskCenterOverview) =>
+    value.groups.some((group) => group.running > 0 || group.presentation?.status === 'QUEUED');
+  const progress = (value: TaskCenterOverview) =>
+    value.groups.map((group) => [
+      group.id,
+      group.running,
+      group.queued,
+      group.completed,
+      group.failed,
+      group.approval,
+    ]);
+  const intervals = {
+    MATERIAL: useProgressQueryInterval(hasWork, progress),
+    PHOTO: useProgressQueryInterval(hasWork, progress),
+  };
   const queries = useQueries({
     queries: modes.map((mode) => ({
       queryKey: [...key, mode, includePrivate, showHistory ? 'HISTORY' : 'ACTIVE'],
@@ -53,7 +69,9 @@ export function EagleTaskCenter({
         showHistory
           ? apiFor(mode).fetchEagleTaskHistory(signal)
           : apiFor(mode).fetchEagleTaskCenter(signal),
-      refetchInterval: showHistory ? false : 10000,
+      refetchInterval: showHistory ? false : intervals[mode],
+      refetchOnWindowFocus: false,
+      retry: false,
     })),
   });
   const query = {

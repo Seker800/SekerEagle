@@ -1,4 +1,8 @@
-import { mediaRequeueData, sanitizeComputeRuntime } from '@sekereagle/library-core';
+import {
+  mediaRequeueData,
+  sanitizeComputeRuntime,
+  taskModelReadiness,
+} from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import { BadRequestException, Injectable, NotFoundException, Inject } from '@nestjs/common';
@@ -143,7 +147,7 @@ export class EagleVectorService {
           libraryMode: this.libraryMode,
         },
       }),
-      this.checkEmbeddingHost(),
+      this.observedEmbeddingHost(),
       this.prisma.eagleAssetProcessingJob.groupBy({
         by: ['status'],
         where: {
@@ -316,6 +320,32 @@ export class EagleVectorService {
       { timeout: 60_000 },
     );
     return { scanned: repaired + created, created, repaired };
+  }
+
+  private async observedEmbeddingHost() {
+    const worker = await this.prisma.eagleProcessingWorkerHeartbeat.findFirst({
+      where: { heartbeatAt: { gte: new Date(Date.now() - 45_000), lte: new Date() } },
+      orderBy: { heartbeatAt: 'desc' },
+      select: { heartbeatAt: true, capabilities: true },
+    });
+    const readiness = taskModelReadiness(
+      worker ? [worker.capabilities] : [],
+      'EMBEDDING',
+      'GENERATE_EMBEDDING',
+    );
+    const status =
+      readiness === 'READY'
+        ? ('ONLINE' as const)
+        : readiness === 'DRIFTED'
+          ? ('DRIFTED' as const)
+          : !process.env.MLX_EMBEDDING_URL
+            ? ('NOT_CONFIGURED' as const)
+            : ('OFFLINE' as const);
+    return { status, observedAt: worker?.heartbeatAt.toISOString() ?? null };
+  }
+
+  async diagnoseEmbeddingHost() {
+    return { ...(await this.checkEmbeddingHost()), observedAt: new Date().toISOString() };
   }
 
   private async checkEmbeddingHost() {

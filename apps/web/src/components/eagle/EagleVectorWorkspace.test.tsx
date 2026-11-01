@@ -51,6 +51,19 @@ vi.mock('./EagleImageViewer', () => ({
   ),
 }));
 
+async function returnToForeground() {
+  const visibility = vi.spyOn(document, 'visibilityState', 'get');
+  await act(async () => {
+    visibility.mockReturnValue('hidden');
+    fireEvent(document, new Event('visibilitychange'));
+  });
+  await act(async () => {
+    visibility.mockReturnValue('visible');
+    fireEvent(document, new Event('visibilitychange'));
+  });
+  visibility.mockRestore();
+}
+
 describe('EagleVectorWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -251,7 +264,7 @@ describe('EagleVectorWorkspace', () => {
         />,
       );
       expect(await screen.findByRole('alert')).toHaveTextContent(failure.message);
-      fireEvent(document, new Event('visibilitychange'));
+      await returnToForeground();
       await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     },
   );
@@ -319,13 +332,17 @@ describe('EagleVectorWorkspace', () => {
           }),
       )
       .mockResolvedValue({ items: [], nextCursor: null });
-    fireEvent(document, new Event('visibilitychange'));
+    await returnToForeground();
     await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(2));
     fireEvent.click(card);
     fireEvent.click(screen.getByRole('button', { name: '指定其他标签' }));
     fireEvent.click(screen.getByRole('checkbox', { name: '驾驶' }));
     fireEvent.click(screen.getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
     await waitFor(() => expect(assign).toHaveBeenCalled());
+    expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      resolveOlder(oldResult);
+    });
     await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(3));
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /选择 red-car\.jpg/ })).not.toBeInTheDocument(),
@@ -577,7 +594,7 @@ describe('EagleVectorWorkspace', () => {
     fireEvent.click(first);
     expect(first).toHaveAttribute('aria-pressed', 'true');
 
-    document.dispatchEvent(new Event('visibilitychange'));
+    await returnToForeground();
     await waitFor(() =>
       expect(vi.mocked(api.listEagleVectorSuggestions).mock.calls.length).toBeGreaterThan(1),
     );

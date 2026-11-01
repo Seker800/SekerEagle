@@ -75,6 +75,8 @@ it('does not repeatedly poll both modes every 1.5 seconds during unchanged backg
     expect(mocks.list).toHaveBeenCalledTimes(2);
     for (const elapsed of [1000, 1000, 1000, 900])
       await act(() => vi.advanceTimersByTimeAsync(elapsed));
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    await act(() => vi.advanceTimersByTimeAsync(1100));
     expect(mocks.list).toHaveBeenCalledTimes(4);
   } finally {
     client?.clear();

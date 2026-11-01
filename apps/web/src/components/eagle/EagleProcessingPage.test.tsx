@@ -16,7 +16,11 @@ vi.mock('../../lib/eagle-processing-admin-api', () => {
   return { ...api, createEagleProcessingAdminApi: () => api };
 });
 vi.mock('./EagleVectorProcessingPanel', () => ({
-  EagleVectorProcessingPanel: ({ active = true }: { active?: boolean }) => <div data-testid="vector-processing-panel" data-active={String(active)}>图片向量状态</div>,
+  EagleVectorProcessingPanel: ({ active = true }: { active?: boolean }) => (
+    <div data-testid="vector-processing-panel" data-active={String(active)}>
+      图片向量状态
+    </div>
+  ),
 }));
 
 const summary = {
@@ -60,10 +64,10 @@ describe('EagleProcessingPage', () => {
   it('does not activate hidden vector content or fetch unopened history', async () => {
     render(<EagleProcessingPage accessToken="token" />);
     await screen.findByRole('heading', { name: '当前任务' });
-    expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active','false');
+    expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active', 'false');
     expect(api.listEagleProcessingJobs).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button',{name:'图片向量',exact:true}));
-    expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active','true');
+    fireEvent.click(screen.getByRole('button', { name: '图片向量' }));
+    expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active', 'true');
   });
 
   it('shows worker, queue metrics and background schedule', async () => {
@@ -171,7 +175,7 @@ describe('EagleProcessingPage', () => {
     await screen.findByText('在线');
     fireEvent.click(screen.getByRole('button', { name: '处理记录' }));
     const historyTable = screen.getByRole('table');
-    expect(within(historyTable).getByText('生成图片向量')).toBeVisible();
+    expect(await within(historyTable).findByText('生成图片向量')).toBeVisible();
     expect(within(historyTable).queryByText('GENERATE_EMBEDDING')).not.toBeInTheDocument();
   });
 

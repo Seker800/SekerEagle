@@ -33,6 +33,7 @@ export interface EagleVectorSummary {
     pending: number;
   };
   host: {
+    observedAt?: string | null;
     status: 'ONLINE' | 'OFFLINE' | 'DRIFTED' | 'NOT_CONFIGURED';
     model?: string | null;
     revision?: string | null;
@@ -144,6 +145,10 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
     return request<EagleVectorSummary>('summary');
   }
 
+  function diagnoseEagleEmbeddingHost() {
+    return request<EagleVectorSummary['host']>('host');
+  }
+
   function fetchEagleReviewSummary() {
     return request<Pick<EagleVectorSummary, 'suggestions'>>('review-summary');
   }
@@ -238,6 +243,7 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
     getVectorThumbnailUrl,
     getVectorPreviewUrl,
     fetchEagleVectorSummary,
+    diagnoseEagleEmbeddingHost,
     fetchEagleReviewSummary,
     listEagleVectorTags,
     setEagleVectorTagEnabled,
@@ -255,6 +261,7 @@ export const {
   getVectorThumbnailUrl,
   getVectorPreviewUrl,
   fetchEagleVectorSummary,
+  diagnoseEagleEmbeddingHost,
   fetchEagleReviewSummary,
   listEagleVectorTags,
   setEagleVectorTagEnabled,

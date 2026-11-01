@@ -8,6 +8,7 @@ test('summary counts only suggestions that can appear in recommendation review',
   let pendingSuggestionQuery: Record<string, unknown> | undefined;
   const service = new EagleVectorService(
     {
+      eagleProcessingWorkerHeartbeat: { findFirst: async () => null },
       eagleAsset: { count: async () => 0 },
       eagleAssetEmbedding: { count: async () => 0 },
       eagleManualTagSemanticConfig: { count: async () => 0 },
@@ -508,7 +509,7 @@ test('unclassified suggestion scan reuses ready embeddings without enqueueing em
   assert.doesNotMatch(sql, /EagleMediaJob/);
 });
 
-test('vector summary recognizes a compatible coordinator and its offline state', async (t) => {
+test('explicit model diagnosis recognizes a compatible coordinator and its offline state', async (t) => {
   const previous = [
     process.env.MLX_EMBEDDING_URL,
     process.env.MLX_EMBEDDING_TOKEN,
@@ -545,6 +546,7 @@ test('vector summary recognizes a compatible coordinator and its offline state',
   );
   const service = new EagleVectorService(
     {
+      eagleProcessingWorkerHeartbeat: { findFirst: async () => null },
       eagleAsset: { count: async () => 0 },
       eagleAssetEmbedding: { count: async () => 0 },
       eagleManualTagSemanticConfig: { count: async () => 0 },
@@ -555,10 +557,10 @@ test('vector summary recognizes a compatible coordinator and its offline state',
     } as never,
     'MATERIAL',
   );
-  assert.equal((await service.summary('owner', false)).host.status, 'ONLINE');
+  assert.equal((await service.diagnoseEmbeddingHost()).status, 'ONLINE');
   status = 'offline';
-  assert.equal((await service.summary('owner', false)).host.status, 'OFFLINE');
+  assert.equal((await service.diagnoseEmbeddingHost()).status, 'OFFLINE');
   protocol = 'forged';
   status = 'ready';
-  assert.equal((await service.summary('owner', false)).host.status, 'DRIFTED');
+  assert.equal((await service.diagnoseEmbeddingHost()).status, 'DRIFTED');
 });

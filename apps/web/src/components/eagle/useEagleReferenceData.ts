@@ -1,3 +1,4 @@
+import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useQuery } from '@tanstack/react-query';
 
@@ -32,20 +33,24 @@ export function useEagleReferenceData(
     staleTime: 60_000,
     enabled: options.enabled !== false && options.aiTagsEnabled,
   });
+  const progressInterval = useProgressQueryInterval<
+    Awaited<ReturnType<typeof listEagleSmartFolders>>
+  >(
+    (value) =>
+      value.some(
+        (folder) =>
+          folder.semanticState?.status === 'PENDING' || folder.semanticState?.status === 'BUILDING',
+      ),
+    (value) => value.map((folder) => [folder.id, folder.semanticState]),
+  );
   const smartFoldersQuery = useQuery({
     queryKey: queryKeys.smartFolders,
     queryFn: () => listEagleSmartFolders(accessToken),
     staleTime: 60_000,
     enabled: options.enabled,
-    refetchInterval: (query) =>
-      query.state.data?.some(
-        (folder) =>
-          folder.semanticState?.status === 'PENDING' || folder.semanticState?.status === 'BUILDING',
-      )
-        ? 10_000
-        : query.state.data?.some((folder) => folder.semanticState)
-          ? 60_000
-          : false,
+    refetchInterval: progressInterval,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 
   return { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery };

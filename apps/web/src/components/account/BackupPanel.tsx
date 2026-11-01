@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { usePageVisible } from '../../lib/useRefreshPolicy';
 import { getLocale, t } from '../../i18n';
 import { request } from '../../lib/api-client';
 import styles from './BackupPanel.module.css';
@@ -26,29 +27,19 @@ function date(value: string | null): string {
 }
 
 export function BackupPanel() {
-  const [status, setStatus] = useState<BackupStatus | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    const load = () => {
-      void request<BackupStatus>('/api/backup/status')
-        .then((value) => {
-          if (!cancelled) {
-            setStatus(value);
-            setFailed(false);
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setFailed(true);
-        });
-    };
-    load();
-    const timer = window.setInterval(load, 30_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, []);
+  const visible = usePageVisible();
+  const query = useQuery({
+    queryKey: ['backup-status'],
+    queryFn: ({ signal }) => request<BackupStatus>('/api/backup/status', { signal }),
+    enabled: visible,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: (query) =>
+      query.state.error ? 60_000 : query.state.data?.status === 'running' ? 30_000 : 60_000,
+    refetchIntervalInBackground: false,
+  });
+  const status = query.data;
+  const failed = Boolean(query.error);
   const labels = {
     never: t('尚未成功备份'),
     running: t('正在备份'),

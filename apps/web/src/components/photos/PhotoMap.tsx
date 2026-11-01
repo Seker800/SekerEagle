@@ -1,3 +1,4 @@
+import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconFocusCentered, IconMapPin } from '@tabler/icons-react';
@@ -61,14 +62,17 @@ export function PhotoMap({
     zoom: 3,
   });
   const [selected, setSelected] = useState<PhotoMapCluster | null>(null);
+  const progressInterval = useProgressQueryInterval<Awaited<ReturnType<typeof getPhotoMap>>>(
+    (value) => value.status === 'PENDING' || value.status === 'UPDATING',
+    (value) => [value.status, value.snapshotId],
+  );
   const locations = useQuery({
     queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoMap(includePrivate, viewport),
     queryFn: ({ signal }) => getPhotoMap(viewport, signal),
     staleTime: 30000,
-    refetchInterval: (query) =>
-      query.state.data?.status === 'PENDING' || query.state.data?.status === 'UPDATING'
-        ? 5000
-        : 30000,
+    refetchInterval: progressInterval,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
   useEffect(() => {
     if (

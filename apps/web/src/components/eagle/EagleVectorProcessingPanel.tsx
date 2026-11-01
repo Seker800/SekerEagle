@@ -1,39 +1,72 @@
+import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
+import {
+  useActivityRefresh,
+  usePageVisible,
+  useRefreshOnWorkspaceChanges,
+} from '../../lib/useRefreshPolicy';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { type EagleVectorSummary } from '../../lib/eagle-vector-api';
 import styles from './EagleVectorProcessingPanel.module.css';
-export function EagleVectorProcessingPanel({ compact = false }: { compact?: boolean } = {}) {
+export function EagleVectorProcessingPanel({
+  compact = false,
+  active = true,
+}: { compact?: boolean; active?: boolean } = {}) {
   const {
-    api: { fetchEagleVectorSummary, retryFailedEagleEmbeddings, scanMissingEagleEmbeddings },
+    api: {
+      fetchEagleVectorSummary,
+      diagnoseEagleEmbeddingHost,
+      retryFailedEagleEmbeddings,
+      scanMissingEagleEmbeddings,
+    },
   } = useLibraryWorkspace();
 
   const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const reload = useCallback(async () => {
+  const [diagnosticHost, setDiagnosticHost] = useState<EagleVectorSummary['host'] | null>(null);
+  const diagnose = async () => {
+    setBusy(true);
     setError('');
     try {
-      setSummary(await fetchEagleVectorSummary());
+      setDiagnosticHost(await diagnoseEagleEmbeddingHost());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('读取图片向量状态失败'));
+    } finally {
+      setBusy(false);
     }
+  };
+  const host = diagnosticHost ?? summary?.host;
+  const visible = usePageVisible();
+  const [readFailure, setReadFailure] = useState<{ count: number; error: unknown }>({
+    count: 0,
+    error: null,
+  });
+  const apply = useCallback((value: EagleVectorSummary) => {
+    setSummary(value);
+    setError('');
+    setReadFailure({ count: 0, error: null });
   }, []);
-  useEffect(() => {
-    void reload();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void reload();
-    }, 10000);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void reload();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [reload]);
+  const report = useCallback((cause: unknown) => {
+    setError(cause instanceof Error ? cause.message : t('读取图片向量状态失败'));
+    setReadFailure((value) => ({ count: value.count + 1, error: cause }));
+  }, []);
+  const reload = useReloadableWorkspaceData(
+    fetchEagleVectorSummary,
+    apply,
+    report,
+    active && visible,
+  );
+  useRefreshOnWorkspaceChanges(reload, ['TASKS', 'RECOMMENDATIONS', 'SETTINGS'], active);
+  useActivityRefresh(
+    reload,
+    Boolean(summary?.embeddingCoverage.running),
+    summary?.embeddingCoverage,
+    active,
+    readFailure,
+  );
   const runAction = async <T,>(
     action: () => Promise<T>,
     message: string | ((result: T) => string),
@@ -44,7 +77,7 @@ export function EagleVectorProcessingPanel({ compact = false }: { compact?: bool
     try {
       const result = await action();
       setNotice(typeof message === 'function' ? message(result) : message);
-      await reload();
+      await reload(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('操作失败'));
     } finally {
@@ -111,8 +144,16 @@ export function EagleVectorProcessingPanel({ compact = false }: { compact?: bool
         </article>
         <article>
           <span>{t('Metal 宿主')}</span>
-          <strong>{formatHostStatus(summary?.host.status)}</strong>
+          <strong>{formatHostStatus(host?.status)}</strong>
           <small>{summary?.model ?? t('正在读取模型信息')}</small>
+          {host?.observedAt ? (
+            <small>
+              {t('最近观测')} {new Date(host.observedAt).toLocaleTimeString()}
+            </small>
+          ) : null}
+          <button type="button" disabled={busy} onClick={() => void diagnose()}>
+            {t('检查模型连接')}
+          </button>
         </article>
       </div>
 

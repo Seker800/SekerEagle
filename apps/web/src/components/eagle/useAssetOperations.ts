@@ -1,3 +1,4 @@
+import { usePageVisible } from '../../lib/useRefreshPolicy';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { ApiError } from '../../lib/api-error';
@@ -46,8 +47,9 @@ export function useEnqueueAssetOperation() {
     }
   };
 }
-export function useAssetOperationList(includePrivate: boolean, enabled = true) {
+export function useAssetOperationList(includePrivate: boolean, enabled = true, observe = false) {
   const client = useQueryClient();
+  const visibleWindow = usePageVisible();
   const { ownerId, libraryMode } = useLibraryWorkspace();
   const schedules = useMemo(
     () => ({ MATERIAL: createOperationPollSchedule(), PHOTO: createOperationPollSchedule() }),
@@ -66,17 +68,23 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
       return {
         queryKey: createEagleQueryKeys(ownerId, mode).operationList(visible),
         queryFn: ({ signal }: { signal: AbortSignal }) => apis[mode].list(visible, signal),
-        enabled,
+        enabled: enabled && visibleWindow,
+        refetchOnWindowFocus: false,
         staleTime: 1000,
         retry: false,
         refetchInterval: (query: {
           state: { data?: AssetOperationSummary[]; error: unknown; errorUpdateCount: number };
         }) =>
-          schedules[mode](
-            query.state.data,
-            getEagleWorkspaceCache(client, ownerId, mode).operations.hasPending(),
-            query.state.error ? query.state.errorUpdateCount : 0,
-          ),
+          !observe ||
+          !visibleWindow ||
+          (query.state.error instanceof ApiError &&
+            (query.state.error.status === 401 || query.state.error.status === 403))
+            ? false
+            : schedules[mode](
+                query.state.data,
+                getEagleWorkspaceCache(client, ownerId, mode).operations.hasPending(),
+                query.state.error ? query.state.errorUpdateCount : 0,
+              ),
         refetchIntervalInBackground: false,
       };
     }),
@@ -86,7 +94,7 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
 export function useAssetOperationProgress(includePrivate: boolean, enabled: boolean) {
   const { ownerId } = useLibraryWorkspace();
   const client = useQueryClient();
-  const queries = useAssetOperationList(includePrivate, enabled);
+  const queries = useAssetOperationList(includePrivate, enabled, true);
   const material = queries[0].data,
     photo = queries[1].data;
   const materialUpdatedAt = queries[0].dataUpdatedAt,
