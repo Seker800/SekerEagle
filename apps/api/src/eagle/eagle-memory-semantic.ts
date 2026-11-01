@@ -1,5 +1,6 @@
 import { smartFolderMatchWhere } from '@sekereagle/library-persistence';
-import { LibraryMemoryIndex, memoryDateTime } from './eagle-memory-index';
+import type { LibraryMemoryIndex } from './eagle-memory-index';
+import { memoryDateTime } from './eagle-memory-index';
 import type { MemorySearchContext } from './eagle-memory-predicate';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import type { ImageSearchPosition } from './eagle-image-search.service';
@@ -59,4 +60,43 @@ export function residentSmartFolderPage(
     positions.push(...ids.map(assetId => ({ assetId, tier: 0 as const, similarity: 0, libraryAddedAt: dates.get(assetId)! })));
   }
   return positions;
+}
+
+/** Bound graph loading to the existing canonical semantic-membership and readiness shapes. */
+export function semanticFolderIds(where: AssetSearchWhere): string[] {
+  const ids = new Set<string>();
+  const record = (value: unknown): Record<string, unknown> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Unsupported semantic read shape');
+    return value as Record<string, unknown>;
+  };
+  const exact = (value: unknown, allowed: string[]) => {
+    const input = record(value);
+    if (Object.keys(input).some(key => !allowed.includes(key))) throw new Error('Unsupported semantic read shape');
+    return input;
+  };
+  const folderId = (value: unknown) => {
+    if (typeof value !== 'string' || !value) throw new Error('Unsupported semantic folder scope');
+    ids.add(value);
+  };
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== 'object' || value instanceof Date) return;
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'embeddings') {
+        const filter = exact(exact(child, ['some']).some, ['ownerId', 'libraryMode', 'smartFolderMatches']);
+        const matches = exact(exact(filter.smartFolderMatches, ['some']).some, ['ownerId', 'libraryMode', 'snapshot']);
+        const snapshot = exact(matches.snapshot, ['ownerId', 'libraryMode', 'folderId', 'isActive']);
+        if (snapshot.isActive !== true) throw new Error('Unsupported inactive semantic scope');
+        folderId(snapshot.folderId);
+      } else if (key === 'owner') {
+        const owner = exact(child, ['eagleSmartFolders']);
+        const folder = exact(exact(owner.eagleSmartFolders, ['some']).some, ['id', 'ownerId', 'libraryMode', 'semanticSnapshots']);
+        const snapshot = exact(exact(folder.semanticSnapshots, ['some']).some, ['isActive']);
+        if (snapshot.isActive !== true) throw new Error('Unsupported inactive semantic scope');
+        folderId(folder.id);
+      } else visit(child);
+    }
+  };
+  visit(where);
+  return [...ids];
 }

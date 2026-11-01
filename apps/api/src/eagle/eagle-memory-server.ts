@@ -7,6 +7,8 @@ import type { LibraryMemoryIndex } from './eagle-memory-index';
 import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
 import type { ImageSearchPosition } from './eagle-image-search.service';
+import { semanticFolderIds } from './eagle-memory-semantic';
+import type { MemorySearchContext } from './eagle-memory-predicate';
 import { memorySemanticOptions } from './eagle-memory-protocol';
 import type { Summary } from '../photos/photo-statistics.service';
 
@@ -61,6 +63,7 @@ async function body(request: IncomingMessage, maxBytes: number) {
 }
 
 export interface LibraryReadHandlers {
+  semanticQuery?: <T>(index: LibraryMemoryIndex, folderIds: string[], read: (context: MemorySearchContext) => T) => Promise<T>;
   smartFolderPage?: (index: LibraryMemoryIndex, options: ResidentSmartFolderOptions) => Promise<ImageSearchPosition[]>;
   statistics?: (
     index: LibraryMemoryIndex,
@@ -143,15 +146,12 @@ export function createLibraryReaderServer(
         send(200, { revision, counts: handlers.peopleCounts(index, query.includePrivate) });
         return;
       }
-      send(
-        200,
-        query.action === 'count'
-          ? { revision: index.revision, count: index.count(where) }
-          : {
-              revision: index.revision,
-              ids: index.page(where, query.date, query.direction, query.take, query.skip),
-            },
-      );
+      const read = (context?: MemorySearchContext) => query.action === 'count'
+        ? { revision: index.revision, count: index.count(where, context) }
+        : { revision: index.revision, ids: index.page(where, query.date, query.direction, query.take, query.skip, context) };
+      const folders = semanticFolderIds(where);
+      if (folders.length && !handlers.semanticQuery) throw new Error('Semantic capability unavailable');
+      send(200, folders.length ? await handlers.semanticQuery!(index, folders, read) : read());
     } catch (error) {
       if (!response.headersSent)
         send(error instanceof SyntaxError ? 400 : 503, {

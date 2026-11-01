@@ -18,7 +18,9 @@ import { log } from 'node:console';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-memory.js';
-import { readResidentSmartFolderPage } from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
+import { readSmartFolderPage } from '../../apps/api/dist/eagle/eagle-smart-folder-page.js';
+import { readMemoryCount } from '../../apps/api/dist/eagle/eagle-memory-client.js';
+import { readResidentSmartFolderPage, withResidentSemanticGraph } from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
 import { rankSmartFolderMatches } from '../../apps/api/dist/eagle/eagle-smart-folder-ranking.js';
 import { smartFolderMatchWhere } from '../../packages/library-persistence/dist/index.js';
 import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';
@@ -476,8 +478,34 @@ test('semantic resident page preserves real SQL scores, additional filters and v
         assert.deepEqual(actual, expected);
         if (expected.length <= 3) break;
         after = expected[2];
-      } while (true);
+      } while (after);
       await assert.rejects(readResidentSmartFolderPage(pool, index, options, 1), /workspace/);
+      const server = createLibraryReaderServer(store, 'semantic-reader', 2097152, {
+        smartFolderPage: (index, options) => readResidentSmartFolderPage(pool, index, options),
+        semanticQuery: (index, ids, read) => withResidentSemanticGraph(pool, index, ids, graph => read(graph.context)),
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+      try {
+        process.env.EAGLE_READER_URL = `http://127.0.0.1:${server.address().port}`;
+        process.env.EAGLE_READER_TOKEN = 'semantic-reader';
+        const hits = libraryReadMetrics.hits;
+        const page = await readSmartFolderPage(db, { scope, query: { limit: 3 }, folderIds: [folderId],
+          folderDefinitionKey: 'fixture', includePrivate, trash: false, where, ordinaryMembersPossible: false },
+          extra => db.eagleAsset.findMany({ where: { AND: [where, extra, ...(includePrivate ? [] : [{ isPrivate: false }])] } }));
+        const expected = await rankSmartFolderMatches(db, scope, [folderId], undefined, 4, includePrivate, false, undefined, where);
+        assert.deepEqual(page.rows.map(row => row.id), expected.slice(0, 3).map(row => row.assetId));
+        assert.equal(libraryReadMetrics.hits, hits + 1);
+        const visible = { AND: [where, ...(includePrivate ? [] : [{ isPrivate: false }])] };
+        assert.equal(await readMemoryCount(visible), await db.eagleAsset.count({ where: visible }));
+      } finally {
+        if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
+        if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = oldToken;
+        server.closeAllConnections();
+        await new Promise(resolve => server.close(resolve));
+      }
+
     }
   } finally {
     await db.eagleSmartFolder.deleteMany({ where: { id: folderId } });

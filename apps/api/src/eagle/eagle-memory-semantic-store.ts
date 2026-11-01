@@ -4,10 +4,11 @@ import type { LibraryMemoryIndex } from './eagle-memory-index';
 import { residentSmartFolderPage, type ResidentSmartFolderOptions, type SemanticReadGraph } from './eagle-memory-semantic';
 
 /** Load only existing memberships and scores. Model vectors never enter this process. */
-export async function readResidentSmartFolderPage(
+export async function withResidentSemanticGraph<T>(
   pool: Pool,
   index: LibraryMemoryIndex,
-  options: ResidentSmartFolderOptions,
+  folderIds: string[],
+  read: (graph: SemanticReadGraph) => T,
   workspaceBytes = Number(process.env.EAGLE_READER_QUERY_WORKSPACE_BYTES ?? 134217728),
 ) {
   if (!Number.isSafeInteger(workspaceBytes) || workspaceBytes <= 0) throw new Error('Invalid semantic workspace budget');
@@ -16,7 +17,7 @@ export async function readResidentSmartFolderPage(
   try {
     await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     await connection.query("SET LOCAL statement_timeout='5s'");
-    const parameters = [index.ownerId, index.libraryMode, options.folderIds];
+    const parameters = [index.ownerId, index.libraryMode, folderIds];
     const state = await connection.query<{ revision: string }>(
       'SELECT revision::text FROM "EagleLibraryReadState" WHERE "ownerId"=$1 AND "libraryMode"=$2::"LibraryMode"', parameters.slice(0, 2));
     if (state.rows[0]?.revision !== revision) throw new Error('Library read revision changed');
@@ -62,7 +63,7 @@ export async function readResidentSmartFolderPage(
     }
     // Synchronization may publish while database I/O yields. Never combine two asset epochs.
     if (index.revision !== revision) throw new Error('Library read revision changed');
-    const result = residentSmartFolderPage(index, graph, options);
+    const result = read(graph);
     await connection.query('COMMIT');
     return result;
   } catch (error) {
@@ -71,4 +72,9 @@ export async function readResidentSmartFolderPage(
   } finally {
     connection.release();
   }
+}
+
+export function readResidentSmartFolderPage(pool: Pool, index: LibraryMemoryIndex, options: ResidentSmartFolderOptions, workspaceBytes?: number) {
+  return withResidentSemanticGraph(pool, index, options.folderIds,
+    graph => residentSmartFolderPage(index, graph, options), workspaceBytes);
 }

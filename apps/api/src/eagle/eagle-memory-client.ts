@@ -6,6 +6,7 @@ import {
   memorySearchPositions,
 } from './eagle-memory-protocol';
 import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
+import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 
 /** Diagnostic counters only: never retain predicates, names, owner IDs or tokens. */
@@ -41,7 +42,9 @@ async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
       redirect: 'error',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: encodeMemoryQuery({ scope, where, ...page }),
-      signal: AbortSignal.timeout(Number(process.env.EAGLE_READER_TIMEOUT_MS ?? 200)),
+      signal: AbortSignal.timeout(Number(page.action === 'smartFolderPage'
+        ? process.env.EAGLE_READER_SEMANTIC_TIMEOUT_MS ?? 1000
+        : process.env.EAGLE_READER_TIMEOUT_MS ?? 200)),
     });
     if (!response.ok) {
       await response.body?.cancel();
@@ -135,7 +138,7 @@ export async function readMemoryPeopleCounts(ownerId: string, includePrivate: bo
 
 export async function readMemorySmartFolderPage(
   scope: { ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' },
-  options: import('./eagle-memory-semantic').ResidentSmartFolderOptions,
+  options: ResidentSmartFolderOptions,
 ) {
   const { where, ...semantic } = options;
   const result = await request({ AND: [scope, where] }, { action: 'smartFolderPage', semantic });
