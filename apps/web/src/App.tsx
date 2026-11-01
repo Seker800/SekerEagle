@@ -1,3 +1,4 @@
+import { WorkspaceRefresh } from './lib/useWorkspaceRefresh';
 import { AsyncViewBoundary } from './components/AsyncViewBoundary';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
@@ -313,6 +314,7 @@ export function App() {
       ownerId={user.id}
     >
       <div className="standalone-eagle-shell">
+        <WorkspaceRefresh ownerId={user.id} includePrivate={privacyVisibility.enabled} />
         {connectionButton}
         <AsyncViewBoundary>
           <SekerEaglePage

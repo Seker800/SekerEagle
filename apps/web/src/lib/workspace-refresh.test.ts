@@ -73,9 +73,10 @@ it('never overlaps slow reads and retries failures with backoff', async () => {
 it('stops automatic retries for revoked authentication', async () => {
   vi.useFakeTimers();
   const client = new QueryClient();
-  const load = vi.fn().mockRejectedValue(new ApiError('revoked',401,null));
+  const load = vi.fn().mockRejectedValue(new ApiError('revoked', 401, null));
   const release = acquireWorkspaceRefresh(client, 'revoked', false, load);
   await vi.advanceTimersByTimeAsync(180_000);
   expect(load).toHaveBeenCalledTimes(1);
-  release(); client.clear();
+  release();
+  client.clear();
 });

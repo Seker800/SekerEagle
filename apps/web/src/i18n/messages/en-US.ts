@@ -1,4 +1,5 @@
 export const enUS = {
+  '自动更新暂时不可用，现有结果已保留。': 'Automatic updates are temporarily unavailable. Existing results have been kept.',
   不支持的操作类型: 'Unsupported operation type',
   '不支持的操作类型，无法执行。': 'This operation type is unsupported and cannot run.',
   '已选 {{value1}} 组，按保留标记处理': '{{value1}} groups selected; use marked keepers',

@@ -1,3 +1,5 @@
+import { WorkspaceChangesController } from './workspace-changes.controller';
+import { WorkspaceChangesService } from './workspace-changes.service';
 import { BackupController } from './backup/backup.controller';
 import { securityResponse } from './security-response';
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
@@ -20,7 +22,8 @@ import { StorageModule } from './storage/storage.module';
     PhotoLibraryModule,
     HealthModule,
   ],
-  controllers: [BackupController],
+  controllers: [BackupController, WorkspaceChangesController],
+  providers: [WorkspaceChangesService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
