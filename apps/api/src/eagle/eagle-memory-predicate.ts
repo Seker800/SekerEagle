@@ -2,6 +2,10 @@ import { paletteColorScore, COLOR_PALETTE_VERSION } from '@sekereagle/library-co
 import { searchPredicateModels, type AssetSearchWhere } from './eagle-search-predicate';
 
 export type MemoryAsset = Record<string, unknown>;
+export interface MemorySearchContext {
+  owner: MemoryAsset;
+  embeddings: ReadonlyMap<string, MemoryAsset[]>;
+}
 type Truth = boolean | null;
 type Check = (row: MemoryAsset) => Truth;
 const unsupported = () => new Error('Unsupported memory search predicate');
@@ -132,9 +136,10 @@ function scalar(field: string, value: unknown, inheritedInsensitive = false): Ch
  */
 export function compileMemorySearchPredicate(
   where: AssetSearchWhere,
+  context?: MemorySearchContext,
 ): (row: MemoryAsset) => boolean {
   const visit = (name: string, input: unknown, preserveNull = false): Check => {
-    if (['embedding', 'owner', 'snapshot', 'match', 'folder'].includes(name)) throw unsupported();
+    if (!context && ['embedding', 'owner', 'snapshot', 'match', 'folder'].includes(name)) throw unsupported();
     const definition = searchPredicateModels[name];
     if (!definition) throw unsupported();
     const checks: Check[] = [];
@@ -175,7 +180,9 @@ export function compileMemorySearchPredicate(
         const link = definition.relations[key];
         if (!link) throw unsupported();
         const rows = (row: MemoryAsset): MemoryAsset[] => {
-          const data = row[key];
+          const data = name === 'asset' && context && key === 'owner' ? context.owner
+            : name === 'asset' && context && key === 'embeddings' ? context.embeddings.get(String(row.id))
+            : row[key];
           return data == null ? [] : Array.isArray(data) ? (data as MemoryAsset[]) : [object(data)];
         };
         if (value === null) {

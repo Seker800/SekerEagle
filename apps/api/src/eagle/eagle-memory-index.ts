@@ -1,4 +1,4 @@
-import { compileMemorySearchPredicate, type MemoryAsset } from './eagle-memory-predicate';
+import { compileMemorySearchPredicate, type MemoryAsset, type MemorySearchContext } from './eagle-memory-predicate';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -83,13 +83,13 @@ export class LibraryMemoryIndex {
     this.revision = revision;
     if (reorder) this.ordered.clear();
   }
-  private predicate(where: AssetSearchWhere) {
+  private predicate(where: AssetSearchWhere, context?: MemorySearchContext) {
     return compileMemorySearchPredicate({
       AND: [
         { ownerId: this.ownerId, libraryMode: this.libraryMode as 'PHOTO' | 'MATERIAL' },
         where,
       ],
-    });
+    }, context);
   }
   page(
     where: AssetSearchWhere,
@@ -97,10 +97,11 @@ export class LibraryMemoryIndex {
     direction: 'asc' | 'desc',
     take: number,
     skip: number,
+    context?: MemorySearchContext,
   ): string[] {
     if (!Number.isSafeInteger(take) || take < 0 || !Number.isSafeInteger(skip) || skip < 0)
       throw new Error('Invalid library read page');
-    const match = this.predicate(where);
+    const match = this.predicate(where, context);
     let rows = this.ordered.get(date);
     if (!rows) {
       rows = [...this.rows.values()].sort((a, b) => {
@@ -121,14 +122,14 @@ export class LibraryMemoryIndex {
     }
     return result;
   }
-  count(where: AssetSearchWhere) {
-    const match = this.predicate(where);
+  count(where: AssetSearchWhere, context?: MemorySearchContext) {
+    const match = this.predicate(where, context);
     let result = 0;
     for (const row of this.rows.values()) if (match(row)) result++;
     return result;
   }
-  forEach(where: AssetSearchWhere, visit: (row: MemoryAsset) => void) {
-    const match = this.predicate(where);
+  forEach(where: AssetSearchWhere, visit: (row: MemoryAsset) => void, context?: MemorySearchContext) {
+    const match = this.predicate(where, context);
     for (const row of this.rows.values()) if (match(row)) visit(row);
   }
   /** Callers own a finite set of projection keys; user query strings are not cache keys. */
