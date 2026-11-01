@@ -4,6 +4,12 @@ import { test } from 'node:test';
 import { createLibraryReaderServer } from './eagle-memory-server';
 import { LibraryMemoryIndex } from './eagle-memory-index';
 
+test('reader cannot start with missing identity or an invalid body byte budget', () => {
+  const store = { synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') };
+  assert.throws(() => createLibraryReaderServer(store, ''), /identity/);
+  for (const bytes of [0, -1, NaN, 1.5]) assert.throws(() => createLibraryReaderServer(store, 'identity', bytes), /budget/);
+});
+
 test('internal reader authenticates before reading and validates scope, page and byte bounds', async () => {
   let reads = 0;
   const token = 'test-reader-identity';

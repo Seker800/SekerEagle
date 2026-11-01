@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { compileMemorySearchPredicate } from './eagle-memory-predicate';
 import { buildEagleFilterWhere } from './eagle-filter-query';
 import type { AssetSearchWhere } from './eagle-search-predicate';
+import { COLOR_PALETTE_VERSION } from '@sekereagle/library-core';
 
 const asset = {
   id: 'asset',
@@ -106,4 +107,92 @@ test('unsupported fields and semantic relations fail closed before scanning', ()
     /Unsupported/,
   );
   assert.throws(() => compileMemorySearchPredicate({ embeddings: { some: {} } }), /Unsupported/);
+});
+
+test('scalar operator matrix preserves SQL empty sets, ranges, dates and unknowns', () => {
+  const yes: AssetSearchWhere[] = [
+    { AND: [] },
+    { NOT: [] },
+    { width: { equals: 4000, gte: 4000, lte: 4000 } },
+    { width: { lt: 5000, gt: 3000 } },
+    { width: { not: 3000 } },
+    { width: { in: [3000, 4000], notIn: [1, 2] } },
+    { rating: { notIn: [] } },
+    { format: { startsWith: 'j', endsWith: 'g', contains: 'p' } },
+    { format: { equals: 'jpg', mode: 'default' } },
+    { libraryAddedAt: { lt: new Date('2026-12-01'), gt: new Date('2026-10-01') } },
+  ];
+  for (const where of yes) assert.equal(compileMemorySearchPredicate(where)(asset), true);
+  for (const where of [
+    { OR: [] },
+    { width: { in: [] } },
+    { rating: { in: [1] } },
+    { rating: { not: null } },
+  ])
+    assert.equal(compileMemorySearchPredicate(where)(asset), false);
+  assert.equal(
+    compileMemorySearchPredicate({ AND: [{ rating: { gt: 1 } }, { format: 'png' }] })(asset),
+    false,
+  );
+  assert.equal(
+    compileMemorySearchPredicate({ OR: [{ rating: { gt: 1 } }, { format: 'png' }] })(asset),
+    false,
+  );
+});
+
+test('relation operators distinguish missing, null, none and every', () => {
+  for (const where of [
+    { photoMetadata: { cameraModel: null } },
+    { photoMetadata: { isNot: null } },
+    { manualTagLinks: { every: { tagId: 'sea' } } },
+    { manualTagLinks: { none: { tagId: 'other' } } },
+    { annotation: null },
+  ])
+    assert.equal(compileMemorySearchPredicate(where)(asset), true);
+  assert.equal(
+    compileMemorySearchPredicate({ photoMetadata: { isNot: { cameraModel: 'camera' } } })(asset),
+    false,
+  );
+  assert.equal(
+    compileMemorySearchPredicate({ manualTagLinks: { every: { tagId: 'other' } } })(asset),
+    false,
+  );
+});
+
+test('color matching reuses the current palette algorithm and media revision guard', () => {
+  const analysis = {
+    isCurrent: true,
+    status: 'COMPLETED',
+    processorVersion: COLOR_PALETTE_VERSION,
+    assetRevision: 2,
+    swatches: [
+      { hex: '#ffffff', weight: 0.8 },
+      { hex: '#000000', weight: 0.2 },
+    ],
+  };
+  const match = compileMemorySearchPredicate({ colorMatch: '#ffffff' });
+  assert.equal(match({ ...asset, mediaRevision: 2, colorAnalyses: [analysis] }), true);
+  assert.equal(match({ ...asset, mediaRevision: 3, colorAnalyses: [analysis] }), false);
+  assert.equal(match(asset), false);
+});
+
+test('malformed predicate input is rejected rather than treated as a successful match', () => {
+  for (const where of [
+    null,
+    { format: { unknown: 'jpg' } },
+    { format: { mode: 'unknown' } },
+    { format: { in: 'jpg' } },
+    { format: { equals: {} } },
+    { format: { startsWith: 3 } },
+    { photoMetadata: { is: {}, unknown: 1 } },
+    { colorMatch: 1 },
+  ]) {
+    assert.throws(() => compileMemorySearchPredicate(where as AssetSearchWhere), /Unsupported/);
+  }
+});
+
+test('unverified Unicode case folding and missing projected fields retain SQL fallback', () => {
+  const insensitive = compileMemorySearchPredicate({ normalizedDisplayName: { contains: 'i', mode: 'insensitive' } });
+  assert.throws(() => insensitive({ ...asset, normalizedDisplayName: 'İmage' }), /Unsupported/);
+  assert.throws(() => compileMemorySearchPredicate({ width: { gt: 1 } })({ id: 'incomplete' }), /Unsupported/);
 });
