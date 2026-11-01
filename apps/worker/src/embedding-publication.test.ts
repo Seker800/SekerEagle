@@ -168,7 +168,7 @@ test('stored-vector activation preserves compatibility, scope and lease without 
     'dimensions',
     'normalized',
   ])
-    assert.ok(sql.join("\n").includes(field), field);
+    assert.ok(sql.join('\n').includes(field), field);
   assert.ok(sql[0]!.includes('"deletedAt" IS NULL'));
   const storedLookup = sql.find((query) => query.includes('FROM "EagleAssetEmbedding"'))!;
   assert.ok(storedLookup.includes('NOT e."isCurrent"'));
@@ -265,7 +265,6 @@ test('fresh publication writes vector bytes and READY state together', async () 
     }),
   );
 });
-
 
 test('malformed inference results fail before consuming a lease or publishing other outputs', async () => {
   for (const vector of [[1], [NaN, 0], [0, 0], [2, 0]]) {

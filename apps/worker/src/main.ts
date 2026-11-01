@@ -32,7 +32,7 @@ import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/librar
 import { catalogImageDimensions, canReuseImageBrowsing } from './image-renditions';
 import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
-import { ensureCompatibleEmbeddingSpace } from './embedding-space';
+import { createEmbeddingSpaceInitializer } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
 import { prepareAssetPurge } from './asset-purge';
 import { ObjectDeletionRunner } from './object-deletion-runner';
@@ -167,6 +167,17 @@ const embeddingClient = new EmbeddingClient({
     50 * 1024 * 1024,
   ),
 });
+
+const embeddingIdentity = Object.freeze({
+  id: embeddingSpaceId,
+  model: embeddingModel,
+  revision: embeddingRevision,
+  dimensions: embeddingDimensions,
+  normalized: true,
+  instructionVersion: 'image-retrieval-v1',
+  preprocessingVersion: 'preview-webp-v1',
+});
+const initializeEmbeddingSpace = createEmbeddingSpaceInitializer(prisma, embeddingIdentity);
 
 async function heartbeat(): Promise<void> {
   if (checkingHeartbeat) return;
@@ -422,20 +433,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
   // Check before selecting or reading an object: a SEND must not download or infer again.
   if (
     job.kind === 'GENERATE_EMBEDDING' &&
-    (await publishStoredEmbedding(
-      prisma,
-      job,
-      {
-        id: embeddingSpaceId,
-        model: embeddingModel,
-        revision: embeddingRevision,
-        dimensions: embeddingDimensions,
-        normalized: true,
-        instructionVersion: 'image-retrieval-v1',
-        preprocessingVersion: 'preview-webp-v1',
-      },
-      createTopSuggestion,
-    ))
+    (await publishStoredEmbedding(prisma, job, embeddingIdentity, createTopSuggestion))
   )
     return;
   if (asset.mimeType.startsWith('image/')) {
@@ -707,28 +705,7 @@ async function processEmbeddingJob(
   source: AsyncIterable<Uint8Array>,
 ): Promise<void> {
   if (!process.env.MLX_EMBEDDING_TOKEN?.trim()) throw new Error('MLX_EMBEDDING_TOKEN_REQUIRED');
-  await prisma.eagleEmbeddingSpace.upsert({
-    where: { id: embeddingSpaceId },
-    create: {
-      id: embeddingSpaceId,
-      model: embeddingModel,
-      revision: embeddingRevision,
-      dimensions: embeddingDimensions,
-      instructionVersion: 'image-retrieval-v1',
-      preprocessingVersion: 'preview-webp-v1',
-      normalized: true,
-      isCurrent: true,
-    },
-    update: {
-      model: embeddingModel,
-      revision: embeddingRevision,
-      dimensions: embeddingDimensions,
-      instructionVersion: 'image-retrieval-v1',
-      preprocessingVersion: 'preview-webp-v1',
-      normalized: true,
-      isCurrent: true,
-    },
-  });
+  await initializeEmbeddingSpace();
   const record = await prisma.eagleAssetEmbedding.upsert({
     where: {
       assetId_assetRevision_spaceId: {
@@ -1671,17 +1648,7 @@ async function main(): Promise<void> {
           prisma,
           embeddingSpaceId,
           async (text) => {
-            await prisma.$transaction((tx) =>
-              ensureCompatibleEmbeddingSpace(tx, {
-                id: embeddingSpaceId,
-                model: embeddingModel,
-                revision: embeddingRevision,
-                dimensions: embeddingDimensions,
-                normalized: true,
-                instructionVersion: 'image-retrieval-v1',
-                preprocessingVersion: 'preview-webp-v1',
-              }),
-            );
+            await initializeEmbeddingSpace();
             return embeddingClient.embedText(text);
           },
           allowModelRequest &&

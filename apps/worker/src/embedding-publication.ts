@@ -29,6 +29,12 @@ export async function publishEmbedding(
   identity: EmbeddingSpaceIdentity,
   suggest: EmbeddingSuggestionPublisher,
 ): Promise<void> {
+  if (
+    embedding.length !== identity.dimensions ||
+    embedding.some((value) => !Number.isFinite(value)) ||
+    Math.abs(Math.sqrt(embedding.reduce((norm, value) => norm + value * value, 0)) - 1) > 1e-3
+  )
+    throw new Error('EMBEDDING_RESULT_INVALID');
   await client.$transaction(
     async (transaction) => {
       if (!(await lockPublicationAsset(transaction, job, identity))) return;

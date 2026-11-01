@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 export interface EmbeddingSpaceIdentity {
   id: string;
@@ -34,4 +34,23 @@ export async function ensureCompatibleEmbeddingSpace(
   if (!existing)
     await client.eagleEmbeddingSpace.create({ data: { ...identity, isCurrent: true } });
   else if (!existing.isCurrent) throw new Error('EMBEDDING_SPACE_NOT_ACTIVE');
+}
+
+/** Cache initialization only. Every publication independently locks and checks the live identity. */
+export function createEmbeddingSpaceInitializer(
+  client: Pick<PrismaClient, '$transaction'>,
+  identity: EmbeddingSpaceIdentity,
+): () => Promise<void> {
+  let initialized: Promise<void> | undefined;
+  return () => {
+    if (!initialized) {
+      initialized = client
+        .$transaction((tx) => ensureCompatibleEmbeddingSpace(tx, identity))
+        .catch((error: unknown) => {
+          initialized = undefined;
+          throw error;
+        });
+    }
+    return initialized;
+  };
 }
