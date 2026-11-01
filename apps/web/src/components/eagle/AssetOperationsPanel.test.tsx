@@ -156,7 +156,29 @@ it('reconciles terminal send receipts in both modes and never refetches the poll
     nextCursor: null,
   });
   client.setQueryData(['eagle', 'owner', 'PHOTO', 'operations', false], [terminal]);
-  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      invalidate.mock.calls.filter(([filters]) => filters?.refetchType === 'active'),
+    ).toHaveLength(2),
+  );
+  const destination = invalidate.mock.calls.filter(([filters]) => filters?.refetchType === 'none');
+  expect(destination).toHaveLength(1);
+  for (const view of ['ACTIVE', 'PRIVATE'])
+    expect(
+      destination[0]![0]!.predicate!({
+        queryKey: ['eagle', 'owner', 'MATERIAL', 'assets', view, {}],
+      } as never),
+    ).toBe(true);
+  for (const [owner, mode, view] of [
+    ['other', 'MATERIAL', 'ACTIVE'],
+    ['owner', 'PHOTO', 'ACTIVE'],
+    ['owner', 'MATERIAL', 'TRASH'],
+  ])
+    expect(
+      destination[0]![0]!.predicate!({
+        queryKey: ['eagle', owner, mode, 'assets', view, {}],
+      } as never),
+    ).toBe(false);
   for (const mode of ['MATERIAL', 'PHOTO']) {
     const predicates = invalidate.mock.calls.map(([filters]) => filters!.predicate!);
     expect(
@@ -200,8 +222,26 @@ it('trash completion calibrates counters once without fetching infinite asset pa
     nextCursor: null,
   });
   client.setQueryData(['eagle', 'owner', 'PHOTO', 'operations', false], [terminal]);
-  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
-  const predicate = invalidate.mock.calls[0]![0]!.predicate!;
+  await waitFor(() =>
+    expect(
+      invalidate.mock.calls.filter(([filters]) => filters?.refetchType === 'active'),
+    ).toHaveLength(1),
+  );
+  const destination = invalidate.mock.calls.filter(([filters]) => filters?.refetchType === 'none');
+  expect(destination).toHaveLength(1);
+  expect(
+    destination[0]![0]!.predicate!({
+      queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'TRASH', {}],
+    } as never),
+  ).toBe(true);
+  expect(
+    destination[0]![0]!.predicate!({
+      queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', {}],
+    } as never),
+  ).toBe(false);
+  const predicate = invalidate.mock.calls.find(
+    ([filters]) => filters?.refetchType === 'active',
+  )![0]!.predicate!;
   expect(
     predicate({
       queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', {}],
