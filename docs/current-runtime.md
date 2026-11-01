@@ -1,5 +1,11 @@
 # 现用运行状态与交接
 
+> **2026-11-01 刷新优化与推荐审核修复已上线（覆盖下方应用／业务 worker 快照）**：API／独立 operations 为 `sekereagle/api:refresh-ff0c9ac7`，固定源码 `ff0c9ac7a97eb8f723ae3edf50e509155f014751`；网页为 `sekereagle/web:refresh-cc4d1978-complete`，固定源码 `cc4d19787b077974af2c9f37afc0a0e111e1fbac`，追加断网保留工作区与重连合并校准。三服务 healthy、零重启，78 项迁移完成。唯一 Mac 业务 worker 已切为不可变 `worker-ff0c9ac7`，现场 PID28050、新鲜心跳；旧 worker 经原 SIGTERM 排空退出。NAS worker 继续停止且 restart=no。
+>
+> 界面只对可见活动任务观察进度，完成后停止完整读取；跨设备共用轻量检查每60秒一次，隐藏暂停。已有推荐／整批审核读取持久结果，不再探测模型；未激活向量面板不请求概览，显式诊断独立。临时断网保留页面、选择和草稿，真实撤权仍清理缓存。完整 CI、六万项隔离集成／历史升级／完整恢复、最终 API 镜像、不可变 Mac worker 与实际 Chrome／Electron 验收通过；生产静态入口逐字节一致，旧静态文件与APK哈希、Range206保持。
+>
+> NAS 已完成910405990字节一致性备份及完整解析，配套回退在 `maintenance/refresh-efficiency-20261101/`。网关保持运行，仅校验并reload；数据库／MinIO／协调器／中继／停止的NAS worker身份、用户暂停与时段、计算修订66及容量／交互预留保持。详细测量、验收条件、失败重试及回退见[刷新优化实施与验收](refresh-efficiency-2026-11-01.md)。本段核验时间为2026年11月1日晚；动态进度以实时检查点为准。
+
 > **2026-11-01 运行效率与读取优化已上线（覆盖下方应用／业务 worker 快照）**：固定运行源码 `df6d3688305a648a66e3bd621f094a8ef452546e`，API／独立 operations 为 `sekereagle/api:efficiency-df6d3688305a`，网页为 `sekereagle/web:efficiency-df6d3688305a-complete`，三服务 healthy、零重启。此前未上线的批处理／独立宿主／向量和恢复保护，以及人物、统计、智能文件夹读取优化配套发布；77 项迁移完成。Mac 唯一业务 worker 为不可变 `worker-df6d3688305a`、现场 PID41559，新鲜心跳；旧 PID57244 已正常退出，placement 检查点已同步。
 >
 > 900786714 字节备份经 SHA 与完整解析。完整 Compose 链仅追加 `maintenance/read-efficiency-20261101/images.json`；保留原 727 镜像、旧 Mac release／plist 和协调回退资料。用户暂停／时段、处理设置、模型、计算修订66及容量保持，三节点 READY；NAS worker 继续停止，无关容器及网关身份／配置保持。网关 Compose 启动等待历史依赖，现场直接启动原容器后只结束等待中的维护命令；17:33:41–17:40:29 为约6分49秒维护中断，不是正常请求延迟。
