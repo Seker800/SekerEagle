@@ -714,15 +714,28 @@ test('W5 API refresh keeps reviewed evidence rejected while allowing a genuinely
 });
 
 test('W5 API refresh refuses vectors from a space retired since the previous publication', async () => {
-  const { refreshUnclassifiedSuggestions } = await import('../../apps/api/dist/eagle/eagle-vector.persistence.js');
+  const { refreshUnclassifiedSuggestions } =
+    await import('../../apps/api/dist/eagle/eagle-vector.persistence.js');
   const f = await fixture();
   await publishEmbedding(prisma, f.job, f.record.id, vector, identity, suggest);
-  await prisma.eagleVectorTagSuggestion.updateMany({ where: { ...scope, embeddingId: f.record.id }, data: { isActive: false, invalidatedAt: new Date() } });
+  await prisma.eagleVectorTagSuggestion.updateMany({
+    where: { ...scope, embeddingId: f.record.id },
+    data: { isActive: false, invalidatedAt: new Date() },
+  });
   const rollback = new Error('synthetic-space-rollback');
-  await assert.rejects(prisma.$transaction(async (tx) => {
-    await tx.eagleEmbeddingSpace.update({ where: { id: identity.id }, data: { isCurrent: false } });
-    const result = await refreshUnclassifiedSuggestions(tx, { ...scope, assetIds: [f.job.assetId] });
-    assert.equal(result.matched, 0);
-    throw rollback;
-  }), (error) => error === rollback);
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      await tx.eagleEmbeddingSpace.update({
+        where: { id: identity.id },
+        data: { isCurrent: false },
+      });
+      const result = await refreshUnclassifiedSuggestions(tx, {
+        ...scope,
+        assetIds: [f.job.assetId],
+      });
+      assert.equal(result.matched, 0);
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
 });
