@@ -40,3 +40,19 @@ describe('localized API errors', () => {
     expect(error.code).toBe('ORIGIN_REJECTED');
   });
 });
+
+it('explains retryable publication pressure without exposing database details in either language', async () => {
+  for (const [locale, message] of [
+    ['zh-CN', '图片已上传，保存暂时繁忙，请重试保存。'],
+    ['en-US', 'The image has uploaded. Saving is temporarily busy; retry saving.'],
+  ] as const) {
+    const error = await errorFromResponse(
+      jsonResponse({ code: 'UPLOAD_PUBLICATION_BUSY', message: 'Internal server error' }, 503),
+      '请求失败（{{value1}}）',
+      locale,
+    );
+    expect(error.status).toBe(503);
+    expect(error.code).toBe('UPLOAD_PUBLICATION_BUSY');
+    expect(error.message).toBe(message);
+  }
+});

@@ -2,6 +2,7 @@ import { getLocale, tForLocale, type MessageId } from '../i18n';
 import type { SupportedLocale } from '../i18n/locale';
 
 const ERROR_CODE_MESSAGES = {
+  UPLOAD_PUBLICATION_BUSY: '图片已上传，保存暂时繁忙，请重试保存。',
   ORIGIN_REJECTED: '请求来源不受信任。',
   CONTENT_HASH_MISMATCH: '上传文件完整性校验失败。',
   MANIFEST_DECLARATION_MISMATCH: '导入清单声明不一致。',

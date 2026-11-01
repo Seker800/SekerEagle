@@ -1693,6 +1693,9 @@ export const enUS = {
   重试失败: 'Retry Failed',
   重试失败任务: 'Retry failed tasks',
   '重试失败任务{{value1}}': 'Failed Retry for Task {{value1}}',
+  '图片已上传，保存暂时繁忙，请重试保存。':
+    'The image has uploaded. Saving is temporarily busy; retry saving.',
+  重试保存: 'Retry save',
   重新加载: 'Reload',
   '重新排队全部失败任务？': 'Requeue all failed tasks?',
   注释: 'Annotation',

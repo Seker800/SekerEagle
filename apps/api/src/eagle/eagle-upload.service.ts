@@ -23,6 +23,7 @@ import {
   Injectable,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
   Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -31,7 +32,10 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
-import { normalizeEagleUploadOriginalName } from './eagle-upload-policy';
+import {
+  normalizeEagleUploadOriginalName,
+  uploadPublicationTimeoutMs,
+} from './eagle-upload-policy';
 import { buildImageProcessingJobs } from './media-job-plan';
 import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
 
@@ -401,267 +405,288 @@ export class EagleUploadService {
     const assetId = randomUUID();
     const displayName = displayNameFromOriginal(session.originalName);
     try {
-      const finalized = await this.prisma.$transaction(async (transaction) => {
-        const copySourceId = session.eagleState?.copySourceAssetId;
-        let copySource: Awaited<ReturnType<typeof loadEditedCopySource>> | undefined;
-        if (copySourceId || session.eagleState?.replacementAssetId)
-          await lockOwnerPrivacyProjection(transaction, session.uploaderId, this.libraryMode);
-        if (copySourceId) {
-          await this.revisionObserver?.beforeEditedCopy?.(transaction, {
-            ownerId: session.uploaderId,
-            libraryMode: this.libraryMode,
-          });
-          copySource = await loadEditedCopySource(
-            transaction,
-            session.uploaderId,
-            this.libraryMode,
-            copySourceId,
-            session.eagleState?.copySourceRowVersion,
-          );
-        }
-        const claimed = await transaction.uploadSession.updateMany({
-          where: {
-            id: session.id,
-            uploaderId: session.uploaderId,
-            status: { in: ['ASSEMBLED', 'FAILED'] },
-            finalizationAttempts: { lt: 10 },
-            libraryMode: this.libraryMode,
-          },
-          data: {
-            status: 'FINALIZING',
-            assembledAt: now,
-            finalizationStartedAt: now,
-            finalizationAttempts: { increment: 1 },
-          },
-        });
-        if (claimed.count !== 1) throw new ConflictException('上传会话状态已改变。');
-        const browserCapture = await transaction.eagleBrowserCapture.findUnique({
-          where: { uploadSessionId: session.id, libraryMode: this.libraryMode },
-          select: { id: true, displayName: true, pageUrl: true },
-        });
-        let finalizedAssetId: string = assetId;
-        let assetRevision = 1;
-        let duplicate = false;
-        let cleanupObject = false;
-        let retiredObjectKeys: string[] = [];
-        if (session.eagleState?.replacementAssetId) {
-          await transaction.$queryRaw(
-            Prisma.sql`SELECT id FROM "EagleAsset" WHERE id=${session.eagleState.replacementAssetId} AND "ownerId"=${session.uploaderId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" FOR UPDATE`,
-          );
-          const current = await transaction.eagleAsset.findFirst({
+      const finalized = await this.prisma.$transaction(
+        async (transaction) => {
+          const copySourceId = session.eagleState?.copySourceAssetId;
+          let copySource: Awaited<ReturnType<typeof loadEditedCopySource>> | undefined;
+          if (copySourceId || session.eagleState?.replacementAssetId)
+            await lockOwnerPrivacyProjection(transaction, session.uploaderId, this.libraryMode);
+          const claimed = await transaction.uploadSession.updateMany({
             where: {
-              id: session.eagleState.replacementAssetId,
-              ownerId: session.uploaderId,
-              deletedAt: null,
+              id: session.id,
+              uploaderId: session.uploaderId,
+              status: { in: ['ASSEMBLED', 'FAILED'] },
+              finalizationAttempts: { lt: 10 },
               libraryMode: this.libraryMode,
             },
-            include: {
-              manualTagLinks: { include: { tag: { select: { marksAssetsPrivate: true } } } },
-              renditions: {
-                select: { storageKey: true, revision: true },
-              },
-            },
-          });
-          if (!current) throw new NotFoundException('待替换的素材不存在。');
-          const retainedAssetIds = await preserveReplacementPrivacy(
-            transaction,
-            session.uploaderId,
-            this.libraryMode,
-            current,
-          );
-          const currentRenditions = current.renditions.filter(
-            (rendition) => rendition.revision === current.mediaRevision,
-          );
-          assetRevision = current.mediaRevision + 1;
-          finalizedAssetId = current.id;
-          retiredObjectKeys = [
-            current.originalObjectKey,
-            ...currentRenditions.map(({ storageKey }) => storageKey),
-          ];
-          await transaction.eagleAsset.update({
-            where: { id: current.id, libraryMode: this.libraryMode },
             data: {
-              originalName: session.originalName,
-              mimeType: session.mimeType,
-              format: inspection.format,
-              byteSize: session.size,
-              sha256: inspection.sha256,
-              width: inspection.width,
-              height: inspection.height,
-              durationMs: inspection.durationMs,
-              originalObjectKey: session.objectKey,
-              lifecycleStatus: 'PROCESSING',
-              mediaErrorCode: null,
-              mediaRevision: assetRevision,
-              livePhotoIdentifier: null,
-              livePhotoRole: null,
-              rowVersion: { increment: 1 },
+              status: 'FINALIZING',
+              assembledAt: now,
+              finalizationStartedAt: now,
+              finalizationAttempts: { increment: 1 },
             },
           });
-          await invalidateMediaRevision(
-            transaction,
-            { ownerId: session.uploaderId, libraryMode: this.libraryMode, assetId: current.id },
-            assetRevision,
-          );
-          await this.revisionObserver?.onOriginalReplaced(
-            transaction,
-            { ownerId: session.uploaderId, libraryMode: this.libraryMode },
-            current.id,
-          );
-          await syncAssetPrivacy(
-            transaction,
-            session.uploaderId,
-            [...new Set([current.id, ...retainedAssetIds])],
-            this.libraryMode,
-          );
-          if (currentRenditions.length) {
-            await transaction.eagleAssetRendition.deleteMany({
+          if (claimed.count !== 1) {
+            // Another process may have published while this request waited for the privacy lock.
+            const completed = await transaction.uploadSession.findFirst({
               where: {
-                assetId: current.id,
-                revision: current.mediaRevision,
+                id: session.id,
+                uploaderId: session.uploaderId,
+                libraryMode: this.libraryMode,
+                status: 'COMPLETED',
+              },
+              select: { eagleAssetId: true, objectCleanupPending: true },
+            });
+            if (completed?.eagleAssetId)
+              return { assetId: completed.eagleAssetId, duplicate: completed.objectCleanupPending };
+            throw new ConflictException('上传会话状态已改变。');
+          }
+          if (copySourceId) {
+            await this.revisionObserver?.beforeEditedCopy?.(transaction, {
+              ownerId: session.uploaderId,
+              libraryMode: this.libraryMode,
+            });
+            copySource = await loadEditedCopySource(
+              transaction,
+              session.uploaderId,
+              this.libraryMode,
+              copySourceId,
+              session.eagleState?.copySourceRowVersion,
+            );
+          }
+
+          const browserCapture = await transaction.eagleBrowserCapture.findUnique({
+            where: { uploadSessionId: session.id, libraryMode: this.libraryMode },
+            select: { id: true, displayName: true, pageUrl: true },
+          });
+          let finalizedAssetId: string = assetId;
+          let assetRevision = 1;
+          let duplicate = false;
+          let cleanupObject = false;
+          let retiredObjectKeys: string[] = [];
+          if (session.eagleState?.replacementAssetId) {
+            await transaction.$queryRaw(
+              Prisma.sql`SELECT id FROM "EagleAsset" WHERE id=${session.eagleState.replacementAssetId} AND "ownerId"=${session.uploaderId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" FOR UPDATE`,
+            );
+            const current = await transaction.eagleAsset.findFirst({
+              where: {
+                id: session.eagleState.replacementAssetId,
+                ownerId: session.uploaderId,
+                deletedAt: null,
                 libraryMode: this.libraryMode,
               },
+              include: {
+                manualTagLinks: { include: { tag: { select: { marksAssetsPrivate: true } } } },
+                renditions: {
+                  select: { storageKey: true, revision: true },
+                },
+              },
             });
-          }
-        } else {
-          await transaction.$executeRaw`
-            SELECT pg_advisory_xact_lock(hashtext(${`${session.uploaderId}:${this.libraryMode}`}), hashtext(${inspection.sha256}))
-          `;
-          const existing =
-            session.eagleState?.duplicatePolicy === 'CREATE_COPY'
-              ? null
-              : await transaction.eagleAsset.findFirst({
-                  where: {
-                    ownerId: session.uploaderId,
-                    sha256: inspection.sha256,
-                    deletedAt: null,
-                    libraryMode: this.libraryMode,
-                  },
-                  select: { id: true },
-                });
-          if (existing) {
-            finalizedAssetId = existing.id;
-            duplicate = true;
-            cleanupObject = true;
-          } else {
-            const assetDisplayName = browserCapture?.displayName ?? displayName;
-            const editedTag = copySource
-              ? await editedCopyTag(transaction, session.uploaderId, this.libraryMode)
-              : null;
-            await transaction.eagleAsset.create({
+            if (!current) throw new NotFoundException('待替换的素材不存在。');
+            const retainedAssetIds = await preserveReplacementPrivacy(
+              transaction,
+              session.uploaderId,
+              this.libraryMode,
+              current,
+            );
+            const currentRenditions = current.renditions.filter(
+              (rendition) => rendition.revision === current.mediaRevision,
+            );
+            assetRevision = current.mediaRevision + 1;
+            finalizedAssetId = current.id;
+            retiredObjectKeys = [
+              current.originalObjectKey,
+              ...currentRenditions.map(({ storageKey }) => storageKey),
+            ];
+            await transaction.eagleAsset.update({
+              where: { id: current.id, libraryMode: this.libraryMode },
               data: {
-                id: assetId,
-                ownerId: session.uploaderId,
                 originalName: session.originalName,
-                displayName: assetDisplayName,
-                normalizedDisplayName: normalizeKey(assetDisplayName),
                 mimeType: session.mimeType,
                 format: inspection.format,
                 byteSize: session.size,
-                originalObjectKey: session.objectKey,
                 sha256: inspection.sha256,
                 width: inspection.width,
                 height: inspection.height,
                 durationMs: inspection.durationMs,
+                originalObjectKey: session.objectKey,
+                lifecycleStatus: 'PROCESSING',
+                mediaErrorCode: null,
                 mediaRevision: assetRevision,
-                libraryMode: this.libraryMode,
-                ...(copySource
-                  ? {
-                      rating: copySource.rating,
-                      isPrivate: copySource.isPrivate || (editedTag?.marksAssetsPrivate ?? false),
-                    }
-                  : {}),
+                livePhotoIdentifier: null,
+                livePhotoRole: null,
+                rowVersion: { increment: 1 },
               },
             });
-            if (copySource) {
-              if (session.eagleState?.copyRecipeJson) {
-                await transaction.eagleAssetEditRecipe.create({
-                  data: {
-                    assetId,
-                    ownerId: session.uploaderId,
-                    libraryMode: this.libraryMode,
-                    assetRevision,
-                    baseAssetId: copySourceId,
-                    baseMediaRevision: copySource.mediaRevision,
-                    recipe: validatedEditRecipe(
-                      session.eagleState.copyRecipeJson,
-                    ) as unknown as Prisma.InputJsonValue,
-                  },
-                });
-              }
-              await inheritEditedCopyDetails(
-                transaction,
-                session.uploaderId,
-                this.libraryMode,
-                assetId,
-                copySource,
-                editedTag,
-              );
-            }
-            if (copySource && copySourceId) {
-              await this.revisionObserver?.onEditedCopyCreated?.(
-                transaction,
-                { ownerId: session.uploaderId, libraryMode: this.libraryMode },
-                { sourceAssetId: copySourceId, assetId, mediaRevision: assetRevision },
-              );
-            }
-            if (browserCapture) {
-              await transaction.eagleAssetAnnotation.create({
-                data: {
-                  ownerId: session.uploaderId,
-                  assetId,
-                  sourceUrl: browserCapture.pageUrl,
+            await invalidateMediaRevision(
+              transaction,
+              { ownerId: session.uploaderId, libraryMode: this.libraryMode, assetId: current.id },
+              assetRevision,
+            );
+            await this.revisionObserver?.onOriginalReplaced(
+              transaction,
+              { ownerId: session.uploaderId, libraryMode: this.libraryMode },
+              current.id,
+            );
+            await syncAssetPrivacy(
+              transaction,
+              session.uploaderId,
+              [...new Set([current.id, ...retainedAssetIds])],
+              this.libraryMode,
+            );
+            if (currentRenditions.length) {
+              await transaction.eagleAssetRendition.deleteMany({
+                where: {
+                  assetId: current.id,
+                  revision: current.mediaRevision,
                   libraryMode: this.libraryMode,
                 },
               });
             }
+          } else {
+            // Explicit copies never deduplicate: serializing identical output hashes adds no protection.
+            if (session.eagleState?.duplicatePolicy !== 'CREATE_COPY') {
+              await transaction.$executeRaw`
+            SELECT pg_advisory_xact_lock(hashtext(${`${session.uploaderId}:${this.libraryMode}`}), hashtext(${inspection.sha256}))
+          `;
+            }
+            const existing =
+              session.eagleState?.duplicatePolicy === 'CREATE_COPY'
+                ? null
+                : await transaction.eagleAsset.findFirst({
+                    where: {
+                      ownerId: session.uploaderId,
+                      sha256: inspection.sha256,
+                      deletedAt: null,
+                      libraryMode: this.libraryMode,
+                    },
+                    select: { id: true },
+                  });
+            if (existing) {
+              finalizedAssetId = existing.id;
+              duplicate = true;
+              cleanupObject = true;
+            } else {
+              const assetDisplayName = browserCapture?.displayName ?? displayName;
+              const editedTag = copySource
+                ? await editedCopyTag(transaction, session.uploaderId, this.libraryMode)
+                : null;
+              await transaction.eagleAsset.create({
+                data: {
+                  id: assetId,
+                  ownerId: session.uploaderId,
+                  originalName: session.originalName,
+                  displayName: assetDisplayName,
+                  normalizedDisplayName: normalizeKey(assetDisplayName),
+                  mimeType: session.mimeType,
+                  format: inspection.format,
+                  byteSize: session.size,
+                  originalObjectKey: session.objectKey,
+                  sha256: inspection.sha256,
+                  width: inspection.width,
+                  height: inspection.height,
+                  durationMs: inspection.durationMs,
+                  mediaRevision: assetRevision,
+                  libraryMode: this.libraryMode,
+                  ...(copySource
+                    ? {
+                        rating: copySource.rating,
+                        isPrivate: copySource.isPrivate || (editedTag?.marksAssetsPrivate ?? false),
+                      }
+                    : {}),
+                },
+              });
+              if (copySource) {
+                if (session.eagleState?.copyRecipeJson) {
+                  await transaction.eagleAssetEditRecipe.create({
+                    data: {
+                      assetId,
+                      ownerId: session.uploaderId,
+                      libraryMode: this.libraryMode,
+                      assetRevision,
+                      baseAssetId: copySourceId,
+                      baseMediaRevision: copySource.mediaRevision,
+                      recipe: validatedEditRecipe(
+                        session.eagleState.copyRecipeJson,
+                      ) as unknown as Prisma.InputJsonValue,
+                    },
+                  });
+                }
+                await inheritEditedCopyDetails(
+                  transaction,
+                  session.uploaderId,
+                  this.libraryMode,
+                  assetId,
+                  copySource,
+                  editedTag,
+                );
+              }
+              if (copySource && copySourceId) {
+                await this.revisionObserver?.onEditedCopyCreated?.(
+                  transaction,
+                  { ownerId: session.uploaderId, libraryMode: this.libraryMode },
+                  { sourceAssetId: copySourceId, assetId, mediaRevision: assetRevision },
+                );
+              }
+              if (browserCapture) {
+                await transaction.eagleAssetAnnotation.create({
+                  data: {
+                    ownerId: session.uploaderId,
+                    assetId,
+                    sourceUrl: browserCapture.pageUrl,
+                    libraryMode: this.libraryMode,
+                  },
+                });
+              }
+            }
           }
-        }
-        const jobs = isCameraVideoMime(session.mimeType)
-          ? [
-              {
+          const jobs = isCameraVideoMime(session.mimeType)
+            ? [
+                {
+                  ownerId: session.uploaderId,
+                  assetId: finalizedAssetId,
+                  kind: 'GENERATE_THUMBNAIL' as const,
+                  lane: 'INTERACTIVE' as const,
+                  assetRevision,
+                  processorVersion: 'camera-video-preview-v2',
+                },
+              ]
+            : buildImageProcessingJobs({
                 ownerId: session.uploaderId,
                 assetId: finalizedAssetId,
-                kind: 'GENERATE_THUMBNAIL' as const,
-                lane: 'INTERACTIVE' as const,
                 assetRevision,
-                processorVersion: 'camera-video-preview-v2',
-              },
-            ]
-          : buildImageProcessingJobs({
-              ownerId: session.uploaderId,
-              assetId: finalizedAssetId,
-              assetRevision,
-              width: inspection.width,
-              height: inspection.height,
+                width: inspection.width,
+                height: inspection.height,
+              });
+          if (!duplicate) {
+            await transaction.eagleAssetProcessingJob.createMany({
+              data: jobs.map((row) => inLibrary(this.libraryMode, row)),
             });
-        if (!duplicate) {
-          await transaction.eagleAssetProcessingJob.createMany({
-            data: jobs.map((row) => inLibrary(this.libraryMode, row)),
+          }
+          if (browserCapture) {
+            await transaction.eagleBrowserCapture.update({
+              where: { id: browserCapture.id, libraryMode: this.libraryMode },
+              data: { assetId: finalizedAssetId, completedAt: now },
+            });
+          }
+          await transaction.eagleUploadSessionState.update({
+            where: { uploadSessionId: session.id, libraryMode: this.libraryMode },
+            data: { assetId: finalizedAssetId, retiredObjectKeys },
           });
-        }
-        if (browserCapture) {
-          await transaction.eagleBrowserCapture.update({
-            where: { id: browserCapture.id, libraryMode: this.libraryMode },
-            data: { assetId: finalizedAssetId, completedAt: now },
+          await transaction.uploadSession.update({
+            where: { id: session.id, libraryMode: this.libraryMode },
+            data: {
+              status: 'COMPLETED',
+              eagleAssetId: finalizedAssetId,
+              completedAt: now,
+              completionParts: parts,
+              objectCleanupPending: cleanupObject,
+            },
           });
-        }
-        await transaction.eagleUploadSessionState.update({
-          where: { uploadSessionId: session.id, libraryMode: this.libraryMode },
-          data: { assetId: finalizedAssetId, retiredObjectKeys },
-        });
-        await transaction.uploadSession.update({
-          where: { id: session.id, libraryMode: this.libraryMode },
-          data: {
-            status: 'COMPLETED',
-            eagleAssetId: finalizedAssetId,
-            completedAt: now,
-            completionParts: parts,
-            objectCleanupPending: cleanupObject,
-          },
-        });
-        return { assetId: finalizedAssetId, duplicate };
-      });
+          return { assetId: finalizedAssetId, duplicate };
+        },
+        { timeout: uploadPublicationTimeoutMs() },
+      );
       return {
         uploadSessionId: session.id,
         assetId: finalized.assetId,
@@ -669,6 +694,9 @@ export class EagleUploadService {
         duplicate: finalized.duplicate,
       };
     } catch (error) {
+      const temporarilyBusy =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        ['P2028', 'P2024', 'P2034'].includes(error.code);
       await this.prisma.uploadSession.updateMany({
         where: {
           id: session.id,
@@ -678,11 +706,16 @@ export class EagleUploadService {
         },
         data: {
           status: 'FAILED',
-          finalizationAttempts: { increment: 1 },
+          ...(!temporarilyBusy ? { finalizationAttempts: { increment: 1 } } : {}),
           lastError: error instanceof Error ? error.message.slice(0, 2000) : 'FINALIZATION_FAILED',
           objectCleanupPending: false,
         },
       });
+      if (temporarilyBusy)
+        throw new ServiceUnavailableException({
+          code: 'UPLOAD_PUBLICATION_BUSY',
+          message: '图片已上传，保存暂时繁忙，请重试保存。',
+        });
       throw error;
     }
   }

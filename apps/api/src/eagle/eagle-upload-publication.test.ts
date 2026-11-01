@@ -122,3 +122,19 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
     assert.equal(result.assetId, 'already-published');
   });
 }
+
+test('publication budget is configurable and rejects invalid resource budgets', async () => {
+  const { uploadPublicationTimeoutMs } = await import('./eagle-upload-policy');
+  const before = process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS;
+  try {
+    process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS = '45000';
+    assert.equal(uploadPublicationTimeoutMs(), 45000);
+    for (const value of ['0', '-1', '1.5', 'NaN', 'Infinity', '9007199254740992']) {
+      process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS = value;
+      assert.throws(uploadPublicationTimeoutMs, /must be a positive integer/);
+    }
+  } finally {
+    if (before === undefined) delete process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS;
+    else process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS = before;
+  }
+});

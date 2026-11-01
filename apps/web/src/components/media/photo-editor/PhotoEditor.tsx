@@ -136,6 +136,7 @@ export function PhotoEditor({
   useEffect(() => () => exportController.current?.abort(), []);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState('');
+  const [errorRetry, setErrorRetry] = useState<'load' | 'save' | 'locate'>('load');
   const [sourceConflict, setSourceConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
@@ -295,6 +296,7 @@ export function PhotoEditor({
   useEffect(() => {
     let cancelled = false;
     setError('');
+    setErrorRetry('load');
     setLoaded(null);
     previewRef.current = null;
     let renderer: ReturnType<typeof createPhotoRenderer>;
@@ -482,6 +484,7 @@ export function PhotoEditor({
       setSavedId(savedPhoto.id);
       setSaved(true);
     } catch (cause) {
+      setErrorRetry('save');
       if (cause instanceof ApiError && cause.status === 409) {
         setSourceConflict(true);
         setError(t('原照片或保存条件已变化，请关闭后重新打开编辑器。'));
@@ -503,6 +506,7 @@ export function PhotoEditor({
     try {
       await onOpenSaved(savedId);
     } catch {
+      setErrorRetry('locate');
       setError(t('定位失败，请重试'));
     } finally {
       setBusy(false);
@@ -738,9 +742,17 @@ export function PhotoEditor({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => setLoadAttempt((value) => value + 1)}
+                onClick={() => {
+                  if (errorRetry === 'save') void savePhoto();
+                  else if (errorRetry === 'locate') void openSavedPhoto();
+                  else setLoadAttempt((value) => value + 1);
+                }}
               >
-                {t('重新加载')}
+                {errorRetry === 'save'
+                  ? t('重试保存')
+                  : errorRetry === 'locate'
+                    ? t('重试')
+                    : t('重新加载')}
               </button>
             )}
           </div>
