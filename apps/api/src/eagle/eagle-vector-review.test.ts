@@ -74,3 +74,20 @@ test('rejecting forty saved suggestions uses one transaction and one status writ
   assert.equal(transactions, 1);
   assert.equal(writes, 1);
 });
+
+test('stored vector progress uses worker observations while the model is unreachable', async t => {
+  const oldUrl = process.env.MLX_EMBEDDING_URL, oldToken = process.env.MLX_EMBEDDING_TOKEN;
+  process.env.MLX_EMBEDDING_URL = 'http://127.0.0.1:1'; process.env.MLX_EMBEDDING_TOKEN = 'synthetic';
+  t.after(() => { if (oldUrl === undefined) delete process.env.MLX_EMBEDDING_URL; else process.env.MLX_EMBEDDING_URL = oldUrl; if (oldToken === undefined) delete process.env.MLX_EMBEDDING_TOKEN; else process.env.MLX_EMBEDDING_TOKEN = oldToken; });
+  const fetch = t.mock.method(globalThis, 'fetch', async () => { throw new Error('model offline'); });
+  const service = new EagleVectorService({
+    eagleAsset: { count: async () => 0 }, eagleAssetEmbedding: { count: async () => 0 },
+    eagleManualTagSemanticConfig: { count: async () => 0 }, eagleVectorTagSuggestion: { count: async () => 0 },
+    eagleAssetProcessingJob: { groupBy: async () => [] }, eagleProcessingSetting: { findUnique: async () => null },
+    eagleProcessingWorkerHeartbeat: { findFirst: async () => ({ heartbeatAt: new Date(), capabilities: { embedding: 'READY' } }) },
+    $queryRaw: async () => [{ count: 0 }],
+  } as never, 'MATERIAL');
+  const summary = await service.summary('owner');
+  assert.equal(fetch.mock.callCount(), 0);
+  assert.equal(summary.host.status, 'ONLINE');
+});
