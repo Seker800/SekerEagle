@@ -174,18 +174,20 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       { operationId: randomUUID() },
     ]) {
       await assert.rejects(
-        f.duplicate.executeCleanupBatch([items[0], { ...items[1], ...patch }], async () => {}),
+        f.executor.publishMetadataBatch([items[0], { ...items[1], ...patch }], async (tx) => {
+          await f.duplicate.applyCleanupBatch(tx, items);
+        }),
         /作用域/,
       );
     }
-    let guards = 0;
     await assert.rejects(
-      f.duplicate.executeCleanupBatch(items, async () => {
-        if (++guards === 2) throw new Error('AUTH_REQUIRED');
+      f.executor.publishMetadataBatch(items, async (tx) => {
+        await f.duplicate.applyCleanupBatch(tx, items);
+        await tx.user.update({ where: { id: f.ownerId }, data: { authVersion: { increment: 1 } } });
       }),
       /AUTH_REQUIRED/,
     );
-    assert.equal(guards, 2, 'authorization is checked before writes and before publication');
+    assert.equal((await db.user.findUniqueOrThrow({ where: { id: f.ownerId } })).authVersion, 0);
     assert.equal(
       await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
       0,
