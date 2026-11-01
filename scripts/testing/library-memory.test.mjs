@@ -6,6 +6,10 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { LibraryReadStore } from '../../apps/api/dist/eagle/eagle-memory-store.js';
 import { compileSearchPredicate } from '../../apps/api/dist/eagle/eagle-search-predicate.js';
 import { buildEagleFilterWhere } from '../../apps/api/dist/eagle/eagle-filter-query.js';
+import { createLibraryReaderServer } from '../../apps/api/dist/eagle/eagle-memory-server.js';
+import { findSearchAssets } from '../../apps/api/dist/eagle/eagle-asset-search.js';
+import { libraryReadMetrics } from '../../apps/api/dist/eagle/eagle-memory-client.js';
+import { once } from 'node:events';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -139,4 +143,25 @@ test('a fresh reader reconstructs the same result after acknowledged logs are pr
     restarted.page({}, 'chronologicalAt', 'desc', 100, 0),
     current.page({}, 'chronologicalAt', 'desc', 100, 0),
   );
+});
+
+test('shared list reads use the reader and preserve authoritative page filtering and SQL fallback', async () => {
+  const savedUrl = process.env.EAGLE_READER_URL, savedToken = process.env.EAGLE_READER_TOKEN;
+  const server = createLibraryReaderServer(store, 'isolated-reader');
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address();
+  process.env.EAGLE_READER_URL = `http://127.0.0.1:${address.port}`;
+  process.env.EAGLE_READER_TOKEN = 'isolated-reader';
+  const args = { where: { ...scope, isPrivate: false }, select: { id: true }, orderBy: [{ chronologicalAt: 'desc' }, { id: 'desc' }], take: 5 };
+  try {
+    const hits = libraryReadMetrics.hits;
+    assert.deepEqual(await findSearchAssets(db, args), await db.eagleAsset.findMany(args));
+    assert.equal(libraryReadMetrics.hits, hits + 1);
+    process.env.EAGLE_READER_TOKEN = 'wrong';
+    assert.deepEqual(await findSearchAssets(db, args), await db.eagleAsset.findMany(args));
+  } finally {
+    if (savedUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = savedUrl;
+    if (savedToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = savedToken;
+    server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
+  }
 });
