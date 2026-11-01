@@ -11,7 +11,12 @@ test('change tokens require a connected listener and do not reveal another owner
   state.record({ ownerId: 'owner', libraryMode: 'PHOTO', kinds: ['ASSETS'], public: false });
   assert.deepEqual(state.snapshot('owner', false), before);
   assert.notDeepEqual(state.snapshot('owner', true), before);
-  state.record({ ownerId: 'owner', libraryMode: 'MATERIAL', kinds: ['RECOMMENDATIONS'], public: true });
+  state.record({
+    ownerId: 'owner',
+    libraryMode: 'MATERIAL',
+    kinds: ['RECOMMENDATIONS'],
+    public: true,
+  });
   const after = state.snapshot('owner', false);
   assert.deepEqual(after.scopes.PHOTO, before.scopes.PHOTO);
   assert.notDeepEqual(after.scopes.MATERIAL, before.scopes.MATERIAL);
