@@ -548,48 +548,12 @@ export class EagleDuplicateService {
       { timeout: 45_000 },
     );
   }
-  async execute(item: Item, assertActor: (tx: Prisma.TransactionClient) => Promise<void>) {
-    if (item.operation.kind === 'DUPLICATE_SCAN')
-      return executeDuplicateIndex(this.prisma, this.storage, this.libraryMode, item, assertActor);
-    return this.executeCleanupBatch([item], assertActor);
+  async executeScan(item: Item, assertActor: (tx: Prisma.TransactionClient) => Promise<void>) {
+    return executeDuplicateIndex(this.prisma, this.storage, this.libraryMode, item, assertActor);
   }
-  async executeCleanupBatch(
-    items: Item[],
-    assertActor: (tx: Prisma.TransactionClient) => Promise<void>,
-  ) {
-    if (!items.length) return;
-    const first = items[0]!;
-    if (
-      items.some(
-        (item) =>
-          item.ownerId !== first.ownerId ||
-          item.libraryMode !== this.libraryMode ||
-          item.operationId !== first.operationId ||
-          item.operation.kind !== 'DUPLICATE_CLEANUP',
-      )
-    )
-      throw new ConflictException('清理批次作用域不一致。');
-    await this.prisma.$transaction(
-      async (tx) => {
-        await lockOwnerPrivacyProjection(tx, first.ownerId, this.libraryMode);
-        await assertActor(tx);
-        for (const item of items) await this.executeCleanupItem(tx, item);
-        await assertActor(tx);
-        const completed = await tx.eagleAssetOperationItem.updateMany({
-          where: {
-            ownerId: first.ownerId,
-            libraryMode: this.libraryMode,
-            operationId: first.operationId,
-            status: 'RUNNING',
-            leaseUntil: { gt: new Date() },
-            OR: items.map(({ id, leaseVersion }) => ({ id, leaseVersion })),
-          },
-          data: { status: 'COMPLETED', leaseUntil: null },
-        });
-        if (completed.count !== items.length) throw new ConflictException('操作租约已变化。');
-      },
-      { timeout: 45_000 },
-    );
+  /** Business rules only; the operation executor owns the transaction, actor, lease and receipts. */
+  async applyCleanupBatch(tx: Prisma.TransactionClient, items: Item[]) {
+    for (const item of items) await this.executeCleanupItem(tx, item);
   }
   private async executeCleanupItem(tx: Prisma.TransactionClient, item: Item) {
     const snapshot = item.snapshots as unknown as CleanupSnapshot;

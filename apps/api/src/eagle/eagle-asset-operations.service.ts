@@ -954,8 +954,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       }
       if (operation.kind === 'DUPLICATE_CLEANUP') {
         if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
-        await this.duplicates.executeCleanupBatch(items, (tx) =>
-          this.assertActor(tx, operation, items),
+        await this.publishMetadataBatch(items, (tx) =>
+          this.duplicates!.applyCleanupBatch(tx, items),
         );
         return;
       }
@@ -963,7 +963,9 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
         await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
         for (const entry of items)
-          await this.duplicates.execute(entry, (tx) => this.assertActor(tx, operation, [entry]));
+          await this.duplicates.executeScan(entry, (tx) =>
+            this.assertActor(tx, operation, [entry]),
+          );
         return;
       }
       // The transfer journal alone owns idempotency; its completed result can be
@@ -1037,69 +1039,52 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           beforeWrite,
         );
       } else {
-        await this.prisma.$transaction(
-          async (tx) => {
-            await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
-            await beforeWrite(tx);
-            const ids = snapshots.map((row) => row.id).sort();
-            await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-            try {
-              await this.checkSnapshots(tx, operation, snapshots);
-            } catch (error) {
-              // A queued deletion is idempotent when its previously owned resources
-              // have all disappeared. Changed active/private resources still fail.
-              if (
-                operation.kind !== 'TRASH' ||
-                items.length !== 1 ||
-                !(error instanceof NotFoundException || error instanceof ConflictException)
-              )
-                throw error;
-              const remaining = await tx.eagleAsset.findMany({
-                where: {
-                  ownerId: operation.ownerId,
-                  libraryMode: this.libraryMode,
-                  id: { in: ids },
-                },
-                select: { deletedAt: true },
-              });
-              if (remaining.some((row) => row.deletedAt === null)) throw error;
-              this.assertPrivateGrant(operation);
-              await tx.eagleAssetOperationItem.updateMany({
-                where: { ...libraryModeIdentity },
-                data: { status: 'SKIPPED', leaseUntil: null },
-              });
-              return;
-            }
-            const current = await resolveEagleTrashTargets(
-              tx,
-              { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-              assetIds,
-              operation.kind === 'RESTORE',
-              operation.isPrivate,
-              items.map((entry) => ({
-                assetIds: entry.assetIds,
-                resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
-              })),
-            );
-            if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
-              throw new ConflictException('实况照片组件已变化。');
-            await setEagleTrash(
-              tx,
-              { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-              assetIds,
-              operation.kind === 'RESTORE',
-              operation.isPrivate,
-            );
-            // A lock wait or bulk write can outlive the grant checked on entry.
-            // Fail inside this transaction so resources and receipts roll back together.
-            this.assertPrivateGrant(operation);
-            await tx.eagleAssetOperationItem.updateMany({
-              where: { ...libraryModeIdentity },
-              data: { status: 'COMPLETED', leaseUntil: null },
+        await this.publishMetadataBatch(items, async (tx) => {
+          const ids = snapshots.map((row) => row.id).sort();
+          await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
+          try {
+            await this.checkSnapshots(tx, operation, snapshots);
+          } catch (error) {
+            // A queued deletion is idempotent when its previously owned resources
+            // have all disappeared. Changed active/private resources still fail.
+            if (
+              operation.kind !== 'TRASH' ||
+              items.length !== 1 ||
+              !(error instanceof NotFoundException || error instanceof ConflictException)
+            )
+              throw error;
+            const remaining = await tx.eagleAsset.findMany({
+              where: {
+                ownerId: operation.ownerId,
+                libraryMode: this.libraryMode,
+                id: { in: ids },
+              },
+              select: { deletedAt: true },
             });
-          },
-          { timeout: METADATA_TRANSACTION_TIMEOUT_MS },
-        );
+            if (remaining.some((row) => row.deletedAt === null)) throw error;
+            return 'SKIPPED';
+          }
+          const current = await resolveEagleTrashTargets(
+            tx,
+            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+            assetIds,
+            operation.kind === 'RESTORE',
+            operation.isPrivate,
+            items.map((entry) => ({
+              assetIds: entry.assetIds,
+              resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
+            })),
+          );
+          if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
+            throw new ConflictException('实况照片组件已变化。');
+          await setEagleTrash(
+            tx,
+            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+            assetIds,
+            operation.kind === 'RESTORE',
+            operation.isPrivate,
+          );
+        });
         return;
       }
       await this.prisma.eagleAssetOperationItem.updateMany({
@@ -1118,6 +1103,43 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       }
       await this.failItems(items, error);
     }
+  }
+  /** One lifecycle for metadata commands; handlers supply only their domain mutation. */
+  private async publishMetadataBatch(
+    items: ClaimedItem[],
+    mutate: (tx: Prisma.TransactionClient) => Promise<'SKIPPED' | void>,
+  ) {
+    const operation = items[0]!.operation;
+    if (
+      items.some(
+        (item) =>
+          item.ownerId !== operation.ownerId ||
+          item.libraryMode !== this.libraryMode ||
+          item.operationId !== operation.id ||
+          item.operation.id !== operation.id ||
+          item.operation.kind !== operation.kind,
+      )
+    )
+      throw new ConflictException('批次作用域不一致。');
+    await this.prisma.$transaction(
+      async (tx) => {
+        await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
+        await this.assertActor(tx, operation, items);
+        const status = await mutate(tx);
+        // Lock waits and business writes can outlive a grant or lease. Publish all facts together.
+        await this.assertActor(tx, operation, items);
+        const result = await tx.eagleAssetOperationItem.updateMany({
+          where: {
+            libraryMode: this.libraryMode,
+            ...this.leaseWhere(items),
+            leaseUntil: { gt: new Date() },
+          },
+          data: { status: status ?? 'COMPLETED', leaseUntil: null },
+        });
+        if (result.count !== items.length) throw new OperationAccessError('LEASE_LOST');
+      },
+      { timeout: METADATA_TRANSACTION_TIMEOUT_MS },
+    );
   }
   private async failItems(items: ClaimedItem[], error: unknown) {
     const { operation } = items[0]!;
