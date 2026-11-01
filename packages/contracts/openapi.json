@@ -4122,6 +4122,18 @@
         "tags": ["EagleVector"]
       }
     },
+    "/api/eagle/vector/review-summary": {
+      "get": {
+        "operationId": "EagleVectorController_reviewSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
     "/api/eagle/vector/tags": {
       "get": {
         "operationId": "EagleVectorController_tags",
@@ -8426,6 +8438,18 @@
     "/api/photos/vector/summary": {
       "get": {
         "operationId": "PhotoVectorsController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-vectors"]
+      }
+    },
+    "/api/photos/vector/review-summary": {
+      "get": {
+        "operationId": "PhotoVectorsController_reviewSummary",
         "parameters": [],
         "responses": {
           "200": {

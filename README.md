@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/src/assets/seker-eagle-logo.svg" width="92" alt="SekerEagle logo" />
+  <img src="apps/web/src/assets/seker-eagle-logo.svg" width="80" alt="SekerEagle" />
 </p>
 
 <h1 align="center">SekerEagle</h1>
@@ -8,387 +8,93 @@
   <strong>简体中文</strong> · <a href="README.en.md">English</a>
 </p>
 
-<p align="center">
-  <strong>图库放家里，随处都能用，想找什么直接搜。</strong><br />
-  自托管的图片与视频素材库，支持多端同步、AI 搜图和自动整理。
-</p>
-
-## 素材与照片双模式
-
-顶部可切换独立的素材与照片工作区，两个模式复用管理能力，资源、标签、上传、处理设置和回收站分别隔离。照片提供拍摄日期时间线、EXIF／相机／镜头筛选、GPS 地图、本地人物识别与人工纠错、连拍／相似组和清晰度参考建议；分组不会删除原片。
+自托管的素材与照片管理工具。支持 **Qwen3-VL-Embedding-2B 图片内容检索**、本地自动打标签、辅助归类和照片编辑，提供网页与 Windows、macOS 桌面客户端。
 
-本地人物模型需要独立安装，默认不自动下载或启用。格式支持、初版批量上限、独立测试页面与未来升级顺序见 [照片模式验收记录](docs/photo-management-acceptance.md)。本轮只完成代码和隔离验证，没有部署或导入群晖真实图库。
-
-## 核心优势
-
-- **私有部署**：图库与隐私自己掌控。
-- **多端同步**：电脑、手机浏览器随时访问同一图库。
-- **AI 语义搜图**：用描述找图片，省去逐张打标签。
-- **自动归类**：智能文件夹自动收图，AI 辅助分类。
-- **私密内容隐藏**：日常浏览与搜索不显示，手动开启才可见。
-- **客户端缓存**：常看图片本地缓存，减少重复加载。
-- **多人独立使用**：一次部署，多人使用，数据相互隔离。
-
-<p align="center">
-  <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>
-  <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-5c6ac4?style=flat-square" /></a>
-  <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white" />
-  <img alt="Version 0.1.5" src="https://img.shields.io/badge/version-0.1.5-ea9d45?style=flat-square" />
-  <img alt="Windows x64 and Apple Silicon" src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20Apple%20Silicon-1674cf?style=flat-square" />
-</p>
-
-<p align="center">
-  <a href="#产品组成">产品组成</a> ·
-  <a href="#windows-客户端下载">Windows 下载</a> ·
-  <a href="#两项核心体验">核心体验</a> ·
-  <a href="#功能一览">功能</a> ·
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#从-eagle-迁移">Eagle 迁移</a> ·
-  <a href="#浏览器采集">浏览器采集</a> ·
-  <a href="#架构与数据边界">架构</a> ·
-  <a href="#文档导航">文档</a>
-</p>
-
-## Windows 客户端下载
-
-<p align="center">
-  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe"><strong>⬇️ 下载 SekerEagle 0.1.5 · Windows 11 x64 便携版</strong></a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.5">查看发布说明与 macOS 下载</a>
-</p>
-
-Windows 客户端是单个免安装 EXE，双击即可运行。首次启动会在程序旁创建
-`SekerEagleData`，用于保存登录状态、服务器连接设置和可重建的媒体缓存；升级时只需替换
-EXE 并保留该目录。客户端加载与网页端相同的完整素材管理界面，需要连接一套已经运行的
-SekerEagle 服务端。
-
-当前公开构建尚未进行 Authenticode 签名，Windows Defender SmartScreen 可能显示“未知
-发布者”。公网连接建议使用 HTTPS；只有在明确接受登录信息、Cookie 和图片明文传输风险
-时，才应在桌面连接设置中启用外网 HTTP。
-
-## 两项核心体验
-
-### 🔎 模糊搜索：不必记住准确文件名或标签
-
-输入一个大概的概念就能搜索。例如素材被 AI 标记为“轿车”或“跑车”时，搜索“汽车”也能
-找到它们。SekerEagle 会综合文件名、人工标签、AI 自动标签以及标签向量的语义相似度，
-优先展示精确结果，再按相似程度扩展结果。AI 自动标签由本机 Ollama 生成，文本和标签向量
-由本机 MLX 服务计算；素材无需发送到云端。
-
-### 🗂️ 自动图片归类：让人工标签越用越聪明
-
-先给一小批代表图片添加人工标签，SekerEagle 会把这些图片的视觉向量聚合成一个或多个
-标签中心，再按照新图片与标签中心的距离生成归类建议。你可以按相似度批量确认、调整或
-拒绝建议，也能直接处理暂时无法可靠判断的图片。人工标签始终是最终事实，模型只负责减少
-重复整理工作。这条从向量生成、标签中心构建、距离检查到批量审核的完整工作流已经可用。
-
-> 两项能力均为可选的本地 AI 功能，默认关闭，不影响普通上传和浏览。启用方式见
-> [图片向量与人工标签建议](docs/operations-runbook.md#图片向量与人工标签建议)。
-
-## 产品组成
-
-SekerEagle 不是单一的网页应用，而是一套围绕自托管素材库协同工作的客户端、采集入口与服务端：
-
-| 组成           | 负责什么                                                                       | 形态                                               |
-| -------------- | ------------------------------------------------------------------------------ | -------------------------------------------------- |
-| **采集插件**   | 从网页采集原图、来源与描述；从 Eagle 导出可校验的迁移快照                      | Chrome Manifest V3 扩展 + Eagle 导出插件           |
-| **桌面应用**   | 连接本机、局域网或公网服务，在统一界面中管理素材，并用可重建的本机缓存加速浏览 | Electron 桌面客户端，支持 macOS 与 Windows x64     |
-| **安卓预览版** | 独立原生图库、筛选与批量操作、下载、视频和后台手机备份／上传                   | Android 11+ 原生 App，仅完成本机模拟器验证         |
-| **服务端**     | 统一处理认证、用户隔离、上传、去重、媒体加工、检索与数据持久化                 | Gateway + NestJS API + Worker + PostgreSQL + MinIO |
-| **网页端**     | 提供瀑布流浏览、筛选、标签、智能文件夹、预览和管理界面                         | React / Vite Web 应用，可直接通过浏览器使用        |
-
-各部分通过同一个 gateway 协作：桌面应用和网页端共享同一套服务端数据，采集插件只负责把素材可靠送入你的素材库。Eagle 本机迁移器与可选的本地 MLX 向量服务提供批量迁移和智能标签能力。
-
-![SekerEagle 素材库总览](docs/screenshots/library-overview.jpg)
-
-这套系统把散落的图片、海报、界面参考和短视频收进自己的素材库：用桌面应用或网页端浏览，
-用标签、颜色、评分、格式和智能文件夹整理，再通过采集插件或 Eagle 迁移器持续收集。
-原文件与元数据保存在你自己的 PostgreSQL 和 MinIO 中；默认部署不包含遥测。
-
-> [!IMPORTANT]
-> 项目目前处于早期公开阶段（`0.1.x`）。核心素材管理与导入链路已经可用，但 API、
-> 数据模型和部署方式仍可能在次版本中变化。请在升级前备份 PostgreSQL 与 MinIO。
-
-> [!NOTE]
-> SekerEagle 是独立社区项目，不是 Eagle 官方产品，也不受 Eagle 团队赞助或背书。
-> “Eagle”仅用于描述兼容与导入来源。
-
-## 界面预览
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/asset-details.jpg" alt="素材详情与标签编辑" />
-      <br /><sub><b>素材详情</b> — 标题、标签、评分、来源、颜色与完整媒体属性。</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/asset-preview.jpg" alt="沉浸式大图预览" />
-      <br /><sub><b>沉浸式预览</b> — 滚轮缩放、拖拽移动，超大图按区域加载切片。</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/tag-management.jpg" alt="人工标签管理" />
-      <br /><sub><b>标签工作台</b> — 搜索、分组、颜色、星标与素材数量统计。</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/media-processing.jpg" alt="素材处理中心" />
-      <br /><sub><b>素材处理</b> — 浏览优化、颜色分析、标签建议与后台任务统一管理。</sub>
-    </td>
-  </tr>
-</table>
-
-> 截图使用仓库维护者生成的演示素材，不包含真实用户内容。
-
-## 功能一览
-
-### 收集与导入
-
-- 拖入图片、相机 RAW 或视频（[格式与限制](docs/camera-media.md)），使用分片上传、SHA-256 去重和可恢复的对象提交。
-- Chrome 扩展支持在网页图片上 `Alt + 右键` 采集原图、页面来源和描述信息。
-- Eagle 本机迁移器支持快照预检、小样本试跑、暂停恢复、幂等重放和最终核验。
-- 每个入口只通过同源 gateway 访问 API，不直接连接数据库或对象存储。
-
-### 浏览与整理
-
-- 响应式瀑布流、可调缩略图尺寸和有界 DOM，适合长时间浏览大型图库。
-- 模糊搜索综合文件名、人工标签、AI 自动标签与语义相似标签，并保持精确结果优先。
-- 按颜色、标签、形状、评分、格式和 AI 标签组合筛选。
-- 人工标签支持颜色、分组、星标、拼音索引、搜索和批量关联。
-- 智能文件夹支持组合规则、实时结果计数和树形整理，符合规则的素材自动归入。
-- 详情侧栏可以编辑标题、描述、来源、标签与评分；回收站支持恢复和最终清理。
-
-### 媒体与大图
-
-- worker 自动生成 256/512 px 缩略图、1600 px 预览图、视频海报和媒体信息。
-- 超大图片生成 Deep Zoom WebP 金字塔；查看器只加载当前区域并限制瓦片缓存。
-- 后台提取代表色，为 Lab 色彩距离筛选提供索引。
-- 处理任务可重试、可调度、可暂停；交互式预览优先于历史回填。
-
-### 可选的本地 AI 能力
-
-- Apple Silicon 上可运行固定 revision 的 Qwen3-VL-Embedding-2B MLX sidecar。
-- 为图片生成 1024 维本地向量，把已人工归类图片聚合为标签中心，再按距离生成可审核的
-  自动归类建议。
-- 标签默认不参与建议；只有用户显式启用并生成标签中心后才开始工作。
-- 可通过本机 Ollama 的 Qwen3-VL 8B Instruct 为图片生成具体名词标签，并按完全匹配和
-  语义相似度扩展搜索。
-- 向量建议和自动标签默认均不运行；普通上传和图库浏览不依赖本地模型。
-
-### 多用户与隐私
-
-- 浏览器会话使用 HttpOnly Cookie；插件和迁移器使用最小 scope 的个人访问令牌。
-- `ownerId` 始终从认证主体推导，请求 DTO 不接受 `ownerId`。
-- 跨用户资源访问统一返回 `404`，不泄露资源是否存在。
-- 用户可将一个或多个人工标签设为私密规则，匹配任一标签的素材会自动进入独立私密视图；
-  私密素材需要开启有时限的可见窗口，普通图库不会混入私密素材。
-- 默认部署完全本地运行且没有遥测。
-
-## 它适合什么场景？
-
-| 场景               | SekerEagle 提供的路径                               |
-| ------------------ | --------------------------------------------------- |
-| 设计参考与灵感归档 | 瀑布流、人工标签、颜色与组合筛选、智能文件夹        |
-| 从 Eagle 独立迁移  | 不可变快照、全量预检、断点续传、逐项 journal 与核验 |
-| 从网页持续收集图片 | Manifest V3 扩展、可靠本地队列、来源留存与重试      |
-| 多人共享一套部署   | 独立账号、owner 级数据隔离、管理员处理中心          |
-| 私有图片的本地整理 | 自托管数据库/对象存储、本机可选模型、无遥测         |
-
-SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享链接或团队协作审批流。
-如果你的核心需求是手机照片备份，应优先评估专门的照片管理项目。
-
-## 支持矩阵
-
-| 能力                  |  当前状态   | 说明                                                                                                                                                               |
-| --------------------- | :---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| macOS + Apple Silicon | ✅ 完整路径 | 当前开发、部署和性能验证环境                                                                                                                                       |
-| Docker Desktop 部署   |     ✅      | PostgreSQL、MinIO、API、web、worker 与 gateway                                                                                                                     |
-| macOS 桌面应用        | ✅ 开发可用 | 连接本机、局域网或公网服务，提供可重建的本机媒体缓存                                                                                                               |
-| Windows x64 桌面应用  |  ✅ 便携版  | [下载 0.1.5 单文件 EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe)，程序旁保存配置和可重建媒体缓存 |
-| Web 素材库            |     ✅      | 桌面浏览器优先                                                                                                                                                     |
-| Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                                                                                                                                          |
-| Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                                                                                                                                          |
-| 本地 MLX 向量归类     | ✅ 可选启用 | 已可用；需要 Apple Silicon、`uv` 和模型下载                                                                                                                        |
-| AI 自动标签与模糊搜索 | ✅ 可选启用 | 已可用；需要本机 Ollama 与 `qwen3-vl:8b-instruct`                                                                                                                  |
-| Linux / x64           |   实验性    | 非向量 TypeScript 组件可能可运行，尚未形成完整支持路径                                                                                                             |
-| 移动端原生应用        |     ❌      | 当前未提供                                                                                                                                                         |
-
-建议为 Docker Desktop 分配至少 16 GiB 内存和 8 CPU。十万条素材的 PostgreSQL
-元数据路径已经过独立基准验证；该结果不代表对象存储容量、备份或磁盘冗余已经自动解决，
-详见[十万图库性能基线](docs/performance-100k-library.md)。
-
-## 快速开始
-
-### 前置条件
-
-- macOS + Apple Silicon
-- Node.js 22、npm 10
-- Docker Desktop
-- 可选：`uv`，用于本地向量 sidecar
-- 可选：Ollama 与 `qwen3-vl:8b-instruct`，用于自动名词标签
-
-### 启动服务
-
-```sh
-git clone https://github.com/Seker800/SekerEagle.git
-cd SekerEagle
-npm ci
-npm run db:generate
-npm run env:create
-./scripts/mlx-embedding-host.sh setup
-npm run mlx:install-service
-npm run deploy:mac:check
-npm run deploy:mac
-```
-
-不使用向量标签建议时，可以跳过 MLX setup 与 service 安装步骤。自动名词标签还需要另行
-安装 Ollama 并拉取 `qwen3-vl:8b-instruct`；两类 AI 功能都默认关闭。随后创建首个管理员：
-
-```sh
-docker compose --env-file .env -f deploy/mac/docker-compose.yml exec \
-  -e BOOTSTRAP_ADMIN_EMAIL=you@example.com \
-  -e BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-long-password' \
-  api node apps/api/dist/bootstrap-admin.js
-```
-
-打开 <http://localhost:8180>。宿主机只应暴露 gateway 的 `127.0.0.1:8180`；不要直接暴露
-PostgreSQL、MinIO、API 或 worker。完整启动、诊断、升级与停止步骤见
-[本机运行手册](docs/operations-runbook.md)。
-
-需要从另一台可信局域网电脑通过 `http://IP:8180` 访问时，可将 `.env` 中的
-`SEKEREAGLE_GATEWAY_LAN_ADDRESS` 设置为服务器的固定内网 IP，并叠加 LAN Compose 文件。
-默认入口仍为 `127.0.0.1`；不要设为 `0.0.0.0`，并应通过主机防火墙限制来源。具体配置见运行手册的“局域网 HTTP”章节。
-网页登录和写操作会动态校验浏览器来源与当前私网 gateway 是否严格同源，不再把 LAN IP 写入
-API 白名单；更换私网 IP 后只需更新 gateway 绑定并重建入口，登录不需要另行登记新来源。
-其他私网主机、协议或端口不匹配的请求仍会 fail closed。
-公网浏览器入口通过 `.env` 中的精确 `SEKEREAGLE_PUBLIC_ORIGIN` 配置。默认只接受 HTTPS；
-公网明文 HTTP 必须额外显式开启危险兼容开关，具体限制见运行手册。
-
-## 从 Eagle 迁移
-
-迁移不是对旧图库边读边写。推荐先复制一份不可变的 Eagle `.library`，通过
-`plugins/eagle-importer` 导出快照，再让本机迁移器执行预检和上传：
-
-```sh
-npm run build --workspace @sekereagle/eagle-migrator
-read -s SEKEREAGLE_PAT
-export SEKEREAGLE_PAT
-
-node apps/eagle-migrator/dist/main.js doctor /绝对路径/迁移快照 \
-  --server http://localhost:8180
-node apps/eagle-migrator/dist/main.js run /绝对路径/迁移快照 \
-  --server http://localhost:8180 --concurrency 4
-```
-
-先用 20–100 个覆盖不同格式、重复文件、中文名、标签和文件夹的小样本试跑，并至少演练一次
-暂停与恢复。完整流程见 [Eagle 本机迁移器](apps/eagle-migrator/README.md)。
-
-## 浏览器采集
-
-Chrome 扩展会把采集任务先写入 IndexedDB，再由 Service Worker 下载候选原图、分片上传并
-最终提交。浏览器或扩展中断后，未完成任务会回到重试队列。
-
-```text
-网页 Alt + 右键
-        ↓
-图片候选解析与来源清理
-        ↓
-IndexedDB 持久队列
-        ↓
-gateway + 最小 scope PAT
-        ↓
-MinIO 原图 + PostgreSQL 元数据 + worker 派生任务
-```
-
-安装、PAT scope、内外网模式和支持格式见
-[浏览器采集扩展说明](plugins/browser-capture/README.md)。
-
-## 架构与数据边界
-
-```mermaid
-flowchart LR
-  Capture["Chrome 采集扩展"] --> Gateway["统一 Gateway"]
-  Eagle["Eagle 导出插件 / 迁移器"] --> Gateway
-  Desktop["桌面应用"] --> Gateway
-  Web["网页端"] --> Gateway
-  Gateway --> API["NestJS API"]
-  API --> Postgres[("PostgreSQL\n业务事实源")]
-  API --> MinIO[("MinIO\n原图与派生文件")]
-  API --> Worker["可重试 Worker"]
-  Worker --> MinIO
-  Worker -. 可选 .-> MLX["本机 MLX Sidecar"]
-```
-
-- 桌面应用加载与网页端一致的管理界面，并以按部署、按账号隔离的可重建缓存加速媒体读取。
-- NestJS 持有认证、owner 隔离、上传状态机和业务规则。
-- PostgreSQL 是业务事实源；MinIO 保存原文件与派生文件，二者通过可恢复状态机收敛。
-- worker 崩溃不会改变已经提交的素材事实，失败任务可以安全重试。
-- 浏览器与导入工具只访问 gateway；运行时不依赖或访问 SekerChat 数据面。
-
-更完整的依赖方向、媒体内存边界和系统不变量见[架构文档](docs/architecture.md)。
-
-## 文档导航
-
-后续工作见[项目待办清单](docs/todo.md)；其中[照片智能整理与 MCP](docs/photo-agent.md)已交付本机首轮代码与隔离验证，真实模型质量仍待试点。
-
-| 文档                                                 | 适合什么时候阅读                                |
-| ---------------------------------------------------- | ----------------------------------------------- |
-| [安卓客户端与手机备份](docs/android-client.md)       | 构建 APK、配置目录和隔离模拟器验收              |
-| [安卓固定测试图库](docs/android-test-lab.md)         | 本机固定测试入口、恢复模拟器预览和保留测试数据  |
-| [维护者接手指南](docs/maintainer-guide.md)           | 第一次接手代码库、理解目录职责和发布流程        |
-| [现用运行状态与交接](docs/current-runtime.md)        | 接手当前群晖图库、模块职责、后台任务与发布边界  |
-| [本机运行手册](docs/operations-runbook.md)           | 安装、启动、诊断、备份与向量服务运维            |
-| [架构文档](docs/architecture.md)                     | 理解服务边界、数据流和长期不变量                |
-| [网页视觉风格](docs/visual-style.md)                 | 深石墨主题、设计变量、密度与组件视觉验收        |
-| [环境模型](docs/environment-model.md)                | 区分开发、测试、生产目标并理解 fail-closed 规则 |
-| [媒体内存操作说明](docs/media-memory-operations.md)  | 调整大图、worker 或容量配置                     |
-| [十万图库性能基线](docs/performance-100k-library.md) | 复跑规模门禁或评估元数据性能                    |
-| [隐私说明](PRIVACY.md)                               | 部署者、插件用户和管理员的数据责任              |
-| [安全策略](SECURITY.md)                              | 报告漏洞和确认支持版本                          |
-| [贡献指南](CONTRIBUTING.md)                          | 开发、测试和提交代码                            |
-
-## 开发与验证
-
-```sh
-npm ci
-npm run db:generate
-npm run ci:check
-npm run test:worker-leases
-npm run contracts:check
-npm run test:library-integration
-./scripts/mlx-embedding-host.sh test
-npm run oss:check
-```
-
-数据库 migration、seed、测试和导入必须先经过安全目标检查。开发数据库只能是
-`sekereagle` 或 `sekereagle_test`，对象存储 bucket 必须使用 `sekereagle-` 前缀。
-
-核心技术栈：Node.js 22、npm workspaces、NestJS、React/Vite、Prisma、PostgreSQL、
-pgvector、MinIO、Sharp、OpenSeadragon，以及可选的 Python/MLX sidecar。
-
-## 项目状态与路线
-
-当前重点是把 `0.1.x` 的部署、迁移、恢复和公开发布流程做扎实。后续方向以 Issue 和
-实际使用反馈为准，优先级大致为：
-
-- 新实例安装与升级体验；
-- 可验证的 PostgreSQL / MinIO 备份恢复流程；
-- Linux/x64 非向量部署验证；
-- 导入、浏览器采集和大图库场景的持续兼容性。
-
-公开发布变化见 [CHANGELOG](CHANGELOG.md)。发现普通问题请使用 GitHub Issues；安全漏洞
-不要公开提交，请按[安全策略](SECURITY.md)私下报告。
-
-## 贡献
-
-欢迎提交问题、文档改进和范围清晰的 Pull Request。开始前请阅读
-[贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)与[支持范围](SUPPORT.md)。
+[下载客户端](https://github.com/Seker800/SekerEagle/releases) · [部署指南](docs/operations-runbook.md) · [Eagle 迁移](apps/eagle-migrator/README.md)
+
+![素材库：风景、建筑、人像、产品与静物参考](docs/screenshots/showcase-library.jpg)
+
+## 图片内容检索
+
+使用 **Qwen3-VL-Embedding-2B** 生成图片与文本向量，直接按图片内容搜索，无需提前打标签。
+
+输入“海边的建筑”等描述，即可检索相关图片；也可结合标签、颜色、格式等条件缩小范围。
+
+![输入“海边的建筑”，通过本地 2B 向量检索图片内容](docs/screenshots/showcase-search.jpg)
+
+## 本地 AI 整理
+
+- **自动标签**：通过 Ollama 运行 Qwen3-VL 8B Instruct，识别图片内容并生成标签。
+- **归类建议**：根据已添加人工标签的图片计算标签中心，为其他图片推荐分类。
+- **批量审核**：集中确认、调整或拒绝建议，人工标签由用户决定。
+
+![基于真实图片向量与人工标签中心生成的归类建议](docs/screenshots/showcase-suggestions.jpg)
+
+模型在本地运行，图片无需上传云端。2B 向量服务使用 Apple Silicon／MLX。AI 功能默认关闭，需单独配置；普通上传与浏览无需模型。
+
+## 照片编辑
+
+- **基础调整**：曝光、对比度、高光、阴影、色温、饱和度等。
+- **精细调色**：HSL 八色混合器、主曲线与 RGB 曲线、阴影／中间调／高光色彩分级。
+- **细节处理**：去雾、明度与色彩降噪、锐化、颗粒和晕影。
+- **构图与滤镜**：自由或固定比例裁切、旋转、镜像，支持导入 CUBE／PNG LUT。
+- **摄影水印**：多种边框与信息排版，可编辑机型、拍摄参数和署名文字。
+
+支持撤销、重做、原图对比、草稿自动保存与批量套用编辑参数。保存创建独立 PNG 副本，保留原图；RAW 可编辑服务端生成的显影副本。
+
+![照片编辑：实际调色预览与 HSL 八色混合器](docs/screenshots/showcase-editor-hsl.jpg)
+
+![摄影水印：边框、摄影信息与成片预览](docs/screenshots/showcase-editor-watermark.jpg)
+
+## 素材管理
+
+- 标签分组、颜色、评分与组合筛选。
+- 智能文件夹按规则自动收录素材。
+- 批量编辑、回收站恢复与私密内容隐藏。
+- 图片、相机 RAW 与视频导入和预览；超大图按区域加载。
+
+![素材详情：标签、评分、来源与图片属性](docs/screenshots/showcase-details.jpg)
+
+## 照片管理
+
+- 按拍摄日期浏览时间线，按 EXIF、相机和镜头筛选。
+- 在 GPS 地图上浏览照片与拍摄位置。
+- 本地人物识别，支持人工纠错。
+- 连拍与相似照片分组，提供清晰度参考。
+- 按时间、相机与镜头查看拍摄统计。
+
+![照片时间线：多题材照片按拍摄月份排列](docs/screenshots/showcase-photos.jpg)
+
+![照片地图：地点聚合与所选位置的照片](docs/screenshots/showcase-map.jpg)
+
+素材与照片使用独立工作区，标签、处理设置和回收站分别管理，可通过“发送到”在两种模式间移动。
+
+## 收集与迁移
+
+- **拖拽上传**：批量导入、分片上传和文件去重。
+- **网页采集**：Chrome 扩展采集原图，保留页面来源与描述。
+- **Eagle 迁移**：支持迁移预检、断点恢复和结果核验。
+
+## 私有部署与多端访问
+
+- 原文件与元数据保存在自己的服务器，默认无遥测。
+- 网页与桌面客户端访问同一图库，客户端缓存减少重复加载。
+- 私密内容默认从日常浏览和搜索中隐藏，手动开启后查看。
+
+## 开始使用
+
+先部署服务端，再通过浏览器或桌面客户端连接。
+
+- [服务端部署与本地 AI 配置](docs/operations-runbook.md)
+- [Windows / macOS 客户端下载](https://github.com/Seker800/SekerEagle/releases)
+- [Chrome 采集插件](plugins/browser-capture/README.md)
+- [Eagle 图库迁移](apps/eagle-migrator/README.md)
+- [支持格式](docs/camera-media.md) · [隐私说明](PRIVACY.md) · [安全策略](SECURITY.md) · [贡献指南](CONTRIBUTING.md)
+
+项目处于早期版本，升级前请备份数据库与原文件。截图使用公开授权照片；日期、位置与相机信息为演示数据，[图片来源与截图说明](docs/screenshots/README.md)。
 
 ## 许可证
 
-除 `services/mlx-embedding` 外，本仓库代码按 [Apache-2.0](LICENSE) 发布。由于直接使用
-GPLv3 的 `mlx-embeddings`，`services/mlx-embedding` 单独按
-[GPL-3.0-only](services/mlx-embedding/LICENSE) 发布。第三方组件与模型说明见
-[THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。
+主体代码采用 [Apache-2.0](LICENSE)；MLX 向量服务采用 [GPL-3.0-only](services/mlx-embedding/LICENSE)。第三方组件与模型说明见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。截图中的照片遵循各自原始许可。
 
-测试执行入口、CI 覆盖与限制见 [测试覆盖与执行](docs/testing.md)。
+独立社区项目，不是 Eagle 官方产品。
