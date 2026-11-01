@@ -33,7 +33,7 @@ db.$on('query', ({ query, params }) => {
 const report = {
   measuredAt: new Date().toISOString(),
   scope:
-    'Real Nest domain service admission and independent executor tick/drain against isolated PostgreSQL; no HTTP server or token authentication',
+    'Real Nest domain service admission and operations executor tick/drain invoked in this test process against isolated PostgreSQL; no executor subprocess, HTTP server or token authentication',
   measured: [
     'domainAdmission',
     'executorTick',
@@ -46,6 +46,7 @@ const report = {
   ],
   unmeasured: [
     'HTTP and token authentication',
+    'executor subprocess startup and scheduling',
     'browser/desktop cache updates and refreshes',
     'physical object deletion',
     'production latency and disk IOPS',
