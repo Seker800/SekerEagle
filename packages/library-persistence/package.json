@@ -11,7 +11,7 @@
     "test": "node --require ts-node/register --test src/*.test.ts"
   },
   "dependencies": {
-    "@prisma/client": "6.19.3",
+    "@prisma/client": "7.10.1",
     "@sekereagle/library-core": "*"
   },
   "devDependencies": {
