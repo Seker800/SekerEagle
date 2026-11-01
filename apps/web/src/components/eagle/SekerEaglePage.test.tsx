@@ -2604,6 +2604,9 @@ describe('SekerEaglePage', () => {
     renderPage();
     expect(await screen.findByText('2026年4月')).toBeVisible();
     fireEvent.click(await screen.findByRole('button',{name:'展开筛选'}));
+    fireEvent.click(await screen.findByRole('button',{name:'添加筛选器'}));
+    fireEvent.click(within(screen.getByRole('dialog',{name:'管理快捷筛选器'})).getByRole('button',{name:'固定 颜色'}));
+    fireEvent.click(screen.getByRole('button',{name:'关闭筛选器管理'}));
     fireEvent.click(await screen.findByRole('button',{name:'颜色筛选'}));
     fireEvent.click(within(screen.getByRole('dialog',{name:'颜色筛选'})).getByRole('button',{name:'颜色 #2e86ab'}));
     await waitFor(()=>expect(screen.queryByText('2026年4月')).not.toBeInTheDocument());
