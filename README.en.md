@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/src/assets/seker-eagle-logo.svg" width="92" alt="SekerEagle logo" />
+  <img src="apps/web/src/assets/seker-eagle-logo.svg" width="80" alt="SekerEagle" />
 </p>
 
 <h1 align="center">SekerEagle</h1>
@@ -8,428 +8,93 @@
   <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
 
-<p align="center">
-  <strong>Keep your library at home. Access it anywhere. Find images with words.</strong><br />
-  A self-hosted image and video library with cross-device sync, AI search, and automatic organization.
-</p>
-
-## Separate asset and photo libraries
-
-The top switch opens independent asset and photo workspaces with shared management
-components. Records, tags, uploads, processing preferences, privacy visibility and
-trash stay separate. Photos add capture-date timelines, camera/lens EXIF filters,
-GPS maps, optional local face recognition with manual corrections, burst/similarity
-groups and sharpness suggestions. Grouping never deletes originals.
-
-Face models are installed separately and are not silently downloaded or enabled.
-See the [photo acceptance notes](docs/photo-management-acceptance.md) (Chinese) for
-current batch limits, isolated test setup and future upgrade order. This change
-has not been deployed to an existing instance or imported a real Synology library.
-
-## Why SekerEagle?
-
-- **Self-hosted**: Your library, your storage, your privacy.
-- **Cross-device sync**: Access the same library from desktop and mobile browsers.
-- **AI semantic search**: Describe an image to find it, without tagging every file by hand.
-- **Automatic organization**: Smart folders collect matching images; AI helps categorize them.
-- **Hidden private content**: Excluded from everyday browsing and search until you enable it.
-- **Desktop caching**: Cache frequently viewed images locally to avoid repeated downloads.
-- **Multiple users, separate libraries**: Deploy once; each user's data stays isolated.
-
-<p align="center">
-  <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>
-  <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-5c6ac4?style=flat-square" /></a>
-  <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white" />
-  <img alt="Version 0.1.5" src="https://img.shields.io/badge/version-0.1.5-ea9d45?style=flat-square" />
-  <img alt="Windows x64 and Apple Silicon" src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20Apple%20Silicon-1674cf?style=flat-square" />
-</p>
-
-<p align="center">
-  <a href="#product-components">Components</a> ·
-  <a href="#windows-desktop-download">Windows download</a> ·
-  <a href="#two-signature-experiences">Core experiences</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#migrating-from-eagle">Eagle migration</a> ·
-  <a href="#browser-capture">Browser capture</a> ·
-  <a href="#architecture-and-data-boundaries">Architecture</a> ·
-  <a href="#documentation">Documentation</a>
-</p>
-
-## Windows desktop download
-
-<p align="center">
-  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe"><strong>⬇️ Download SekerEagle 0.1.5 · Windows 11 x64 portable</strong></a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.5">Release notes and macOS downloads</a>
-</p>
-
-The Windows client is a single portable EXE with no installer. On first launch it creates
-`SekerEagleData` beside the program for the browser profile, server connection settings, and
-rebuildable media cache. Keep that directory and replace only the EXE when upgrading. The client
-loads the same complete asset-management interface as the web app and requires a running
-SekerEagle server.
-
-The public build is not yet Authenticode-signed, so Microsoft Defender SmartScreen may report an
-unknown publisher. Prefer HTTPS for public connections. Enable public HTTP in desktop connection
-settings only when you explicitly accept cleartext transport of credentials, cookies, and media.
-
-## Two signature experiences
-
-### 🔎 Fuzzy search: find an image without remembering its exact name or tag
-
-Search with an approximate concept. If AI tagged assets as “sedan” or “sports car,” a search for
-“car” can still find them. SekerEagle combines filenames, manual tags, automatically generated AI
-tags, and semantic similarity between tag embeddings. Exact matches rank first, followed by
-semantically related results. Ollama generates tags locally, while the MLX service computes text
-and tag embeddings; your assets do not need to leave your machine.
-
-### 🗂️ Automatic image classification: make manual tags smarter over time
-
-Manually label a small set of representative images. SekerEagle groups their visual embeddings
-into one or more prototype centers for each tag, then proposes a category for new images according
-to their distance from those centers. Review, adjust, reject, or batch-confirm suggestions by
-similarity, and handle uncertain images directly. Manual tags remain the source of truth while the
-model removes repetitive sorting work. The complete workflow—from embeddings and prototype builds
-to distance inspection and batch review—is available today.
-
-> Both are optional local-AI features and remain disabled by default, so regular uploads and
-> browsing do not depend on them. See the
-> [vector and manual-tag workflow](docs/operations-runbook.md#图片向量与人工标签建议) (Chinese).
-
-## Product components
-
-SekerEagle is not a single web application. It is a coordinated set of clients, capture tools, and self-hosted services built around one asset library:
-
-| Component           | Responsibility                                                                                                                           | Form                                                |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **Capture plugins** | Capture original images, provenance, and descriptions from the web; export verifiable migration snapshots from Eagle                     | Chrome Manifest V3 extension + Eagle export plugin  |
-| **Desktop app**     | Connect to a local, LAN, or public server, manage assets in the shared interface, and accelerate browsing with a rebuildable local cache | Electron desktop client for macOS and Windows x64   |
-| **Server**          | Own authentication, user isolation, uploads, deduplication, media processing, search, and persistence                                    | Gateway + NestJS API + worker + PostgreSQL + MinIO  |
-| **Web app**         | Provide masonry browsing, filters, tags, smart folders, previews, and administration                                                     | React / Vite application used directly in a browser |
-
-Every component works through the same gateway. The desktop and web apps share the same server-side library, while capture plugins reliably deliver new assets into it. A local Eagle migrator and an optional MLX vector service add bulk migration and intelligent tag suggestions.
-
-![SekerEagle library overview](docs/screenshots/library-overview.jpg)
-
-The system brings scattered images, posters, interface references, and short videos into one
-library. Browse them from the desktop or web app, organize them with tags, colors, ratings,
-formats, and smart folders, and keep collecting through capture plugins or Eagle migration tools.
-Your original files and metadata remain in your own PostgreSQL and MinIO deployment, with no
-telemetry enabled by default.
-
-> [!IMPORTANT]
-> SekerEagle is currently in its early public `0.1.x` stage. Core asset management and ingestion
-> paths are available, but APIs, data models, and deployment conventions may still change between
-> minor releases. Back up PostgreSQL and MinIO before upgrading.
-
-> [!NOTE]
-> SekerEagle is an independent community project. It is not an official Eagle product and is not
-> sponsored or endorsed by the Eagle team. “Eagle” is used only to describe compatibility and
-> migration sources.
-
-## Interface preview
-
-<table>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/asset-details.jpg" alt="Asset details and tag editing" />
-      <br /><sub><b>Asset details</b> — Edit titles, tags, ratings, sources, colors, and media metadata.</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/asset-preview.jpg" alt="Immersive large-image preview" />
-      <br /><sub><b>Immersive preview</b> — Zoom with the mouse wheel, pan by dragging, and stream tiled regions of very large images.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="docs/screenshots/tag-management.jpg" alt="Manual tag management" />
-      <br /><sub><b>Tag workspace</b> — Search, group, color, star, and inspect asset counts.</sub>
-    </td>
-    <td width="50%">
-      <img src="docs/screenshots/media-processing.jpg" alt="Media processing center" />
-      <br /><sub><b>Media processing</b> — Manage browsing derivatives, color analysis, tag suggestions, and background jobs.</sub>
-    </td>
-  </tr>
-</table>
-
-> Screenshots use maintainer-generated demo assets and contain no real user content.
-
-## Features
-
-### Collection and ingestion
-
-- Drag in images or MP4 files with multipart upload, SHA-256 deduplication, and recoverable object
-  commits.
-- Capture source images, page provenance, and descriptions with `Alt + right-click` in the Chrome
-  extension.
-- Migrate Eagle libraries with snapshot preflight checks, small-sample runs, pause/resume,
-  idempotent replay, and final verification.
-- Keep every client behind the same-origin gateway; no browser or import tool connects directly to
-  PostgreSQL or object storage.
-
-### Browsing and organization
-
-- Browse with a responsive masonry layout, adjustable thumbnail sizes, and a bounded DOM designed
-  for large libraries.
-- Use fuzzy search across filenames, manual tags, AI-generated tags, and semantically related tags,
-  with exact results ranked first.
-- Combine filters for color, tag, shape, rating, format, and AI tags.
-- Organize manual tags with colors, groups, favorites, Pinyin indexing, search, and batch assignment.
-- Build smart folders with combined rules, live result counts, and a folder tree; matching assets
-  appear automatically.
-- Edit titles, descriptions, sources, tags, and ratings from the details panel; restore assets from
-  the trash or purge them permanently.
-
-### Media and large images
-
-- Generate 256/512 px thumbnails, 1600 px previews, video posters, and media metadata in the worker.
-- Build Deep Zoom WebP pyramids for very large images; the viewer loads only the visible region and
-  keeps a bounded tile cache.
-- Extract representative colors in the background and index them for Lab color-distance searches.
-- Retry, schedule, and pause processing jobs while keeping interactive previews ahead of historical
-  backfills.
-
-### Optional local AI features
-
-- Run a pinned Qwen3-VL-Embedding-2B MLX sidecar on Apple Silicon.
-- Generate local 1024-dimensional image embeddings, aggregate manually classified examples into
-  tag prototype centers, and propose reviewable classifications by distance.
-- Keep every tag opted out by default; suggestions start only after the user explicitly enables a
-  tag and builds its prototype center.
-- Use Qwen3-VL 8B Instruct through a local Ollama runtime to generate concrete noun tags and expand
-  searches by exact match and semantic similarity.
-- Keep vector suggestions and automatic tagging stopped by default. Normal uploads and library
-  browsing do not depend on either local model.
-
-### Multi-user privacy and security
-
-- Use HttpOnly cookies for browser sessions and least-privilege personal access tokens for plugins
-  and migration tools.
-- Derive every `ownerId` from the authenticated principal; request DTOs never accept an `ownerId`.
-- Return `404` for cross-owner access without revealing whether a resource exists.
-- Select one or more manual tags as private rules. Assets matching any selected tag automatically
-  enter a dedicated private view and never mix into the regular library.
-- Reveal private assets only during a time-limited visibility window. The default deployment stays
-  local and includes no telemetry.
-
-## Where does it fit?
-
-| Use case                          | What SekerEagle provides                                                                |
-| --------------------------------- | --------------------------------------------------------------------------------------- |
-| Design references and inspiration | Masonry browsing, manual tags, color and compound filters, smart folders                |
-| Independent migration from Eagle  | Immutable snapshots, full preflight, resumable uploads, per-item journals, verification |
-| Ongoing collection from the web   | Manifest V3 extension, durable local queue, provenance retention, retries               |
-| Multiple users on one deployment  | Separate accounts, owner-level isolation, administrator processing center               |
-| Private local image organization  | Self-hosted database and object storage, optional local model, no telemetry             |
-
-SekerEagle is not currently a mobile photo backup tool, and it does not provide public sharing links
-or team approval workflows. If automatic phone backup is your primary goal, consider a dedicated
-photo management project instead.
-
-## Support matrix
-
-| Capability                |        Status        | Notes                                                                                                                                                                                      |
-| ------------------------- | :------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| macOS + Apple Silicon     |  ✅ Supported path   | Current development, deployment, and performance test environment                                                                                                                          |
-| Docker Desktop deployment |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                                                                                                                                           |
-| macOS desktop app         | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache                                                                                                                   |
-| Windows x64 desktop app   | ✅ Portable release  | [Download the 0.1.5 single-file EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe); profile and cache stay beside the program |
-| Web asset library         |          ✅          | Desktop browsers first                                                                                                                                                                     |
-| Chrome browser capture    |          ✅          | Unpacked Manifest V3 extension                                                                                                                                                             |
-| Eagle snapshot migration  |          ✅          | Local CLI plus Eagle export plugin                                                                                                                                                         |
-| Local MLX classification  |  ✅ Optional, ready  | Available; requires Apple Silicon, `uv`, and a model download                                                                                                                              |
-| AI tags and fuzzy search  |  ✅ Optional, ready  | Available; requires local Ollama and `qwen3-vl:8b-instruct`                                                                                                                                |
-| Linux / x64               |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet                                                                                                                  |
-| Native mobile app         |          ❌          | Not currently available                                                                                                                                                                    |
-
-Allocate at least 16 GiB of memory and 8 CPUs to Docker Desktop. The PostgreSQL metadata path has
-been independently benchmarked with 100,000 assets. That result does not mean object-storage
-capacity, backups, or disk redundancy are handled automatically. See the
-[100k-library performance baseline](docs/performance-100k-library.md) (Chinese).
-
-## Quick start
-
-### Prerequisites
-
-- macOS on Apple Silicon
-- Node.js 22 and npm 10
-- Docker Desktop
-- Optional: `uv` for the local vector sidecar
-- Optional: Ollama with `qwen3-vl:8b-instruct` for automatic noun tagging
-
-### Start the services
-
-```sh
-git clone https://github.com/Seker800/SekerEagle.git
-cd SekerEagle
-npm ci
-npm run db:generate
-npm run env:create
-./scripts/mlx-embedding-host.sh setup
-npm run mlx:install-service
-npm run deploy:mac:check
-npm run deploy:mac
-```
-
-If you do not need vector tag suggestions, skip the MLX setup and service installation steps.
-Automatic noun tagging additionally requires Ollama and `qwen3-vl:8b-instruct`; both AI features
-remain stopped by default. Then create the first administrator:
-
-```sh
-docker compose --env-file .env -f deploy/mac/docker-compose.yml exec \
-  -e BOOTSTRAP_ADMIN_EMAIL=you@example.com \
-  -e BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-long-password' \
-  api node apps/api/dist/bootstrap-admin.js
-```
-
-Open <http://localhost:8180>. Only the gateway should bind to the host at `127.0.0.1:8180`; do not
-expose PostgreSQL, MinIO, the API, or the worker directly. See the
-[local operations runbook](docs/operations-runbook.md) (Chinese) for setup, diagnostics, upgrades,
-and shutdown procedures.
-
-To access SekerEagle from another trusted LAN computer at `http://IP:8180`, set
-`SEKEREAGLE_GATEWAY_LAN_ADDRESS` in `.env` to the server's fixed private IP and apply the LAN
-Compose overlay. The default `127.0.0.1` entry remains available; do not use `0.0.0.0`, and
-restrict source devices with the host firewall.
-The overlay also adds that exact address to the trusted browser origins so LAN login and writes work.
-
-## Migrating from Eagle
-
-Migration does not read and mutate the live source library at the same time. Copy the Eagle
-`.library` first, export an immutable snapshot with `plugins/eagle-importer`, and let the local
-migrator run preflight checks and uploads:
-
-```sh
-npm run build --workspace @sekereagle/eagle-migrator
-read -s SEKEREAGLE_PAT
-export SEKEREAGLE_PAT
-
-node apps/eagle-migrator/dist/main.js doctor /absolute/path/to/migration-snapshot \
-  --server http://localhost:8180
-node apps/eagle-migrator/dist/main.js run /absolute/path/to/migration-snapshot \
-  --server http://localhost:8180 --concurrency 4
-```
-
-Start with a sample of 20–100 items covering different formats, duplicates, non-ASCII names, tags,
-and folders, and rehearse pause/resume at least once. See the
-[local Eagle migrator guide](apps/eagle-migrator/README.md) (Chinese) for the complete workflow.
-
-## Browser capture
-
-The Chrome extension writes captures to IndexedDB before its Service Worker downloads candidate
-source images, uploads them in parts, and commits them. Interrupted browser or extension sessions
-return unfinished work to the retry queue.
-
-```text
-Web page Alt + right-click
-            ↓
-Image candidate resolution and provenance cleanup
-            ↓
-Durable IndexedDB queue
-            ↓
-Gateway + least-privilege PAT
-            ↓
-MinIO originals + PostgreSQL metadata + worker derivatives
-```
-
-See the [browser capture extension guide](plugins/browser-capture/README.md) (Chinese) for
-installation, PAT scopes, local/public connection modes, and supported formats.
-
-## Architecture and data boundaries
-
-```mermaid
-flowchart LR
-  Capture["Chrome capture extension"] --> Gateway["Unified gateway"]
-  Eagle["Eagle export plugin / migrator"] --> Gateway
-  Desktop["Desktop app"] --> Gateway
-  Web["Web app"] --> Gateway
-  Gateway --> API["NestJS API"]
-  API --> Postgres[("PostgreSQL\nsource of truth")]
-  API --> MinIO[("MinIO\noriginals and derivatives")]
-  API --> Worker["Retryable worker"]
-  Worker --> MinIO
-  Worker -. optional .-> MLX["Local MLX sidecar"]
-```
-
-- The desktop app loads the same management interface as the web app and accelerates media reads
-  with a rebuildable cache isolated by deployment and account.
-- NestJS owns authentication, owner isolation, upload state machines, and business rules.
-- PostgreSQL is the source of truth. MinIO stores originals and derivatives, and recoverable state
-  machines converge changes across both systems.
-- A worker crash does not change an already committed asset fact; failed jobs can be retried safely.
-- Browsers and import tools access only the gateway. The runtime does not depend on or access the
-  SekerChat data plane.
-
-See the [architecture documentation](docs/architecture.md) (Chinese) for dependency direction,
-media memory boundaries, and system invariants.
-
-## Documentation
-
-See the [project to-do list](docs/todo.md) for deferred work. The [photo agent and MCP implementation](docs/photo-agent.md) has local code and isolated validation; real-model quality evaluation remains pending.
-
-The detailed operational and maintainer documentation is currently written in Simplified Chinese.
-English translations can be added incrementally without blocking the English project overview.
-
-| Document                                                              | When to read it                                                       |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [Maintainer guide](docs/maintainer-guide.md)                          | First-time codebase handoff, directory ownership, and releases        |
-| [Local operations runbook](docs/operations-runbook.md)                | Installation, startup, diagnostics, backup, and vector operations     |
-| [Architecture](docs/architecture.md)                                  | Service boundaries, data flow, and long-lived invariants              |
-| [Environment model](docs/environment-model.md)                        | Development/test/production targets and fail-closed rules             |
-| [Media memory operations](docs/media-memory-operations.md)            | Large images, worker tuning, and capacity planning                    |
-| [100k-library performance baseline](docs/performance-100k-library.md) | Re-running scale gates and evaluating metadata performance            |
-| [Privacy](PRIVACY.md)                                                 | Data responsibilities for operators, plugin users, and administrators |
-| [Security policy](SECURITY.md)                                        | Reporting vulnerabilities and checking supported versions             |
-| [Contributing](CONTRIBUTING.md)                                       | Development, testing, and submitting changes                          |
-
-## Development and verification
-
-```sh
-npm ci
-npm run db:generate
-npm run ci:check
-npm run test:worker-leases
-npm run contracts:check
-npm run test:library-integration
-./scripts/mlx-embedding-host.sh test
-npm run oss:check
-```
-
-Database migrations, seeds, tests, and imports must pass the safe-target guard first. Development
-databases may only be named `sekereagle` or `sekereagle_test`, and object-storage buckets must use
-the `sekereagle-` prefix.
-
-Core stack: Node.js 22, npm workspaces, NestJS, React/Vite, Prisma, PostgreSQL, pgvector, MinIO,
-Sharp, OpenSeadragon, and an optional Python/MLX sidecar.
-
-## Project status and roadmap
-
-The current priority is making `0.1.x` deployment, migration, recovery, and public release workflows
-reliable. Future priorities will follow Issues and real-world feedback, with an approximate focus on:
-
-- smoother installation and upgrades for new instances;
-- verifiable PostgreSQL and MinIO backup/restore procedures;
-- Linux/x64 validation for non-vector deployments;
-- continued compatibility across imports, browser capture, and large-library scenarios.
-
-See the [changelog](CHANGELOG.md) for public release changes. Use GitHub Issues for ordinary
-problems. Do not file security vulnerabilities publicly; report them privately according to the
-[security policy](SECURITY.md).
-
-## Contributing
-
-Issues, documentation improvements, and focused pull requests are welcome. Read the
-[contributing guide](CONTRIBUTING.md), [code of conduct](CODE_OF_CONDUCT.md), and
-[support policy](SUPPORT.md) before getting started. These documents are currently in Simplified
-Chinese.
+A self-hosted asset and photo manager with **Qwen3-VL-Embedding-2B content search**, local AI tagging, classification suggestions, and photo editing. Available on the web and as Windows and macOS desktop clients.
+
+[Download](https://github.com/Seker800/SekerEagle/releases) · [Deployment](docs/operations-runbook.md) · [Import from Eagle](apps/eagle-migrator/README.md)
+
+![A library of landscapes, architecture, portraits, products, and still life](docs/screenshots/showcase-library.jpg)
+
+## Search image content
+
+**Qwen3-VL-Embedding-2B** embeds images and text so you can search by what an image contains, without tagging it first.
+
+Enter a description such as “buildings by the sea.” Combine content search with tags, colors, and formats to narrow the results.
+
+![Actual local 2B vector results for “buildings by the sea”](docs/screenshots/showcase-search.jpg)
+
+## Local AI organization
+
+- **Automatic tags**: run Qwen3-VL 8B Instruct through Ollama to identify image content and generate tags.
+- **Classification suggestions**: build tag centers from manually tagged images and suggest categories for other images.
+- **Batch review**: accept, adjust, or reject suggestions. You control the final tags.
+
+![Classification suggestions computed from real image vectors and manual tag centers](docs/screenshots/showcase-suggestions.jpg)
+
+Models run locally; images do not need to leave your server. AI features require separate setup and are disabled by default. The 2B embedding service runs on Apple Silicon with MLX. Uploading and browsing work without AI.
+
+## Photo editing
+
+- **Basic adjustments**: exposure, contrast, highlights, shadows, temperature, saturation, and more.
+- **Color tools**: eight-color HSL mixer, master and RGB curves, and shadow/midtone/highlight color grading.
+- **Detail tools**: dehaze, luminance and color noise reduction, sharpening, grain, and vignette.
+- **Composition and filters**: free or fixed-ratio crop, rotation, mirror, and custom CUBE / PNG LUT import.
+- **Photo watermarks**: frame and information layouts with editable camera details, shooting settings, and credits.
+
+Undo, redo, compare with the original, autosave drafts, and apply editing settings to a batch. Save edits as a separate PNG while keeping the original. RAW editing uses a server-rendered copy.
+
+![Photo editing with actual adjustments and the eight-color HSL mixer](docs/screenshots/showcase-editor-hsl.jpg)
+
+![Watermark layout and finished photo preview](docs/screenshots/showcase-editor-watermark.jpg)
+
+## Asset management
+
+- Tag groups, colors, ratings, and combined filters.
+- Smart folders that collect matching assets automatically.
+- Batch changes, trash recovery, and hidden private content.
+- Import and preview images, camera RAW files, and videos; load large images by visible region.
+
+![Asset details with tags, ratings, source attribution, and file properties](docs/screenshots/showcase-details.jpg)
+
+## Photo management
+
+- Browse by capture date; filter by EXIF, camera, and lens.
+- Explore photos on a GPS map.
+- Local person recognition with manual corrections.
+- Burst and similar-photo groups with sharpness references.
+- Shooting statistics by time, camera, and lens.
+
+![Photo timeline organized by capture month](docs/screenshots/showcase-photos.jpg)
+
+![Photo map with location clusters and photos from a selected location](docs/screenshots/showcase-map.jpg)
+
+Assets and photos have separate workspaces, tags, processing settings, and trash. Use “Send to” to move items between modes.
+
+## Capture and import
+
+- **Drag and drop**: batch import, multipart uploads, and file deduplication.
+- **Web capture**: a Chrome extension that collects original images with their page source and description.
+- **Eagle migration**: preflight checks, resumable import, and result verification.
+
+## Private hosting and shared access across devices
+
+- Store original files and metadata on your own server. No telemetry in the default deployment.
+- Access the same library from the web and desktop clients. Client caching reduces repeated downloads.
+- Private content stays hidden from everyday browsing and search until you enable access.
+
+## Get started
+
+Deploy the server, then connect through a browser or desktop client.
+
+- [Server deployment and local AI setup](docs/operations-runbook.md)
+- [Windows / macOS downloads](https://github.com/Seker800/SekerEagle/releases)
+- [Chrome capture extension](plugins/browser-capture/README.md)
+- [Eagle migration](apps/eagle-migrator/README.md)
+- [Supported formats](docs/camera-media.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+
+Early-stage software. Back up your database and original files before upgrading. Screenshots use publicly licensed photographs with demonstration dates, locations, and camera metadata. See [image credits and capture notes](docs/screenshots/README.md).
 
 ## License
 
-Except for `services/mlx-embedding`, repository code is released under the
-[Apache License 2.0](LICENSE). Because `services/mlx-embedding` directly uses GPLv3-licensed
-`mlx-embeddings`, that service is released separately under
-[GPL-3.0-only](services/mlx-embedding/LICENSE). See
-[third-party notices](THIRD_PARTY_NOTICES.md) for component and model attribution.
+Main code: [Apache License 2.0](LICENSE). MLX embedding service: [GPL-3.0-only](services/mlx-embedding/LICENSE). See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md) for third-party components and models. Photographs in screenshots retain their original licenses.
 
-See [Testing coverage and execution](docs/testing.md) for CI gates, isolated integration tests, and verification limits.
+An independent community project, not an official Eagle product.
