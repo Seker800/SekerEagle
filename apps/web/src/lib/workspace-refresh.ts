@@ -84,6 +84,7 @@ export function acquireWorkspaceRefresh(
     inFlight = false,
     failures = 0;
   let revoked = false;
+  let wakePending = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let previous: WorkspaceChanges | undefined;
   const controller = new AbortController();
@@ -172,17 +173,21 @@ export function acquireWorkspaceRefresh(
       delay = retryRefreshDelay(++failures);
     } finally {
       inFlight = false;
-      if (!stopped && !revoked && visible()) schedule(delay);
+      const nextDelay = wakePending ? 0 : delay;
+      wakePending = false;
+      if (!stopped && !revoked && visible()) schedule(nextDelay);
     }
   };
   const wake = () => {
     if (timer) clearTimeout(timer);
     if (!visible() || stopped) return;
     for (const { query, running } of queued.values()) if (!running) reconcile(query);
-    schedule(0);
+    if (inFlight) wakePending = true;
+    else schedule(0);
   };
   document.addEventListener('visibilitychange', wake);
   window.addEventListener('focus', wake);
+  window.addEventListener('online', wake);
   schedule(0);
   const entry = {
     refs: 1,
@@ -193,6 +198,7 @@ export function acquireWorkspaceRefresh(
       queued.clear();
       document.removeEventListener('visibilitychange', wake);
       window.removeEventListener('focus', wake);
+      window.removeEventListener('online', wake);
     },
   };
   registry.set(identity, entry);
