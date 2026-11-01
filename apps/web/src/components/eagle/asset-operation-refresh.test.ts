@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
 import { InfiniteQueryObserver, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { expect, it, vi } from 'vitest';
 import { AssetOperationRefresher } from './asset-operation-refresh';
@@ -265,4 +266,80 @@ it('publishes a completed sixty-thousand image scan without downloading asset me
     expect.anything(),
   );
   f.close();
+});
+
+it.each([
+  ['TRASH', 'PHOTO', 'TRASH'],
+  ['DUPLICATE_CLEANUP', 'PHOTO', 'TRASH'],
+  ['RESTORE', 'PHOTO', 'ACTIVE'],
+  ['RESTORE', 'PHOTO', 'PRIVATE'],
+  ['SEND', 'MATERIAL', 'ACTIVE'],
+  ['SEND', 'MATERIAL', 'PRIVATE'],
+] as const)(
+  'marks an inactive %s destination stale for %s/%s without fetching its pages',
+  async (kind, targetMode, view) => {
+    const f = fixture();
+    const target = createEagleQueryKeys('owner', targetMode).assetList(view, {});
+    const otherOwner = createEagleQueryKeys('other', targetMode).assetList(view, {});
+    const unrelatedMode = createEagleQueryKeys(
+      'owner',
+      targetMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO',
+    ).assetList(view, {});
+    f.client.setQueryData(target, f.data);
+    f.client.setQueryData(otherOwner, f.data);
+    f.client.setQueryData(unrelatedMode, f.data);
+    const completed = {
+      ...summary(kind),
+      completed: 2,
+      failed: 0,
+      errors: [],
+      state: 'COMPLETED' as const,
+    };
+    mocks.results.mockResolvedValue({
+      operation: completed,
+      revision: 'v1',
+      membership: [],
+      receipts: [],
+      nextCursor: null,
+    });
+    try {
+      await f.refresher.reconcile('PHOTO', completed);
+      expect(f.client.getQueryState(target)?.isInvalidated).toBe(true);
+      expect(f.client.getQueryData(target)).toEqual(f.data);
+      expect(f.client.getQueryState(otherOwner)?.isInvalidated).toBe(false);
+      if (kind !== 'SEND') expect(f.client.getQueryState(unrelatedMode)?.isInvalidated).toBe(false);
+      if (kind === 'TRASH' || kind === 'DUPLICATE_CLEANUP')
+        expect(f.queryFn).not.toHaveBeenCalled();
+    } finally {
+      f.close();
+    }
+  },
+);
+
+it('adds newly trashed members through only the active trash first window while retaining every page', async () => {
+  const f = fixture('TRASH');
+  const completed = {
+    ...summary('TRASH'),
+    completed: 2,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [{ id: 'new', rowVersion: 2, state: 'TRASH' }],
+    receipts: [{ assetIds: ['new'], status: 'COMPLETED', errorCode: null }],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(f.queryFn).toHaveBeenCalledTimes(1);
+    const current = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(current.pages).toHaveLength(12);
+    expect(current.pageParams).toEqual(f.data.pageParams);
+    expect(current.pages[0].assetIds).toEqual(['new', 'a-0', 'b-0']);
+  } finally {
+    f.close();
+  }
 });
