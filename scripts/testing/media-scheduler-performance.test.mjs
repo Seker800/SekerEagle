@@ -83,6 +83,19 @@ async function fixture(size = 1) {
   await db.$executeRaw`INSERT INTO "EagleMediaJob" (id,"ownerId","libraryMode","assetId","assetRevision",kind,lane,"processorVersion","updatedAt") SELECT 'job-'||id,"ownerId","libraryMode",id,1,'GENERATE_EMBEDDING','BACKGROUND','synthetic-perf-v1',now() FROM "EagleAsset" WHERE "ownerId"=${owner}`;
   return { owner, prefix };
 }
+async function withIsolatedMediaQueue(ownerIds, run) {
+  return db.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`CREATE TEMP TABLE "EagleMediaJob" (LIKE public."EagleMediaJob" INCLUDING ALL) ON COMMIT DROP`;
+      await tx.$executeRaw(
+        Prisma.sql`INSERT INTO "EagleMediaJob" SELECT * FROM public."EagleMediaJob" WHERE "ownerId" IN (${Prisma.join(ownerIds)})`,
+      );
+      await tx.$executeRaw`ANALYZE "EagleMediaJob"`;
+      return run(tx);
+    },
+    { timeout: 30000 },
+  );
+}
 test('failure propagation does not scan independent pending work or retired history on every wake', async () => {
   const pending = await fixture(12000),
     failed = await fixture(12000);
@@ -99,9 +112,19 @@ test('failure propagation does not scan independent pending work or retired hist
         return 0;
       },
     });
-    const rows = await db.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${query}`);
-    const plan = rows[0]['QUERY PLAN'][0];
-    const buffers = (plan.Plan['Shared Hit Blocks'] ?? 0) + (plan.Plan['Shared Read Blocks'] ?? 0);
+    // Earlier integration cases leave unrelated dependency edges and dead index entries.
+    // Copy only this scenario with the migrated indexes, so the zero-edge budget measures
+    // its stated workload and never mutates another test's queue through EXPLAIN ANALYZE.
+    const plan = await withIsolatedMediaQueue([pending.owner, failed.owner], async (tx) => {
+      const rows = await tx.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${query}`);
+      return rows[0]['QUERY PLAN'][0];
+    });
+    const buffers = [
+      'Shared Hit Blocks',
+      'Shared Read Blocks',
+      'Local Hit Blocks',
+      'Local Read Blocks',
+    ].reduce((sum, field) => sum + (plan.Plan[field] ?? 0), 0);
     console.log(
       JSON.stringify({
         dependencyPropagation: true,
@@ -131,17 +154,14 @@ test('indexed failure propagation still follows multiple levels and leaves indep
         where: { id: ids[i] },
         data: { dependsOnJobId: ids[i - 1] },
       });
-    assert.equal(await propagateFailedDependencies(db), 2);
-    for (const id of ids.slice(0, 3))
-      assert.equal(
-        (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id } })).status,
-        'FAILED',
-      );
-    assert.equal(
-      (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: ids[3] } })).status,
-      'PENDING',
-    );
-    assert.equal(await propagateFailedDependencies(db), 0);
+    await withIsolatedMediaQueue([f.owner], async (tx) => {
+      assert.equal(await propagateFailedDependencies(tx), 2);
+      const rows = await tx.$queryRaw`SELECT id,status FROM "EagleMediaJob"`;
+      const status = new Map(rows.map((row) => [row.id, row.status]));
+      for (const id of ids.slice(0, 3)) assert.equal(status.get(id), 'FAILED');
+      assert.equal(status.get(ids[3]), 'PENDING');
+      assert.equal(await propagateFailedDependencies(tx), 0);
+    });
   } finally {
     await db.eagleAsset.deleteMany({ where: { ownerId: f.owner } });
     await db.user.delete({ where: { id: f.owner } });
