@@ -412,8 +412,21 @@ test('maintenance and upload recovery cannot restart themselves through API life
     ['eagle-upload-recovery.service.ts', 'EagleUploadRecoveryService'],
   ]) {
     for (const hook of ['onModuleInit', 'onApplicationBootstrap'])
-      rejectsMutation(`apps/api/src/eagle/${file}`, (source) => source.replace(`class ${name} {`, `class ${name} { ${hook}() { setInterval(() => this.runBackground(), 1000); }`), 'operations-background-host');
-    rejectsMutation(`apps/api/src/eagle/${file}`, (source) => source.replace('  ) {}', '  ) { this.startBackground(); }'), 'operations-background-host');
+      rejectsMutation(
+        `apps/api/src/eagle/${file}`,
+        (source) =>
+          source.replace(
+            `class ${name} {`,
+            `class ${name} { ${hook}() { setInterval(() => this.runBackground(), 1000); }`,
+          ),
+        'operations-background-host',
+      );
+    rejectsMutation(
+      `apps/api/src/eagle/${file}`,
+      (source) => source.replace('  ) {}', '  ) { this.startBackground(); }'),
+      'operations-background-host',
+    );
+    rejectsMutation(`apps/api/src/eagle/${file}`, (source) => source.replace('  ) {}', '  ) { setInterval(() => undefined, 1000); }'), 'operations-background-host');
   }
 });
 test('operations host must explicitly assemble recovery in both modes and maintenance before starting', () => {
@@ -423,6 +436,11 @@ test('operations host must explicitly assemble recovery in both modes and mainte
     (source) => source.replace('new EagleUploadRecoveryService(', 'new OtherRecoveryService('),
     (source) => source.replace('new AssetOperationBackground(', 'new OtherBackground('),
     (source) => source.replace('    background.start();', ''),
-    (source) => source.replace("  const recoveries = (['MATERIAL', 'PHOTO'] as const)", "  const recoveries = (['MATERIAL'] as const)"),
-  ]) rejectsMutation(file, mutate, 'operations-background-host');
+    (source) =>
+      source.replace(
+        "  const recoveries = (['MATERIAL', 'PHOTO'] as const)",
+        "  const recoveries = (['MATERIAL'] as const)",
+      ),
+  ])
+    rejectsMutation(file, mutate, 'operations-background-host');
 });
