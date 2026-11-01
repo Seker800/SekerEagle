@@ -41,6 +41,8 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
     providers: [EagleService, EaglePrivacyService],
     tables: [
       'EagleAsset',
+      'EagleLibraryReadState',
+      'EagleLibraryReadChange',
       'EagleAssetAnnotation',
       'EagleManualTag',
       'EagleManualTagGroup',

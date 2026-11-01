@@ -34,6 +34,8 @@
 
 ## 本地与 CI
 
+常用信息读取候选复用两模式的唯一 `AssetSearchWhere` 字段／关系登记及 SQL 语义，不覆盖 PHOTO Controller、不替换原服务。`EagleLibraryReadState`／`EagleLibraryReadChange` 归资源读取能力，记录事务修订与受影响 ID，不拥有资源生命周期；读取宿主仅在独立入口启动，API 中不自动启动。反例测试继续覆盖模式遗漏、独立后台宿主装配和未登记持久模型；内存与真实 SQL 的 NULL／关系／排序／分页等价由数据库测试证明。
+
 运行`npm run architecture:check`、`npm run test:architecture`及完整`npm run ci:check`。API成品镜像发布仍须独立启动验收，历史升级和完整恢复仍须真实隔离数据库，门禁通过不自动授予生产发布或数据操作权限。
 
 ## 基础颜色筛选共用约束
