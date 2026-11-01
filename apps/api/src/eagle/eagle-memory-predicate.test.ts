@@ -192,11 +192,28 @@ test('malformed predicate input is rejected rather than treated as a successful 
 });
 
 test('unverified Unicode case folding and missing projected fields retain SQL fallback', () => {
-  const insensitive = compileMemorySearchPredicate({ normalizedDisplayName: { contains: 'i', mode: 'insensitive' } });
+  const insensitive = compileMemorySearchPredicate({
+    normalizedDisplayName: { contains: 'i', mode: 'insensitive' },
+  });
   assert.throws(() => insensitive({ ...asset, normalizedDisplayName: 'İmage' }), /Unsupported/);
-  assert.throws(() => compileMemorySearchPredicate({ width: { gt: 1 } })({ id: 'incomplete' }), /Unsupported/);
+  assert.throws(
+    () => compileMemorySearchPredicate({ width: { gt: 1 } })({ id: 'incomplete' }),
+    /Unsupported/,
+  );
 });
 
 test('case-insensitive string negation keeps its mode on the primitive operand', () => {
-  assert.equal(compileMemorySearchPredicate({ format: { not: 'JPG', mode: 'insensitive' } })(asset), false);
+  assert.equal(
+    compileMemorySearchPredicate({ format: { not: 'JPG', mode: 'insensitive' } })(asset),
+    false,
+  );
+});
+
+test('partial relation projections reject queries for history before scanning', () => {
+  for (const where of [
+    { photoFaces: { some: { personId: 'person' } } },
+    { photoFaces: { every: { personId: 'person', isCurrent: true } } },
+    { aiTagLinks: { none: { aiTagId: 'blue' } } },
+    { colorAnalyses: { some: { isCurrent: false } } },
+  ]) assert.throws(() => compileMemorySearchPredicate(where as AssetSearchWhere), /Unsupported/);
 });
