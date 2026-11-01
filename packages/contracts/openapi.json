@@ -13,6 +13,25 @@
         "tags": ["backup"]
       }
     },
+    "/api/library/changes": {
+      "get": {
+        "operationId": "WorkspaceChangesController_snapshot",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceChangesResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["library"]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -4095,6 +4114,42 @@
     "/api/eagle/vector/summary": {
       "get": {
         "operationId": "EagleVectorController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/progress": {
+      "get": {
+        "operationId": "EagleVectorController_progress",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/review-summary": {
+      "get": {
+        "operationId": "EagleVectorController_reviewSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/host": {
+      "get": {
+        "operationId": "EagleVectorController_host",
         "parameters": [],
         "responses": {
           "200": {
@@ -8399,6 +8454,42 @@
         "tags": ["photo-vectors"]
       }
     },
+    "/api/photos/vector/progress": {
+      "get": {
+        "operationId": "PhotoVectorsController_progress",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-vectors"]
+      }
+    },
+    "/api/photos/vector/review-summary": {
+      "get": {
+        "operationId": "PhotoVectorsController_reviewSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-vectors"]
+      }
+    },
+    "/api/photos/vector/host": {
+      "get": {
+        "operationId": "PhotoVectorsController_host",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-vectors"]
+      }
+    },
     "/api/photos/vector/tags": {
       "get": {
         "operationId": "PhotoVectorsController_tags",
@@ -8894,6 +8985,76 @@
       }
     },
     "schemas": {
+      "WorkspaceHealthDto": {
+        "type": "object",
+        "properties": {
+          "worker": {
+            "type": "string",
+            "enum": ["ONLINE", "OFFLINE"]
+          },
+          "embedding": {
+            "type": "string",
+            "enum": ["READY", "UNKNOWN", "OFFLINE", "DRIFTED"]
+          }
+        },
+        "required": ["worker", "embedding"]
+      },
+      "WorkspaceChangeScopeDto": {
+        "type": "object",
+        "properties": {
+          "MATERIAL": {
+            "type": "object",
+            "required": [
+              "ASSETS",
+              "LABELS",
+              "PEOPLE",
+              "MAP",
+              "FOLDERS",
+              "RECOMMENDATIONS",
+              "OPERATIONS",
+              "TASKS",
+              "SETTINGS",
+              "AGENT"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "PHOTO": {
+            "type": "object",
+            "required": [
+              "ASSETS",
+              "LABELS",
+              "PEOPLE",
+              "MAP",
+              "FOLDERS",
+              "RECOMMENDATIONS",
+              "OPERATIONS",
+              "TASKS",
+              "SETTINGS",
+              "AGENT"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WorkspaceChangesResponseDto": {
+        "type": "object",
+        "properties": {
+          "health": {
+            "$ref": "#/components/schemas/WorkspaceHealthDto"
+          },
+          "epoch": {
+            "type": "string"
+          },
+          "scopes": {
+            "$ref": "#/components/schemas/WorkspaceChangeScopeDto"
+          }
+        },
+        "required": ["epoch", "scopes"]
+      },
       "LoginDto": {
         "type": "object",
         "properties": {

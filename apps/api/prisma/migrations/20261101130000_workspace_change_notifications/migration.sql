@@ -32,7 +32,11 @@ BEGIN
     WHEN 'person' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
     WHEN 'separation' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
     WHEN 'group' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
-    WHEN 'agent' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
+    WHEN 'agent' THEN 'CASE WHEN jsonb_typeof(d->''scope'')=''array'' THEN NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(d->''scope'') item
+      LEFT JOIN "EagleAsset" scoped ON scoped.id=item->>''id''
+        AND scoped."ownerId"=d->>''ownerId'' AND scoped."libraryMode"::text=d->>''libraryMode''
+      WHERE scoped.id IS NULL OR scoped."isPrivate") ELSE false END'
     ELSE 'NOT coalesce((d->>''isPrivate'')::boolean,false)' END;
   FOR scope IN EXECUTE format('
     WITH delta AS MATERIALIZED (%s)
@@ -48,12 +52,10 @@ BEGIN
       AND face."ownerId"=d->>''ownerId'' AND face."libraryMode"::text=d->>''libraryMode'' AND face."isCurrent"
     LEFT JOIN "EaglePhotoGroupMember" member ON %L=''group'' AND member."groupId"=d->>''id''
       AND member."ownerId"=d->>''ownerId'' AND member."libraryMode"::text=d->>''libraryMode''
-    LEFT JOIN "EaglePhotoAgentSuggestion" suggestion ON %L=''agent'' AND suggestion."taskId"=d->>''id''
-      AND suggestion."ownerId"=d->>''ownerId'' AND suggestion."libraryMode"::text=d->>''libraryMode''
-    LEFT JOIN "EagleAsset" a ON a.id=coalesce(d->>''assetId'',ca."assetId",face."assetId",member."assetId",suggestion."assetId")
+    LEFT JOIN "EagleAsset" a ON a.id=coalesce(d->>''assetId'',ca."assetId",face."assetId",member."assetId")
       AND a."ownerId"=d->>''ownerId'' AND a."libraryMode"::text=d->>''libraryMode''
     GROUP BY coalesce(d->>''ownerId'',d->>''uploaderId''),d->>''libraryMode''',
-    source,visibility,TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2])
+    source,visibility,TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2])
   LOOP
     IF scope.owner_id IS NOT NULL AND scope.mode IN ('MATERIAL','PHOTO') THEN
       PERFORM pg_notify('sekereagle_workspace_changes',json_build_object(

@@ -20,6 +20,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/library/changes': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['WorkspaceChangesController_snapshot'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/auth/login': {
     parameters: {
       query?: never;
@@ -1628,6 +1644,54 @@ export interface paths {
       cookie?: never;
     };
     get: operations['EagleVectorController_summary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/vector/progress': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleVectorController_progress'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/vector/review-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleVectorController_reviewSummary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/vector/host': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleVectorController_host'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3364,6 +3428,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/vector/progress': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoVectorsController_progress'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/vector/review-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoVectorsController_reviewSummary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/vector/host': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoVectorsController_host'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/vector/tags': {
     parameters: {
       query?: never;
@@ -3784,6 +3896,25 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    WorkspaceHealthDto: {
+      /** @enum {string} */
+      worker: 'ONLINE' | 'OFFLINE';
+      /** @enum {string} */
+      embedding: 'READY' | 'UNKNOWN' | 'OFFLINE' | 'DRIFTED';
+    };
+    WorkspaceChangeScopeDto: {
+      MATERIAL?: {
+        [key: string]: string;
+      };
+      PHOTO?: {
+        [key: string]: string;
+      };
+    };
+    WorkspaceChangesResponseDto: {
+      health?: components['schemas']['WorkspaceHealthDto'];
+      epoch: string;
+      scopes: components['schemas']['WorkspaceChangeScopeDto'];
+    };
     LoginDto: {
       /**
        * Format: email
@@ -4540,6 +4671,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  WorkspaceChangesController_snapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WorkspaceChangesResponseDto'];
+        };
       };
     };
   };
@@ -7124,6 +7274,57 @@ export interface operations {
     };
   };
   EagleVectorController_summary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleVectorController_progress: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleVectorController_reviewSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleVectorController_host: {
     parameters: {
       query?: never;
       header?: never;
@@ -9871,6 +10072,57 @@ export interface operations {
     };
   };
   PhotoVectorsController_summary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoVectorsController_progress: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoVectorsController_reviewSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoVectorsController_host: {
     parameters: {
       query?: never;
       header?: never;
