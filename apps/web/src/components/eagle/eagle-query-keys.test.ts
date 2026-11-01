@@ -73,3 +73,12 @@ it('owns photography namespaces with stable shapes and isolated privacy scopes',
   expect(keys.photoAgent(false)).not.toEqual(keys.photoAgent(true));
   expect(keys.pyramid('asset')).toEqual([...keys.root, 'pyramid', 'asset']);
 });
+
+it('selects a list view through the key protocol without leaking its tuple positions', () => {
+  const keys = createEagleQueryKeys('owner', 'PHOTO');
+  expect(isEagleAssetListKey(keys.assetList('TRASH', {}), 'owner', 'PHOTO', 'TRASH')).toBe(true);
+  for (const view of ['ACTIVE', 'PRIVATE'])
+    expect(isEagleAssetListKey(keys.assetList(view, {}), 'owner', 'PHOTO', 'TRASH')).toBe(false);
+  expect(isEagleAssetListKey(keys.assetList('TRASH', {}), 'other', 'PHOTO', 'TRASH')).toBe(false);
+  expect(isEagleAssetListKey(keys.assetList('TRASH', {}), 'owner', 'MATERIAL', 'TRASH')).toBe(false);
+});
