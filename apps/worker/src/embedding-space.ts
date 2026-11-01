@@ -54,3 +54,15 @@ export function createEmbeddingSpaceInitializer(
     return initialized;
   };
 }
+
+/** Text-folder publication has its own protocol, so retain its per-request compatibility check. */
+export function createCompatibleTextEmbedding<T>(
+  client: Pick<PrismaClient, '$transaction'>,
+  identity: EmbeddingSpaceIdentity,
+  request: (text: string) => Promise<T>,
+): (text: string) => Promise<T> {
+  return async (text) => {
+    await client.$transaction((tx) => ensureCompatibleEmbeddingSpace(tx, identity));
+    return request(text);
+  };
+}

@@ -21,6 +21,7 @@ import { publishImage } from './image-publication';
 import { MediaOutputAttempt } from './media-output-attempt';
 import { publishPyramid } from './pyramid-publication';
 import { EmbeddingProcessor } from './embedding-job';
+import { createCompatibleTextEmbedding } from './embedding-space';
 import {
   createTopEmbeddingSuggestion,
   activateEmbeddingSuggestionGeneration,
@@ -1565,10 +1566,9 @@ async function main(): Promise<void> {
         await runSmartFolderBuildStep(
           prisma,
           embeddingSpaceId,
-          async (text) => {
-            await embeddingProcessor.initializeSpace();
-            return embeddingClient.embedText(text);
-          },
+          createCompatibleTextEmbedding(prisma, embeddingIdentity, (text) =>
+            embeddingClient.embedText(text),
+          ),
           allowModelRequest &&
             embeddingReadiness === 'READY' &&
             (embeddingClient.computeRuntime?.backgroundLimit ?? legacyEmbeddingLimit) > 0,
