@@ -3971,6 +3971,8 @@ export interface components {
     };
     DuplicateListDto: {
       /** @enum {string} */
+      sameVisual?: 'true' | 'false';
+      /** @enum {string} */
       sameName?: 'true' | 'false';
       /** @enum {string} */
       sameCapturedAt?: 'true' | 'false';
@@ -4985,6 +4987,7 @@ export interface operations {
   EagleController_listDuplicates: {
     parameters: {
       query?: {
+        sameVisual?: 'true' | 'false';
         sameName?: 'true' | 'false';
         sameCapturedAt?: 'true' | 'false';
         sameDimensions?: 'true' | 'false';
@@ -5015,6 +5018,7 @@ export interface operations {
   EagleController_duplicateMembers: {
     parameters: {
       query?: {
+        sameVisual?: 'true' | 'false';
         sameName?: 'true' | 'false';
         sameCapturedAt?: 'true' | 'false';
         sameDimensions?: 'true' | 'false';
@@ -7551,6 +7555,7 @@ export interface operations {
   PhotosController_listDuplicates: {
     parameters: {
       query?: {
+        sameVisual?: 'true' | 'false';
         sameName?: 'true' | 'false';
         sameCapturedAt?: 'true' | 'false';
         sameDimensions?: 'true' | 'false';
@@ -7581,6 +7586,7 @@ export interface operations {
   PhotosController_duplicateMembers: {
     parameters: {
       query?: {
+        sameVisual?: 'true' | 'false';
         sameName?: 'true' | 'false';
         sameCapturedAt?: 'true' | 'false';
         sameDimensions?: 'true' | 'false';
