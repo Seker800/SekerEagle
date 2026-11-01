@@ -79,8 +79,23 @@ export const memoryStatisticsQuery = z
   })
   .strict();
 
-export const memoryColorPosition = z.object({ id: z.string().min(1), score: z.number().finite().nonnegative(), time: z.string().datetime(), mediaRevision: z.number().int().nonnegative() }).strict();
-export const memoryColorOptions = z.object({ color: z.string().regex(/^#[0-9a-f]{6}$/i), date: z.enum(['chronologicalAt', 'libraryAddedAt']),
-  limit: z.number().int().positive().safe(), offset: z.number().int().nonnegative().safe(),
-  after: memoryColorPosition.omit({ mediaRevision: true }).extend({ newer: z.literal(true).optional() }).optional(),
-}).strict();
+export const memoryColorPosition = z
+  .object({
+    id: z.string().min(1),
+    score: z.number().finite().nonnegative(),
+    time: z.string().datetime(),
+    mediaRevision: z.number().int().nonnegative(),
+  })
+  .strict();
+export const memoryColorOptions = z
+  .object({
+    color: z.string().regex(/^#[0-9a-f]{6}$/i),
+    date: z.enum(['chronologicalAt', 'libraryAddedAt']),
+    limit: z.number().int().positive().safe(),
+    offset: z.number().int().nonnegative().safe(),
+    after: memoryColorPosition
+      .omit({ mediaRevision: true })
+      .extend({ newer: z.literal(true).optional() })
+      .optional(),
+  })
+  .strict();

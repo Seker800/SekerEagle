@@ -1,5 +1,9 @@
 import { requestLibraryRead, libraryReadMetrics } from '../eagle/eagle-memory-client';
-import { memoryStatisticsSummary, memoryPersonCounts, memoryPhotoFacets } from '../eagle/eagle-memory-protocol';
+import {
+  memoryStatisticsSummary,
+  memoryPersonCounts,
+  memoryPhotoFacets,
+} from '../eagle/eagle-memory-protocol';
 import type { PhotoStatisticsQueryDto } from './photo-statistics.dto';
 
 export async function readMemoryStatistics(
@@ -32,7 +36,10 @@ export async function readMemoryPeopleCounts(ownerId: string, includePrivate: bo
 }
 
 export async function readMemoryPhotoFacets(ownerId: string, includePrivate: boolean) {
-  const result = await requestLibraryRead({ ownerId, libraryMode: 'PHOTO' }, { action: 'facets', includePrivate });
+  const result = await requestLibraryRead(
+    { ownerId, libraryMode: 'PHOTO' },
+    { action: 'facets', includePrivate },
+  );
   if (!result) return null;
   const parsed = memoryPhotoFacets.safeParse(result.facets);
   if (!parsed.success) return null;

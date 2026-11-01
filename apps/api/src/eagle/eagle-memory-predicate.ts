@@ -159,7 +159,7 @@ export function compileMemorySearchPredicate(
         );
       } else if (key === 'colorMatch' && name === 'asset') {
         if (typeof value !== 'string') throw unsupported();
-        checks.push(row => colorScore(row, value) !== null);
+        checks.push((row) => colorScore(row, value) !== null);
       } else if (definition.fields.has(key)) {
         const check = scalar(key, value);
         checks.push((row) => {

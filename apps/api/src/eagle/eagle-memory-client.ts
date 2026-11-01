@@ -1,6 +1,10 @@
 import type { MemoryColorPageOptions } from './eagle-memory-color';
 import type { Prisma } from '@prisma/client';
-import { encodeMemoryQuery, memorySearchPositions, memoryColorPosition } from './eagle-memory-protocol';
+import {
+  encodeMemoryQuery,
+  memorySearchPositions,
+  memoryColorPosition,
+} from './eagle-memory-protocol';
 import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 
@@ -36,11 +40,11 @@ export async function requestLibraryRead(where: AssetSearchWhere, page: Record<s
       method: 'POST',
       redirect: 'error',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: encodeMemoryQuery({ scope, where, ...page }),
+      body: encodeMemoryQuery({ ...page, scope, where }),
       signal: AbortSignal.timeout(
         Number(
           page.action === 'smartFolderPage' || page.action === 'colorPage'
-            ? (process.env.EAGLE_READER_SEMANTIC_TIMEOUT_MS ?? 1000)
+            ? (process.env.EAGLE_READER_COMPLEX_TIMEOUT_MS ?? 1000)
             : (process.env.EAGLE_READER_TIMEOUT_MS ?? 200),
         ),
       ),
@@ -128,12 +132,23 @@ export async function readMemorySmartFolderPage(
   return parsed.data;
 }
 
-export async function readMemoryColorPage(scope: { ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }, options: MemoryColorPageOptions) {
+export async function readMemoryColorPage(
+  scope: { ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' },
+  options: MemoryColorPageOptions,
+) {
   const { where, ...colorPage } = options;
-  const result = await requestLibraryRead({ AND: [scope, where] }, { action: 'colorPage', colorPage });
+  const result = await requestLibraryRead(
+    { AND: [scope, where] },
+    { action: 'colorPage', colorPage },
+  );
   if (!result) return null;
   const parsed = memoryColorPosition.array().safeParse(result.positions);
-  if (!parsed.success || parsed.data.length > options.limit + 1 || new Set(parsed.data.map(row => row.id)).size !== parsed.data.length) return null;
+  if (
+    !parsed.success ||
+    parsed.data.length > options.limit + 1 ||
+    new Set(parsed.data.map((row) => row.id)).size !== parsed.data.length
+  )
+    return null;
   libraryReadMetrics.hits++;
   return parsed.data;
 }

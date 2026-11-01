@@ -124,7 +124,8 @@ function scalar(
   inheritedInsensitive = false,
 ): Prisma.Sql {
   if (value === null) return Prisma.sql`${column} IS NULL`;
-  if (typeof value === 'string' && inheritedInsensitive) return Prisma.sql`${column} ILIKE ${parameter(value)}`;
+  if (typeof value === 'string' && inheritedInsensitive)
+    return Prisma.sql`${column} ILIKE ${parameter(value)}`;
   if (value instanceof Date || typeof value !== 'object')
     return Prisma.sql`${column}=${parameter(value, enumType)}`;
   const input = object(value);
