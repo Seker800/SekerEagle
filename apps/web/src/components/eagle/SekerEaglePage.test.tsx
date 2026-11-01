@@ -2598,6 +2598,17 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByText('尝试其他名称或标签。')).not.toBeInTheDocument();
   });
 
+  it('keeps photo color relevance results ungrouped by capture month', async () => {
+    testWorkspaceMode.value='PHOTO';
+    listEagleAssetsMock.mockResolvedValue({items:[{...asset,chronologicalAt:'2026-04-10T12:00:00Z',libraryAddedAt:'2026-04-10T12:00:00Z'}],nextCursor:null});
+    renderPage();
+    expect(await screen.findByText('2026年4月')).toBeVisible();
+    fireEvent.click(await screen.findByRole('button',{name:'展开筛选'}));
+    fireEvent.click(await screen.findByRole('button',{name:'颜色筛选'}));
+    fireEvent.click(within(screen.getByRole('dialog',{name:'颜色筛选'})).getByRole('button',{name:'颜色 #2e86ab'}));
+    await waitFor(()=>expect(screen.queryByText('2026年4月')).not.toBeInTheDocument());
+  });
+
   it('opens semantic folders in relevance order without chronological section headings', async () => {
     testWorkspaceMode.value = 'PHOTO';
     listEagleAssetsMock.mockResolvedValue({
