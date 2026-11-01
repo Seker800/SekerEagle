@@ -644,3 +644,36 @@ test('a metadata publication timeout reduces the batch without failing healthy i
   assert.deepEqual(batches, [2, 1, 1]);
   assert.deepEqual(failed, []);
 });
+
+
+test('unknown persisted operation kinds fail closed before any resource transaction or mutation', async () => {
+  let transactions = 0;
+  const failures: Array<{ data: { status: string; errorCode: string } }> = [];
+  const service = new EagleAssetOperationService({
+    $transaction: async () => { transactions++; throw new Error('unexpected resource transaction'); },
+    eagleAssetOperationItem: { updateMany: async (write: typeof failures[number]) => {
+      failures.push(write); return { count: 1 };
+    } },
+  } as never, {} as never, {} as never, 'MATERIAL');
+  Reflect.set(service, 'logger', { error: () => undefined });
+  await (service as unknown as { execute(items: unknown[]): Promise<void> }).execute([{
+    id: 'item', ownerId: 'owner', leaseVersion: 1, assetIds: ['asset'], snapshots: [],
+    operation: { id: 'operation', ownerId: 'owner', kind: 'FUTURE_KIND', isPrivate: false },
+  }]);
+  assert.equal(transactions, 0);
+  assert.deepEqual(failures.map((write) => write.data), [{
+    status: 'FAILED', errorCode: 'UNSUPPORTED_OPERATION_KIND', leaseUntil: null,
+  }]);
+});
+
+test('direct service admission rejects unknown and specialized kinds before opening a transaction', async () => {
+  let transactions = 0;
+  const service = new EagleAssetOperationService({ $transaction: async () => {
+    transactions++; throw new Error('unexpected admission transaction');
+  } } as never, {} as never, {} as never, 'PHOTO');
+  for (const kind of ['FUTURE_KIND', 'DUPLICATE_SCAN', 'DUPLICATE_CLEANUP'])
+    await assert.rejects(service.enqueue({ sub: 'owner' } as never,
+      { operationId: 'operation', kind, assetIds: ['asset'] } as never),
+      (error: unknown) => error instanceof Error && error.name === 'BadRequestException');
+  assert.equal(transactions, 0);
+});
