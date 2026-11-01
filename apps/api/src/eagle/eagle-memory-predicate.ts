@@ -140,6 +140,7 @@ export function compileMemorySearchPredicate(
 ): (row: MemoryAsset) => boolean {
   const visit = (name: string, input: unknown, preserveNull = false): Check => {
     if (!context && ['embedding', 'owner', 'snapshot', 'match', 'folder'].includes(name)) throw unsupported();
+    if (['analysis', 'swatch'].includes(name)) throw unsupported();
     const definition = searchPredicateModels[name];
     if (!definition) throw unsupported();
     const checks: Check[] = [];
@@ -179,6 +180,14 @@ export function compileMemorySearchPredicate(
       } else {
         const link = definition.relations[key];
         if (!link) throw unsupported();
+        if (key === 'photoFaces' || key === 'aiTagLinks') {
+          const relation = object(value);
+          if (!Object.keys(relation).length || Object.keys(relation).some(op => !['some', 'none'].includes(op))) throw unsupported();
+          for (const operand of Object.values(relation)) {
+            const predicate = object(operand);
+            if (key === 'photoFaces' ? predicate.isCurrent !== true : predicate.status !== 'ACTIVE') throw unsupported();
+          }
+        }
         const rows = (row: MemoryAsset): MemoryAsset[] => {
           const data = name === 'asset' && context && key === 'owner' ? context.owner
             : name === 'asset' && context && key === 'embeddings' ? context.embeddings.get(String(row.id))
