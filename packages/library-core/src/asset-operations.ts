@@ -8,24 +8,87 @@ export const ASSET_OPERATION_KINDS = [
 ] as const;
 export type AssetOperationKind = (typeof ASSET_OPERATION_KINDS)[number];
 /** Direct commands are opt-in: adding a kind never expands the public DTO. */
-export const DIRECT_ASSET_OPERATION_KINDS = ['SEND', 'TRASH', 'RESTORE', 'EMPTY_TRASH'] as const satisfies readonly AssetOperationKind[];
+export const DIRECT_ASSET_OPERATION_KINDS = [
+  'SEND',
+  'TRASH',
+  'RESTORE',
+  'EMPTY_TRASH',
+] as const satisfies readonly AssetOperationKind[];
 export type DirectAssetOperationKind = (typeof DIRECT_ASSET_OPERATION_KINDS)[number];
 export type MetadataOperationKind = 'TRASH' | 'RESTORE' | 'DUPLICATE_CLEANUP';
 type OperationProtocolFor<K extends AssetOperationKind> = {
   admission: K extends DirectAssetOperationKind ? 'DIRECT' : 'DUPLICATES';
-  execution: K extends MetadataOperationKind ? 'METADATA' : K extends 'SEND' ? 'TRANSFER' : K extends 'DUPLICATE_SCAN' ? 'SCAN' : 'CUTOFF';
-  snapshot: K extends 'SEND' | 'TRASH' ? 'RESOURCE_VERSIONS' : K extends 'RESTORE' ? 'RESOURCE_VERSIONS_OR_UNDO' : K extends 'DUPLICATE_CLEANUP' ? 'CLEANUP_REVIEW' : K extends 'DUPLICATE_SCAN' ? 'SCAN_STAGE' : 'CREATED_AT_CUTOFF';
-  membership: K extends 'SEND' ? 'SOURCE_REMOVED' : K extends 'TRASH' | 'DUPLICATE_CLEANUP' ? 'TRASH' : K extends 'RESTORE' ? 'ACTIVE' : K extends 'EMPTY_TRASH' ? 'PURGED_AT_CUTOFF' : 'UNCHANGED';
+  execution: K extends MetadataOperationKind
+    ? 'METADATA'
+    : K extends 'SEND'
+      ? 'TRANSFER'
+      : K extends 'DUPLICATE_SCAN'
+        ? 'SCAN'
+        : 'CUTOFF';
+  snapshot: K extends 'SEND' | 'TRASH'
+    ? 'RESOURCE_VERSIONS'
+    : K extends 'RESTORE'
+      ? 'RESOURCE_VERSIONS_OR_UNDO'
+      : K extends 'DUPLICATE_CLEANUP'
+        ? 'CLEANUP_REVIEW'
+        : K extends 'DUPLICATE_SCAN'
+          ? 'SCAN_STAGE'
+          : 'CREATED_AT_CUTOFF';
+  membership: K extends 'SEND'
+    ? 'SOURCE_REMOVED'
+    : K extends 'TRASH' | 'DUPLICATE_CLEANUP'
+      ? 'TRASH'
+      : K extends 'RESTORE'
+        ? 'ACTIVE'
+        : K extends 'EMPTY_TRASH'
+          ? 'PURGED_AT_CUTOFF'
+          : 'UNCHANGED';
   compensation: K extends 'TRASH' | 'DUPLICATE_CLEANUP' ? 'RESTORE' : null;
 };
 /** Execution, receipts and compensation are explicit for every persisted kind. */
 export const ASSET_OPERATION_PROTOCOLS = {
-  SEND: { admission: 'DIRECT', execution: 'TRANSFER', snapshot: 'RESOURCE_VERSIONS', membership: 'SOURCE_REMOVED', compensation: null },
-  TRASH: { admission: 'DIRECT', execution: 'METADATA', snapshot: 'RESOURCE_VERSIONS', membership: 'TRASH', compensation: 'RESTORE' },
-  RESTORE: { admission: 'DIRECT', execution: 'METADATA', snapshot: 'RESOURCE_VERSIONS_OR_UNDO', membership: 'ACTIVE', compensation: null },
-  EMPTY_TRASH: { admission: 'DIRECT', execution: 'CUTOFF', snapshot: 'CREATED_AT_CUTOFF', membership: 'PURGED_AT_CUTOFF', compensation: null },
-  DUPLICATE_SCAN: { admission: 'DUPLICATES', execution: 'SCAN', snapshot: 'SCAN_STAGE', membership: 'UNCHANGED', compensation: null },
-  DUPLICATE_CLEANUP: { admission: 'DUPLICATES', execution: 'METADATA', snapshot: 'CLEANUP_REVIEW', membership: 'TRASH', compensation: 'RESTORE' },
+  SEND: {
+    admission: 'DIRECT',
+    execution: 'TRANSFER',
+    snapshot: 'RESOURCE_VERSIONS',
+    membership: 'SOURCE_REMOVED',
+    compensation: null,
+  },
+  TRASH: {
+    admission: 'DIRECT',
+    execution: 'METADATA',
+    snapshot: 'RESOURCE_VERSIONS',
+    membership: 'TRASH',
+    compensation: 'RESTORE',
+  },
+  RESTORE: {
+    admission: 'DIRECT',
+    execution: 'METADATA',
+    snapshot: 'RESOURCE_VERSIONS_OR_UNDO',
+    membership: 'ACTIVE',
+    compensation: null,
+  },
+  EMPTY_TRASH: {
+    admission: 'DIRECT',
+    execution: 'CUTOFF',
+    snapshot: 'CREATED_AT_CUTOFF',
+    membership: 'PURGED_AT_CUTOFF',
+    compensation: null,
+  },
+  DUPLICATE_SCAN: {
+    admission: 'DUPLICATES',
+    execution: 'SCAN',
+    snapshot: 'SCAN_STAGE',
+    membership: 'UNCHANGED',
+    compensation: null,
+  },
+  DUPLICATE_CLEANUP: {
+    admission: 'DUPLICATES',
+    execution: 'METADATA',
+    snapshot: 'CLEANUP_REVIEW',
+    membership: 'TRASH',
+    compensation: 'RESTORE',
+  },
 } as const satisfies { [K in AssetOperationKind]: OperationProtocolFor<K> };
 export function assetOperationProtocol(kind: string) {
   return Object.prototype.hasOwnProperty.call(ASSET_OPERATION_PROTOCOLS, kind)

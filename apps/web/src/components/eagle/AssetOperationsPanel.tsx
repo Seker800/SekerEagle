@@ -1,3 +1,4 @@
+import { operationKindPresentation } from './asset-operation-kind';
 import { useAssetOperationActions } from './useAssetOperationActions';
 import type { AssetOperationSummary } from '@sekereagle/library-core';
 import type { LibraryMode } from '../../lib/library-api-scope';
@@ -22,47 +23,39 @@ export function AssetOperationsPanel({
   );
   const history = operations.filter((operation) => !active.includes(operation));
   const titles = (operation: AssetOperationSummary) =>
-    operation.kind === 'DUPLICATE_SCAN'
-      ? t('检查重复图片')
-      : operation.kind === 'DUPLICATE_CLEANUP'
-        ? t('清理重复项')
-        : operation.kind === 'SEND'
-          ? operation.libraryMode === 'PHOTO'
-            ? t('发送到素材')
-            : t('发送到照片')
-          : operation.kind === 'TRASH'
-            ? t('移入回收站')
-            : operation.kind === 'RESTORE'
-              ? t('恢复')
-              : t('清空回收站');
+    t(operationKindPresentation(operation.kind, operation.libraryMode).title);
   const state = (operation: AssetOperationSummary) =>
-    operation.running
-      ? operation.kind === 'SEND'
-        ? t('发送中…')
-        : t('处理中…')
-      : operation.queued
-        ? t('排队中')
-        : operation.failed
-          ? operation.completed
-            ? t('已部分完成（{{count}}项失败）', { count: operation.failed })
-            : t('已停止（{{count}}项失败）', { count: operation.failed })
-          : operation.cancelled
-            ? t('已停止')
-            : t('已完成');
+    !operationKindPresentation(operation.kind, operation.libraryMode).executable
+      ? t('不支持的操作类型，无法执行。')
+      : operation.running
+        ? operation.kind === 'SEND'
+          ? t('发送中…')
+          : t('处理中…')
+        : operation.queued
+          ? t('排队中')
+          : operation.failed
+            ? operation.completed
+              ? t('已部分完成（{{count}}项失败）', { count: operation.failed })
+              : t('已停止（{{count}}项失败）', { count: operation.failed })
+            : operation.cancelled
+              ? t('已停止')
+              : t('已完成');
   const errorLabel = (code: string) =>
-    code === 'NOT_FOUND'
-      ? t('部分内容不存在或不可访问，其余项目继续处理。')
-      : code === 'AUTH_REQUIRED'
-        ? t('账号状态已改变，请重新登录后重试。')
-        : code === 'PRIVATE_LOCKED'
-          ? t('请解锁私密内容后重试。')
-          : code === 'ASSET_CHANGED'
-            ? t('资源已改变，请重新选择。')
-            : code === 'ASSET_UNAVAILABLE'
-              ? t('资源已移除或不再可访问。')
-              : code === 'TRANSACTION_TIMEOUT'
-                ? t('数据库事务等待超时，未提交的项目可以重试。')
-                : t('操作失败，请重试。');
+    code === 'UNSUPPORTED_OPERATION_KIND'
+      ? t('不支持的操作类型，无法执行。')
+      : code === 'NOT_FOUND'
+        ? t('部分内容不存在或不可访问，其余项目继续处理。')
+        : code === 'AUTH_REQUIRED'
+          ? t('账号状态已改变，请重新登录后重试。')
+          : code === 'PRIVATE_LOCKED'
+            ? t('请解锁私密内容后重试。')
+            : code === 'ASSET_CHANGED'
+              ? t('资源已改变，请重新选择。')
+              : code === 'ASSET_UNAVAILABLE'
+                ? t('资源已移除或不再可访问。')
+                : code === 'TRANSACTION_TIMEOUT'
+                  ? t('数据库事务等待超时，未提交的项目可以重试。')
+                  : t('操作失败，请重试。');
   function card(operation: AssetOperationSummary) {
     return (
       <article key={operation.id} className={styles.card} data-state={operation.state}>
@@ -95,7 +88,8 @@ export function AssetOperationsPanel({
             )}
           </div>
           <div className={styles.actions}>
-            {(operation.kind === 'TRASH' || operation.kind === 'DUPLICATE_CLEANUP') &&
+            {operationKindPresentation(operation.kind, operation.libraryMode).compensation ===
+              'RESTORE' &&
               !operations.some((row) => row.undoOf === operation.id) &&
               (operation.completed > (operation.skipped ?? 0) ||
                 operation.queued > 0 ||
@@ -108,24 +102,26 @@ export function AssetOperationsPanel({
                   {operation.kind === 'TRASH' ? t('撤销删除') : t('恢复清理项（保留已合并信息）')}
                 </button>
               )}
-            {operation.failed > 0 && (
-              <button
-                type="button"
-                disabled={action.isPending}
-                onClick={() => action.mutate({ operation, action: 'retry' })}
-              >
-                {t('重试失败任务')}
-              </button>
-            )}
-            {operation.queued > 0 && (
-              <button
-                type="button"
-                disabled={action.isPending}
-                onClick={() => action.mutate({ operation, action: 'cancel' })}
-              >
-                {t('停止排队')}
-              </button>
-            )}
+            {operation.failed > 0 &&
+              operationKindPresentation(operation.kind, operation.libraryMode).executable && (
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ operation, action: 'retry' })}
+                >
+                  {t('重试失败任务')}
+                </button>
+              )}
+            {operation.queued > 0 &&
+              operationKindPresentation(operation.kind, operation.libraryMode).executable && (
+                <button
+                  type="button"
+                  disabled={action.isPending}
+                  onClick={() => action.mutate({ operation, action: 'cancel' })}
+                >
+                  {t('停止排队')}
+                </button>
+              )}
           </div>
         </div>
         {operation.errors.length > 0 && (

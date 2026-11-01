@@ -1,3 +1,4 @@
+import { databaseBatches, DATABASE_STATEMENTS } from './eagle-database-batches';
 import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import { Prisma, type LibraryMode } from '@prisma/client';
@@ -52,8 +53,10 @@ export async function scheduleDuplicateVerification(
   const missing: Array<{ id: string; rowVersion: number; mediaRevision: number }> = [];
   const candidates = rows.filter((row) => ids.has(row.id) && !row.isEdited && !row.isLivePhoto);
   const pixelLimit = duplicateOriginalPixelLimit();
-  for (let offset = 0; offset < candidates.length; offset += 500) {
-    const part = candidates.slice(offset, offset + 500);
+  for (const { rows: part } of databaseBatches(
+    candidates,
+    DATABASE_STATEMENTS.duplicateVerificationLookup,
+  )) {
     const cached = await prisma.eagleDuplicateFingerprint.findMany({
       where: {
         ownerId: item.ownerId,
@@ -103,9 +106,12 @@ export async function scheduleDuplicateVerification(
             snapshots: { kind: 'publish', version: DUPLICATE_GROUPING_VERSION } as ScanSnapshot,
           },
         ];
-        for (let offset = 0; offset < jobs.length; offset += 500)
+        for (const { offset, rows: part } of databaseBatches(
+          jobs,
+          DATABASE_STATEMENTS.duplicateVerificationItems,
+        ))
           await tx.eagleAssetOperationItem.createMany({
-            data: jobs.slice(offset, offset + 500).map((job, i) => ({
+            data: part.map((job, i) => ({
               ...job,
               id: randomUUID(),
               operationId: item.operationId,

@@ -1,3 +1,4 @@
+import { databaseBatches, DATABASE_STATEMENTS } from './eagle-database-batches';
 import { readDuplicateCandidates } from './eagle-duplicate-candidates';
 import { ConflictException } from '@nestjs/common';
 import { completeDuplicateItem } from './eagle-duplicate-item';
@@ -46,9 +47,9 @@ async function buildProjection(
           ...(item.operation.isPrivate ? {} : { isPrivate: false }),
         },
       });
-      for (let offset = 0; offset < groups.length; offset += 500)
+      for (const { rows: part } of databaseBatches(groups, DATABASE_STATEMENTS.duplicateGroups))
         await tx.eagleDuplicateGroup.createMany({
-          data: groups.slice(offset, offset + 500).map((group) => ({
+          data: part.map((group) => ({
             ownerId: item.ownerId,
             libraryMode: libraryMode,
             signature: signature(item.ownerId, libraryMode, group, byId),

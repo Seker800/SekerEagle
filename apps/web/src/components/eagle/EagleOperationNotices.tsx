@@ -1,3 +1,4 @@
+import { operationKindPresentation } from './asset-operation-kind';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useAssetOperationActions } from './useAssetOperationActions';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
@@ -55,31 +56,23 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
               : 'status'
           }
         >
-          <strong>
-            {row.kind === 'TRASH' || row.kind === 'DUPLICATE_CLEANUP'
-              ? t('移入回收站')
-              : row.kind === 'RESTORE'
-                ? t('恢复')
-                : row.kind === 'SEND'
-                  ? t('发送')
-                  : row.kind === 'DUPLICATE_SCAN'
-                    ? t('检查新内容')
-                    : t('清空回收站')}
-          </strong>
+          <strong>{t(operationKindPresentation(row.kind, libraryMode).title)}</strong>
           <span>
-            {row.uncertain
-              ? t('正在确认操作是否受理，请勿重复提交。')
-              : row.pending
-                ? t('正在处理 {{done}} / {{total}} 项', {
-                    done: (row.summary?.completed ?? 0) - (row.summary?.skipped ?? 0),
-                    total: row.summary?.total ?? row.expectedTotal,
-                  })
-                : row.message && !row.summary
-                  ? t('操作失败，请重试。')
-                  : t('已完成 {{done}} 项，{{failed}} 项未完成', {
+            {!operationKindPresentation(row.kind, libraryMode).executable
+              ? t('不支持的操作类型，无法执行。')
+              : row.uncertain
+                ? t('正在确认操作是否受理，请勿重复提交。')
+                : row.pending
+                  ? t('正在处理 {{done}} / {{total}} 项', {
                       done: (row.summary?.completed ?? 0) - (row.summary?.skipped ?? 0),
-                      failed: row.summary?.failed ?? row.failedIds.length,
-                    })}
+                      total: row.summary?.total ?? row.expectedTotal,
+                    })
+                  : row.message && !row.summary
+                    ? t('操作失败，请重试。')
+                    : t('已完成 {{done}} 项，{{failed}} 项未完成', {
+                        done: (row.summary?.completed ?? 0) - (row.summary?.skipped ?? 0),
+                        failed: row.summary?.failed ?? row.failedIds.length,
+                      })}
           </span>
           {row.summary && row.summary.cancelled > 0 && (
             <span>{t('已取消 {{count}} 项', { count: row.summary.cancelled })}</span>
@@ -98,44 +91,48 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
               ({item.count})
             </span>
           ))}
-          {['TRASH', 'DUPLICATE_CLEANUP'].includes(row.kind) && !row.undoId && (
-            <button
-              type="button"
-              disabled={action.isPending}
-              onClick={() =>
-                action.mutate({
-                  operation: { id: row.id, kind: row.kind, libraryMode },
-                  action: 'undo',
-                })
-              }
-            >
-              {action.isPending
-                ? t('正在提交撤销…')
-                : row.kind === 'DUPLICATE_CLEANUP'
-                  ? t('恢复清理项（保留已合并信息）')
-                  : t('撤销删除')}
-            </button>
-          )}
+          {operationKindPresentation(row.kind, libraryMode).compensation === 'RESTORE' &&
+            !row.undoId && (
+              <button
+                type="button"
+                disabled={action.isPending}
+                onClick={() =>
+                  action.mutate({
+                    operation: { id: row.id, kind: row.kind, libraryMode },
+                    action: 'undo',
+                  })
+                }
+              >
+                {action.isPending
+                  ? t('正在提交撤销…')
+                  : row.kind === 'DUPLICATE_CLEANUP'
+                    ? t('恢复清理项（保留已合并信息）')
+                    : t('撤销删除')}
+              </button>
+            )}
           {row.undoId && <span>{t('已申请撤销，可查看恢复进度。')}</span>}
-          {(row.failedIds.length > 0 || (row.summary?.failed ?? 0) > 0) && (
-            <button
-              type="button"
-              onClick={() => {
-                if (
-                  row.summary &&
-                  (row.kind === 'DUPLICATE_CLEANUP' || row.summary.undoOf || !row.failedIds.length)
-                )
-                  action.mutate({ operation: row.summary, action: 'retry' });
-                else
-                  void enqueue(row.kind, failedRequestIds(row.requestAssetIds, row.failedIds))
-                    .then(() => changes.dismiss(row.id))
-                    .catch(() => undefined);
-              }}
-            >
-              {t('重试未完成项')}
-            </button>
-          )}
-          {row.uncertain && (
+          {operationKindPresentation(row.kind, libraryMode).executable &&
+            (row.failedIds.length > 0 || (row.summary?.failed ?? 0) > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    row.summary &&
+                    (row.kind === 'DUPLICATE_CLEANUP' ||
+                      row.summary.undoOf ||
+                      !row.failedIds.length)
+                  )
+                    action.mutate({ operation: row.summary, action: 'retry' });
+                  else
+                    void enqueue(row.kind, failedRequestIds(row.requestAssetIds, row.failedIds))
+                      .then(() => changes.dismiss(row.id))
+                      .catch(() => undefined);
+                }}
+              >
+                {t('重试未完成项')}
+              </button>
+            )}
+          {row.uncertain && operationKindPresentation(row.kind, libraryMode).executable && (
             <button
               type="button"
               onClick={() =>

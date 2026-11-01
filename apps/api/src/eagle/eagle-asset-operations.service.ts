@@ -1,6 +1,5 @@
 import { EagleDuplicateService } from './eagle-duplicates.service';
 import {
-  OPERATION_DB_BATCH_SIZE,
   OPERATION_SEND_CONCURRENCY,
   OPERATION_POLL_MS,
   OPERATION_ADMISSION_TIMEOUT_MS,
@@ -26,6 +25,9 @@ import {
 import { randomUUID } from 'node:crypto';
 import {
   assetOperationState,
+  assetOperationProtocol,
+  ASSET_OPERATION_PROTOCOLS,
+  type MetadataOperationKind,
   type AssetOperationKind,
   type AssetOperationSummary,
   type AssetOperationResults,
@@ -38,6 +40,8 @@ import { EagleService } from './eagle.service';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { resolveEagleTrashTargets, setEagleTrash } from './eagle-trash';
 import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
+import { databaseBatches, databaseBatchSize, DATABASE_STATEMENTS } from './eagle-database-batches';
+import type { CleanupSnapshot, ScanSnapshot } from './eagle-duplicate-model';
 import type { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
 
 type Snapshot = { id: string; rowVersion: number; mediaRevision: number };
@@ -47,7 +51,7 @@ type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode
 };
 const LEASE_MS = 120_000;
 const METADATA_BATCH_SIZE = OPERATION_METADATA_BATCH_SIZE;
-const ADMISSION_BATCH_SIZE = OPERATION_DB_BATCH_SIZE;
+const ADMISSION_BATCH_SIZE = databaseBatchSize(DATABASE_STATEMENTS.operationItems);
 const SEND_CONCURRENCY = OPERATION_SEND_CONCURRENCY;
 // Transfer publication may hold the shared privacy lock for up to 30 seconds.
 // Leave a bounded write budget after that wait, inside the 120-second lease.
@@ -60,6 +64,31 @@ const laneKind = (lane: OperationLane) =>
       ? 'DUPLICATE_SCAN'
       : { notIn: ['SEND', 'DUPLICATE_SCAN'] };
 type ClaimedItem = EagleAssetOperationItem & { operation: EagleAssetOperation };
+type OperationSnapshots = {
+  SEND: Snapshot[];
+  TRASH: Snapshot[];
+  RESTORE: Snapshot[] | { undoOf: string };
+  EMPTY_TRASH: Snapshot[];
+  DUPLICATE_SCAN: ScanSnapshot;
+  DUPLICATE_CLEANUP: CleanupSnapshot;
+};
+type AuthorizedBatch<K extends AssetOperationKind> = Array<
+  Omit<ClaimedItem, 'operation' | 'snapshots'> & {
+    operation: EagleAssetOperation & { kind: K };
+    snapshots: OperationSnapshots[K];
+  }
+>;
+type MetadataHandler<K extends MetadataOperationKind> = {
+  protocol: 'METADATA';
+  apply: (tx: Prisma.TransactionClient, batch: AuthorizedBatch<K>) => Promise<'SKIPPED' | void>;
+};
+type HandlerFor<K extends AssetOperationKind> = K extends MetadataOperationKind
+  ? MetadataHandler<K>
+  : {
+      protocol: (typeof ASSET_OPERATION_PROTOCOLS)[K]['execution'];
+      execute: (items: ClaimedItem[]) => Promise<void>;
+    };
+type OperationHandlers = { [K in AssetOperationKind]: HandlerFor<K> };
 class OperationAccessError extends Error {
   constructor(readonly code: string) {
     super(code);
@@ -218,8 +247,10 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       ...new Set(page.flatMap((row) => this.receiptIds(row.assetIds, row.snapshots))),
     ];
     const membership: AssetMembershipFact[] = [];
-    for (let offset = 0; offset < resourceIds.length; offset += ADMISSION_BATCH_SIZE) {
-      const ids = resourceIds.slice(offset, offset + ADMISSION_BATCH_SIZE);
+    for (const { rows: ids } of databaseBatches(
+      resourceIds,
+      DATABASE_STATEMENTS.operationMembership,
+    )) {
       membership.push(
         ...(await this.prisma.$queryRaw<AssetMembershipFact[]>`
         SELECT requested.id, a."rowVersion",
@@ -399,9 +430,9 @@ export class EagleAssetOperationService implements OnModuleDestroy {
               },
             ];
           });
-        for (let offset = 0; offset < restore.length; offset += ADMISSION_BATCH_SIZE)
+        for (const { rows: part } of databaseBatches(restore, DATABASE_STATEMENTS.operationItems))
           await tx.eagleAssetOperationItem.createMany({
-            data: restore.slice(offset, offset + ADMISSION_BATCH_SIZE),
+            data: part,
             skipDuplicates: true,
           });
         // Atomically replace the control item with ordinary restore items. An
@@ -439,8 +470,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     return operation;
   }
   async enqueue(principal: AuthPrincipal, input: EnqueueAssetOperationDto) {
-    if (input.kind === 'DUPLICATE_SCAN' || input.kind === 'DUPLICATE_CLEANUP')
-      throw new BadRequestException('请从查重入口提交操作。');
+    if (assetOperationProtocol(input.kind)?.admission !== 'DIRECT')
+      throw new BadRequestException('不支持此操作，请使用对应功能入口。');
     const ids = [...new Set(input.assetIds)].sort();
     if (input.kind === 'EMPTY_TRASH' ? ids.length !== 0 : ids.length === 0)
       throw new BadRequestException('请选择要处理的资源。');
@@ -482,8 +513,10 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           let skippedPrivate = false;
           const activeIds: string[] = [];
           if (input.kind === 'TRASH') {
-            for (let offset = 0; offset < ids.length; offset += ADMISSION_BATCH_SIZE) {
-              const part = ids.slice(offset, offset + ADMISSION_BATCH_SIZE);
+            for (const { rows: part } of databaseBatches(
+              ids,
+              DATABASE_STATEMENTS.operationAssetLookup,
+            )) {
               const owned = await tx.eagleAsset.findMany({
                 where: {
                   ownerId: principal.sub,
@@ -508,11 +541,14 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             if (!activeIds.length && !alreadyRemoved.length)
               throw new NotFoundException('一个或多个素材不存在。');
           } else activeIds.push(...ids);
-          for (let offset = 0; offset < activeIds.length; offset += ADMISSION_BATCH_SIZE) {
+          for (const { rows: ids } of databaseBatches(
+            activeIds,
+            DATABASE_STATEMENTS.operationTrashTargets,
+          )) {
             const part = await resolveEagleTrashTargets(
               tx,
               { ownerId: principal.sub, libraryMode: this.libraryMode },
-              activeIds.slice(offset, offset + ADMISSION_BATCH_SIZE),
+              ids,
               input.kind === 'RESTORE',
               principal.canViewPrivate,
             );
@@ -526,11 +562,14 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             lifecycleStatus: string;
           }> = [];
           const resourceIds = [...resourcesById.keys()];
-          for (let offset = 0; offset < resourceIds.length; offset += ADMISSION_BATCH_SIZE) {
+          for (const { rows: ids } of databaseBatches(
+            resourceIds,
+            DATABASE_STATEMENTS.operationAssetLookup,
+          )) {
             rows.push(
               ...(await tx.eagleAsset.findMany({
                 where: {
-                  id: { in: resourceIds.slice(offset, offset + ADMISSION_BATCH_SIZE) },
+                  id: { in: ids },
                   ownerId: principal.sub,
                   libraryMode: this.libraryMode,
                 },
@@ -644,9 +683,12 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             status: item.status,
             errorCode: item.errorCode,
           }));
-          for (let offset = 0; offset < pendingItems.length; offset += ADMISSION_BATCH_SIZE) {
+          for (const { rows: part } of databaseBatches(
+            pendingItems,
+            DATABASE_STATEMENTS.operationItems,
+          )) {
             await tx.eagleAssetOperationItem.createMany({
-              data: pendingItems.slice(offset, offset + ADMISSION_BATCH_SIZE),
+              data: part,
             });
           }
           await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
@@ -937,11 +979,31 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       }
     }
   }
+  /** A kind must opt into its exact execution protocol; there is no destructive fallback. */
+  private readonly handlers: OperationHandlers = {
+    SEND: { protocol: 'TRANSFER', execute: (items) => this.executeSend(items) },
+    TRASH: { protocol: 'METADATA', apply: (tx, batch) => this.applyTrashMetadata(tx, batch) },
+    RESTORE: { protocol: 'METADATA', apply: (tx, batch) => this.applyTrashMetadata(tx, batch) },
+    EMPTY_TRASH: { protocol: 'CUTOFF', execute: (items) => this.executeEmptyTrash(items) },
+    DUPLICATE_SCAN: { protocol: 'SCAN', execute: (items) => this.executeScan(items) },
+    DUPLICATE_CLEANUP: {
+      protocol: 'METADATA',
+      apply: async (tx, batch) => {
+        if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
+        await this.duplicates.applyCleanupBatch(tx, batch);
+      },
+    },
+  };
   private async execute(items: ClaimedItem[]) {
     const item = items[0]!;
     const { operation } = item;
-    const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
     try {
+      if (
+        !assetOperationProtocol(operation.kind) ||
+        items.some((entry) => !assetOperationProtocol(entry.operation.kind))
+      )
+        throw new OperationAccessError('UNSUPPORTED_OPERATION_KIND');
+      const handler = this.handlers[operation.kind as AssetOperationKind];
       if (
         operation.kind === 'RESTORE' &&
         !Array.isArray(item.snapshots) &&
@@ -952,161 +1014,161 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         await this.expandUndo(item);
         return;
       }
-      if (operation.kind === 'DUPLICATE_CLEANUP') {
-        if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
+      if (handler.protocol === 'METADATA') {
+        // The runtime kind guard is the boundary from persisted strings to the closed protocol.
+        const metadata = handler as MetadataHandler<MetadataOperationKind>;
         await this.publishMetadataBatch(items, (tx) =>
-          this.duplicates!.applyCleanupBatch(tx, items),
-        );
-        return;
-      }
-      if (operation.kind === 'DUPLICATE_SCAN') {
-        if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
-        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
-        for (const entry of items)
-          await this.duplicates.executeScan(entry, (tx) =>
-            this.assertActor(tx, operation, [entry]),
-          );
-        return;
-      }
-      // The transfer journal alone owns idempotency; its completed result can be
-      // replayed after credential changes without attempting any new resource write.
-      if (operation.kind === 'EMPTY_TRASH')
-        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
-      const snapshots = items.flatMap((entry) => entry.snapshots as unknown as Snapshot[]);
-      const assetIds = items.flatMap((entry) => entry.assetIds);
-      const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
-      if (operation.kind === 'SEND') {
-        const published = new Set<string>();
-        const requests = items.map((entry) => {
-          const entrySnapshots = entry.snapshots as unknown as Snapshot[];
-          return {
-            input: { assetIds: entry.assetIds, operationId: entry.id },
-            expected: new Map(entrySnapshots.map((row) => [row.id, row])),
-            guard: {
-              beforePublish: (tx: Prisma.TransactionClient) =>
-                this.assertActor(tx, operation, [entry]),
-              beforeCopy: () =>
-                this.prisma.$transaction((tx) => this.assertActor(tx, operation, [entry])),
-              afterPublish: async (tx: Prisma.TransactionClient) => {
-                this.assertPrivateGrant(operation);
-                const updated = await tx.eagleAssetOperationItem.updateMany({
-                  where: { libraryMode: this.libraryMode, ...this.leaseWhere([entry]) },
-                  data: { status: 'COMPLETED', leaseUntil: null },
-                });
-                if (updated.count !== 1) throw new OperationAccessError('LEASE_LOST');
-                published.add(entry.id);
-              },
-              componentIds: entrySnapshots.map((row) => row.id),
-            },
-          };
-        });
-        const failed = new Set<string>();
-        if (requests.length === 1) {
-          const request = requests[0]!;
-          await this.transfers.send(
-            operation.ownerId,
-            request.input,
-            operation.isPrivate,
-            request.expected,
-            request.guard,
-          );
-        } else {
-          const results = await this.transfers.sendBatch(
-            operation.ownerId,
-            requests,
-            operation.isPrivate,
-          );
-          for (const [index, result] of results.entries()) {
-            if (result.status !== 'rejected') continue;
-            const entry = items[index]!;
-            failed.add(entry.id);
-            await this.failItems([entry], result.reason);
-          }
-        }
-        // A completed journal can be replayed after a crash without publishing again.
-        const replayed = items.filter((entry) => !published.has(entry.id) && !failed.has(entry.id));
-        if (replayed.length)
-          await this.prisma.eagleAssetOperationItem.updateMany({
-            where: { libraryMode: this.libraryMode, ...this.leaseWhere(replayed) },
-            data: { status: 'COMPLETED', leaseUntil: null },
-          });
-        return;
-      } else if (operation.kind === 'EMPTY_TRASH') {
-        await this.eagle.emptyTrash(
-          operation.ownerId,
-          operation.isPrivate,
-          operation.createdAt,
-          beforeWrite,
+          metadata.apply(tx, items as AuthorizedBatch<MetadataOperationKind>),
         );
       } else {
-        await this.publishMetadataBatch(items, async (tx) => {
-          const ids = snapshots.map((row) => row.id).sort();
-          await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-          try {
-            await this.checkSnapshots(tx, operation, snapshots);
-          } catch (error) {
-            // A queued deletion is idempotent when its previously owned resources
-            // have all disappeared. Changed active/private resources still fail.
-            if (
-              operation.kind !== 'TRASH' ||
-              items.length !== 1 ||
-              !(error instanceof NotFoundException || error instanceof ConflictException)
-            )
-              throw error;
-            const remaining = await tx.eagleAsset.findMany({
-              where: {
-                ownerId: operation.ownerId,
-                libraryMode: this.libraryMode,
-                id: { in: ids },
-              },
-              select: { deletedAt: true },
-            });
-            if (remaining.some((row) => row.deletedAt === null)) throw error;
-            return 'SKIPPED';
-          }
-          const current = await resolveEagleTrashTargets(
-            tx,
-            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-            assetIds,
-            operation.kind === 'RESTORE',
-            operation.isPrivate,
-            items.map((entry) => ({
-              assetIds: entry.assetIds,
-              resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
-            })),
-          );
-          if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
-            throw new ConflictException('实况照片组件已变化。');
-          await setEagleTrash(
-            tx,
-            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-            assetIds,
-            operation.kind === 'RESTORE',
-            operation.isPrivate,
-          );
-        });
-        return;
+        await handler.execute(items);
       }
-      await this.prisma.eagleAssetOperationItem.updateMany({
-        where: { ...libraryModeIdentity },
-        data: { status: 'COMPLETED', leaseUntil: null },
-      });
     } catch (error) {
       if (
         items.length > 1 &&
         (error instanceof NotFoundException ||
           error instanceof ConflictException ||
-          (['TRASH', 'RESTORE', 'DUPLICATE_CLEANUP'].includes(operation.kind) &&
+          (assetOperationProtocol(operation.kind)?.execution === 'METADATA' &&
             error instanceof Prisma.PrismaClientKnownRequestError &&
             error.code === 'P2028'))
       ) {
-        // The fast path was rolled back. Keep unaffected resources actionable,
-        // while preserving the exact per-item conflict and retry semantics.
+        // The fast path was rolled back. Preserve unaffected items and exact conflicts.
         for (const entry of items) await this.execute([entry]);
         return;
       }
       await this.failItems(items, error);
     }
+  }
+  private async executeScan(items: ClaimedItem[]) {
+    const operation = items[0]!.operation;
+    if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
+    await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
+    for (const entry of items)
+      await this.duplicates.executeScan(entry, (tx) => this.assertActor(tx, operation, [entry]));
+  }
+  private async executeEmptyTrash(items: ClaimedItem[]) {
+    const operation = items[0]!.operation;
+    const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
+    await this.prisma.$transaction(beforeWrite);
+    await this.eagle.emptyTrash(
+      operation.ownerId,
+      operation.isPrivate,
+      operation.createdAt,
+      beforeWrite,
+    );
+    await this.prisma.eagleAssetOperationItem.updateMany({
+      where: { libraryMode: this.libraryMode, ...this.leaseWhere(items) },
+      data: { status: 'COMPLETED', leaseUntil: null },
+    });
+  }
+  private async executeSend(items: ClaimedItem[]) {
+    const operation = items[0]!.operation;
+    // The transfer journal owns replay; completed transfers never perform new writes.
+    const published = new Set<string>();
+    const requests = items.map((entry) => {
+      const entrySnapshots = entry.snapshots as unknown as Snapshot[];
+      return {
+        input: { assetIds: entry.assetIds, operationId: entry.id },
+        expected: new Map(entrySnapshots.map((row) => [row.id, row])),
+        guard: {
+          beforePublish: (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, [entry]),
+          beforeCopy: () =>
+            this.prisma.$transaction((tx) => this.assertActor(tx, operation, [entry])),
+          afterPublish: async (tx: Prisma.TransactionClient) => {
+            this.assertPrivateGrant(operation);
+            const updated = await tx.eagleAssetOperationItem.updateMany({
+              where: { libraryMode: this.libraryMode, ...this.leaseWhere([entry]) },
+              data: { status: 'COMPLETED', leaseUntil: null },
+            });
+            if (updated.count !== 1) throw new OperationAccessError('LEASE_LOST');
+            published.add(entry.id);
+          },
+          componentIds: entrySnapshots.map((row) => row.id),
+        },
+      };
+    });
+    const failed = new Set<string>();
+    if (requests.length === 1) {
+      const request = requests[0]!;
+      await this.transfers.send(
+        operation.ownerId,
+        request.input,
+        operation.isPrivate,
+        request.expected,
+        request.guard,
+      );
+    } else {
+      const results = await this.transfers.sendBatch(
+        operation.ownerId,
+        requests,
+        operation.isPrivate,
+      );
+      for (const [index, result] of results.entries()) {
+        if (result.status !== 'rejected') continue;
+        const entry = items[index]!;
+        failed.add(entry.id);
+        await this.failItems([entry], result.reason);
+      }
+    }
+    // A completed journal can be replayed after a crash without publishing again.
+    const replayed = items.filter((entry) => !published.has(entry.id) && !failed.has(entry.id));
+    if (replayed.length)
+      await this.prisma.eagleAssetOperationItem.updateMany({
+        where: { libraryMode: this.libraryMode, ...this.leaseWhere(replayed) },
+        data: { status: 'COMPLETED', leaseUntil: null },
+      });
+  }
+  private async applyTrashMetadata(
+    tx: Prisma.TransactionClient,
+    items: AuthorizedBatch<'TRASH' | 'RESTORE'>,
+  ): Promise<'SKIPPED' | void> {
+    const operation = items[0]!.operation;
+    const snapshots = items.flatMap((entry) => entry.snapshots as Snapshot[]);
+    const assetIds = items.flatMap((entry) => entry.assetIds);
+    const ids = snapshots.map((row) => row.id).sort();
+    await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
+    try {
+      await this.checkSnapshots(tx, operation, snapshots);
+    } catch (error) {
+      // A queued deletion is idempotent when its previously owned resources
+      // have all disappeared. Changed active/private resources still fail.
+      if (
+        operation.kind !== 'TRASH' ||
+        items.length !== 1 ||
+        !(error instanceof NotFoundException || error instanceof ConflictException)
+      )
+        throw error;
+      const remaining = await tx.eagleAsset.findMany({
+        where: {
+          ownerId: operation.ownerId,
+          libraryMode: this.libraryMode,
+          id: { in: ids },
+        },
+        select: { deletedAt: true },
+      });
+      if (remaining.some((row) => row.deletedAt === null)) throw error;
+      return 'SKIPPED';
+    }
+    const current = await resolveEagleTrashTargets(
+      tx,
+      { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+      assetIds,
+      operation.kind === 'RESTORE',
+      operation.isPrivate,
+      items.map((entry) => ({
+        assetIds: entry.assetIds,
+        resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
+      })),
+    );
+    if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
+      throw new ConflictException('实况照片组件已变化。');
+    await setEagleTrash(
+      tx,
+      { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+      assetIds,
+      operation.kind === 'RESTORE',
+      operation.isPrivate,
+    );
   }
   /** One lifecycle for metadata commands; handlers supply only their domain mutation. */
   private async publishMetadataBatch(

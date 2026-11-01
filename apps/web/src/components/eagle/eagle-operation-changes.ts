@@ -1,3 +1,4 @@
+import { operationKindPresentation } from './asset-operation-kind';
 import type { DuplicateCleanupInput } from '../../lib/eagle-duplicates-api';
 import type {
   AssetOperationKind,
@@ -59,10 +60,11 @@ export class EagleOperationChanges {
     }
   }
   private index(entry: EagleOperationChange, delta: number) {
+    const membership = operationKindPresentation(entry.kind, 'MATERIAL').optimisticMembership;
     const index =
-      entry.kind === 'RESTORE'
+      membership === 'HIDE_TRASH'
         ? this.hiddenTrash
-        : entry.kind === 'TRASH' || entry.kind === 'DUPLICATE_CLEANUP'
+        : membership === 'HIDE_ACTIVE'
           ? this.hiddenActive
           : null;
     if (!index) return;

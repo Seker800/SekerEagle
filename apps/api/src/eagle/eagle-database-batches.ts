@@ -7,8 +7,11 @@ export interface DatabaseStatementBudget {
   readonly parametersPerRow: number;
   readonly targetRows: number;
 }
-const statement = (parametersPerRow: number, fixedParameters = 0, targetRows = OPERATION_DB_BATCH_SIZE): DatabaseStatementBudget =>
-  ({ parametersPerRow, fixedParameters, targetRows });
+const statement = (
+  parametersPerRow: number,
+  fixedParameters = 0,
+  targetRows = OPERATION_DB_BATCH_SIZE,
+): DatabaseStatementBudget => ({ parametersPerRow, fixedParameters, targetRows });
 /**
  * Upper bounds include Prisma supplied defaults/timestamps. Arrays are one binding;
  * IN/OR lists expand. Resolver budgets cover each statement separately, including
@@ -33,24 +36,39 @@ export const DATABASE_STATEMENTS = {
   duplicateVerificationItems: statement(14, 0, 500),
   duplicateFingerprintPublish: statement(5, 6, 500),
   duplicateProofPublish: statement(4, 4, 500),
+  transferTagLookup: statement(1, 2),
+  transferTagGroupInsert: statement(10),
+  transferTagInsert: statement(13),
+  transferGroupMembershipInsert: statement(5),
+  transferAssetTagInsert: statement(8),
   trashAssetMutation: statement(1, 8),
   trashRestoreJobs: statement(2, 16),
 } as const satisfies Record<string, DatabaseStatementBudget>;
 
 export function databaseBatchSize(budget: DatabaseStatementBudget): number {
-  if (!Number.isSafeInteger(budget.fixedParameters) || budget.fixedParameters < 0 ||
-      !Number.isSafeInteger(budget.parametersPerRow) || budget.parametersPerRow < 0 ||
-      !Number.isSafeInteger(budget.targetRows) || budget.targetRows < 1 ||
-      budget.fixedParameters >= DATABASE_PARAMETER_LIMIT ||
-      (budget.parametersPerRow === 0 && budget.fixedParameters === 0))
+  if (
+    !Number.isSafeInteger(budget.fixedParameters) ||
+    budget.fixedParameters < 0 ||
+    !Number.isSafeInteger(budget.parametersPerRow) ||
+    budget.parametersPerRow < 0 ||
+    !Number.isSafeInteger(budget.targetRows) ||
+    budget.targetRows < 1 ||
+    budget.fixedParameters >= DATABASE_PARAMETER_LIMIT ||
+    (budget.parametersPerRow === 0 && budget.fixedParameters === 0)
+  )
     throw new Error('Invalid database statement budget');
-  const capacity = budget.parametersPerRow === 0 ? budget.targetRows
-    : Math.floor((DATABASE_PARAMETER_LIMIT - budget.fixedParameters) / budget.parametersPerRow);
+  const capacity =
+    budget.parametersPerRow === 0
+      ? budget.targetRows
+      : Math.floor((DATABASE_PARAMETER_LIMIT - budget.fixedParameters) / budget.parametersPerRow);
   if (capacity < 1) throw new Error('Invalid database statement budget: no row fits');
   return Math.min(budget.targetRows, capacity);
 }
 /** No truncation: offsets always refer to the complete original sequence. */
-export function* databaseBatches<T>(rows: readonly T[], budget: DatabaseStatementBudget): Iterable<{ offset: number; rows: T[] }> {
+export function* databaseBatches<T>(
+  rows: readonly T[],
+  budget: DatabaseStatementBudget,
+): Iterable<{ offset: number; rows: T[] }> {
   const size = databaseBatchSize(budget);
   for (let offset = 0; offset < rows.length; offset += size)
     yield { offset, rows: rows.slice(offset, offset + size) };

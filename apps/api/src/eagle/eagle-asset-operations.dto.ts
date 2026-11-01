@@ -1,15 +1,15 @@
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsArray, IsIn, IsUUID, IsInt, Min, IsString } from 'class-validator';
-import { ASSET_OPERATION_KINDS, type AssetOperationKind } from '@sekereagle/library-core';
-const DIRECT_OPERATION_KINDS = ASSET_OPERATION_KINDS.filter(
-  (kind) => kind !== 'DUPLICATE_SCAN' && kind !== 'DUPLICATE_CLEANUP',
-);
+import {
+  DIRECT_ASSET_OPERATION_KINDS,
+  type DirectAssetOperationKind,
+} from '@sekereagle/library-core';
 export class EnqueueAssetOperationDto {
   @ApiProperty() @IsUUID('4') operationId!: string;
-  @ApiProperty({ enum: [...DIRECT_OPERATION_KINDS] })
-  @IsIn(DIRECT_OPERATION_KINDS)
-  kind!: AssetOperationKind;
+  @ApiProperty({ enum: [...DIRECT_ASSET_OPERATION_KINDS] })
+  @IsIn(DIRECT_ASSET_OPERATION_KINDS)
+  kind!: DirectAssetOperationKind;
   @ApiProperty({ type: [String] })
   @IsArray()
   @IsUUID('4', { each: true })
