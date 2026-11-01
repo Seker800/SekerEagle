@@ -138,3 +138,21 @@ test('publication budget is configurable and rejects invalid resource budgets', 
     else process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS = before;
   }
 });
+
+test('PostgreSQL statement timeout is retryable while unrelated SQL errors remain failures', async () => {
+  for (const sqlCode of ['57014', '23505']) {
+    const error = new Prisma.PrismaClientKnownRequestError('Raw query failed', {
+      code: 'P2010',
+      clientVersion: '6.19.3',
+      meta: { code: sqlCode },
+    });
+    const { service } = fixture('PHOTO', async () => {
+      throw error;
+    });
+    await assert.rejects(
+      service.complete('owner', 'session', { parts: [{ partNumber: 1, etag: 'etag' }] }),
+      (received: unknown) =>
+        sqlCode === '57014' ? received instanceof ServiceUnavailableException : received === error,
+    );
+  }
+});

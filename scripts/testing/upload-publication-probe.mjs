@@ -43,7 +43,7 @@ export async function verifyUploadPublication({
   const parts = [{ partNumber: 1, etag: uploaded.headers.get('etag') }];
   const budget = Number(process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS ?? 30_000);
   const expectBusy = budget < 5000;
-  const holdMs = expectBusy ? budget + 600 : 6500;
+  const holdMs = 6500;
   let ready;
   const acquired = new Promise((resolve) => {
     ready = resolve;
@@ -65,16 +65,22 @@ export async function verifyUploadPublication({
   const begun = Date.now();
   // Both browser requests must resolve to one atomic publication, including after contention.
   let completions;
+  let responseElapsedMs;
   try {
     completions = await Promise.all([
       request(`uploads/${sessionId}/complete`, { parts }),
       request(`uploads/${sessionId}/complete`, { parts }),
     ]);
+    responseElapsedMs = Date.now() - begun;
   } finally {
     await lock;
   }
   const elapsedMs = Date.now() - begun;
   if (expectBusy) {
+    assert.ok(
+      responseElapsedMs < budget + 1500,
+      `SQL lock must stop near its budget, response took ${responseElapsedMs}ms`,
+    );
     for (const response of completions) {
       assert.equal(response.status, 503);
       assert.equal(response.body.code, 'UPLOAD_PUBLICATION_BUSY');
@@ -106,6 +112,7 @@ export async function verifyUploadPublication({
       mode,
       uploadPublication: expectBusy ? '503-rollback-and-retry' : 'contention-survived',
       elapsedMs,
+      responseElapsedMs,
       copies: 1,
       originalUnchanged: true,
     }),
