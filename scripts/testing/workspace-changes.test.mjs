@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout, clearTimeout } from 'node:timers';
+import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import { PrismaClient } from '@prisma/client';
@@ -16,8 +17,11 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 
 test('committed changes are discovered without scanning resources and private writes stay private', async () => {
   const db = new PrismaClient();
-  const listener = new Client({ connectionString: process.env.DATABASE_URL });
-  const service = new WorkspaceChangesService(() => listener);
+  let listener;
+  const service = new WorkspaceChangesService(() => {
+    listener = new Client({ connectionString: process.env.DATABASE_URL });
+    return listener;
+  });
   const ownerId = randomUUID(),
     other = randomUUID();
   const barrier = async () => {
@@ -73,8 +77,11 @@ test('committed changes are discovered without scanning resources and private wr
     });
     await db.eaglePhotoGroup.update({ where: { id: privateGroup.id }, data: { title: 'private' } });
     await barrier();
-    assert.deepEqual(await service.snapshot(ownerId, false), initial,
-      'private group creation and edits must not wake public observers');
+    assert.deepEqual(
+      await service.snapshot(ownerId, false),
+      initial,
+      'private group creation and edits must not wake public observers',
+    );
     await db.eagleAsset.update({ where: { id: asset.id }, data: { isPrivate: false } });
     await barrier();
     assert.notEqual(
@@ -146,6 +153,69 @@ test('committed changes are discovered without scanning resources and private wr
     });
     await barrier();
     assert.deepEqual(await service.snapshot(ownerId, false), beforeLease);
+    // A transaction starting first may commit last. Neither commit can be
+    // hidden by an ID/timestamp watermark chosen by the faster transaction.
+    let staged, commit;
+    const ready = new Promise((resolve) => {
+      staged = resolve;
+    });
+    const release = new Promise((resolve) => {
+      commit = resolve;
+    });
+    const slow = db.$transaction(async (tx) => {
+      await tx.eagleAsset.create({
+        data: {
+          ...{
+            ownerId,
+            libraryMode: 'PHOTO',
+            originalName: 'late.jpg',
+            displayName: 'late',
+            normalizedDisplayName: 'late',
+            mimeType: 'image/jpeg',
+            format: 'jpeg',
+            byteSize: 1,
+            originalObjectKey: `users/${ownerId}/late`,
+          },
+        },
+      });
+      staged();
+      await release;
+    });
+    await ready;
+    await db.eagleAsset.update({ where: { id: asset.id }, data: { displayName: 'fast' } });
+    await barrier();
+    const fast = await service.snapshot(ownerId, false);
+    commit();
+    await slow;
+    await barrier();
+    assert.notEqual(
+      (await service.snapshot(ownerId, false)).scopes.PHOTO.ASSETS,
+      fast.scopes.PHOTO.ASSETS,
+      'late commit must remain discoverable',
+    );
+
+    const beforeGap = await service.snapshot(ownerId, false);
+    const backend = await listener.query('SELECT pg_backend_pid() AS pid');
+    const ended = new Promise((resolve) => listener.once('end', resolve));
+    await db.$executeRaw`SELECT pg_terminate_backend(${backend.rows[0].pid}::integer)`;
+    await ended;
+    await assert.rejects(service.snapshot(ownerId, false), /UNAVAILABLE/);
+    await db.eagleAsset.update({ where: { id: asset.id }, data: { displayName: 'during-gap' } });
+    let restored;
+    for (let n = 0; n < 120; n++) {
+      try {
+        restored = await service.snapshot(ownerId, false);
+        break;
+      } catch {
+        await delay(25);
+      }
+    }
+    assert.ok(restored, 'listener must recover independently');
+    assert.notEqual(
+      restored.epoch,
+      beforeGap.epoch,
+      'new epoch covers commits during disconnection',
+    );
   } finally {
     await service.onModuleDestroy();
     await db.$disconnect();

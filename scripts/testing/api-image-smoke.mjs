@@ -173,6 +173,9 @@ try {
     }
   }, 'final image readiness');
   for (const path of [
+    '/api/library/changes',
+    '/api/eagle/vector/host',
+    '/api/photos/vector/host',
     '/api/photos/photography/people/summary',
     '/api/photos/photography/people/review',
   ])
