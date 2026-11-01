@@ -207,6 +207,38 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       'keeper metadata and removed resources must roll back together',
     );
   });
+  test(`${mode}: collection cleanup unions repeated manual tags only into each reviewed keeper`, async () => {
+    const f = await fixture(mode);
+    const tag = await db.eagleManualTag.create({
+      data: { ownerId: f.ownerId, libraryMode: mode, name: 'shared', normalizedName: 'shared' },
+    });
+    const keepers = [];
+    for (let group = 0; group < 2; group++) {
+      const sha256 = hash(`tagged-${group}`);
+      keepers.push(await f.add({ sha256, rating: 5 }));
+      for (let copy = 0; copy < 2; copy++) {
+        const source = await f.add({ sha256, rating: 1 });
+        await db.eagleAssetManualTag.create({
+          data: { ownerId: f.ownerId, libraryMode: mode, assetId: source.id, tagId: tag.id },
+        });
+      }
+    }
+    const page = await f.duplicate.list(f.ownerId, false, {});
+    const receipt = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      revision: page.exactRevision,
+      allExact: true,
+    });
+    assert.equal((await f.drain(receipt.operationId)).completed, 4);
+    for (const keeper of keepers) {
+      const links = await db.eagleAssetManualTag.findMany({ where: { assetId: keeper.id } });
+      assert.equal(links.length, 1);
+      assert.equal(links[0].tagId, tag.id);
+      assert.equal(links[0].assignmentProvenance, 'USER_ASSIGNED');
+      assert.equal((await db.eagleAsset.findUniqueOrThrow({ where: { id: keeper.id } })).rating, 5);
+    }
+    assert.equal(f.reads(), 0);
+  });
   test(`${mode}: multi-group cleanup keeps large resource reads inside the statement budget`, async () => {
     const f = await fixture(mode);
     for (let group = 0; group < 2; group++) {

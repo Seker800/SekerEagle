@@ -238,6 +238,7 @@ try {
     [
       '--experimental-test-coverage',
       '--test-coverage-include=apps/api/dist/eagle/eagle-asset-operations.service.js',
+      '--test-coverage-include=apps/api/dist/eagle/eagle-duplicate-cleanup.js',
       '--test-concurrency=1',
       '--test-coverage-lines=80',
       '--test-coverage-branches=80',
@@ -251,6 +252,16 @@ try {
       stdio: 'inherit',
     },
   );
+  // Architecture efficiency contracts run serially: model-space state is global,
+  // while every fixture owns and cleans only its synthetic owner resources.
+  for (const file of [
+    'scripts/testing/empty-trash-performance.test.mjs',
+    'scripts/testing/embedding-publication-performance.test.mjs',
+    'scripts/testing/transfer-background.test.mjs',
+    'scripts/testing/operation-protocol-performance.test.mjs',
+    'scripts/testing/architecture-operation-cost.test.mjs',
+  ])
+    run(process.execPath, ['--test', file], { env, stdio: 'inherit' });
   run(process.execPath, ['--test', 'scripts/testing/photo-face-scan.test.mjs'], {
     env,
     stdio: 'inherit',

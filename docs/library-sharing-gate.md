@@ -39,3 +39,9 @@
 ## 基础颜色筛选共用约束
 
 素材与照片复用 `library-core/color-search`、`color-palette` 和唯一 SQL 适配器；没有新增模式专属 provider 或提取器。`AssetSearchWhere.colorMatch` 必须通过 `findSearchAssets`、`countSearchAssets` 或颜色分页适配器执行；Prisma 仅用于保留权限条件的当页投影。`scripts/testing/color-search.mjs` 以真实隔离数据库核验数值、布尔组合、权限、媒体版本、前后分页及六万项代价。
+
+## 架构效率优化的执行宿主约束
+
+上传恢复与维护保持原能力和持久事实归属，共享provider在HTTP模块中只提供领域入口；独立operations显式装配后台宿主并负责启动、续行与排空。共享装配不等于允许API模块生命周期执行后台业务。门禁及反例须覆盖自动启动业务定时器、未登记的后台宿主和第二套恢复状态；保留独立执行器与worker正常租约心跳，不粗暴禁止setInterval。
+
+本轮穷尽操作登记和语句分批门禁只约束已列明的执行路径，不全仓禁止500／512或所有定时器。反例验证漏登记、陌生直接准入、裸批次回归及API后台自动启动。宿主迁移不删除能力专属扩展：PHOTO上传恢复继续装配原摄影修订observer，MATERIAL不注入；实际替换恢复测试证明媒体修订和摄影事实失效仍生效。
