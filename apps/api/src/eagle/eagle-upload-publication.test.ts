@@ -89,3 +89,31 @@ function fixture(
   );
   return { service, writes };
 }
+
+for (const mode of ['MATERIAL', 'PHOTO'] as const) {
+  test(`a concurrent publisher's committed copy is returned without checking a stale source (${mode})`, async () => {
+    const { service } = fixture(mode, async (callback) =>
+      (callback as (tx: unknown) => Promise<unknown>)({
+        $queryRaw: async () => [],
+        $executeRaw: async () => [],
+        uploadSession: {
+          updateMany: async () => ({ count: 0 }),
+          findFirst: async ({ where }: { where: Record<string, unknown> }) => {
+            assert.equal(where.uploaderId, 'owner');
+            assert.equal(where.libraryMode, mode);
+            assert.equal(where.status, 'COMPLETED');
+            return { eagleAssetId: 'already-published', objectCleanupPending: false };
+          },
+        },
+        eagleAsset: {
+          findFirst: async () =>
+            assert.fail('completed publication must not revalidate its old source'),
+        },
+      }),
+    );
+    const result = await service.complete('owner', 'session', {
+      parts: [{ partNumber: 1, etag: 'etag' }],
+    });
+    assert.equal(result.assetId, 'already-published');
+  });
+}
