@@ -32,7 +32,7 @@ export function getAssetOperationRefresher(client: QueryClient, ownerId: string)
   }
   return coordinator;
 }
-/** Read terminal receipts once and project membership; list pages are never re-fetched for deletion. */
+/** Read terminal receipts once and merge destination windows without replaying loaded pages. */
 export class AssetOperationRefresher {
   private disposed = false;
   private readonly reading = new Set<string>();
@@ -71,21 +71,18 @@ export class AssetOperationRefresher {
             cache.operations.confirmCounts();
           const views = this.destinationViews.get(mode);
           if (views) {
-            this.destinationViews.delete(mode);
-            // Closed lists cannot receive missing positive members from local filtering.
-            // Mark them stale without I/O; the next intentional visit reads current facts.
-            await this.client.invalidateQueries(
-              {
-                type: 'inactive',
-                predicate: (query) =>
-                  [...views].some((view) =>
-                    isEagleAssetListKey(query.queryKey, this.ownerId, mode, view),
-                  ),
-                refetchType: 'none',
-              },
-              { cancelRefetch: false },
-            );
-            await this.refreshFirstPages(mode, [...views]);
+            const destinations = [...views];
+            const predicate = (query: { queryKey: readonly unknown[] }) =>
+              destinations.some((view) =>
+                isEagleAssetListKey(query.queryKey, this.ownerId, mode, view),
+              );
+            // An older infinite refetch must not overwrite the controlled merge.
+            // Cancel before invalidating because cancellation restores the prior state.
+            await this.client.cancelQueries({ predicate });
+            await this.client.invalidateQueries({ predicate, refetchType: 'none' });
+            const failed = await this.refreshFirstPages(mode, destinations);
+            for (const view of destinations) if (!failed.has(view)) views.delete(view);
+            if (!views.size) this.destinationViews.delete(mode);
           }
         }
       }
@@ -128,8 +125,14 @@ export class AssetOperationRefresher {
     }
     const signature = JSON.stringify(summary);
     const key = `${mode}:${summary.id}`;
-    if (this.reading.has(key) || done.get(summary.id) === `${epoch}:${intentVersion}:${signature}`)
+    if (this.reading.has(key)) return;
+    if (done.get(summary.id) === `${epoch}:${intentVersion}:${signature}`) {
+      // A terminal receipt remains applied even if its destination read failed.
+      // Retry only on a later status/schedule event, never in the same flush loop.
+      for (const pendingMode of this.destinationViews.keys()) this.dirtyMetadata.add(pendingMode);
+      await this.flush().catch(() => undefined);
       return;
+    }
     this.reading.add(key);
     try {
       if (summary.kind === 'DUPLICATE_SCAN' && summary.total > 0) {
@@ -218,27 +221,35 @@ export class AssetOperationRefresher {
         query.isActive() &&
         views.some((view) => isEagleAssetListKey(query.queryKey, this.ownerId, mode, view)),
     });
+    const failed = new Set<AssetListView>();
     for (const query of queries) {
       const data = query.state.data as InfiniteData<NormalizedEagleAssetPage, string> | undefined;
       const fn = query.options.queryFn;
       if (!data?.pages.length || typeof fn !== 'function') continue;
       const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
       const epoch = cache.operations.epoch;
-      const page = await this.client.fetchQuery<NormalizedEagleAssetPage>({
-        queryKey: [...query.queryKey, 'operation-first-page'],
-        gcTime: 0,
-        staleTime: 0,
-        retry: 2,
-        queryFn: async ({ signal }) =>
-          (await fn({
-            client: this.client,
-            queryKey: query.queryKey,
-            signal,
-            pageParam: data.pageParams[0],
-            direction: 'forward',
-            meta: query.meta,
-          })) as NormalizedEagleAssetPage,
-      });
+      let page: NormalizedEagleAssetPage;
+      try {
+        page = await this.client.fetchQuery<NormalizedEagleAssetPage>({
+          queryKey: [...query.queryKey, 'operation-first-page'],
+          gcTime: 0,
+          staleTime: 0,
+          retry: 2,
+          queryFn: async ({ signal }) =>
+            (await fn({
+              client: this.client,
+              queryKey: query.queryKey,
+              signal,
+              pageParam: data.pageParams[0],
+              direction: 'forward',
+              meta: query.meta,
+            })) as NormalizedEagleAssetPage,
+        });
+      } catch {
+        for (const view of views)
+          if (isEagleAssetListKey(query.queryKey, this.ownerId, mode, view)) failed.add(view);
+        continue;
+      }
       if (
         cache.operations.epoch !== epoch ||
         this.client.getQueryCache().get(query.queryHash) !== query
@@ -271,6 +282,7 @@ export class AssetOperationRefresher {
         },
       );
     }
+    return failed;
   }
   dispose() {
     this.disposed = true;

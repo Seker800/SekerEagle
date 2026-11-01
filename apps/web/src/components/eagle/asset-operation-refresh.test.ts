@@ -346,11 +346,14 @@ it('adds newly trashed members through only the active trash first window while 
   }
 });
 
-
 it('retains a failed destination for the next terminal reconciliation without rereading receipts', async () => {
   const f = fixture('TRASH');
   mocks.results.mockReset().mockResolvedValue({
-    operation: summary(), revision: 'v1', membership: [], receipts: [], nextCursor: null,
+    operation: summary(),
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
   });
   f.queryFn.mockRejectedValue(new Error('offline'));
   try {
@@ -377,9 +380,18 @@ it('retains a failed destination for the next terminal reconciliation without re
 it('prevents an older in-flight infinite response from overwriting the destination merge', async () => {
   const f = fixture('TRASH');
   let release!: (value: { assetIds: string[]; nextCursor: string }) => void;
-  f.queryFn.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  f.queryFn.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
   mocks.results.mockResolvedValue({
-    operation: summary(), revision: 'v1', membership: [], receipts: [], nextCursor: null,
+    operation: summary(),
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
   });
   try {
     const oldFetch = f.client.refetchQueries({ queryKey: f.key, exact: true });
