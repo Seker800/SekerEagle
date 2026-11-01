@@ -44,6 +44,7 @@
 - API 镜像发布前必须对最终镜像执行 `npm run test:api-image -- <镜像标签>`，验证独立依赖、隔离迁移及实际服务就绪；本地源码启动或镜像构建成功不能替代成品镜像启动验收。
 - 素材／照片通用能力变更必须通过 `npm run architecture:check` 与共用契约测试；不得通过新增照片版通用组件、覆盖通用 Controller 或替换共用 provider 绕过门禁。新增专属能力或调整装配边界时，先更新北极星与 `docs/library-sharing-gate.md` 的理由，再同步门禁及反例测试。
 - 修改批量操作、后台任务、进度刷新或新增上限时，按 `docs/product-frame.md` 说明取舍，按 `docs/performance-budget.md` 给出端到端成本。
+- 新增后台批量元数据操作，先复用 `EagleAssetOperationService` 的批次领取与 `publishMetadataBatch` 发布流程；业务能力只提供同一事务内的规则，不另写权限、租约、事务与终态回执编排。发送 journal、扫描解码等外部工作仍按架构中的专属发布边界执行。必须同时验证整批入队与执行成本，检查事务、SQL、S3及唤醒查询的数据访问量；真实数据库性能回归随 `test:library-integration` 进入 CI，不以单项、小库或仅单测通过替代。现行契约与样本见 `docs/background-processing-performance-2026-11-01.md`。
 - 任何新上限必须写清防的真实资源、到顶 UX 和环境变量开关；写不出「防谁」就不加。
 - 使用中文提交类型：`新增`、`修复`、`重构`、`清理`、`文档`。
 - Agent 可自行判断并执行提交与 push，无需另行征求用户许可。
