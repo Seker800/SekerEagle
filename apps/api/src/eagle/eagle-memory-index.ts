@@ -3,6 +3,12 @@ import type { AssetSearchWhere } from './eagle-search-predicate';
 import { isDeepStrictEqual } from 'node:util';
 
 export type MemoryDateField = 'libraryAddedAt' | 'chronologicalAt';
+export const memoryDateTime = (value: unknown): number =>
+  value instanceof Date
+    ? value.getTime()
+    : typeof value === 'number'
+      ? value
+      : new Date(String(value)).getTime();
 /** One library's derived information. Like Eagle, sort once and filter the resident array.
  * No business writes, timers, global user state or independent rule language.
  */
@@ -26,7 +32,7 @@ export class LibraryMemoryIndex {
       )
         throw new Error('Library read scope mismatch');
       for (const key of ['libraryAddedAt', 'chronologicalAt']) {
-        if (!Number.isFinite(new Date(String(row[key])).getTime()))
+        if (!Number.isFinite(memoryDateTime(row[key])))
           throw new Error('Invalid library read date');
       }
     }
@@ -64,8 +70,8 @@ export class LibraryMemoryIndex {
       const previous = this.rows.get(row.id as string);
       if (previous) {
         if (
-          String(previous.libraryAddedAt) !== String(row.libraryAddedAt) ||
-          String(previous.chronologicalAt) !== String(row.chronologicalAt)
+          memoryDateTime(previous.libraryAddedAt) !== memoryDateTime(row.libraryAddedAt) ||
+          memoryDateTime(previous.chronologicalAt) !== memoryDateTime(row.chronologicalAt)
         )
           reorder = true;
         Object.assign(previous, row);
@@ -98,7 +104,7 @@ export class LibraryMemoryIndex {
     let rows = this.ordered.get(date);
     if (!rows) {
       rows = [...this.rows.values()].sort((a, b) => {
-        const diff = new Date(String(b[date])).getTime() - new Date(String(a[date])).getTime();
+        const diff = memoryDateTime(b[date]) - memoryDateTime(a[date]);
         return diff || (String(a.id) < String(b.id) ? 1 : String(a.id) > String(b.id) ? -1 : 0);
       });
       this.ordered.set(date, rows);
