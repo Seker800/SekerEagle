@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
 import { renderInWorkspace as render } from '../../test/render-in-workspace';
 import type { OriginalFileTarget } from '../../lib/original-file-export';
 import type * as PrivacyApiModule from '../../lib/eagle-privacy-api';
@@ -840,6 +841,15 @@ describe('SekerEaglePage', () => {
       await screen.findByText('图片内容搜索暂不可用，当前仅匹配名称和人工标签。'),
     ).toBeInTheDocument();
     expect(screen.queryByText('标签匹配')).not.toBeInTheDocument();
+  });
+
+  it('reads sidebar review counts without scheduling a polling interval', async () => {
+    const { client } = renderPage();
+    await waitFor(() => expect(fetchEagleReviewSummaryMock).toHaveBeenCalled());
+    const query = client
+      .getQueryCache()
+      .find({ queryKey: createEagleQueryKeys('owner-test', 'MATERIAL').vectorSummary });
+    expect(query?.options).not.toHaveProperty('refetchInterval');
   });
 
   it('keeps inspector visibility independent from the current asset selection', async () => {

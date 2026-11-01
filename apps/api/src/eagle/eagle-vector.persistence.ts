@@ -102,40 +102,6 @@ export async function refreshUnclassifiedSuggestions(
   return rows[0] ?? { scanned: 0, matched: 0 };
 }
 
-export async function upsertAcceptedSuggestionMemberDistance(
-  transaction: VectorSqlClient,
-  input: {
-    libraryMode?: LibraryMode;
-    ownerId: string;
-    tagId: string;
-    assetId: string;
-    snapshotId: string;
-    embeddingId: string;
-  },
-) {
-  await transaction.$executeRaw(
-    Prisma.sql`
-      INSERT INTO "EagleTagMemberDistance" (
-        "ownerId", "libraryMode", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
-      )
-      SELECT ${input.ownerId}, ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode", ${input.tagId}, ${input.assetId},
-             prototype."snapshotId", prototype.embedding <=> embedding.embedding,
-             prototype.rank, NOW()
-      FROM "EagleAssetEmbedding" embedding
-      CROSS JOIN LATERAL (
-        SELECT candidate."snapshotId", candidate.rank, candidate.embedding
-        FROM "EagleTagPrototype" candidate
-        WHERE candidate."ownerId" = ${input.ownerId} AND candidate."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
-          AND candidate."snapshotId" = ${input.snapshotId}
-        ORDER BY candidate.embedding <=> embedding.embedding
-        LIMIT 1
-      ) prototype
-      WHERE embedding."ownerId" = ${input.ownerId} AND embedding."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode" AND embedding.id = ${input.embeddingId}
-      ON CONFLICT ("ownerId", "tagId", "assetId", "snapshotId") DO NOTHING
-    `,
-  );
-}
-
 export async function syncCurrentTagMemberDistances(
   transaction: VectorSqlClient,
   ownerId: string,

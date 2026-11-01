@@ -1123,7 +1123,12 @@ export function SekerEaglePage({
     clearAssetSelection();
     setTagPicker(null);
   };
-  const changeLibraryView = (view: EagleLibraryView) => navigateLibrary({ view });
+  const changeLibraryView = (view: EagleLibraryView) => {
+    navigateLibrary({ view });
+    if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED') {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.vectorSummary });
+    }
+  };
   const openLibraryRoot = (photoView: EaglePhotoView = 'timeline') =>
     navigateLibrary({ view: 'ACTIVE', photoView });
   const applySmartFolder = (folder: EagleSmartFolder) =>
@@ -1966,6 +1971,9 @@ export function SekerEaglePage({
                   await trashMutation.mutateAsync(assetIds);
                 }}
                 onAssetPrivacyChanged={resetAssetPrivacyState}
+                onRecommendationsChanged={() =>
+                  queryClient.invalidateQueries({ queryKey: queryKeys.vectorSummary })
+                }
                 onAssetRelationsChanged={(ids) =>
                   refreshEagleAssetRelations(queryClient, queryKeys, ids)
                 }
