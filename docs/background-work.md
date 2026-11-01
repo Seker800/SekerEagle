@@ -115,4 +115,4 @@
 
 上传恢复与领域维护由 `asset-operation-executor` 的 `AssetOperationBackground` 明确装配：启动立即发现持久积压，恢复60秒、维护10分钟，关闭先停止发现并排空。API的 `EagleUploadRecoveryService` 与 `EagleMaintenanceService` 构造／Nest生命周期不启动后台工作。原上传会话、导入run、发送journal、cleanup标记及CAS仍是事实，没有新增调度表；两个宿主并发最多重复检查，不能重复发布资产。对象删除成功后的确认比较原键快照，避免抹去同时登记的新清理意图。
 
-`EAGLE_UPLOAD_RECOVERY_ENABLED=false` 保留停止自动恢复的含义；维护照常，不把上传恢复绑定到分析时段。API与operations须协调交接，旧API停止发现后应及时启动兼容新宿主，不能把本地候选误写成现用状态。成本、失败重试和交接证据见[实施记录](architecture-efficiency-results-2026-11-01.md)。
+Mac基础compose及NAS生成配置为operations透传同一 `EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS` 与 `EAGLE_UPLOAD_RECOVERY_ENABLED`，不因迁移回退为进程默认配置。`EAGLE_UPLOAD_RECOVERY_ENABLED=false` 保留停止自动恢复的含义；维护照常，不把上传恢复绑定到分析时段。API与operations须协调交接，旧API停止发现后应及时启动兼容新宿主，不能把本地候选误写成现用状态。成本、失败重试和交接证据见[实施记录](architecture-efficiency-results-2026-11-01.md)。
