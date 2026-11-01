@@ -35,6 +35,11 @@ export class EagleVectorController {
     return this.vectors.summary(principal.sub, principal.canViewPrivate);
   }
 
+  @Get('progress')
+  progress(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.vectors.progress(principal.sub, principal.canViewPrivate);
+  }
+
   @Get('review-summary')
   reviewSummary(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.vectors.reviewSummary(principal.sub, principal.canViewPrivate);

@@ -77,46 +77,8 @@ export class EagleVectorService {
 
   async summary(ownerId: string, includePrivate = false) {
     const visibleAsset = includePrivate ? {} : { isPrivate: false };
-    const [
-      eligible,
-      ready,
-      failed,
-      enabledTags,
-      readyTags,
-      unclassified,
-      pendingSuggestions,
-      host,
-      embeddingJobs,
-      processingSetting,
-      processableRows,
-    ] = await Promise.all([
-      this.prisma.eagleAsset.count({
-        where: {
-          ownerId,
-          deletedAt: null,
-          mimeType: { startsWith: 'image/' },
-          ...visibleAsset,
-          libraryMode: this.libraryMode,
-        },
-      }),
-      this.prisma.eagleAssetEmbedding.count({
-        where: {
-          ownerId,
-          isCurrent: true,
-          status: 'READY',
-          asset: { deletedAt: null, ...visibleAsset },
-          libraryMode: this.libraryMode,
-        },
-      }),
-      this.prisma.eagleAssetEmbedding.count({
-        where: {
-          ownerId,
-          isCurrent: true,
-          status: 'FAILED',
-          asset: { deletedAt: null, ...visibleAsset },
-          libraryMode: this.libraryMode,
-        },
-      }),
+    const [progress, enabledTags, readyTags, unclassified, pendingSuggestions] = await Promise.all([
+      this.progress(ownerId, includePrivate),
       this.prisma.eagleManualTagSemanticConfig.count({
         where: { ownerId, recommendationEnabled: true, libraryMode: this.libraryMode },
       }),
@@ -147,25 +109,64 @@ export class EagleVectorService {
           libraryMode: this.libraryMode,
         },
       }),
-      this.observedEmbeddingHost(),
-      this.prisma.eagleAssetProcessingJob.groupBy({
-        by: ['status'],
-        where: {
-          ownerId,
-          kind: 'GENERATE_EMBEDDING',
-          processorVersion: EMBEDDING_PROCESSOR_VERSION,
-          asset: { deletedAt: null, ...visibleAsset },
-          libraryMode: this.libraryMode,
-        },
-        _count: true,
-      }),
-      this.prisma.eagleProcessingSetting.findUnique({
-        where: {
-          ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
-          libraryMode: this.libraryMode,
-        },
-      }),
-      this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+    ]);
+    return {
+      ...progress,
+      tags: { enabled: enabledTags, ready: readyTags, awaitingCenter: enabledTags - readyTags },
+      suggestions: { unclassified, pending: pendingSuggestions },
+    };
+  }
+
+  async progress(ownerId: string, includePrivate = false) {
+    const visibleAsset = includePrivate ? {} : { isPrivate: false };
+    const [eligible, ready, failed, host, embeddingJobs, processingSetting, processableRows] =
+      await Promise.all([
+        this.prisma.eagleAsset.count({
+          where: {
+            ownerId,
+            deletedAt: null,
+            mimeType: { startsWith: 'image/' },
+            ...visibleAsset,
+            libraryMode: this.libraryMode,
+          },
+        }),
+        this.prisma.eagleAssetEmbedding.count({
+          where: {
+            ownerId,
+            isCurrent: true,
+            status: 'READY',
+            asset: { deletedAt: null, ...visibleAsset },
+            libraryMode: this.libraryMode,
+          },
+        }),
+        this.prisma.eagleAssetEmbedding.count({
+          where: {
+            ownerId,
+            isCurrent: true,
+            status: 'FAILED',
+            asset: { deletedAt: null, ...visibleAsset },
+            libraryMode: this.libraryMode,
+          },
+        }),
+        this.observedEmbeddingHost(),
+        this.prisma.eagleAssetProcessingJob.groupBy({
+          by: ['status'],
+          where: {
+            ownerId,
+            kind: 'GENERATE_EMBEDDING',
+            processorVersion: EMBEDDING_PROCESSOR_VERSION,
+            asset: { deletedAt: null, ...visibleAsset },
+            libraryMode: this.libraryMode,
+          },
+          _count: true,
+        }),
+        this.prisma.eagleProcessingSetting.findUnique({
+          where: {
+            ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
+            libraryMode: this.libraryMode,
+          },
+        }),
+        this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
         SELECT COUNT(*)::integer AS count
         FROM "EagleAsset" AS asset
         WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
@@ -182,7 +183,7 @@ export class EagleVectorService {
               AND preview.status = 'READY'
           )
       `),
-    ]);
+      ]);
     const countJobs = (status: string) =>
       embeddingJobs.find((row) => row.status === status)?._count ?? 0;
     const queued = countJobs('PENDING');
@@ -210,8 +211,6 @@ export class EagleVectorService {
         nightEnd: processingSetting?.nightEnd ?? '06:00',
         timeZone: 'Asia/Shanghai' as const,
       },
-      tags: { enabled: enabledTags, ready: readyTags, awaitingCenter: enabledTags - readyTags },
-      suggestions: { unclassified, pending: pendingSuggestions },
       host,
       refreshedAt: new Date().toISOString(),
     };

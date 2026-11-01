@@ -29,6 +29,17 @@ import {
 } from './task-center-labels';
 import styles from './EagleTaskCenter.module.css';
 
+function nextTaskWake(value: TaskCenterOverview): Date | null {
+  const times = value.groups
+    .flatMap((group) =>
+      group.waiting
+        .filter((wait) => wait.count > 0 && wait.nextAt)
+        .map((wait) => Date.parse(wait.nextAt!)),
+    )
+    .filter(Number.isFinite);
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
 export function EagleTaskCenter({
   includePrivate = false,
   canManageProcessing = false,
@@ -59,8 +70,8 @@ export function EagleTaskCenter({
       group.approval,
     ]);
   const intervals = {
-    MATERIAL: useProgressQueryInterval(hasWork, progress),
-    PHOTO: useProgressQueryInterval(hasWork, progress),
+    MATERIAL: useProgressQueryInterval(hasWork, progress, nextTaskWake),
+    PHOTO: useProgressQueryInterval(hasWork, progress, nextTaskWake),
   };
   const queries = useQueries({
     queries: modes.map((mode) => ({

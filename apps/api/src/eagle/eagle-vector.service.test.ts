@@ -5,14 +5,17 @@ import { ListTagDistanceAssetsDto } from './eagle-vector.dto';
 import { EagleVectorService } from './eagle-vector.service';
 
 test('operational vector progress reads no recommendation or tag aggregates', async () => {
-  const service = new EagleVectorService({
-    eagleProcessingWorkerHeartbeat: { findFirst: async () => null },
-    eagleAsset: { count: async () => 0 },
-    eagleAssetEmbedding: { count: async () => 0 },
-    eagleAssetProcessingJob: { groupBy: async () => [] },
-    eagleProcessingSetting: { findUnique: async () => null },
-    $queryRaw: async () => [{ count: 0 }],
-  } as never, 'PHOTO');
+  const service = new EagleVectorService(
+    {
+      eagleProcessingWorkerHeartbeat: { findFirst: async () => null },
+      eagleAsset: { count: async () => 0 },
+      eagleAssetEmbedding: { count: async () => 0 },
+      eagleAssetProcessingJob: { groupBy: async () => [] },
+      eagleProcessingSetting: { findUnique: async () => null },
+      $queryRaw: async () => [{ count: 0 }],
+    } as never,
+    'PHOTO',
+  );
   const progress = await service.progress('owner', false);
   assert.equal(progress.embeddingCoverage.eligible, 0);
   assert.equal('tags' in progress, false);

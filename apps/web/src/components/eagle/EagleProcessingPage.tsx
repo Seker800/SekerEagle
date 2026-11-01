@@ -1,4 +1,5 @@
 import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
+import { backgroundScheduleAllows, nextBackgroundTime } from '@sekereagle/library-core';
 import {
   useActivityRefresh,
   usePageVisible,
@@ -168,6 +169,9 @@ export function EagleProcessingPage({
     summary && [summary.counts, summary.colorCoverage],
     enabled,
     readFailure,
+    summary && summary.counts.queued > 0 && !backgroundScheduleAllows(summary.settings)
+      ? nextBackgroundTime(summary.settings)
+      : null,
   );
   const runAction = async (action: () => Promise<unknown>, success: string) => {
     setIsActing(true);

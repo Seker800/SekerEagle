@@ -25,12 +25,19 @@ it('wakes once at a known scheduling boundary without idle progress reads', () =
   vi.useFakeTimers();
   try {
     vi.setSystemTime(0);
-    const hook = renderHook(() => useProgressQueryInterval<number>(() => false,
-      (value) => value, () => new Date(60_000)));
-    const query = {state: {data: 1,error: null,errorUpdateCount: 0}};
+    const hook = renderHook(() =>
+      useProgressQueryInterval<number>(
+        () => false,
+        (value) => value,
+        () => new Date(60_000),
+      ),
+    );
+    const query = { state: { data: 1, error: null, errorUpdateCount: 0 } };
     expect(hook.result.current(query)).toBe(60_000);
     vi.setSystemTime(60_000);
     expect(hook.result.current(query)).toBe(5000);
     hook.unmount();
-  } finally { vi.useRealTimers(); }
+  } finally {
+    vi.useRealTimers();
+  }
 });

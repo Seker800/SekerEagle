@@ -2,6 +2,12 @@ export function retryRefreshDelay(failures: number) {
   return Math.min(60_000, 5_000 * 2 ** Math.min(4, Math.max(0, failures - 1)));
 }
 
+export function scheduledRefreshDelay(nextAt: number | undefined): number | false {
+  return nextAt !== undefined && Number.isFinite(nextAt)
+    ? Math.max(5000, nextAt - Date.now())
+    : false;
+}
+
 export function createProgressRefreshSchedule() {
   let lastSignature: string | undefined;
   let changedAt = 0;

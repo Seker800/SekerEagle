@@ -8,7 +8,12 @@ test('idle operation lanes avoid claim transactions when unlocked probes are emp
   let transactions = 0;
   let probes = 0;
   const db = {
-    eagleAssetOperationItem: { findFirst: async () => { probes++; return null; } },
+    eagleAssetOperationItem: {
+      findFirst: async () => {
+        probes++;
+        return null;
+      },
+    },
     $transaction: async (run: (tx: unknown) => Promise<unknown>) => {
       transactions++;
       return run({
@@ -44,16 +49,30 @@ test('idle operation lanes avoid claim transactions when unlocked probes are emp
 
 test('recovery timer waits for the previous check to finish', async (context) => {
   context.mock.timers.enable({ apis: ['setTimeout'] });
-  const service = new EagleAssetOperationService({} as never, undefined as never, undefined as never, 'PHOTO');
-  let checks = 0, complete!: () => void;
-  service.tick = async () => { checks++; await new Promise<void>((resolve) => { complete=resolve; }); };
+  const service = new EagleAssetOperationService(
+    {} as never,
+    undefined as never,
+    undefined as never,
+    'PHOTO',
+  );
+  let checks = 0,
+    complete!: () => void;
+  service.tick = async () => {
+    checks++;
+    await new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+  };
   service.startExecutor();
   try {
     context.mock.timers.tick(1000);
-    assert.equal(checks,1);
+    assert.equal(checks, 1);
     context.mock.timers.tick(10_000);
-    assert.equal(checks,1);
-  } finally { service.onModuleDestroy(); complete(); }
+    assert.equal(checks, 1);
+  } finally {
+    service.onModuleDestroy();
+    complete();
+  }
 });
 
 test('accepted and retried commands wake the local processor only after commit', async () => {

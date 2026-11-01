@@ -174,6 +174,8 @@ try {
   }, 'final image readiness');
   for (const path of [
     '/api/library/changes',
+    '/api/eagle/vector/progress',
+    '/api/photos/vector/progress',
     '/api/eagle/vector/host',
     '/api/photos/vector/host',
     '/api/photos/photography/people/summary',

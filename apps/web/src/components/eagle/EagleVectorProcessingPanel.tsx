@@ -1,4 +1,5 @@
 import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
+import { backgroundScheduleAllows, nextBackgroundTime } from '@sekereagle/library-core';
 import {
   useActivityRefresh,
   usePageVisible,
@@ -7,7 +8,7 @@ import {
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useCallback, useState } from 'react';
-import { type EagleVectorSummary } from '../../lib/eagle-vector-api';
+import { type EagleVectorProgress } from '../../lib/eagle-vector-api';
 import styles from './EagleVectorProcessingPanel.module.css';
 export function EagleVectorProcessingPanel({
   compact = false,
@@ -15,18 +16,18 @@ export function EagleVectorProcessingPanel({
 }: { compact?: boolean; active?: boolean } = {}) {
   const {
     api: {
-      fetchEagleVectorSummary,
+      fetchEagleVectorProgress,
       diagnoseEagleEmbeddingHost,
       retryFailedEagleEmbeddings,
       scanMissingEagleEmbeddings,
     },
   } = useLibraryWorkspace();
 
-  const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
+  const [summary, setSummary] = useState<EagleVectorProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [diagnosticHost, setDiagnosticHost] = useState<EagleVectorSummary['host'] | null>(null);
+  const [diagnosticHost, setDiagnosticHost] = useState<EagleVectorProgress['host'] | null>(null);
   const diagnose = async () => {
     setBusy(true);
     setError('');
@@ -44,7 +45,7 @@ export function EagleVectorProcessingPanel({
     count: 0,
     error: null,
   });
-  const apply = useCallback((value: EagleVectorSummary) => {
+  const apply = useCallback((value: EagleVectorProgress) => {
     setSummary(value);
     setError('');
     setReadFailure({ count: 0, error: null });
@@ -54,7 +55,7 @@ export function EagleVectorProcessingPanel({
     setReadFailure((value) => ({ count: value.count + 1, error: cause }));
   }, []);
   const reload = useReloadableWorkspaceData(
-    fetchEagleVectorSummary,
+    fetchEagleVectorProgress,
     apply,
     report,
     active && visible,
@@ -62,10 +63,21 @@ export function EagleVectorProcessingPanel({
   useRefreshOnWorkspaceChanges(reload, ['TASKS', 'RECOMMENDATIONS', 'SETTINGS'], active);
   useActivityRefresh(
     reload,
-    Boolean(summary && (summary.embeddingCoverage.running || summary.embeddingCoverage.queued)),
+    Boolean(
+      summary &&
+      (summary.embeddingCoverage.running ||
+        (summary.embeddingCoverage.queued &&
+          summary.host.status === 'ONLINE' &&
+          backgroundScheduleAllows(summary.processingSchedule))),
+    ),
     summary?.embeddingCoverage,
     active,
     readFailure,
+    summary &&
+      summary.embeddingCoverage.queued > 0 &&
+      !backgroundScheduleAllows(summary.processingSchedule)
+      ? nextBackgroundTime(summary.processingSchedule)
+      : null,
   );
   const runAction = async <T,>(
     action: () => Promise<T>,
@@ -194,7 +206,7 @@ export function EagleVectorProcessingPanel({
     </section>
   );
 }
-function formatSchedule(summary: EagleVectorSummary | null): string {
+function formatSchedule(summary: EagleVectorProgress | null): string {
   if (summary?.processingSchedule.mode === 'ALWAYS') return t('全天执行');
   if (summary?.processingSchedule.mode === 'MANUAL') return t('已暂停');
   return t('夜间 {{value1}}–{{value2}} 执行', {
@@ -202,7 +214,7 @@ function formatSchedule(summary: EagleVectorSummary | null): string {
     value2: summary?.processingSchedule.nightEnd ?? '06:00',
   });
 }
-function formatHostStatus(status?: EagleVectorSummary['host']['status']): string {
+function formatHostStatus(status?: EagleVectorProgress['host']['status']): string {
   if (status === 'ONLINE') return t('在线');
   if (status === 'DRIFTED') return t('合同不一致');
   if (status === 'NOT_CONFIGURED') return t('未配置');

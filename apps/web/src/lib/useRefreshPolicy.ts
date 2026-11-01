@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { WorkspaceChangeKind } from '@sekereagle/library-core';
-import { createProgressRefreshSchedule } from './refresh-policy';
+import { createProgressRefreshSchedule, scheduledRefreshDelay } from './refresh-policy';
 import { ApiError } from './api-error';
 import { useLibraryWorkspace } from './library-workspace';
 import { workspaceRefreshKey, type WorkspaceRefreshObservation } from './workspace-refresh';
@@ -20,6 +20,7 @@ export const usePageVisible = () =>
 export function useProgressQueryInterval<T>(
   active: (data: T) => boolean,
   signature: (data: T) => unknown,
+  nextWake?: (data: T) => Date | null,
 ) {
   const visible = usePageVisible();
   const schedule = useMemo(createProgressRefreshSchedule, []);
@@ -28,7 +29,7 @@ export function useProgressQueryInterval<T>(
     if (!query.state.error) errors.current.consecutive = 0;
     else if (errors.current.revision !== query.state.errorUpdateCount) errors.current.consecutive++;
     errors.current.revision = query.state.errorUpdateCount;
-    return schedule({
+    const delay = schedule({
       visible,
       active: query.state.data !== undefined && active(query.state.data),
       signature: JSON.stringify(
@@ -37,6 +38,9 @@ export function useProgressQueryInterval<T>(
       failures: query.state.error ? errors.current.consecutive : 0,
       status: query.state.error instanceof ApiError ? query.state.error.status : undefined,
     });
+    if (delay !== false || !visible || query.state.error || query.state.data === undefined)
+      return delay;
+    return scheduledRefreshDelay(nextWake?.(query.state.data)?.getTime());
   };
 }
 
@@ -58,6 +62,7 @@ export function useRefreshOnWorkspaceChanges(
       ? JSON.stringify([
           value.snapshot.epoch,
           ...kinds.map((kind) => value.snapshot!.scopes[libraryMode][kind]),
+          kinds.includes('TASKS') ? value.snapshot.health : null,
         ])
       : '';
   };
@@ -76,18 +81,21 @@ export function useActivityRefresh(
   signature: unknown,
   enabled = true,
   failure?: { count: number; error: unknown },
+  nextAt?: Date | null,
 ) {
   const visible = usePageVisible();
   const schedule = useMemo(createProgressRefreshSchedule, []);
   const encoded = JSON.stringify(signature);
   const failures = failure?.count ?? 0;
   const status = failure?.error instanceof ApiError ? failure.error.status : undefined;
+  const wakeAt = nextAt?.getTime();
   useEffect(() => {
     if (!enabled || !visible) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     const queue = () => {
-      const delay = schedule({ visible: true, active, signature: encoded, failures, status });
+      const progress = schedule({ visible: true, active, signature: encoded, failures, status });
+      const delay = progress === false && !failures ? scheduledRefreshDelay(wakeAt) : progress;
       if (delay !== false && !cancelled)
         timer = setTimeout(() => {
           void reload().finally(queue);
@@ -98,5 +106,5 @@ export function useActivityRefresh(
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [active, enabled, encoded, failures, status, reload, schedule, visible]);
+  }, [active, enabled, encoded, failures, status, reload, schedule, visible, wakeAt]);
 }

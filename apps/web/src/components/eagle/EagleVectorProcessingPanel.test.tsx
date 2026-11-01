@@ -6,7 +6,7 @@ import { EagleVectorProcessingPanel } from './EagleVectorProcessingPanel';
 
 vi.mock('../../lib/eagle-vector-api', () => {
   const api = {
-    fetchEagleVectorSummary: vi.fn(),
+    fetchEagleVectorProgress: vi.fn(),
     retryFailedEagleEmbeddings: vi.fn(),
     scanMissingEagleEmbeddings: vi.fn(),
   };
@@ -17,7 +17,7 @@ describe('EagleVectorProcessingPanel', () => {
   afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(api.fetchEagleVectorSummary).mockResolvedValue({
+    vi.mocked(api.fetchEagleVectorProgress).mockResolvedValue({
       model: 'Qwen/Qwen3-VL-Embedding-2B',
       dimensions: 1024,
       embeddingCoverage: {
@@ -37,8 +37,6 @@ describe('EagleVectorProcessingPanel', () => {
         nightEnd: '06:00',
         timeZone: 'Asia/Shanghai',
       },
-      tags: { enabled: 16, ready: 12, awaitingCenter: 4 },
-      suggestions: { unclassified: 4, pending: 0 },
       host: { status: 'ONLINE' },
       refreshedAt: '2026-08-19T00:00:00Z',
     });
@@ -63,22 +61,25 @@ describe('EagleVectorProcessingPanel', () => {
 
   it('observes queued work until its final result, then stops', async () => {
     vi.useFakeTimers();
-    const summary = await api.fetchEagleVectorSummary();
-    vi.mocked(api.fetchEagleVectorSummary).mockClear().mockResolvedValue({
-      ...summary,
-      embeddingCoverage: { ...summary.embeddingCoverage, running: 0, queued: 1 },
-    });
+    const summary = await api.fetchEagleVectorProgress();
+    vi.mocked(api.fetchEagleVectorProgress)
+      .mockClear()
+      .mockResolvedValue({
+        ...summary,
+        processingSchedule: { ...summary.processingSchedule, mode: 'ALWAYS' },
+        embeddingCoverage: { ...summary.embeddingCoverage, running: 0, queued: 1 },
+      });
     const view = render(<EagleVectorProcessingPanel />);
     await act(async () => {});
-    expect(api.fetchEagleVectorSummary).toHaveBeenCalledTimes(1);
-    vi.mocked(api.fetchEagleVectorSummary).mockResolvedValue({
+    expect(api.fetchEagleVectorProgress).toHaveBeenCalledTimes(1);
+    vi.mocked(api.fetchEagleVectorProgress).mockResolvedValue({
       ...summary,
       embeddingCoverage: { ...summary.embeddingCoverage, running: 0, queued: 0 },
     });
     await act(async () => vi.advanceTimersByTimeAsync(5000));
-    expect(api.fetchEagleVectorSummary).toHaveBeenCalledTimes(2);
+    expect(api.fetchEagleVectorProgress).toHaveBeenCalledTimes(2);
     await act(async () => vi.advanceTimersByTimeAsync(600_000));
-    expect(api.fetchEagleVectorSummary).toHaveBeenCalledTimes(2);
+    expect(api.fetchEagleVectorProgress).toHaveBeenCalledTimes(2);
     view.unmount();
   });
 });

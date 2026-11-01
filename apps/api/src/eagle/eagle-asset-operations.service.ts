@@ -120,8 +120,9 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     if (this.stopping) return;
     this.timer = setTimeout(
       () => {
-        void this.tick(false).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
-        this.scheduleRecoveryPoll();
+        void this.tick(false)
+          .catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'))
+          .finally(() => this.scheduleRecoveryPoll());
       },
       operationIdlePollDelay(OPERATION_POLL_MS, this.idlePolls),
     );

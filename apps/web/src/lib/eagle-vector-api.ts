@@ -43,6 +43,8 @@ export interface EagleVectorSummary {
   refreshedAt: string;
 }
 
+export type EagleVectorProgress = Omit<EagleVectorSummary, 'tags' | 'suggestions'>;
+
 export interface EagleVectorTag {
   id: string;
   name: string;
@@ -145,6 +147,10 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
     return request<EagleVectorSummary>('summary');
   }
 
+  function fetchEagleVectorProgress() {
+    return request<EagleVectorProgress>('progress');
+  }
+
   function diagnoseEagleEmbeddingHost() {
     return request<EagleVectorSummary['host']>('host');
   }
@@ -243,6 +249,7 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
     getVectorThumbnailUrl,
     getVectorPreviewUrl,
     fetchEagleVectorSummary,
+    fetchEagleVectorProgress,
     diagnoseEagleEmbeddingHost,
     fetchEagleReviewSummary,
     listEagleVectorTags,
@@ -261,6 +268,7 @@ export const {
   getVectorThumbnailUrl,
   getVectorPreviewUrl,
   fetchEagleVectorSummary,
+  fetchEagleVectorProgress,
   diagnoseEagleEmbeddingHost,
   fetchEagleReviewSummary,
   listEagleVectorTags,
