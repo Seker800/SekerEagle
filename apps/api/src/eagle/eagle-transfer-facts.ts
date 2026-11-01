@@ -6,6 +6,7 @@ import {
   type EaglePhotoLocation,
   type EagleManualTag,
 } from '@prisma/client';
+import { databaseBatches, DATABASE_STATEMENTS } from './eagle-database-batches';
 import { COLOR_THUMBNAIL_PROCESSOR_VERSION } from './media-job-plan';
 
 export const transferFactIncludes = {
@@ -103,13 +104,12 @@ export async function resolveTransferTagMappings(
       };
     });
     const names = [...new Set(candidates.map((candidate) => candidate.normalizedName))];
-    const existing = new Map(
-      (
-        await tx.eagleManualTag.findMany({
-          where: { ownerId, libraryMode: targetMode, normalizedName: { in: names } },
-        })
-      ).map((tag) => [tag.normalizedName, tag]),
-    );
+    const existing = new Map<string, EagleManualTag>();
+    for (const { rows } of databaseBatches(names, DATABASE_STATEMENTS.transferTagLookup))
+      for (const tag of await tx.eagleManualTag.findMany({
+        where: { ownerId, libraryMode: targetMode, normalizedName: { in: rows } },
+      }))
+        existing.set(tag.normalizedName, tag);
     // First source for a name owns creation, just as in sequential publication.
     const missing = [
       ...new Map(
@@ -131,48 +131,52 @@ export async function resolveTransferTagMappings(
       ).values(),
     ];
     if (groups.length) {
-      await tx.eagleManualTagGroup.createMany({
-        data: groups.map((group) => ({
-          ownerId,
-          libraryMode: targetMode,
-          name: group.name,
-          normalizedName: group.normalizedName,
-          color: group.color,
-          description: group.description,
-        })),
-        skipDuplicates: true,
-      });
-      for (const group of await tx.eagleManualTagGroup.findMany({
-        where: {
-          ownerId,
-          libraryMode: targetMode,
-          normalizedName: { in: groups.map((group) => group.normalizedName) },
-        },
-      }))
-        mappings.groups.set(group.normalizedName, group.id);
+      for (const { rows } of databaseBatches(groups, DATABASE_STATEMENTS.transferTagGroupInsert))
+        await tx.eagleManualTagGroup.createMany({
+          data: rows.map((group) => ({
+            ownerId,
+            libraryMode: targetMode,
+            name: group.name,
+            normalizedName: group.normalizedName,
+            color: group.color,
+            description: group.description,
+          })),
+          skipDuplicates: true,
+        });
+      for (const { rows } of databaseBatches(groups, DATABASE_STATEMENTS.transferTagLookup))
+        for (const group of await tx.eagleManualTagGroup.findMany({
+          where: {
+            ownerId,
+            libraryMode: targetMode,
+            normalizedName: { in: rows.map((group) => group.normalizedName) },
+          },
+        }))
+          mappings.groups.set(group.normalizedName, group.id);
     }
     if (missing.length) {
-      await tx.eagleManualTag.createMany({
-        data: missing.map(({ tag, name, normalizedName }) => ({
-          ownerId,
-          libraryMode: targetMode,
-          name,
-          normalizedName,
-          color: tag.color,
-          isStarred: tag.isStarred,
-          marksAssetsPrivate: tag.marksAssetsPrivate,
-          groupId: tag.group ? mappings.groups.get(tag.group.normalizedName) : undefined,
-        })),
-        skipDuplicates: true,
-      });
-      for (const tag of await tx.eagleManualTag.findMany({
-        where: {
-          ownerId,
-          libraryMode: targetMode,
-          normalizedName: { in: missing.map((candidate) => candidate.normalizedName) },
-        },
-      }))
-        existing.set(tag.normalizedName, tag);
+      for (const { rows } of databaseBatches(missing, DATABASE_STATEMENTS.transferTagInsert))
+        await tx.eagleManualTag.createMany({
+          data: rows.map(({ tag, name, normalizedName }) => ({
+            ownerId,
+            libraryMode: targetMode,
+            name,
+            normalizedName,
+            color: tag.color,
+            isStarred: tag.isStarred,
+            marksAssetsPrivate: tag.marksAssetsPrivate,
+            groupId: tag.group ? mappings.groups.get(tag.group.normalizedName) : undefined,
+          })),
+          skipDuplicates: true,
+        });
+      for (const { rows } of databaseBatches(missing, DATABASE_STATEMENTS.transferTagLookup))
+        for (const tag of await tx.eagleManualTag.findMany({
+          where: {
+            ownerId,
+            libraryMode: targetMode,
+            normalizedName: { in: rows.map((candidate) => candidate.normalizedName) },
+          },
+        }))
+          existing.set(tag.normalizedName, tag);
       const memberships = missing.flatMap(({ tag, normalizedName }) => {
         const target = existing.get(normalizedName);
         if (!target || target.marksAssetsPrivate !== tag.marksAssetsPrivate) return [];
@@ -187,9 +191,12 @@ export async function resolveTransferTagMappings(
           ),
         ].map((groupId) => ({ ownerId, libraryMode: targetMode, tagId: target.id, groupId }));
       });
-      if (memberships.length)
+      for (const { rows } of databaseBatches(
+        memberships,
+        DATABASE_STATEMENTS.transferGroupMembershipInsert,
+      ))
         await tx.eagleManualTagGroupMembership.createMany({
-          data: memberships,
+          data: rows,
           skipDuplicates: true,
         });
     }
