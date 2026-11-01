@@ -80,7 +80,7 @@ export async function resolveTransferTagMappings(
   previous?: TransferTagMappings,
 ): Promise<TransferTagMappings> {
   const { ownerId, targetMode } = scope;
-  const mappings = previous ?? {
+  const mappings: TransferTagMappings = previous ?? {
     tx,
     ownerId,
     targetMode,

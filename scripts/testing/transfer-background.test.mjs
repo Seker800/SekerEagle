@@ -1,8 +1,12 @@
+import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
+import { EagleAssetOperationService } from '../../apps/api/dist/eagle/eagle-asset-operations.service.js';
+import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { OPERATION_SEND_CONCURRENCY } from '../../apps/api/dist/eagle/eagle-operation-settings.js';
 import { EagleLibraryTransferService } from '../../apps/api/dist/eagle/eagle-library-transfer.service.js';
 import { EagleUploadService } from '../../apps/api/dist/eagle/eagle-upload.service.js';
 import { EagleUploadRecoveryService } from '../../apps/api/dist/eagle/eagle-upload-recovery.service.js';
@@ -347,3 +351,108 @@ test('replacement cleanup acknowledges only its frozen keys and preserves newer 
   assert.deepEqual(state.retiredObjectKeys, [newer]);
   assert.equal(state.replacementAssetId, row.id);
 });
+
+for (const mode of ['PHOTO', 'MATERIAL'])
+  test(`${mode} user operation sends 100 tagged resources through default execution quanta`, async () => {
+    const ownerId = await owner(),
+      targetMode = mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
+    const rows = Array.from({ length: 100 }, () => asset(ownerId, mode));
+    await prisma.eagleAsset.createMany({ data: rows });
+    const tag = await prisma.eagleManualTag.create({
+      data: { ownerId, libraryMode: mode, name: 'Shared', normalizedName: 'shared' },
+    });
+    await prisma.eagleAssetManualTag.createMany({
+      data: rows.map((row) => ({ ownerId, libraryMode: mode, assetId: row.id, tagId: tag.id })),
+    });
+    const storage = new Proxy(
+      {},
+      { get: () => async () => assert.fail('HANDOFF operation performed storage I/O') },
+    );
+    const service = new EagleAssetOperationService(
+      prisma,
+      new EagleLibraryTransferService(prisma, storage, mode),
+      new EagleService(prisma, undefined, mode),
+      mode,
+    );
+    const principal = {
+      sub: ownerId,
+      role: 'USER',
+      email: 'synthetic@example.invalid',
+      kind: 'browser',
+      authVersion: 0,
+      scopes: [],
+      canViewPrivate: false,
+      privacyVisibleUntil: null,
+    };
+    queries = [];
+    const receipt = await service.enqueue(principal, {
+      operationId: randomUUID(),
+      kind: 'SEND',
+      assetIds: rows.map(({ id }) => id),
+    });
+    const admission = [...queries];
+    queries = [];
+    const quanta = Math.ceil(rows.length / OPERATION_SEND_CONCURRENCY);
+    for (let index = 0; index < quanta; index++) await service.tick();
+    const execution = [...queries];
+    const operation = await prisma.eagleAssetOperation.findUniqueOrThrow({
+      where: { id: receipt.id },
+      include: { items: true },
+    });
+    assert.equal(operation.items.filter((item) => item.status === 'COMPLETED').length, 100);
+    const associations = execution.filter(({ query }) =>
+      query.includes('INSERT INTO "public"."EagleAssetManualTag"'),
+    );
+    assert.equal(associations.length, quanta);
+    const targetTagReads = execution.filter(
+      ({ query, params }) =>
+        query.includes('SELECT') &&
+        query.includes('FROM "public"."EagleManualTag"') &&
+        JSON.parse(params).includes(targetMode),
+    );
+    assert.equal(targetTagReads.length, quanta + 1);
+    const stats = (events) => ({
+      statements: events.length,
+      transactions: events.filter(({ query }) => query.trim() === 'BEGIN').length,
+    });
+    const phases = {
+      claim: { statements: 0, transactions: 0 },
+      publication: { statements: 0, transactions: 0 },
+      outsideTransactions: 0,
+    };
+    let transaction;
+    for (const event of execution) {
+      if (event.query.trim() === 'BEGIN') transaction = [];
+      if (transaction) transaction.push(event);
+      else phases.outsideTransactions++;
+      if (event.query.trim() === 'COMMIT' && transaction) {
+        const phase = transaction.some(({ query }) =>
+          query.includes('INSERT INTO "public"."EagleAsset"'),
+        )
+          ? phases.publication
+          : phases.claim;
+        phase.transactions++;
+        phase.statements += transaction.length;
+        transaction = undefined;
+      }
+    }
+
+    console.info(
+      JSON.stringify({
+        scenario: 'operation-transfer-tags',
+        mode,
+        resources: 100,
+        quantum: OPERATION_SEND_CONCURRENCY,
+        quanta,
+        admission: stats(admission),
+        execution: stats(execution),
+        phases,
+        tagReads: targetTagReads.length,
+        associationInserts: associations.length,
+        maxBinds: Math.max(
+          ...[...admission, ...execution].map(({ params }) => JSON.parse(params).length),
+        ),
+        s3: 0,
+      }),
+    );
+  });

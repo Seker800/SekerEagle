@@ -213,7 +213,7 @@ test('large transfer tag sets obey statement budgets without dropping mappings',
       createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
         peak = Math.max(peak, data.length);
         assert.ok(data.length <= 512, 'one statement must fit its configured work quantum');
-        saved.push(...data.map((tag) => ({ ...tag, id: `target-${tag.normalizedName}` })));
+        saved.push(...data.map((tag) => ({ ...tag, id: `target-${String(tag.normalizedName)}` })));
       },
     },
   };
