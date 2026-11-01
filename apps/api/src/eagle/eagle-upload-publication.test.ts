@@ -34,6 +34,11 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
     assert.equal(writes.length, 1);
     assert.equal(writes[0]?.status, 'FAILED');
     assert.equal(writes[0]?.objectCleanupPending, false);
+    assert.equal(
+      writes[0]?.finalizationAttempts,
+      undefined,
+      'temporary lock pressure must not exhaust recovery attempts',
+    );
     const result = await service.complete('owner', 'session', {
       parts: [{ partNumber: 1, etag: 'etag' }],
     });
