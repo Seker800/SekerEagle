@@ -37,7 +37,9 @@ export async function publishEmbedding(
     throw new Error('EMBEDDING_RESULT_INVALID');
   await client.$transaction(
     async (transaction) => {
-      if (!(await lockPublicationAsset(transaction, job, identity))) return;
+      const facts = await lockPublicationFacts(transaction, job, identity);
+      if (facts === 'ASSET_UNAVAILABLE') return;
+      if (facts === 'SPACE_INCOMPATIBLE') throw new Error('EMBEDDING_SPACE_INCOMPATIBLE');
       const scope = {
         ownerId: job.ownerId,
         libraryMode: job.libraryMode,
@@ -83,7 +85,9 @@ export async function publishStoredEmbedding(
 ): Promise<boolean> {
   return client.$transaction(
     async (tx) => {
-      if (!(await lockPublicationAsset(tx, job, identity))) {
+      const facts = await lockPublicationFacts(tx, job, identity);
+      if (facts === 'SPACE_INCOMPATIBLE') return false;
+      if (facts === 'ASSET_UNAVAILABLE') {
         const completion = mediaCompletion(job);
         await tx.eagleAssetProcessingJob.updateMany({
           ...completion,
@@ -133,11 +137,11 @@ export async function publishStoredEmbedding(
 }
 
 /** Asset and model identity stay locked until the original publication transaction commits. */
-async function lockPublicationAsset(
+async function lockPublicationFacts(
   tx: Prisma.TransactionClient,
   job: PublicationJob,
   identity: EmbeddingSpaceIdentity,
-): Promise<boolean> {
+): Promise<'ASSET_UNAVAILABLE' | 'SPACE_INCOMPATIBLE' | 'PUBLISHABLE'> {
   // Scalar subquery keeps a missing asset distinct from an incompatible/retired space.
   // FOR SHARE prevents replacement and identity mutation after this check.
   const visible = await tx.$queryRaw<Array<{ id: string; spaceId: string | null }>>(Prisma.sql`
@@ -151,7 +155,6 @@ async function lockPublicationAsset(
     FROM "EagleAsset" a WHERE a.id=${job.assetId} AND a."ownerId"=${job.ownerId}
       AND a."libraryMode"=${job.libraryMode}::"LibraryMode" AND a."mediaRevision"=${job.assetRevision}
       AND a."deletedAt" IS NULL AND a."storageTransferredOut"=false FOR SHARE OF a`);
-  if (!visible.length) return false;
-  if (visible[0]!.spaceId !== identity.id) throw new Error('EMBEDDING_SPACE_INCOMPATIBLE');
-  return true;
+  if (!visible.length) return 'ASSET_UNAVAILABLE';
+  return visible[0]!.spaceId === identity.id ? 'PUBLISHABLE' : 'SPACE_INCOMPATIBLE';
 }
