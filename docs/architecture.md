@@ -14,16 +14,16 @@ SekerEagle是单owner、自托管的个人图片工具，规模锚点为约六�
 
 共享能力由`apps/api/src/eagle/library-capabilities.ts`登记并装配；同一provider只归属一个能力，模式差异显式登记。摄影专属服务在`apps/api/src/photos`装配。能力拥有自己的表与写入入口，引用EagleAsset不等于拥有其生命周期。
 
-| 能力                   | 权威入口与状态                                                     | 依赖与执行位置                             |
-| ---------------------- | ------------------------------------------------------------------ | ------------------------------------------ |
-| 资源、标签、可见性     | EagleService／EaglePrivacyService及既有资源事务                    | API读取／接收修改，固定owner／mode         |
-| 上传与导入             | EagleUploadService、原上传会话；导入应用服务和适配器               | 认证直传S3，原发布事务                     |
-| 发送                   | EagleLibraryTransferService／EagleLibraryTransfer                  | 独立operations；创建独立目标，成功后源退役 |
-| 操作进度与回收         | EagleAssetOperationService及operation／item                        | 独立operations；复用原回收与租约事务       |
-| 查重                   | EagleDuplicateService、指纹／分组／忽略表                          | 原操作队列；严格原图证据，批量回收         |
-| 搜索与索引             | EagleImageSearchService／EagleVectorService及原索引                | API读取；模型与索引计算在独立worker        |
-| 人物、地图、统计、整理 | PhotoManagement／PhotoMap／PhotoStatistics／PhotoAgent服务及各自表 | PHOTO专属；沿用共享资源和发布守卫          |
-| 媒体处理               | 原EagleMediaJob与library-core任务规则                              | 独立worker；Mac／NAS位置以运行文档为准     |
+| 能力                   | 权威入口与状态                                                     | 依赖与执行位置                               |
+| ---------------------- | ------------------------------------------------------------------ | -------------------------------------------- |
+| 资源、标签、可见性     | EagleService／EaglePrivacyService及既有资源事务                    | API读取／接收修改，固定owner／mode           |
+| 上传与导入             | EagleUploadService、原上传会话；导入应用服务和适配器               | 认证直传S3，原发布事务                       |
+| 发送                   | EagleLibraryTransferService／EagleLibraryTransfer                  | 独立operations；创建独立目标，成功后源退役   |
+| 操作进度与回收         | EagleAssetOperationService及operation／item                        | 独立operations；复用原回收与租约事务         |
+| 查重                   | EagleDuplicateService、指纹／分组／忽略表                          | 原操作队列；文件哈希／勾选条件分组，批量回收 |
+| 搜索与索引             | EagleImageSearchService／EagleVectorService及原索引                | API读取；模型与索引计算在独立worker          |
+| 人物、地图、统计、整理 | PhotoManagement／PhotoMap／PhotoStatistics／PhotoAgent服务及各自表 | PHOTO专属；沿用共享资源和发布守卫            |
+| 媒体处理               | 原EagleMediaJob与library-core任务规则                              | 独立worker；Mac／NAS位置以运行文档为准       |
 
 新能力必须登记所属provider、持久表及依赖；新增共享模块不自动被禁止，也不能因为“两个模式都注册了”就默认通过。通用控制器继承只用于复用同一路由实现，摄影专属入口应明确自己的业务边界。
 
@@ -40,6 +40,8 @@ SekerEagle是单owner、自托管的个人图片工具，规模锚点为约六�
 API负责认证、受理、持久化意图和查询，不执行后台业务轮询。上传终结恢复、对象清理发现和全局维护由独立operations宿主显式装配、启动与排空；API注册的领域provider保持惰性，构造与模块生命周期不得自行启动业务定时器；operations为PHOTO装配原摄影修订observer，为MATERIAL保留通用上传语义。原上传会话、发送journal及对象删除outbox继续保存事实，不为迁移宿主复制队列。独立operations负责主动批量操作和查重；独立业务worker领取唯一持久媒体队列，媒体节点按固定能力执行有界计算。暂停／时段、模型兼容、资源版本、租约和隐私是执行条件，进度展示不替代这些条件。
 
 发送允许在同owner的两个模式间显式移动：新建独立目标业务记录，在同一发布事务移交不可变对象所有权并退役源项，源不进回收站。历史复制计划保持可恢复，物理删除通过唯一outbox，不能删除已由目标接管的对象。
+
+查重的文件完全重复与按条件查找为两个独立视图。文件完全重复只使用当前原文件哈希；按条件查找只执行勾选的画面、文件名、拍摄时间、尺寸、格式、大小条件。画面候选由独立operations使用当前预览指纹发布，允许缩放、压缩、跨格式和已记录编辑版本进入候选，编辑保护由显式条件负责。HTTP只读取派生候选并按元数据分组；关闭画面条件时由SQL对可访问图库集合分组，不依赖视觉索引或后台原图解码。多个条件取交集并形成匹配子组，不因一个成员不满足而丢弃其他匹配成员。匹配结果不声称文件或像素完全一致；成员查看、忽略和回收必须重建同一条件作用域及版本签名。空匹配条件返回空集，大小上限和编辑保护不单独构成匹配关系。新扫描不再排原图逐像素核验，旧持久核验项保留恢复执行器。此项为2026年11月1日本地候选，未发布生产。
 
 删除／恢复／查重调用共享回收事务，不因拆能力另写版本或实况组件校验。永久删除受确认与备份保护；普通删除立即更新界面，后台回执局部对账，进度不得裁剪已加载分页或重置滚动。
 

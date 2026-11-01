@@ -104,5 +104,6 @@ test('duplicate reads use scoped SQL projections without rebuilding visual match
         String(value.sql).includes('"isPrivate"=false'),
     ),
   );
-  assert.ok(calls[1]!.sql.includes('NOT EXISTS'));
+  assert.ok(calls[1]!.sql.includes('HAVING count(*)>1'));
+  assert.ok(calls[1]!.sql.includes('WITH ORDINALITY'));
 });

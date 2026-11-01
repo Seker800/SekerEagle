@@ -291,6 +291,15 @@
         "operationId": "EagleController_listDuplicates",
         "parameters": [
           {
+            "name": "sameVisual",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
             "name": "sameName",
             "required": false,
             "in": "query",
@@ -411,6 +420,15 @@
             "in": "path",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sameVisual",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
             }
           },
           {
@@ -4307,6 +4325,15 @@
         "operationId": "PhotosController_listDuplicates",
         "parameters": [
           {
+            "name": "sameVisual",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
             "name": "sameName",
             "required": false,
             "in": "query",
@@ -4427,6 +4454,15 @@
             "in": "path",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "sameVisual",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
             }
           },
           {
@@ -9025,6 +9061,10 @@
       "DuplicateListDto": {
         "type": "object",
         "properties": {
+          "sameVisual": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
           "sameName": {
             "type": "string",
             "enum": ["true", "false"]

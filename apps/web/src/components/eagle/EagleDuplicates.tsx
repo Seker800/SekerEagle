@@ -47,12 +47,16 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     () => getEagleWorkspaceCache(client, ownerId, libraryMode).thumbnails,
     [client, ownerId, libraryMode],
   );
-  const [kind, setKind] = useState('ALL'),
+  const [kind, setKind] = useState('SIMILAR'),
     [showIgnored, setShowIgnored] = useState(false),
     [expanded, setExpanded] = useState<string | null>(null);
-  const [filters, setFilters] = useState<DuplicateFilters>({ protectEdits: 'true' });
+  const [filters, setFilters] = useState<DuplicateFilters>({
+    sameVisual: 'true',
+    protectEdits: 'true',
+  });
   const appliedFilters = useDebouncedValue(filters, 150);
   const filterPending = appliedFilters !== filters;
+  const needsVisual = kind !== 'EXACT' && filters.sameVisual === 'true';
   const [keepers, setKeepers] = useState<Map<string, { keepIds?: string[]; removeIds?: string[] }>>(
     new Map(),
   );
@@ -118,8 +122,13 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     retry: false,
   });
   const filtering = filterPending || results.isPlaceholderData;
+  const noConditions =
+    kind !== 'EXACT' &&
+    !['sameVisual', 'sameName', 'sameCapturedAt', 'sameDimensions', 'sameFormat', 'sameBytes'].some(
+      (key) => filters[key as keyof DuplicateFilters] === 'true',
+    );
   const narrowed = Object.entries(filters).some(
-    ([key, value]) => key !== 'protectEdits' && !!value,
+    ([key, value]) => key !== 'protectEdits' && key !== 'sameVisual' && !!value,
   );
   const data = results.data?.pages[0],
     allGroups = results.data?.pages.flatMap((p) => p.groups) ?? [];
@@ -214,6 +223,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const upgradeKey = `${ownerId}:${libraryMode}:${includePrivate}:${DUPLICATE_GROUPING_VERSION}`;
   useEffect(() => {
     if (
+      needsVisual &&
       (data?.outdatedGroups ||
         (data?.originalCheckCompleted === false && data.coverage.total > 0)) &&
       data?.originalCheckAttempted !== true &&
@@ -226,6 +236,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       scan.mutate(true);
     }
   }, [
+    needsVisual,
     data?.outdatedGroups,
     data?.originalCheckCompleted,
     data?.originalCheckAttempted,
@@ -439,6 +450,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   remove: confirm.removeCount,
                 })}
               </p>
+              {kind !== 'EXACT' && (
+                <p>{t('所选条件不保证内容完全一致，请确认已比较需要清理的文件。')}</p>
+              )}
               <p>{t('按当前保留标记保留照片；未调整的组保留推荐项，其余移入回收站，可以恢复。')}</p>
               <p>
                 {t(
@@ -474,9 +488,8 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
         <div className={styles.tools}>
           <div className={styles.tabs} role="group" aria-label={t('查重类型')}>
             {[
-              ['ALL', t('全部')],
               ['EXACT', t('完全重复')],
-              ['SIMILAR', t('原图画面相同')],
+              ['SIMILAR', t('按条件查找')],
             ].map(([value, label]) => (
               <button
                 key={value}
@@ -492,7 +505,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 {label}
                 {data && value === 'EXACT'
                   ? ` ${data.exactGroups}`
-                  : data && value === 'SIMILAR'
+                  : data && value === 'SIMILAR' && kind === 'SIMILAR'
                     ? ` ${data.similarGroups}`
                     : ''}
               </button>
@@ -502,23 +515,25 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
             <button type="button" disabled={results.isFetching} onClick={() => void refresh()}>
               {results.isFetching ? t('正在读取查重结果…') : t('刷新结果')}
             </button>
-            <button
-              type="button"
-              disabled={scan.isPending || scanning}
-              onClick={() => scan.mutate(false)}
-            >
-              {scanning ? t('后台检查中…') : t('检查新内容')}
-            </button>
+            {needsVisual && (
+              <button
+                type="button"
+                disabled={scan.isPending || scanning}
+                onClick={() => scan.mutate(false)}
+              >
+                {scanning ? t('后台检查中…') : t('检查新内容')}
+              </button>
+            )}
           </div>
         </div>
-        <EagleDuplicateFilters value={filters} onChange={changeFilters} />
+        {kind !== 'EXACT' && <EagleDuplicateFilters value={filters} onChange={changeFilters} />}
         <div className={styles.content} aria-busy={filtering}>
           {filtering && <p role="status">{t('正在筛选…')}</p>}
-          {!!data?.outdatedGroups && (
+          {needsVisual && !!data?.outdatedGroups && (
             <p role="status">
               {data.originalCheckAttempted && !scanning && !scan.isPending
-                ? t('旧版近似结果已停用；可点击“检查新内容”重新核验原图。')
-                : t('旧版近似结果已停用，正在核验原图；连拍不作为重复副本清理。')}
+                ? t('匹配规则已更新，点击“检查新内容”更新结果。')
+                : t('正在更新画面匹配结果，完成后自动显示。')}
             </p>
           )}
           {data && (
@@ -532,27 +547,19 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 {data.coverage.waiting > 0
                   ? ` · ${t('{{count}} 张等待预览', { count: data.coverage.waiting })}`
                   : ''}
-                {` · ${t('已核验 {{value1}} 张候选原图', { value1: (data.coverage.originalsVerified ?? 0).toLocaleString() })}`}
               </span>
               <details className={styles.help}>
                 <summary>{t('查重依据与空间说明')}</summary>
                 <p>
                   {t(
-                    '文件完全相同依据原文件哈希；原图画面相同依据完整分辨率的定向像素哈希。缩略图只找候选，连拍和重新压缩的近似照片不进入清理结果。',
+                    '完全重复依据原文件哈希。按条件查找只使用勾选的条件；画面匹配可找到缩放、压缩副本，也可能包含连拍，请比较后清理。',
                   )}
                 </p>
                 <p>
                   {t(
-                    '原图核验目前支持单帧八位 JPEG 和 PNG；RAW、实况、编辑副本及其他格式仅检查文件完全相同，不将相似预览当作证据。',
+                    '画面匹配使用当前预览，预览未就绪的图片会在检查完成后加入；只按文件属性查找不需要等待画面检查。',
                   )}
                 </p>
-                {!!data.coverage.unsupportedOriginals && (
-                  <p>
-                    {t('{{value1}} 张候选原图未通过格式或资源预算核验，不会进入画面相同清理。', {
-                      value1: data.coverage.unsupportedOriginals,
-                    })}
-                  </p>
-                )}
                 <p>{t('现在不会释放磁盘空间，清空回收站后才会释放实际占用。')}</p>
               </details>
             </div>
@@ -729,8 +736,8 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   <div>
                     <div className={styles.groupSummary}>
                       <strong>
-                        {group.kind === 'EXACT' ? t('文件完全相同') : t('原图像素完全相同')} ·{' '}
-                        {group.count} {t('项')}
+                        {group.kind === 'EXACT' ? t('文件完全相同') : t('符合所选条件，需比较确认')}{' '}
+                        · {group.count} {t('项')}
                       </strong>
                       <small>
                         {t('保留一项后可清理 {{size}} 文件', {
@@ -768,6 +775,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   <DuplicateComparison
                     key={group.signature}
                     group={group}
+                    filters={{ ...filters, kind }}
                     initialSelection={
                       keepers.get(group.signature) ?? priorChoices.get(group.signature)
                     }
@@ -799,7 +807,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                         cleanup.error &&
                           JSON.stringify(previous?.groups) === JSON.stringify(selectedGroups)
                           ? previous!
-                          : { operationId: crypto.randomUUID(), groups: selectedGroups },
+                          : {
+                              operationId: crypto.randomUUID(),
+                              groups: selectedGroups,
+                              filters: { ...filters, kind },
+                            },
                       );
                     }}
                   />
@@ -817,52 +829,60 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   !scan.isPending &&
                   !data.outdatedGroups &&
                   !(
+                    needsVisual &&
                     data.originalCheckAttempted &&
                     !data.originalCheckCompleted &&
                     kind !== 'EXACT'
                   ) && <IconCheck size={35} />}
                 <h3>
-                  {scanning || scan.isPending
-                    ? t('正在检查查重结果…')
-                    : narrowed
-                      ? t('没有符合当前筛选的重复组')
-                      : data.outdatedGroups
-                        ? t('查重规则尚未更新')
-                        : showIgnored
-                          ? t('没有已忽略的结果')
-                          : kind === 'EXACT'
-                            ? t('没有完全重复的文件')
-                            : data.originalCheckAttempted && !data.originalCheckCompleted
-                              ? t('原图核验尚未完成')
-                              : data.coverage.indexed < data.coverage.total
+                  {noConditions
+                    ? t('请至少选择一个匹配条件')
+                    : scanning || scan.isPending
+                      ? t('正在检查查重结果…')
+                      : narrowed
+                        ? t('没有符合当前筛选的重复组')
+                        : data.outdatedGroups
+                          ? t('查重规则尚未更新')
+                          : showIgnored
+                            ? t('没有已忽略的结果')
+                            : kind === 'EXACT'
+                              ? t('没有完全重复的文件')
+                              : needsVisual &&
+                                  data.originalCheckAttempted &&
+                                  !data.originalCheckCompleted
                                 ? t('视觉检查尚未完成')
-                                : kind === 'SIMILAR'
-                                  ? t('未发现已核验的画面相同副本')
-                                  : t('未发现符合当前规则的重复项')}
+                                : needsVisual && data.coverage.indexed < data.coverage.total
+                                  ? t('视觉检查尚未完成')
+                                  : kind === 'SIMILAR'
+                                    ? t('没有符合所选条件的文件')
+                                    : t('未发现符合当前规则的重复项')}
                 </h3>
                 <p>
-                  {scanning || scan.isPending
-                    ? t('后台检查完成后会自动显示结果，可以继续浏览。')
-                    : narrowed
-                      ? t('可以放宽筛选或还原默认条件，无需重新扫描。')
-                      : data.outdatedGroups
-                        ? data.originalCheckAttempted
-                          ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
-                          : t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
-                        : data.originalCheckAttempted &&
-                            !data.originalCheckCompleted &&
-                            kind !== 'EXACT'
-                          ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
-                          : kind === 'EXACT' && !showIgnored
-                            ? t(
-                                '文件字节不同的备份副本请查看“原图画面相同”；需先完成候选原图核验。',
-                              )
-                            : data.coverage.indexed < data.coverage.total
-                              ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
-                              : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
+                  {noConditions
+                    ? t('文件大小上限和编辑保护只限制范围，不能单独判断两个文件是否匹配。')
+                    : scanning || scan.isPending
+                      ? t('后台检查完成后会自动显示结果，可以继续浏览。')
+                      : narrowed
+                        ? t('可以放宽筛选或还原默认条件，无需重新扫描。')
+                        : data.outdatedGroups
+                          ? data.originalCheckAttempted
+                            ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
+                            : t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
+                          : data.originalCheckAttempted &&
+                              !data.originalCheckCompleted &&
+                              kind !== 'EXACT'
+                            ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
+                            : kind === 'EXACT' && !showIgnored
+                              ? t('缩放、压缩等不同版本请使用“按条件查找”。')
+                              : needsVisual && data.coverage.indexed < data.coverage.total
+                                ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
+                                : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
                 </p>
                 {narrowed && (
-                  <button type="button" onClick={() => changeFilters({ protectEdits: 'true' })}>
+                  <button
+                    type="button"
+                    onClick={() => changeFilters({ sameVisual: 'true', protectEdits: 'true' })}
+                  >
                     {t('还原默认条件')}
                   </button>
                 )}
@@ -874,7 +894,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       setExpanded(null);
                     }}
                   >
-                    {t('查看原图画面相同 {{value1}} 组', {
+                    {t('查看按条件查找 {{value1}} 组', {
                       value1: data.similarGroups.toLocaleString(),
                     })}
                   </button>
@@ -959,6 +979,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
 }
 function DuplicateComparison({
   group,
+  filters,
   initialSelection,
   ignored,
   api,
@@ -972,6 +993,7 @@ function DuplicateComparison({
   onCleanup,
 }: {
   group: DuplicateGroupSummary;
+  filters: DuplicateFilters;
   initialSelection?: { keepIds?: string[]; removeIds?: string[] };
   ignored: boolean;
   api: ReturnType<typeof createDuplicatesApi>;
@@ -992,14 +1014,22 @@ function DuplicateComparison({
   const keepMode = group.kind === 'EXACT' || !!initialSelection?.keepIds;
   const isKept = (id: string) => (keepMode ? keepIds.includes(id) : !removeIds.includes(id));
   const members = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, libraryMode, 'duplicate-members', group.signature, scopeRevision],
+    queryKey: [
+      'eagle',
+      ownerId,
+      libraryMode,
+      'duplicate-members',
+      group.signature,
+      scopeRevision,
+      filters,
+    ],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) => api.members(group.signature, pageParam, signal),
+    queryFn: ({ pageParam, signal }) => api.members(group.signature, pageParam, signal, filters),
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     retry: false,
   });
   const ignore = useMutation({
-    mutationFn: () => api.ignore(group.signature, !ignored),
+    mutationFn: () => api.ignore(group.signature, !ignored, filters),
     onSuccess: onIgnored,
   });
   useEffect(() => {
@@ -1031,7 +1061,7 @@ function DuplicateComparison({
       <p>
         {group.kind === 'EXACT'
           ? t('完全重复项合并标签和最高评分；说明、来源及编辑关系保留在回收站原项中。')
-          : t('原图像素已核验完全相同。可用上方批量工具每组保留一份；这里也可手动选择额外保留项。')}
+          : t('这些文件符合所选条件，不代表内容完全一致。请比较后选择保留项，其余移入回收站。')}
       </p>
       {members.isPending && <p role="status">{t('正在读取组内图片…')}</p>}
       {(members.error || ignore.error) && (

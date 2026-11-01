@@ -146,3 +146,22 @@ test('visual condition is a validated optional predicate in list and cleanup req
     pipe.transform({ sameVisual: 'yes' }, { type: 'query', metatype: DuplicateListDto }),
   );
 });
+
+test('capture time comparison treats equivalent fractional precision as equal and zero dimensions as unknown', () => {
+  assert.equal(
+    partitionDuplicateMembers(
+      [
+        member({ id: 'local', capturedLocal: '2020-01-01T00:00:00.1' }),
+        member({ id: 'utc', capturedAt: new Date('2020-01-01T00:00:00.100Z') }),
+      ],
+      { sameCapturedAt: 'true' },
+    ).length,
+    1,
+  );
+  assert.deepEqual(
+    partitionDuplicateMembers([member({ width: 0 }), member({ id: 'two', width: 0 })], {
+      sameDimensions: 'true',
+    }),
+    [],
+  );
+});

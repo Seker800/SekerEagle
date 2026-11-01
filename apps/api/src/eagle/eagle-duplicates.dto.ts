@@ -15,6 +15,10 @@ export class DuplicateFilterDto {
   @ApiProperty({ required: false, enum: ['true', 'false'] })
   @IsOptional()
   @IsIn(['true', 'false'])
+  sameVisual?: string;
+  @ApiProperty({ required: false, enum: ['true', 'false'] })
+  @IsOptional()
+  @IsIn(['true', 'false'])
   sameName?: string;
   @ApiProperty({ required: false, enum: ['true', 'false'] })
   @IsOptional()

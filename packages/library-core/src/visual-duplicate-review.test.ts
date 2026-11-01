@@ -25,7 +25,7 @@ test('visual review finds resized, recompressed, cross-format and edited variant
   ];
   const groups = findVisualDuplicateGroups(rows);
   assert.equal(groups.length, 1);
-  assert.deepEqual(groups[0]!.assetIds, ['original', 'small', 'png', 'edited']);
+  assert.deepEqual(groups[0]!.assetIds, ['original', 'png', 'edited', 'small']);
   assert.deepEqual(findVisualDuplicateGroups([...rows].reverse()), groups);
 });
 test('visual review retains exact copies, preserves privacy, and never chains through another image', () => {
@@ -41,4 +41,22 @@ test('visual review retains exact copies, preserves privacy, and never chains th
     groups.map((g) => g.assetIds),
     [['a', 'b', 'c']],
   );
+});
+
+test('metadata filtering cannot turn a reference-only match into a transitive pair', () => {
+  const fp = (hash: string) => ({ hash, colors: Array(48).fill(100), contrast: 30 });
+  const groups = findVisualDuplicateGroups([
+    row('a', { fingerprint: fp('0000000000000000') }),
+    row('b', { fingerprint: fp('000000000000001f') }),
+    row('c', { fingerprint: fp('00000000000003e0') }),
+  ]);
+  assert.deepEqual(
+    groups.map((g) => g.assetIds),
+    [['a', 'b']],
+  );
+});
+test('a sixty-thousand-copy visual group compares unique fingerprints instead of every pair', () => {
+  const groups = findVisualDuplicateGroups(Array.from({ length: 60000 }, (_, i) => row(String(i))));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]!.assetIds.length, 60000);
 });

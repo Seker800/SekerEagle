@@ -1,132 +1,17 @@
-import { databaseBatches, DATABASE_STATEMENTS } from './eagle-database-batches';
-import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import { Prisma, type LibraryMode } from '@prisma/client';
-import {
-  DUPLICATE_GROUPING_VERSION,
-  DUPLICATE_PIXEL_VERSION,
-  findDuplicateGroups,
-} from '@sekereagle/library-core';
+import { DUPLICATE_PIXEL_VERSION } from '@sekereagle/library-core';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ObjectStorageService } from '../storage/object-storage.service';
-import { readDuplicateCandidates } from './eagle-duplicate-candidates';
 import { inDuplicateLibrary, type Item, type ScanSnapshot } from './eagle-duplicate-model';
 import { completeDuplicateItem } from './eagle-duplicate-item';
 import {
   verifyDuplicateOriginal,
-  duplicateOriginalPixelLimit,
   withDuplicateOriginalSlot,
   type OriginalProof,
 } from './eagle-duplicate-original';
 
-/** Expand discovery once, after previews finish; durable ordinals keep restart/retry idempotent. */
-export async function scheduleDuplicateVerification(
-  prisma: PrismaService,
-  mode: LibraryMode,
-  item: Item,
-  assertActor: (tx: Prisma.TransactionClient) => Promise<void>,
-) {
-  const rows = await readDuplicateCandidates(prisma, item.ownerId, mode, item.operation.isPrivate);
-  const ids = new Set(
-    findDuplicateGroups(rows)
-      .filter((g) => g.kind === 'SIMILAR')
-      .flatMap((g) => g.assetIds),
-  );
-  // Flat pictures are intentionally absent from approximate matching, but can still be exact copies.
-  const buckets = new Map<string, string[]>();
-  for (const row of rows) {
-    if (!row.fingerprint || row.isEdited || row.isLivePhoto) continue;
-    const key = JSON.stringify([
-      row.isPrivate,
-      row.format,
-      row.width,
-      row.height,
-      row.fingerprint.hash,
-      row.fingerprint.colors,
-    ]);
-    const bucket = buckets.get(key) ?? [];
-    bucket.push(row.id);
-    buckets.set(key, bucket);
-  }
-  for (const bucket of buckets.values())
-    if (bucket.length > 1) for (const id of bucket) ids.add(id);
-  const missing: Array<{ id: string; rowVersion: number; mediaRevision: number }> = [];
-  const candidates = rows.filter((row) => ids.has(row.id) && !row.isEdited && !row.isLivePhoto);
-  const pixelLimit = duplicateOriginalPixelLimit();
-  for (const { rows: part } of databaseBatches(
-    candidates,
-    DATABASE_STATEMENTS.duplicateVerificationLookup,
-  )) {
-    const cached = await prisma.eagleDuplicateFingerprint.findMany({
-      where: {
-        ownerId: item.ownerId,
-        libraryMode: mode,
-        assetId: { in: part.map((r) => r.id) },
-        pixelProcessorVersion: DUPLICATE_PIXEL_VERSION,
-        pixelStatus: { in: ['VERIFIED', 'UNSUPPORTED', 'PIXEL_LIMIT'] },
-      },
-      select: { assetId: true, mediaRevision: true, pixelStatus: true },
-    });
-    const byId = new Map(cached.map((r) => [r.assetId, r]));
-    for (const row of part) {
-      const proof = byId.get(row.id);
-      // Reuse only a proven exclusion still beyond the current budget. Raising it retries the original.
-      const stillOverBudget = !!row.width && !!row.height && row.width * row.height > pixelLimit;
-      if (
-        proof?.mediaRevision !== row.mediaRevision ||
-        (proof.pixelStatus === 'PIXEL_LIMIT' && !stillOverBudget)
-      )
-        missing.push({ id: row.id, rowVersion: row.rowVersion, mediaRevision: row.mediaRevision });
-    }
-  }
-  await prisma.$transaction(
-    async (tx) => {
-      await assertActor(tx);
-      const existing = await tx.eagleAssetOperationItem.count({
-        where: {
-          operationId: item.operationId,
-          ownerId: item.ownerId,
-          libraryMode: mode,
-          ordinal: { gt: item.ordinal },
-        },
-      });
-      if (!existing) {
-        const jobs = [
-          ...Array.from({ length: Math.ceil(missing.length / 4) }, (_, i) => {
-            const rows = missing.slice(i * 4, i * 4 + 4);
-            return {
-              assetIds: rows.map((row) => row.id),
-              weight: rows.length,
-              snapshots: { kind: 'verify', rows },
-            };
-          }),
-          {
-            assetIds: [],
-            weight: 1,
-            snapshots: { kind: 'publish', version: DUPLICATE_GROUPING_VERSION } as ScanSnapshot,
-          },
-        ];
-        for (const { offset, rows: part } of databaseBatches(
-          jobs,
-          DATABASE_STATEMENTS.duplicateVerificationItems,
-        ))
-          await tx.eagleAssetOperationItem.createMany({
-            data: part.map((job, i) => ({
-              ...job,
-              id: randomUUID(),
-              operationId: item.operationId,
-              ownerId: item.ownerId,
-              libraryMode: mode,
-              ordinal: item.ordinal + offset + i + 1,
-            })),
-          });
-      }
-      await completeDuplicateItem(tx, item, mode);
-    },
-    { timeout: 30_000 },
-  );
-}
-
+/** Compatibility executor for original-verification items already queued by older releases. */
 export async function executeDuplicateVerification(
   prisma: PrismaService,
   storage: ObjectStorageService,

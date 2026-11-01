@@ -207,7 +207,7 @@ describe('duplicate cleanup review', () => {
     await waitFor(() =>
       expect(mocks.ignoreFiltered).toHaveBeenCalledWith(
         'b'.repeat(64),
-        { protectEdits: 'true', kind: 'ALL' },
+        { sameVisual: 'true', protectEdits: 'true', kind: 'SIMILAR' },
         true,
       ),
     );
@@ -220,7 +220,7 @@ describe('duplicate cleanup review', () => {
     await waitFor(() =>
       expect(mocks.ignoreFiltered).toHaveBeenLastCalledWith(
         'b'.repeat(64),
-        { protectEdits: 'true', kind: 'ALL' },
+        { sameVisual: 'true', protectEdits: 'true', kind: 'SIMILAR' },
         false,
       ),
     );
@@ -512,9 +512,9 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: '完全重复 0' }));
     await screen.findByRole('heading', { name: '没有完全重复的文件' });
     expect(screen.queryByText('当前没有待处理的查重结果')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '查看原图画面相同 2,635 组' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看按条件查找 2,635 组' }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: '原图画面相同 2635' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: '按条件查找 2635' })).toHaveAttribute(
         'aria-pressed',
         'true',
       ),
@@ -703,7 +703,7 @@ describe('duplicate cleanup review', () => {
       })),
     });
     render();
-    fireEvent.click(await screen.findByRole('button', { name: /^原图像素完全相同/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^符合所选条件，需比较确认/ }));
     expect(await screen.findByRole('checkbox', { name: '保留 one' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();
     expect(screen.getByRole('button', { name: '保留 3 项，清理 0 项' })).toBeDisabled();
@@ -919,6 +919,43 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
     await waitFor(() => expect(mocks.list.mock.calls.length).toBeGreaterThan(before));
   });
+  it('visual matching is a checked condition; unchecking it is explicit and empty conditions do not match the library', async () => {
+    const page = await mocks.list();
+    mocks.list.mockImplementation(async () => ({
+      ...page,
+      groups: [],
+      totalGroups: 0,
+      originalCheckCompleted: true,
+      originalCheckAttempted: true,
+      coverage: { total: 5, indexed: 0, waiting: 5 },
+    }));
+    render();
+    const visual = await screen.findByRole('checkbox', { name: '画面相同（包括缩放、压缩副本）' });
+    expect(visual).toBeChecked();
+    expect(screen.queryByRole('button', { name: /^原图画面相同/ })).not.toBeInTheDocument();
+    fireEvent.click(visual);
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sameVisual: 'false' }),
+        expect.anything(),
+      ),
+    );
+    expect(await screen.findByRole('heading', { name: '请至少选择一个匹配条件' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: '检查新内容' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: '文件名相同' }));
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sameVisual: 'false', sameName: 'true' }),
+        expect.anything(),
+      ),
+    );
+    expect(mocks.scan).not.toHaveBeenCalled();
+    expect(screen.queryByText('视觉检查尚未完成')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^完全重复/ }));
+    await waitFor(() => expect(mocks.list.mock.calls.at(-1)?.[0].kind).toBe('EXACT'));
+    expect(screen.queryByRole('checkbox', { name: '尺寸相同' })).not.toBeInTheDocument();
+    expect(mocks.scan).not.toHaveBeenCalled();
+  });
   it('rebuilds an outdated algorithm projection once on opening through the durable scan API', async () => {
     const page = await mocks.list();
     mocks.list.mockClear();
@@ -929,9 +966,7 @@ describe('duplicate cleanup review', () => {
     });
     render();
     await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
-    expect(
-      await screen.findByText('旧版近似结果已停用，正在核验原图；连拍不作为重复副本清理。'),
-    ).toBeVisible();
+    expect(await screen.findByText('正在更新画面匹配结果，完成后自动显示。')).toBeVisible();
   });
 });
 
