@@ -8,11 +8,11 @@ import {
   type LibraryMode,
 } from '@prisma/client';
 
-type PublicationJob = Pick<
+export type PublicationJob = Pick<
   EagleAssetProcessingJob,
   'id' | 'ownerId' | 'libraryMode' | 'assetId' | 'assetRevision' | 'leaseVersion'
 >;
-type Suggest = (
+export type EmbeddingSuggestionPublisher = (
   tx: Prisma.TransactionClient,
   ownerId: string,
   mode: LibraryMode,
@@ -26,17 +26,12 @@ export async function publishEmbedding(
   job: PublicationJob,
   recordId: string,
   embedding: readonly number[],
-  suggest: Suggest,
+  identity: EmbeddingSpaceIdentity,
+  suggest: EmbeddingSuggestionPublisher,
 ): Promise<void> {
   await client.$transaction(
     async (transaction) => {
-      // Asset-first ordering matches replacement. Never publish a superseded media revision.
-      const visible = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        SELECT id FROM "EagleAsset" WHERE id=${job.assetId} AND "ownerId"=${job.ownerId}
-          AND "libraryMode"=${job.libraryMode}::"LibraryMode" AND "mediaRevision"=${job.assetRevision}
-          AND "deletedAt" IS NULL AND "storageTransferredOut"=false
-        FOR SHARE`);
-      if (!visible.length) return;
+      if (!(await lockPublicationAsset(transaction, job, identity))) return;
       const scope = {
         ownerId: job.ownerId,
         libraryMode: job.libraryMode,
@@ -53,24 +48,19 @@ export async function publishEmbedding(
           libraryMode: job.libraryMode,
           assetId: job.assetId,
           isCurrent: true,
+          id: { not: recordId },
         },
         data: { isCurrent: false, status: 'SUPERSEDED' },
       });
-      const published = await transaction.eagleAssetEmbedding.updateMany({
-        where: { id: recordId, ...scope },
-        data: {
-          status: 'READY',
-          isCurrent: true,
-          l2Norm: 1,
-          errorCode: null,
-          completedAt: new Date(),
-        },
-      });
-      if (published.count !== 1) throw new Error('EMBEDDING_RECORD_NOT_OWNED');
       const vector = `[${embedding.join(',')}]`;
-      await transaction.$executeRaw(
-        Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${job.ownerId} AND "libraryMode" = ${job.libraryMode}::"LibraryMode" AND "id" = ${recordId}`,
-      );
+      const published = await transaction.$executeRaw(Prisma.sql`
+        UPDATE "EagleAssetEmbedding" SET embedding=${vector}::vector,
+          status='READY', "isCurrent"=true, "l2Norm"=1, "errorCode"=NULL,
+          "completedAt"=now(), "updatedAt"=now()
+        WHERE id=${recordId} AND "ownerId"=${scope.ownerId}
+          AND "libraryMode"=${scope.libraryMode}::"LibraryMode" AND "assetId"=${scope.assetId}
+          AND "assetRevision"=${scope.assetRevision} AND "spaceId"=${identity.id}`);
+      if (published !== 1) throw new Error('EMBEDDING_RECORD_NOT_OWNED');
       await matchSmartFoldersForEmbedding(transaction, job, recordId);
       await suggest(transaction, job.ownerId, job.libraryMode, job.assetId, recordId);
     },
@@ -83,15 +73,11 @@ export async function publishStoredEmbedding(
   client: Pick<PrismaClient, '$transaction'>,
   job: PublicationJob,
   identity: EmbeddingSpaceIdentity,
-  suggest: Suggest,
+  suggest: EmbeddingSuggestionPublisher,
 ): Promise<boolean> {
   return client.$transaction(
     async (tx) => {
-      const visible = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      SELECT id FROM "EagleAsset" WHERE id=${job.assetId} AND "ownerId"=${job.ownerId}
-        AND "libraryMode"=${job.libraryMode}::"LibraryMode" AND "mediaRevision"=${job.assetRevision}
-        AND "deletedAt" IS NULL AND "storageTransferredOut"=false FOR SHARE`);
-      if (!visible.length) {
+      if (!(await lockPublicationAsset(tx, job, identity))) {
         const completion = mediaCompletion(job);
         await tx.eagleAssetProcessingJob.updateMany({
           ...completion,
@@ -101,17 +87,11 @@ export async function publishStoredEmbedding(
       }
       const records = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT e.id FROM "EagleAssetEmbedding" e
-      JOIN "EagleEmbeddingSpace" s ON s.id=e."spaceId"
       WHERE e."ownerId"=${job.ownerId} AND e."libraryMode"=${job.libraryMode}::"LibraryMode"
         AND e."assetId"=${job.assetId} AND e."assetRevision"=${job.assetRevision}
         AND NOT e."isCurrent" AND e.status IN ('PENDING','RUNNING','FAILED')
         AND e.embedding IS NOT NULL AND e."l2Norm" BETWEEN 0.99 AND 1.01
-        AND s.id=${identity.id} AND s."isCurrent" AND s.model=${identity.model}
-        AND s.revision=${identity.revision} AND s.dimensions=${identity.dimensions}
-        AND s.normalized=${identity.normalized} AND s.normalized
-        AND s."instructionVersion"=${identity.instructionVersion}
-        AND s."preprocessingVersion"=${identity.preprocessingVersion}
-      FOR SHARE OF s`);
+        AND e."spaceId"=${identity.id} AND vector_dims(e.embedding)=${identity.dimensions}`);
       const record = records[0];
       if (!record) return false;
       const completed = await tx.eagleAssetProcessingJob.updateMany(mediaCompletion(job));
@@ -144,4 +124,28 @@ export async function publishStoredEmbedding(
     },
     { maxWait: 5000, timeout: 30000 },
   );
+}
+
+/** Asset and model identity stay locked until the original publication transaction commits. */
+async function lockPublicationAsset(
+  tx: Prisma.TransactionClient,
+  job: PublicationJob,
+  identity: EmbeddingSpaceIdentity,
+): Promise<boolean> {
+  // Scalar subquery keeps a missing asset distinct from an incompatible/retired space.
+  // FOR SHARE prevents replacement and identity mutation after this check.
+  const visible = await tx.$queryRaw<Array<{ id: string; spaceId: string | null }>>(Prisma.sql`
+    SELECT a.id, (SELECT s.id FROM "EagleEmbeddingSpace" s
+      WHERE s.id=${identity.id} AND s."isCurrent" AND s.model=${identity.model}
+        AND s.revision=${identity.revision} AND s.dimensions=${identity.dimensions}
+        AND s.normalized=${identity.normalized} AND s.normalized
+        AND s."instructionVersion"=${identity.instructionVersion}
+        AND s."preprocessingVersion"=${identity.preprocessingVersion}
+      FOR SHARE) AS "spaceId"
+    FROM "EagleAsset" a WHERE a.id=${job.assetId} AND a."ownerId"=${job.ownerId}
+      AND a."libraryMode"=${job.libraryMode}::"LibraryMode" AND a."mediaRevision"=${job.assetRevision}
+      AND a."deletedAt" IS NULL AND a."storageTransferredOut"=false FOR SHARE OF a`);
+  if (!visible.length) return false;
+  if (visible[0]!.spaceId !== identity.id) throw new Error('EMBEDDING_SPACE_INCOMPATIBLE');
+  return true;
 }

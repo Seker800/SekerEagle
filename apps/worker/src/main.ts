@@ -756,7 +756,22 @@ async function processEmbeddingJob(
   });
   const bytes = await readBoundedBytes(source, 20 * 1024 * 1024);
   const { embedding } = await embeddingClient.embedImage(bytes, mimeType);
-  await publishEmbedding(prisma, job, record.id, embedding, createTopSuggestion);
+  await publishEmbedding(
+    prisma,
+    job,
+    record.id,
+    embedding,
+    {
+      id: embeddingSpaceId,
+      model: embeddingModel,
+      revision: embeddingRevision,
+      dimensions: embeddingDimensions,
+      normalized: true,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+    },
+    createTopSuggestion,
+  );
 }
 
 async function createTopSuggestion(

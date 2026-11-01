@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { publishEmbedding, publishStoredEmbedding } from './embedding-publication';
 
+const identity = {
+  id: 'space',
+  model: 'model',
+  revision: 'revision',
+  dimensions: 2,
+  normalized: true,
+  instructionVersion: 'image-retrieval-v1',
+  preprocessingVersion: 'preview-webp-v1',
+};
+
 const job = {
   id: 'job-1',
   ownerId: 'owner-1',
@@ -15,7 +25,7 @@ function fixture(leaseCount = 1, recordCount = 1, currentRevision = true) {
   const calls: Array<{ operation: string; input: unknown }> = [];
   let options: { timeout?: number; maxWait?: number } | undefined;
   const tx = {
-    $queryRaw: async () => (currentRevision ? [{ id: job.assetId }] : []),
+    $queryRaw: async () => (currentRevision ? [{ id: job.assetId, spaceId: identity.id }] : []),
     eagleAssetProcessingJob: {
       updateMany: async (input: unknown) => {
         calls.push({ operation: 'lease', input });
@@ -33,7 +43,9 @@ function fixture(leaseCount = 1, recordCount = 1, currentRevision = true) {
       assert.ok((options?.timeout ?? 5000) > 6000, 'NAS index write exceeds Prisma default');
       assert.ok(options!.timeout! <= 60000, 'transaction must remain bounded');
       calls.push({ operation: 'vector', input });
-      return 1;
+      return (input as { sql: string }).sql.includes('UPDATE "EagleAssetEmbedding"')
+        ? recordCount
+        : 1;
     },
   };
   const client = {
@@ -50,10 +62,10 @@ function fixture(leaseCount = 1, recordCount = 1, currentRevision = true) {
 
 test('publishes a vector and job atomically with a bounded NAS index-write budget', async () => {
   const f = fixture();
-  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
+  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], identity, f.suggest);
   assert.deepEqual(
     f.calls.map((x) => x.operation),
-    ['lease', 'embedding', 'embedding', 'vector', 'vector', 'suggest'],
+    ['lease', 'embedding', 'vector', 'vector', 'suggest'],
   );
   assert.deepEqual((f.calls[0]!.input as { where: unknown }).where, {
     id: job.id,
@@ -64,13 +76,21 @@ test('publishes a vector and job atomically with a bounded NAS index-write budge
     status: 'PROCESSING',
     leaseVersion: job.leaseVersion,
   });
-  const vector = f.calls[3]!.input as { values: unknown[] };
-  assert.deepEqual(vector.values, ['[1,0]', job.ownerId, job.libraryMode, 'vector-1']);
+  const vector = f.calls[2]!.input as { values: unknown[] };
+  assert.deepEqual(vector.values, [
+    '[1,0]',
+    'vector-1',
+    job.ownerId,
+    job.libraryMode,
+    job.assetId,
+    job.assetRevision,
+    identity.id,
+  ]);
 });
 
 test('a lost lease cannot publish a vector or generate suggestions', async () => {
   const f = fixture(0);
-  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
+  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], identity, f.suggest);
   assert.deepEqual(
     f.calls.map((x) => x.operation),
     ['lease'],
@@ -80,25 +100,23 @@ test('a lost lease cannot publish a vector or generate suggestions', async () =>
 test('a missing or differently scoped vector record aborts publication', async () => {
   const f = fixture(1, 0);
   await assert.rejects(
-    publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest),
+    publishEmbedding(f.client as never, job, 'vector-1', [1, 0], identity, f.suggest),
     /EMBEDDING_RECORD_NOT_OWNED/,
   );
   assert.equal(
-    f.calls.some((x) => x.operation === 'vector' || x.operation === 'suggest'),
+    f.calls.some((x) => x.operation === 'suggest'),
     false,
   );
-  assert.deepEqual((f.calls[2]!.input as { where: unknown }).where, {
-    id: 'vector-1',
-    ownerId: job.ownerId,
-    libraryMode: job.libraryMode,
-    assetId: job.assetId,
-    assetRevision: job.assetRevision,
-  });
+  const write = f.calls[2]!.input as { values: unknown[] };
+  assert.ok(write.values.includes(job.ownerId));
+  assert.ok(write.values.includes(job.libraryMode));
+  assert.ok(write.values.includes(job.assetRevision));
+  assert.ok(write.values.includes(identity.id));
 });
 
 test('a superseded media revision cannot publish into smart folders', async () => {
   const f = fixture(1, 1, false);
-  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
+  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], identity, f.suggest);
   assert.deepEqual(f.calls, []);
 });
 
@@ -117,7 +135,8 @@ test('stored-vector activation preserves compatibility, scope and lease without 
   const tx = {
     $queryRaw: async (query: { sql: string }) => {
       sql.push(query.sql);
-      if (query.sql.includes('FROM "EagleAsset"')) return [{ id: job.assetId }];
+      if (query.sql.includes('FROM "EagleAsset"'))
+        return [{ id: job.assetId, spaceId: identity.id }];
       return [{ id: 'stored', status: 'PENDING', isCurrent: false }];
     },
     eagleAssetProcessingJob: { updateMany: async () => ({ count: 1 }) },
@@ -137,7 +156,7 @@ test('stored-vector activation preserves compatibility, scope and lease without 
   );
   assert.equal(reused, true);
   assert.equal(suggestions, 1);
-  const lookup = sql.find((x) => x.includes('JOIN "EagleEmbeddingSpace"'))!;
+  const lookup = sql[0]!;
   for (const field of [
     '"ownerId"',
     '"libraryMode"',
@@ -149,10 +168,11 @@ test('stored-vector activation preserves compatibility, scope and lease without 
     'dimensions',
     'normalized',
   ])
-    assert.ok(lookup.includes(field), field);
+    assert.ok(sql.join("\n").includes(field), field);
   assert.ok(sql[0]!.includes('"deletedAt" IS NULL'));
-  assert.ok(lookup.includes('NOT e."isCurrent"'));
-  assert.ok(lookup.includes("e.status IN ('PENDING','RUNNING','FAILED')"));
+  const storedLookup = sql.find((query) => query.includes('FROM "EagleAssetEmbedding"'))!;
+  assert.ok(storedLookup.includes('NOT e."isCurrent"'));
+  assert.ok(storedLookup.includes("e.status IN ('PENDING','RUNNING','FAILED')"));
 });
 
 for (const scenario of [
@@ -170,7 +190,7 @@ for (const scenario of [
         query.sql.includes('FROM "EagleAsset"')
           ? scenario === 'stale-asset'
             ? []
-            : [{ id: job.assetId }]
+            : [{ id: job.assetId, spaceId: identity.id }]
           : scenario === 'no-cache' || scenario === 'ready'
             ? []
             : [
@@ -216,7 +236,6 @@ for (const scenario of [
     assert.equal(matched, 0);
   });
 
-
 test('fresh publication locks the active model identity instead of trusting preparation', async () => {
   const queries: string[] = [];
   const f = fixture();
@@ -231,16 +250,18 @@ test('fresh publication locks the active model identity instead of trusting prep
         return work(tx);
       }, options as never),
   };
-  await publishEmbedding(client as never, job, 'vector-1', [1, 0], f.suggest);
+  await publishEmbedding(client as never, job, 'vector-1', [1, 0], identity, f.suggest);
   assert.ok(queries.some((sql) => sql.includes('"EagleEmbeddingSpace"')));
 });
 
 test('fresh publication writes vector bytes and READY state together', async () => {
   const f = fixture();
-  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
+  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], identity, f.suggest);
   const writes = f.calls.filter((call) => call.operation === 'vector');
-  assert.ok(writes.some((call) => {
-    const sql = (call.input as { sql: string }).sql;
-    return sql.includes('"embedding"') && sql.includes("'READY'");
-  }));
+  assert.ok(
+    writes.some((call) => {
+      const sql = (call.input as { sql: string }).sql;
+      return sql.includes('embedding=') && sql.includes("'READY'");
+    }),
+  );
 });
