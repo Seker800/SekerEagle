@@ -20,7 +20,11 @@ import { SmartFolderBuildRunner } from './smart-folder-runner';
 import { publishImage } from './image-publication';
 import { MediaOutputAttempt } from './media-output-attempt';
 import { publishPyramid } from './pyramid-publication';
-import { publishEmbedding, publishStoredEmbedding } from './embedding-publication';
+import { EmbeddingProcessor } from './embedding-job';
+import {
+  createTopEmbeddingSuggestion,
+  unreviewedSuggestionEvidenceSql,
+} from './embedding-suggestions';
 import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
 import {
@@ -32,7 +36,6 @@ import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/librar
 import { catalogImageDimensions, canReuseImageBrowsing } from './image-renditions';
 import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
-import { createEmbeddingSpaceInitializer } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
 import { prepareAssetPurge } from './asset-purge';
 import { ObjectDeletionRunner } from './object-deletion-runner';
@@ -177,7 +180,6 @@ const embeddingIdentity = Object.freeze({
   instructionVersion: 'image-retrieval-v1',
   preprocessingVersion: 'preview-webp-v1',
 });
-const initializeEmbeddingSpace = createEmbeddingSpaceInitializer(prisma, embeddingIdentity);
 
 async function heartbeat(): Promise<void> {
   if (checkingHeartbeat) return;
@@ -431,11 +433,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
 
   // The same queue, policy and lease guard handle both inference and stored-vector activation.
   // Check before selecting or reading an object: a SEND must not download or infer again.
-  if (
-    job.kind === 'GENERATE_EMBEDDING' &&
-    (await publishStoredEmbedding(prisma, job, embeddingIdentity, createTopSuggestion))
-  )
-    return;
+  if (job.kind === 'GENERATE_EMBEDDING' && (await embeddingProcessor.activateStored(job))) return;
   if (asset.mimeType.startsWith('image/')) {
     if (asset.byteSize > BigInt(CAMERA_MAX_IMAGE_BYTES))
       throw new PermanentMediaValidationError(
@@ -464,9 +462,8 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
     if (job.kind === 'GENERATE_EMBEDDING') {
-      await processEmbeddingJob(
+      await embeddingProcessor.infer(
         job,
-        asset,
         sourceDetails.mimeType,
         object.Body as AsyncIterable<Uint8Array>,
       );
@@ -698,105 +695,30 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
   });
 }
 
-async function processEmbeddingJob(
-  job: EagleAssetProcessingJob,
-  asset: { id: string; ownerId: string; libraryMode: LibraryMode },
-  mimeType: string,
-  source: AsyncIterable<Uint8Array>,
-): Promise<void> {
-  if (!process.env.MLX_EMBEDDING_TOKEN?.trim()) throw new Error('MLX_EMBEDDING_TOKEN_REQUIRED');
-  await initializeEmbeddingSpace();
-  const record = await prisma.eagleAssetEmbedding.upsert({
-    where: {
-      assetId_assetRevision_spaceId: {
-        assetId: asset.id,
-        assetRevision: job.assetRevision,
-        spaceId: embeddingSpaceId,
-      },
-    },
-    create: {
-      ownerId: asset.ownerId,
-      libraryMode: asset.libraryMode,
-      assetId: asset.id,
-      assetRevision: job.assetRevision,
-      spaceId: embeddingSpaceId,
-      status: 'RUNNING',
-      startedAt: new Date(),
-    },
-    update: {
-      status: 'RUNNING',
-      errorCode: null,
-      startedAt: new Date(),
-      completedAt: null,
-    },
-    select: { id: true },
-  });
-  const bytes = await readBoundedBytes(source, 20 * 1024 * 1024);
-  const { embedding } = await embeddingClient.embedImage(bytes, mimeType);
-  await publishEmbedding(
-    prisma,
-    job,
-    record.id,
-    embedding,
-    {
-      id: embeddingSpaceId,
-      model: embeddingModel,
-      revision: embeddingRevision,
-      dimensions: embeddingDimensions,
-      normalized: true,
-      instructionVersion: 'image-retrieval-v1',
-      preprocessingVersion: 'preview-webp-v1',
-    },
-    createTopSuggestion,
-  );
-}
-
-async function createTopSuggestion(
+const createTopSuggestion = (
   transaction: Prisma.TransactionClient,
   ownerId: string,
   libraryMode: LibraryMode,
   assetId: string,
   embeddingId: string,
-): Promise<void> {
-  const minimumScore = boundedNumber(process.env.EAGLE_VECTOR_MINIMUM_SCORE, 0.3, -1, 1);
-  await transaction.$executeRaw(
-    Prisma.sql`
-      INSERT INTO "EagleVectorTagSuggestion" (
-        "id", "ownerId", "libraryMode", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
-        "generationId", "isActive", "score", "distance", "prototypeRank", "status", "createdAt", "updatedAt"
-      )
-      SELECT gen_random_uuid()::text, ${ownerId}, ${libraryMode}::"LibraryMode", ${assetId}, candidate."tagId", ${embeddingId},
-             candidate."snapshotId", candidate."generationId", true, 1 - candidate.distance,
-             candidate.distance, candidate.rank, 'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
-      FROM (
-        SELECT snapshot."tagId", prototype."snapshotId", snapshot."generationId", prototype.rank,
-               prototype.embedding <=> embedding.embedding AS distance
-        FROM "EagleAssetEmbedding" embedding
-        JOIN "EagleTagPrototype" prototype ON prototype."ownerId" = embedding."ownerId" AND prototype."libraryMode" = embedding."libraryMode"
-        JOIN "EagleTagPrototypeSnapshot" snapshot
-          ON snapshot."ownerId" = prototype."ownerId" AND snapshot."libraryMode" = prototype."libraryMode" AND snapshot.id = prototype."snapshotId"
-        JOIN "EagleManualTagSemanticConfig" config
-          ON config."ownerId" = snapshot."ownerId" AND config."libraryMode" = snapshot."libraryMode" AND config."tagId" = snapshot."tagId"
-        WHERE embedding."ownerId" = ${ownerId} AND embedding."libraryMode" = ${libraryMode}::"LibraryMode" AND embedding.id = ${embeddingId}
-          AND snapshot."spaceId" = embedding."spaceId"
-          AND snapshot."isCurrent" = true AND snapshot.status = 'ACTIVE'
-          AND config."recommendationEnabled" = true
-        ORDER BY prototype.embedding <=> embedding.embedding ASC
-        LIMIT 1
-      ) candidate
-      WHERE 1 - candidate.distance >= ${minimumScore}
-        AND NOT EXISTS (
-          SELECT 1 FROM "EagleAssetManualTag" manual
-          WHERE manual."ownerId" = ${ownerId} AND manual."libraryMode" = ${libraryMode}::"LibraryMode" AND manual."assetId" = ${assetId}
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM "EagleVectorTagSuggestion" existing
-          WHERE existing."ownerId" = ${ownerId} AND existing."libraryMode" = ${libraryMode}::"LibraryMode" AND existing."assetId" = ${assetId}
-            AND existing."isActive" = true AND existing.status = 'PENDING' AND existing."invalidatedAt" IS NULL
-        )
-    `,
+) =>
+  createTopEmbeddingSuggestion(
+    transaction,
+    ownerId,
+    libraryMode,
+    assetId,
+    embeddingId,
+    boundedNumber(process.env.EAGLE_VECTOR_MINIMUM_SCORE, 0.3, -1, 1),
   );
-}
+
+const embeddingProcessor = new EmbeddingProcessor({
+  client: prisma,
+  identity: embeddingIdentity,
+  hasCredentials: Boolean(process.env.MLX_EMBEDDING_TOKEN?.trim()),
+  embedImage: (bytes, mimeType) => embeddingClient.embedImage(bytes, mimeType),
+  readSource: (source) => readBoundedBytes(source, 20 * 1024 * 1024),
+  suggest: createTopSuggestion,
+});
 
 async function readBoundedBytes(
   source: AsyncIterable<Uint8Array>,
@@ -1020,6 +942,7 @@ async function recomputeSuggestionGeneration(
         AND embedding.status = 'READY' AND embedding."assetRevision" = asset."mediaRevision"
         AND embedding."spaceId" = ${embeddingSpaceId} AND asset."deletedAt" IS NULL
         AND 1 - nearest.distance >= ${minimumScore}
+        AND ${unreviewedSuggestionEvidenceSql(build, Prisma.sql`embedding.id`, Prisma.sql`nearest."tagId"`)}
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAssetManualTag" manual
           WHERE manual."ownerId" = embedding."ownerId" AND manual."libraryMode" = embedding."libraryMode" AND manual."assetId" = embedding."assetId"
@@ -1648,7 +1571,7 @@ async function main(): Promise<void> {
           prisma,
           embeddingSpaceId,
           async (text) => {
-            await initializeEmbeddingSpace();
+            await embeddingProcessor.initializeSpace();
             return embeddingClient.embedText(text);
           },
           allowModelRequest &&
