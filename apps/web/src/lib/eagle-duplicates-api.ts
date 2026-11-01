@@ -2,6 +2,7 @@ import type { EagleAssetListItem } from './eagle-api';
 import { request } from './api-client';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 export interface DuplicateFilters {
+  sameVisual?: string;
   sameName?: string;
   sameCapturedAt?: string;
   sameDimensions?: string;
@@ -80,9 +81,14 @@ export function createDuplicatesApi(mode: LibraryMode) {
         `${base}?${new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined))}`,
         { signal },
       ),
-    members: (signature: string, cursor: string | undefined, signal?: AbortSignal) =>
+    members: (
+      signature: string,
+      cursor: string | undefined,
+      signal?: AbortSignal,
+      filters: DuplicateFilters = {},
+    ) =>
       request<DuplicateMembers>(
-        `${base}/${encodeURIComponent(signature)}/members?${new URLSearchParams(cursor ? { cursor } : {})}`,
+        `${base}/${encodeURIComponent(signature)}/members?${new URLSearchParams(Object.entries({ ...filters, cursor }).filter((entry): entry is [string, string] => entry[1] !== undefined))}`,
         { signal },
       ),
     scan: (operationId: string, onlyIfUnattempted = false) =>
@@ -103,10 +109,10 @@ export function createDuplicatesApi(mode: LibraryMode) {
         method: 'POST',
         body: JSON.stringify({ allFiltered: true, revision, filters, ignored }),
       }),
-    ignore: (signature: string, ignored: boolean) =>
+    ignore: (signature: string, ignored: boolean, filters?: DuplicateFilters) =>
       request<{ ignored: boolean }>(`${base}/ignore`, {
         method: 'POST',
-        body: JSON.stringify({ signature, ignored }),
+        body: JSON.stringify({ signature, ignored, filters }),
       }),
   };
 }

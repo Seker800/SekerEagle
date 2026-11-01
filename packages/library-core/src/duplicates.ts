@@ -1,4 +1,4 @@
-export const DUPLICATE_GROUPING_VERSION = 'original-pixels-v3';
+export const DUPLICATE_GROUPING_VERSION = 'conditions-visual-v4';
 export const DUPLICATE_PIXEL_VERSION = 'oriented-srgb-rgba8-v1';
 export function canonicalDuplicateFormat(format: string) {
   const v = format.trim().toLowerCase();
@@ -105,15 +105,16 @@ function validFingerprint(value: DuplicateFingerprint | null): value is Duplicat
     value.colors.every((n) => Number.isFinite(n) && n >= 0 && n <= 255)
   );
 }
-function visuallyMatches(a: DuplicateCandidate, b: DuplicateCandidate) {
+function visuallyMatches(a: DuplicateCandidate, b: DuplicateCandidate, visualReview: boolean) {
   if (
-    !a.width ||
-    !a.height ||
-    a.width !== b.width ||
-    a.height !== b.height ||
-    a.isEdited ||
-    b.isEdited ||
-    canonicalDuplicateFormat(a.format) !== canonicalDuplicateFormat(b.format)
+    !visualReview &&
+    (!a.width ||
+      !a.height ||
+      a.width !== b.width ||
+      a.height !== b.height ||
+      a.isEdited ||
+      b.isEdited ||
+      canonicalDuplicateFormat(a.format) !== canonicalDuplicateFormat(b.format))
   )
     return false;
   const left = a.fingerprint!,
@@ -124,7 +125,10 @@ function visuallyMatches(a: DuplicateCandidate, b: DuplicateCandidate) {
   return rms <= 18;
 }
 /** Stable reference-star groups: A≈B and B≈C never implies A≈C. */
-export function findDuplicateGroups(input: readonly DuplicateCandidate[]): DuplicateGroup[] {
+function groupDuplicateCandidates(
+  input: readonly DuplicateCandidate[],
+  visualReview: boolean,
+): DuplicateGroup[] {
   const rows = [...input].sort(
     (a, b) =>
       (b.rating ?? 0) - (a.rating ?? 0) ||
@@ -152,7 +156,8 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
     members.push(row);
     exact.set(key, members);
   }
-  for (const members of exact.values()) if (members.length > 1) add('EXACT', members);
+  for (const members of exact.values())
+    if (!visualReview && members.length > 1) add('EXACT', members);
   const hiddenExact = new Set(groups.flatMap((group) => group.assetIds.slice(1)));
   used.clear();
   for (const privateScope of [false, true]) {
@@ -181,21 +186,23 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
       high[index] = parts[0];
       low[index] = parts[1];
       ranges.forEach(([start, end], band) => {
-        const key = `${canonicalDuplicateFormat(row.format)}:${row.width}:${row.height}:${hash.slice(start, end)}`,
+        const key = `${visualReview ? 'visual' : `${canonicalDuplicateFormat(row.format)}:${row.width}:${row.height}`}:${hash.slice(start, end)}`,
           bucket = bands[band]!.get(key) ?? [];
         bucket.push(index);
         bands[band]!.set(key, bucket);
       });
     });
+    const fingerprintKeys = eligible.map((row) => JSON.stringify(row.fingerprint));
     const visited = new Uint32Array(eligible.length),
       assigned = new Uint8Array(eligible.length);
     for (let index = 0; index < eligible.length; index++) {
       if (assigned[index]) continue;
       const reference = eligible[index]!,
         matches: number[] = [];
+      const representatives = new Map<string, number>([[fingerprintKeys[index]!, index]]);
       ranges.forEach(([start, end], band) => {
         for (const candidate of bands[band]!.get(
-          `${canonicalDuplicateFormat(reference.format)}:${reference.width}:${reference.height}:${reference.fingerprint!.hash.slice(start, end)}`,
+          `${visualReview ? 'visual' : `${canonicalDuplicateFormat(reference.format)}:${reference.width}:${reference.height}`}:${reference.fingerprint!.hash.slice(start, end)}`,
         ) ?? []) {
           if (candidate === index || assigned[candidate] || visited[candidate] === index + 1)
             continue;
@@ -203,9 +210,26 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
           if (
             popcount(high[index]! ^ high[candidate]!) + popcount(low[index]! ^ low[candidate]!) <=
               5 &&
-            visuallyMatches(reference, eligible[candidate]!)
-          )
+            visuallyMatches(reference, eligible[candidate]!, visualReview)
+          ) {
+            // Every retained subset must remain a valid visual group after applying metadata
+            // conditions or deleting its old cover. Compare unique fingerprints, not every copy.
+            const key = fingerprintKeys[candidate]!;
+            if (
+              visualReview &&
+              !representatives.has(key) &&
+              [...representatives.values()].some(
+                (other) =>
+                  duplicateHashDistance(
+                    eligible[other]!.fingerprint!.hash,
+                    eligible[candidate]!.fingerprint!.hash,
+                  ) > 5 || !visuallyMatches(eligible[other]!, eligible[candidate]!, true),
+              )
+            )
+              continue;
+            representatives.set(key, candidate);
             matches.push(candidate);
+          }
         }
       });
       if (matches.length) {
@@ -222,4 +246,14 @@ export function findDuplicateGroups(input: readonly DuplicateCandidate[]): Dupli
       b.removableBytes - a.removableBytes ||
       a.recommendedId.localeCompare(b.recommendedId),
   );
+}
+
+/** Review candidates may differ in encoding, dimensions and edit history. Filters own those choices. */
+export function findVisualDuplicateGroups(input: readonly DuplicateCandidate[]): DuplicateGroup[] {
+  return groupDuplicateCandidates(input, true);
+}
+
+/** Legacy strict discovery is retained for callers that explicitly need identical dimensions/format. */
+export function findDuplicateGroups(input: readonly DuplicateCandidate[]): DuplicateGroup[] {
+  return groupDuplicateCandidates(input, false);
 }

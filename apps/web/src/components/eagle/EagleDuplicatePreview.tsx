@@ -97,7 +97,7 @@ export function EagleDuplicatePreview({
                 disabled={ignored || disabled}
                 onClick={() => onKeep(asset.id)}
               >
-                {kept ? t('保留这张') : t('保留此图，回收其他副本')}
+                {kept ? t('保留这张') : t('改为保留这张')}
               </button>
               {!kept && !ignored && <span>{t('移入回收站')}</span>}
             </div>

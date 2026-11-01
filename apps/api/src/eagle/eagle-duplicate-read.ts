@@ -37,17 +37,19 @@ export async function readDuplicateReview(
         removableBytes: bigint;
       }>
     >`
-        SELECT g.signature,g."assetIds",g."mediaRevisions",g."isPrivate",g."removableBytes",
-          ARRAY(SELECT a."rowVersion" FROM unnest(g."assetIds") WITH ORDINALITY AS r(id,ordinal)
-            JOIN "EagleAsset" a ON a.id=r.id AND a."ownerId"=g."ownerId" AND a."libraryMode"=g."libraryMode" ORDER BY r.ordinal) AS "rowVersions"
-        FROM "EagleDuplicateGroup" g WHERE g."ownerId"=${ownerId} AND g."libraryMode"=${libraryMode}::"LibraryMode"
-        AND g."algorithmVersion"=${DUPLICATE_GROUPING_VERSION}
-        AND (${includePrivate} OR NOT g."isPrivate") AND NOT EXISTS (
-          SELECT 1 FROM unnest(g."assetIds",g."rowVersions",g."mediaRevisions") AS r(id,version,revision)
-          LEFT JOIN "EagleAsset" a ON a.id=r.id AND a."ownerId"=g."ownerId" AND a."libraryMode"=g."libraryMode"
-          WHERE a.id IS NULL OR a."deletedAt" IS NOT NULL OR a."purgeAfter" IS NOT NULL OR a."storageTransferredOut"
-            OR a."isPrivate"<>g."isPrivate" OR a."mediaRevision"<>r.revision
-        )`,
+        SELECT g.signature,array_agg(a.id ORDER BY r.ordinal) AS "assetIds",
+          array_agg(a."mediaRevision" ORDER BY r.ordinal) AS "mediaRevisions",
+          array_agg(a."rowVersion" ORDER BY r.ordinal) AS "rowVersions",g."isPrivate",
+          sum(a."byteSize")::bigint-(array_agg(a."byteSize" ORDER BY r.ordinal))[1] AS "removableBytes"
+        FROM "EagleDuplicateGroup" g
+        CROSS JOIN LATERAL unnest(g."assetIds",g."mediaRevisions") WITH ORDINALITY AS r(id,revision,ordinal)
+        JOIN "EagleAsset" a ON a.id=r.id AND a."ownerId"=g."ownerId" AND a."libraryMode"=g."libraryMode"
+          AND a."deletedAt" IS NULL AND a."purgeAfter" IS NULL AND NOT a."storageTransferredOut"
+          AND a."isPrivate"=g."isPrivate" AND a."mediaRevision"=r.revision
+        WHERE g."ownerId"=${ownerId} AND g."libraryMode"=${libraryMode}::"LibraryMode"
+          AND g."algorithmVersion"=${DUPLICATE_GROUPING_VERSION}
+          AND (${includePrivate} OR NOT g."isPrivate")
+        GROUP BY g.signature,g."isPrivate" HAVING count(*)>1`,
     tx.eagleDuplicateDismissal.findMany({
       where: { ownerId, libraryMode: libraryMode },
       select: { signature: true },
@@ -69,7 +71,7 @@ export async function readDuplicateReview(
           AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION} AND i.snapshots->>'kind' IN ('build','publish')) AS "originalCheckAttempted",
         EXISTS(SELECT 1 FROM "EagleAssetOperation" o JOIN "EagleAssetOperationItem" i ON i."operationId"=o.id AND i."ownerId"=o."ownerId" AND i."libraryMode"=o."libraryMode"
           WHERE o."ownerId"=${ownerId} AND o."libraryMode"=${libraryMode}::"LibraryMode" AND o.kind='DUPLICATE_SCAN' AND o."isPrivate"=${includePrivate}
-          AND i.status='COMPLETED' AND i.snapshots->>'kind'='publish' AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION}
+          AND i.status='COMPLETED' AND i.snapshots->>'kind' IN ('build','publish') AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION}
           AND NOT EXISTS(SELECT 1 FROM "EagleAssetOperationItem" other WHERE other."operationId"=o.id AND other.status<>'COMPLETED')) AS "originalCheckCompleted",
         count(*) FILTER (WHERE f."mediaRevision"=a."mediaRevision" AND f."processorVersion"=${DUPLICATE_FINGERPRINT_VERSION})::int AS indexed,
         count(*) FILTER (WHERE a."lifecycleStatus"<>'READY')::int AS waiting,
@@ -91,9 +93,8 @@ export async function readDuplicateReview(
         isPrivate: row.isPrivate,
       }),
     );
-  const pixelIds = new Set(similar.flatMap((row) => row.assetIds));
   for (const original of exact) {
-    const row = { ...original, assetIds: original.assetIds.filter((id) => !pixelIds.has(id)) };
+    const row = original;
     if (row.assetIds.length < 2) continue;
     const group: DuplicateGroup = {
       kind: 'EXACT',
@@ -132,6 +133,7 @@ export async function readDuplicateReview(
   ]);
   return {
     byId,
+    dismissedSignatures: ignoredKeys,
     groups,
     ignored,
     revision,

@@ -1,0 +1,48 @@
+# Opt-in overlay after the final image and isolated acceptance are verified.
+# The reader is internal-only. Keep its database URL and service token in private env.
+services:
+  api:
+    environment:
+      EAGLE_READER_URL: http://library-reader:3001
+      EAGLE_READER_TOKEN: ${EAGLE_READER_TOKEN:?Provide a private reader service token}
+      EAGLE_READER_TIMEOUT_MS: ${EAGLE_READER_TIMEOUT_MS:-200}
+      EAGLE_READER_COMPLEX_TIMEOUT_MS: ${EAGLE_READER_COMPLEX_TIMEOUT_MS:-1000}
+  library-reader:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    command: ['node', 'apps/api/dist/library-reader.js']
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=${EAGLE_READER_HEAP_MB:-640}
+      EAGLE_READER_DATABASE_CONNECTIONS: ${EAGLE_READER_DATABASE_CONNECTIONS:-2}
+      EAGLE_READER_CONNECT_TIMEOUT_MS: ${EAGLE_READER_CONNECT_TIMEOUT_MS:-3000}
+      EAGLE_READER_DATABASE_TIMEOUT_MS: ${EAGLE_READER_DATABASE_TIMEOUT_MS:-60000}
+      EAGLE_READER_SEMANTIC_DATABASE_TIMEOUT_MS: ${EAGLE_READER_SEMANTIC_DATABASE_TIMEOUT_MS:-5000}
+      EAGLE_READER_SEMANTIC_BATCH_SIZE: ${EAGLE_READER_SEMANTIC_BATCH_SIZE:-2048}
+      EAGLE_READER_QUERY_WORKSPACE_BYTES: ${EAGLE_READER_QUERY_WORKSPACE_BYTES:-134217728}
+      EAGLE_READER_COLOR_CACHE_BYTES: ${EAGLE_READER_COLOR_CACHE_BYTES:-8388608}
+      DATABASE_URL: ${EAGLE_READER_DATABASE_URL:?Use the current SekerEagle Compose database}
+      EAGLE_READER_TOKEN: ${EAGLE_READER_TOKEN:?Provide a private reader service token}
+      EAGLE_READER_HOST: 0.0.0.0
+      EAGLE_READER_REQUEST_MAX_BYTES: ${EAGLE_READER_REQUEST_MAX_BYTES:-2097152}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    mem_limit: ${EAGLE_READER_MEMORY_LIMIT:-1g}
+    stop_grace_period: 70s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health',{headers:{authorization:'Bearer '+process.env.EAGLE_READER_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '3'

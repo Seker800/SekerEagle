@@ -30,6 +30,8 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 
 const root = process.cwd(),
   name = `sekereagle-photo-workbench-${randomUUID().slice(0, 8)}`;
+const readerWorkbench = process.env.PHOTO_WORKBENCH_READER === '1';
+const workbenchRecord = readerWorkbench ? 'library-read-workbench.json' : 'photo-workbench.json';
 const containers = [],
   children = [],
   timers = [];
@@ -58,8 +60,11 @@ async function container(suffix, image, args, command = []) {
   return run('docker', ['port', id, '5432']).split(':').at(-1);
 }
 function child(path, env, label) {
-  const prefix =
-    process.env.PHOTO_WORKBENCH_TASK_CENTER === '1' ? 'task-center-workbench' : 'photo-workbench';
+  const prefix = readerWorkbench
+    ? 'library-read-workbench'
+    : process.env.PHOTO_WORKBENCH_TASK_CENTER === '1'
+      ? 'task-center-workbench'
+      : 'photo-workbench';
   const stream = createWriteStream(join(artifacts, `${prefix}-${label}.log`));
   const childProcess = spawn(globalThis.process.execPath, [path], {
     cwd: root,
@@ -346,6 +351,25 @@ try {
 
   if (process.env.PHOTO_WORKBENCH_DUPLICATES === '1')
     child('apps/api/dist/asset-operation-executor.js', env, 'duplicate-executor');
+  if (readerWorkbench) {
+    const reservation = createServer();
+    await new Promise((resolve) => reservation.listen(0, '127.0.0.1', resolve));
+    const port = reservation.address().port;
+    await new Promise((resolve) => reservation.close(resolve));
+    env.EAGLE_READER_URL = `http://127.0.0.1:${port}`;
+    env.EAGLE_READER_TOKEN = randomBytes(32).toString('hex');
+    env.EAGLE_READER_PORT = String(port);
+    child('apps/api/dist/library-reader.js', env, 'reader');
+    await waitFor(
+      () =>
+        fetch(`${env.EAGLE_READER_URL}/health`, {
+          headers: { authorization: `Bearer ${env.EAGLE_READER_TOKEN}` },
+        })
+          .then((response) => response.ok)
+          .catch(() => false),
+      'independent library reader',
+    );
+  }
   child('apps/api/dist/main.js', env, 'api');
   child('apps/api/dist/asset-operation-executor.js', env, 'operations');
   await waitFor(
@@ -1569,7 +1593,7 @@ try {
           artifacts,
           process.env.PHOTO_WORKBENCH_TASK_CENTER === '1'
             ? 'task-center-workbench.json'
-            : 'photo-workbench.json',
+            : workbenchRecord,
         ),
         JSON.stringify(result, null, 2),
       );
@@ -1663,7 +1687,7 @@ try {
     restoredObjects: objects.Contents?.length ?? 0,
     status: 'passed',
   };
-  await writeFile(join(artifacts, 'photo-workbench.json'), JSON.stringify(result, null, 2));
+  await writeFile(join(artifacts, workbenchRecord), JSON.stringify(result, null, 2));
   console.log(`Photo smoke passed. Isolated acceptance site: ${result.loginUrl}`);
   if (process.argv.includes('--serve')) await new Promise(() => {});
   else await cleanup();

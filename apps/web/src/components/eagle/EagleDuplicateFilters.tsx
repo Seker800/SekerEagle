@@ -9,6 +9,7 @@ export function EagleDuplicateFilters({
   onChange: (value: DuplicateFilters) => void;
 }) {
   const conditions = [
+    ['sameVisual', t('画面相同（包括缩放、压缩副本）')],
     ['sameName', t('文件名相同')],
     ['sameCapturedAt', t('拍摄时间相同')],
     ['sameDimensions', t('尺寸相同')],
@@ -25,7 +26,12 @@ export function EagleDuplicateFilters({
             <input
               type="checkbox"
               checked={value[key] === 'true'}
-              onChange={(e) => onChange({ ...value, [key]: e.target.checked ? 'true' : undefined })}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  [key]: e.target.checked ? 'true' : key === 'sameVisual' ? 'false' : undefined,
+                })
+              }
             />
             {label}
           </label>
@@ -72,12 +78,12 @@ export function EagleDuplicateFilters({
           {t('保护已知编辑版本')}
         </label>
       </div>
-      <button type="button" onClick={() => onChange({ protectEdits: 'true' })}>
+      <button type="button" onClick={() => onChange({ sameVisual: 'true', protectEdits: 'true' })}>
         {t('还原默认条件')}
       </button>
       <small>
         {t(
-          '条件作用于组内每张原文件；缺少拍摄时间不算相同。编辑保护依据系统记录，不能识别所有外部修图。',
+          '只检查勾选的条件，多个条件同时满足。画面匹配包含疑似连拍，请比较后清理；缺少拍摄时间不算相同。',
         )}
       </small>
     </fieldset>

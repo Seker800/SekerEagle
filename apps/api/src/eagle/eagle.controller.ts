@@ -119,6 +119,7 @@ export class EagleController {
       principal.canViewPrivate,
       signature,
       Number(input.cursor ?? 0),
+      input,
     );
   }
   @Post('duplicates/scan')

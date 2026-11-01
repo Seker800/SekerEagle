@@ -107,3 +107,61 @@ test('bulk overrides can retain all members without dropping unseen photos, and 
       ),
     );
 });
+
+import { partitionDuplicateMembers } from './eagle-duplicate-filters';
+test('conditions partition matches rather than discarding a whole group; unchecked fields do not participate', () => {
+  const rows = [
+    member({ id: 'a' }),
+    member({ id: 'b', originalName: 'other.png', width: 600, format: 'png' }),
+    member({ id: 'c', originalName: 'other.png', width: 600, format: 'png' }),
+  ];
+  assert.deepEqual(partitionDuplicateMembers(rows, {}), [rows]);
+  assert.deepEqual(partitionDuplicateMembers(rows, { sameName: 'true' }), [[rows[1], rows[2]]]);
+  assert.deepEqual(
+    partitionDuplicateMembers(rows, { sameDimensions: 'true', sameFormat: 'true' }),
+    [[rows[1], rows[2]]],
+  );
+  assert.deepEqual(
+    partitionDuplicateMembers(
+      [member({ id: 'a', capturedAt: null }), member({ id: 'b', capturedAt: null })],
+      { sameCapturedAt: 'true' },
+    ),
+    [],
+  );
+  assert.deepEqual(
+    partitionDuplicateMembers(
+      [member(), member({ id: 'edited', edited: true }), member({ id: 'c' })],
+      { protectEdits: 'true' },
+    ).map((g) => g.map((r) => r.id)),
+    [['one', 'c']],
+  );
+});
+test('visual condition is a validated optional predicate in list and cleanup requests', async () => {
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+  await pipe.transform(
+    { sameVisual: 'false', kind: 'SIMILAR' },
+    { type: 'query', metatype: DuplicateListDto },
+  );
+  await assert.rejects(
+    pipe.transform({ sameVisual: 'yes' }, { type: 'query', metatype: DuplicateListDto }),
+  );
+});
+
+test('capture time comparison treats equivalent fractional precision as equal and zero dimensions as unknown', () => {
+  assert.equal(
+    partitionDuplicateMembers(
+      [
+        member({ id: 'local', capturedLocal: '2020-01-01T00:00:00.1' }),
+        member({ id: 'utc', capturedAt: new Date('2020-01-01T00:00:00.100Z') }),
+      ],
+      { sameCapturedAt: 'true' },
+    ).length,
+    1,
+  );
+  assert.deepEqual(
+    partitionDuplicateMembers([member({ width: 0 }), member({ id: 'two', width: 0 })], {
+      sameDimensions: 'true',
+    }),
+    [],
+  );
+});

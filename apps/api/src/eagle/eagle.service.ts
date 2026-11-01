@@ -19,6 +19,7 @@ import { readColorAssetPage } from './eagle-color-page';
 import { sampleImageSearch } from './eagle-search-preview';
 import { createEditRender, readEditRender, CreateEditRenderDto } from './eagle-edit-render';
 import { readSmartFolderPage } from './eagle-smart-folder-page';
+import { canMatchWithoutSemantic } from './eagle-smart-folder-members';
 import { encodeImageSearchCursor, decodeImageSearchCursor } from './eagle-search-cursor';
 import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
 import {
@@ -232,6 +233,7 @@ export class EagleService {
         JSON.stringify(folderQueries),
         includePrivate,
         trash,
+        activeFolderQueries.some(canMatchWithoutSemantic),
       );
     }
     if (filters.search && this.imageSearch) {
@@ -649,11 +651,21 @@ export class EagleService {
     folderDefinitionKey: string,
     includePrivate: boolean,
     trash: boolean,
+    ordinaryMembersPossible = true,
   ) {
     const scope = { ownerId, libraryMode: this.libraryMode };
     const page = await readSmartFolderPage(
       this.prisma,
-      { scope, query, folderIds, folderDefinitionKey, includePrivate, trash, where },
+      {
+        scope,
+        query,
+        folderIds,
+        folderDefinitionKey,
+        includePrivate,
+        trash,
+        where,
+        ordinaryMembersPossible,
+      },
       (extraWhere, options) =>
         findSearchAssets(this.prisma, {
           where: inLibrary(this.libraryMode, { AND: [where, extraWhere] }),

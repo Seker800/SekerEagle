@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { colorSearchPlan, hasColorSearch, colorCandidateWhere } from './eagle-color-query';
+import { readMemoryPage, readMemoryCount } from './eagle-memory-client';
 export { hasColorSearch, colorCandidateWhere } from './eagle-color-query';
 
 type SearchDatabase = Pick<PrismaClient, 'eagleAsset' | '$queryRaw'>;
@@ -24,6 +25,32 @@ function searchOrder(
 }
 
 export async function findSearchAssets<T extends Prisma.EagleAssetFindManyArgs>(
+  prisma: SearchDatabase,
+  args: Prisma.SelectSubset<T, Prisma.EagleAssetFindManyArgs>,
+): Promise<Prisma.EagleAssetGetPayload<T>[]> {
+  const ids = await readMemoryPage(args);
+  if (ids) {
+    if (!ids.length) return [];
+    const input: Prisma.EagleAssetFindManyArgs = args;
+    const rows = await findSearchAssetsInDatabase(prisma, {
+      ...input,
+      where: { AND: [args.where ?? {}, { id: { in: ids } }] },
+      skip: undefined,
+      take: undefined,
+    } as Prisma.SelectSubset<T, Prisma.EagleAssetFindManyArgs>);
+    // Concurrent changes can invalidate candidates. The original full predicate
+    // still owns visibility and eligibility; fall back rather than omit page members.
+    if (rows.length === ids.length) {
+      const position = new Map(ids.map((id, index) => [id, index]));
+      return rows.sort(
+        (a, b) => position.get((a as { id: string }).id)! - position.get((b as { id: string }).id)!,
+      );
+    }
+  }
+  return findSearchAssetsInDatabase(prisma, args);
+}
+
+async function findSearchAssetsInDatabase<T extends Prisma.EagleAssetFindManyArgs>(
   prisma: SearchDatabase,
   args: Prisma.SelectSubset<T, Prisma.EagleAssetFindManyArgs>,
 ): Promise<Prisma.EagleAssetGetPayload<T>[]> {
@@ -62,6 +89,8 @@ export async function countSearchAssets(
   prisma: SearchDatabase,
   { where }: { where: AssetSearchWhere },
 ): Promise<number> {
+  const resident = await readMemoryCount(where);
+  if (resident !== null) return resident;
   if (!hasColorSearch(where)) return prisma.eagleAsset.count({ where });
   const plan = colorSearchPlan(where);
   const [row] = await prisma.$queryRaw<Array<{ count: bigint }>>(

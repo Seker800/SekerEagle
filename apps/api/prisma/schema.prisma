@@ -383,6 +383,26 @@ model EagleUploadSessionState {
   @@index([ownerId, libraryMode, replacementAssetId])
 }
 
+// Derived read-side handoff only. Business tables remain authoritative.
+model EagleLibraryReadState {
+  ownerId String
+  libraryMode LibraryMode
+  revision BigInt @default(0)
+  enabled Boolean @default(false)
+  changes EagleLibraryReadChange[]
+  @@id([ownerId, libraryMode])
+}
+
+model EagleLibraryReadChange {
+  ownerId String
+  libraryMode LibraryMode
+  revision BigInt
+  assetIds String[]
+  rebuild Boolean @default(false)
+  state EagleLibraryReadState @relation(fields: [ownerId, libraryMode], references: [ownerId, libraryMode], onDelete: Cascade)
+  @@id([ownerId, libraryMode, revision])
+}
+
 model EagleAsset {
   libraryMode                    LibraryMode                    @default(MATERIAL)
   id                             String                         @id @default(uuid())

@@ -41,6 +41,19 @@ afterEach(async () => {
 });
 after(() => db.$disconnect());
 const hash = (value) => createHash('sha256').update(value).digest('hex');
+async function texturedPreview() {
+  const pixels = Buffer.alloc(96 * 64 * 3);
+  for (let y = 0; y < 64; y++)
+    for (let x = 0; x < 96; x++) {
+      const at = (y * 96 + x) * 3;
+      pixels[at] = (x * 7 + y * 3) % 256;
+      pixels[at + 1] = (x * 3 + y * 7) % 256;
+      pixels[at + 2] = x * 2;
+    }
+  return sharp(pixels, { raw: { width: 96, height: 64, channels: 3 } })
+    .png()
+    .toBuffer();
+}
 async function fixture(mode) {
   const ownerId = randomUUID();
   owners.push(ownerId);
@@ -477,7 +490,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const scan = await f.duplicate.scan(f.principal, randomUUID());
     assert.equal(f.reads(), 0);
     assert.equal((await f.drain(scan.operationId)).failed, 0);
-    assert.equal(f.reads(), 4);
+    assert.equal(f.reads(), 2);
     const page = await f.duplicate.list(f.ownerId, false, {});
     assert.equal(page.coverage.indexed, 2);
     assert.equal(page.similarGroups, 1);
@@ -487,7 +500,11 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.ok(members.items.every((row) => !('originalObjectKey' in row)));
     const next = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(next.operationId);
-    assert.equal(f.reads(), 4, 'repeat checks reuse versioned preview and original proofs');
+    assert.equal(
+      f.reads(),
+      2,
+      'repeat checks reuse current preview fingerprints without original reads',
+    );
     await db.eagleDuplicateGroup.updateMany({
       where: { ownerId: f.ownerId },
       data: { algorithmVersion: 'legacy' },
@@ -497,7 +514,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal(obsolete.outdatedGroups, 1);
     const rebuild = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(rebuild.operationId);
-    assert.equal(f.reads(), 4, 'algorithm-only rebuild reuses all existing current fingerprints');
+    assert.equal(f.reads(), 2, 'algorithm-only rebuild reuses all existing current fingerprints');
     const renewed = await f.duplicate.list(f.ownerId, false, {});
     assert.equal(renewed.outdatedGroups, 0);
     assert.equal(renewed.similarGroups, 1);
@@ -809,10 +826,10 @@ test('visual cleanup removes only explicitly unchecked members, including partia
   assert.ok((await db.eagleAsset.findUnique({ where: { id: rows[1].id } })).deletedAt);
 });
 
-test('backup copies are proven from originals, burst frames are excluded, and all groups clean in one request', async () => {
+test('visual review includes compressed backups and near-identical frames, without claiming pixel identity', async () => {
   const f = await fixture('PHOTO');
   const source = sharp({ create: { width: 96, height: 64, channels: 3, background: '#476a9f' } });
-  const preview = await source.clone().png().toBuffer();
+  const preview = await texturedPreview();
   const backups = [];
   for (let i = 0; i < 5; i++) {
     const row = await f.add();
@@ -867,11 +884,12 @@ test('backup copies are proven from originals, burst frames are excluded, and al
   );
   const page = await f.duplicate.list(f.ownerId, false, {});
   assert.equal(page.verifiedGroups, 1);
-  assert.equal(page.verifiedItems, 4);
+  assert.equal(page.verifiedItems, 5);
   assert.equal(page.originalCheckCompleted, true);
-  assert.equal(page.groups[0].count, 5);
+  assert.equal(page.groups[0].count, 6);
   const members = await f.duplicate.members(f.ownerId, false, page.groups[0].signature);
-  assert.ok(!members.items.some((row) => row.id === burst.id));
+  assert.ok(members.items.some((row) => row.id === burst.id));
+  assert.equal(f.reads(), 6, 'only previews were read, never originals');
   await assert.rejects(
     f.duplicate.cleanup(f.principal, { operationId: randomUUID(), allVerified: true }),
   );
@@ -887,15 +905,14 @@ test('backup copies are proven from originals, burst frames are excluded, and al
     allVerified: true,
     revision: page.revision,
   });
-  assert.equal((await f.drain(operation.operationId)).completed, 4);
-  assert.equal(await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: null } }), 2);
-  assert.equal((await db.eagleAsset.findUnique({ where: { id: burst.id } })).deletedAt, null);
+  assert.equal((await f.drain(operation.operationId)).completed, 5);
+  assert.equal(await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: null } }), 1);
 });
 
-test('pixel budget skips are visible and retryable after resource configuration changes', async () => {
+test('visual results do not depend on original decode budgets or reread cached previews', async () => {
   const f = await fixture('PHOTO');
   const source = sharp({ create: { width: 96, height: 64, channels: 3, background: '#476a9f' } });
-  const preview = await source.clone().png().toBuffer();
+  const preview = await texturedPreview();
   for (let i = 0; i < 2; i++) {
     const row = await f.add();
     await f.preview(row, preview);
@@ -913,8 +930,9 @@ test('pixel budget skips are visible and retryable after resource configuration 
     const scan = await f.duplicate.scan(f.principal, randomUUID());
     assert.equal((await f.drain(scan.operationId)).failed, 0);
     const result = await f.duplicate.list(f.ownerId, false, {});
-    assert.equal(result.similarGroups, 0);
-    assert.equal(result.coverage.unsupportedOriginals, 2);
+    assert.equal(result.similarGroups, 1);
+    assert.equal(result.coverage.unsupportedOriginals, 0);
+    assert.equal(f.reads(), 2);
     const readsBeforeRepeat = f.reads();
     const repeat = await f.duplicate.scan(f.principal, randomUUID());
     assert.equal((await f.drain(repeat.operationId)).failed, 0);
@@ -1010,7 +1028,13 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
         recipe: {},
       },
     });
-    const filters = { sameName: 'true', maxBytes: '2000', protectEdits: 'true', kind: 'EXACT' };
+    const filters = {
+      sameVisual: 'false',
+      sameName: 'true',
+      maxBytes: '2000',
+      protectEdits: 'true',
+      kind: 'SIMILAR',
+    };
     await flushQueryEvents();
     const listBefore = queries,
       listTransactions = transactions,
@@ -1028,18 +1052,14 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       }),
     );
     assert.equal(page.totalGroups, 26);
-    const otherKind = await f.duplicate.list(f.ownerId, false, { ...filters, kind: 'SIMILAR' });
+    const otherKind = await f.duplicate.list(f.ownerId, false, { ...filters, sameVisual: 'true' });
     assert.equal(otherKind.totalGroups, 0);
-    assert.equal(
-      otherKind.exactGroups,
-      26,
-      'category badges still describe other filtered categories',
-    );
+    assert.equal(otherKind.exactGroups, 29, 'exact files are independent of conditional matching');
     assert.deepEqual(
       await f.duplicate.cleanup(f.principal, {
         operationId: randomUUID(),
         allVerified: true,
-        filters: { ...filters, kind: 'SIMILAR' },
+        filters: { ...filters, sameVisual: 'true' },
         revision: otherKind.revision,
       }),
       { operationId: null },
@@ -1142,3 +1162,280 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal(f.reads(), 0, 'filter, batch keep and cleanup use no S3 reads');
   });
 }
+
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode}: unchecked visual and dimensions conditions never suppress full-library metadata matches`, async () => {
+    const f = await fixture(mode),
+      foreign = await fixture(mode);
+    const a = await f.add({ originalName: 'same.jpg', width: 4208, height: 2368, byteSize: 1800n });
+    const b = await f.add({
+      originalName: 'same.jpg',
+      width: 1919,
+      height: 1080,
+      format: 'png',
+      byteSize: 900n,
+    });
+    const c = await f.add({
+      originalName: 'same.jpg',
+      width: 1919,
+      height: 1080,
+      format: 'png',
+      byteSize: 900n,
+    });
+    await foreign.add({ originalName: 'same.jpg' });
+    await f.add({ originalName: 'same.jpg', isPrivate: true });
+    await f.add({ originalName: 'same.jpg', deletedAt: new Date() });
+    const filters = { kind: 'SIMILAR', sameVisual: 'false', sameName: 'true' };
+    const start = performance.now();
+    await flushQueryEvents();
+    const q = queries,
+      tr = transactions;
+    const page = await f.duplicate.list(f.ownerId, false, filters);
+    await flushQueryEvents();
+    console.log(
+      JSON.stringify({
+        case: 'metadata-conditions',
+        mode,
+        sql: queries - q,
+        transactions: transactions - tr,
+        s3: f.reads(),
+        ms: performance.now() - start,
+      }),
+    );
+    assert.equal(page.totalGroups, 1);
+    assert.equal(page.groups[0].count, 3);
+    assert.equal(page.groups[0].recommendedId, a.id, 'prefer the original resolution');
+    const signature = page.groups[0].signature;
+    const members = await f.duplicate.members(f.ownerId, false, signature, 0, filters);
+    assert.deepEqual(new Set(members.items.map((a) => a.id)), new Set([a.id, b.id, c.id]));
+    await assert.rejects(
+      f.duplicate.members(foreign.ownerId, false, signature, 0, filters),
+      /变化/,
+    );
+    await assert.rejects(
+      f.duplicate.members(f.ownerId, false, signature, 0, { ...filters, sameDimensions: 'true' }),
+      /变化/,
+    );
+    for (const condition of ['sameDimensions', 'sameFormat', 'sameBytes']) {
+      const result = await f.duplicate.list(f.ownerId, false, { ...filters, [condition]: 'true' });
+      assert.equal(result.totalGroups, 1);
+      assert.equal(result.groups[0].count, 2);
+    }
+    assert.equal(
+      (await f.duplicate.list(f.ownerId, false, { ...filters, sameCapturedAt: 'true' }))
+        .totalGroups,
+      0,
+    );
+    assert.equal(
+      (
+        await f.duplicate.list(f.ownerId, false, {
+          sameVisual: 'false',
+          kind: 'SIMILAR',
+          maxBytes: '2000',
+        })
+      ).totalGroups,
+      0,
+    );
+    assert.equal(
+      (await f.duplicate.list(f.ownerId, false, { ...filters, sameVisual: 'true' })).totalGroups,
+      0,
+      'no hidden preview requirement when visual is unchecked',
+    );
+    assert.equal(f.reads(), 0);
+    await f.duplicate.ignore(f.ownerId, false, { signature, ignored: true, filters });
+    assert.equal((await f.duplicate.list(f.ownerId, false, filters)).totalGroups, 0);
+    await f.duplicate.ignore(f.ownerId, false, { signature, ignored: false, filters });
+    const current = await f.duplicate.list(f.ownerId, false, filters);
+    const op = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      revision: current.revision,
+      filters,
+      allVerified: true,
+    });
+    assert.equal((await f.drain(op.operationId)).failed, 0);
+    assert.equal((await db.eagleAsset.findUnique({ where: { id: a.id } })).deletedAt, null);
+    assert.ok((await db.eagleAsset.findUnique({ where: { id: b.id } })).deletedAt);
+    assert.equal(f.reads(), 0);
+  });
+}
+
+test('already-queued original verification remains resumable across the visual-rule upgrade', async () => {
+  const f = await fixture('PHOTO');
+  const png = await texturedPreview();
+  const rows = [await f.add({ format: 'png' }), await f.add({ format: 'nef' })];
+  for (const r of rows) {
+    await f.preview(r, png);
+    await f.original(r, png);
+  }
+  await db.eagleAsset.update({ where: { id: rows[1].id }, data: { format: 'nef' } });
+  async function legacyRun() {
+    const op = await f.duplicate.scan(f.principal, randomUUID());
+    const items = await db.eagleAssetOperationItem.findMany({
+      where: { operationId: op.operationId },
+      orderBy: { ordinal: 'asc' },
+    });
+    const build = items.at(-1);
+    await db.eagleAssetOperationItem.update({
+      where: { id: build.id },
+      data: {
+        assetIds: rows.map((r) => r.id),
+        snapshots: {
+          kind: 'verify',
+          rows: rows.map((r) => ({
+            id: r.id,
+            rowVersion: r.rowVersion,
+            mediaRevision: r.mediaRevision,
+          })),
+        },
+        weight: 2,
+      },
+    });
+    await db.eagleAssetOperationItem.create({
+      data: {
+        id: randomUUID(),
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        operationId: op.operationId,
+        ordinal: build.ordinal + 1,
+        assetIds: [],
+        snapshots: { kind: 'publish', version: 'conditions-visual-v4' },
+        weight: 1,
+      },
+    });
+    assert.equal((await f.drain(op.operationId)).failed, 0);
+  }
+  process.env.EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS = '1';
+  try {
+    await legacyRun();
+  } finally {
+    delete process.env.EAGLE_DUPLICATE_ORIGINAL_MAX_PIXELS;
+  }
+  assert.equal(
+    (await db.eagleDuplicateFingerprint.findUnique({ where: { assetId: rows[0].id } })).pixelStatus,
+    'PIXEL_LIMIT',
+  );
+  await legacyRun();
+  assert.equal(
+    (await db.eagleDuplicateFingerprint.findUnique({ where: { assetId: rows[0].id } })).pixelStatus,
+    'VERIFIED',
+  );
+  assert.equal(
+    (await db.eagleDuplicateFingerprint.findUnique({ where: { assetId: rows[1].id } })).pixelStatus,
+    'UNSUPPORTED',
+  );
+});
+
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode}: visual conditions split a matched group and all actions bind to the resulting subgroup`, async () => {
+    const f = await fixture(mode),
+      preview = await texturedPreview();
+    const a = await f.add({
+      originalName: 'original.jpg',
+      width: 4208,
+      height: 2368,
+      byteSize: 1800n,
+    });
+    const b = await f.add({
+      originalName: 'copy.png',
+      format: 'png',
+      width: 1919,
+      height: 1080,
+      byteSize: 900n,
+    });
+    const c = await f.add({
+      originalName: 'copy.png',
+      format: 'png',
+      width: 1919,
+      height: 1080,
+      byteSize: 900n,
+    });
+    for (const r of [a, b, c]) await f.preview(r, preview);
+    const op = await f.duplicate.scan(f.principal, randomUUID());
+    assert.equal((await f.drain(op.operationId)).failed, 0);
+    const filters = { kind: 'SIMILAR', sameVisual: 'true', protectEdits: 'true' };
+    const page = await f.duplicate.list(f.ownerId, false, filters);
+    assert.equal(page.totalGroups, 1);
+    assert.equal(page.groups[0].count, 3);
+    const narrow = {
+      ...filters,
+      sameName: 'true',
+      sameDimensions: 'true',
+      sameFormat: 'true',
+      sameBytes: 'true',
+      maxBytes: '1000',
+    };
+    const subgroup = await f.duplicate.list(f.ownerId, false, narrow);
+    assert.equal(subgroup.totalGroups, 1);
+    assert.equal(subgroup.groups[0].count, 2);
+    const sig = subgroup.groups[0].signature;
+    assert.deepEqual(
+      new Set((await f.duplicate.members(f.ownerId, false, sig, 0, narrow)).items.map((r) => r.id)),
+      new Set([b.id, c.id]),
+    );
+    await assert.rejects(f.duplicate.members(f.ownerId, false, sig, 0, filters), /变化/);
+    await assert.rejects(
+      f.duplicate.cleanup(f.principal, {
+        operationId: randomUUID(),
+        allVerified: true,
+        revision: subgroup.revision,
+        filters,
+      }),
+      /变化/,
+    );
+    await f.duplicate.ignore(f.ownerId, false, { signature: sig, ignored: true, filters: narrow });
+    assert.equal((await f.duplicate.list(f.ownerId, false, narrow)).totalGroups, 0);
+    assert.equal(
+      (await f.duplicate.list(f.ownerId, false, { ...narrow, showIgnored: 'true' })).totalGroups,
+      1,
+    );
+    await f.duplicate.ignore(f.ownerId, false, { signature: sig, ignored: false, filters: narrow });
+    const current = await f.duplicate.list(f.ownerId, false, filters);
+    const cleanup = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      filters,
+      groups: [{ signature: current.groups[0].signature, removeIds: [c.id] }],
+    });
+    assert.equal((await f.drain(cleanup.operationId)).failed, 0);
+    const remaining = await f.duplicate.list(f.ownerId, false, filters);
+    assert.equal(remaining.totalGroups, 1);
+    assert.equal(
+      remaining.groups[0].count,
+      2,
+      'deleting one member must retain the remaining visual pair',
+    );
+    assert.equal(
+      f.reads(),
+      3,
+      'all listing, filtering, ignore and cleanup stages perform zero original GETs',
+    );
+  });
+}
+
+test('metadata time grouping normalizes known fractional precision and keeps unknown times separate', async () => {
+  const f = await fixture('PHOTO');
+  const rows = [
+    await f.add({ originalName: 'a.jpg' }),
+    await f.add({ originalName: 'b.png', format: 'png', width: 300 }),
+    await f.add(),
+  ];
+  for (let i = 0; i < 2; i++)
+    await db.eaglePhotoMetadata.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: rows[i].id,
+        assetRevision: 1,
+        processorVersion: 'synthetic',
+        capturedAt: new Date('2020-01-01T00:00:00.100Z'),
+        capturedLocal: i === 0 ? '2020-01-01T00:00:00.1' : null,
+      },
+    });
+  const result = await f.duplicate.list(f.ownerId, false, {
+    kind: 'SIMILAR',
+    sameVisual: 'false',
+    sameCapturedAt: 'true',
+  });
+  assert.equal(result.totalGroups, 1);
+  assert.equal(result.groups[0].count, 2);
+  assert.equal(f.reads(), 0);
+});

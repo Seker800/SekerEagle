@@ -106,3 +106,7 @@ test('matches portable golden scores captured from Eagle Build 23 without requir
     else assert.ok(score !== null && Math.abs(score - row.score) < 1e-9);
   }
 });
+
+test('color rank distances retain the same rounded-Lab square-root arithmetic as SQL cursors', () => {
+  assert.equal(paletteColorScore('#777777', [{ hex: '#69696a', weight: 1 }]), Math.sqrt(37));
+});

@@ -4,7 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import { completeDuplicateItem } from './eagle-duplicate-item';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import {
-  findVerifiedPixelGroups,
+  findVisualDuplicateGroups,
   DUPLICATE_GROUPING_VERSION,
   type DuplicateFingerprint,
 } from '@sekereagle/library-core';
@@ -18,10 +18,7 @@ import {
   type ScanSnapshot,
 } from './eagle-duplicate-model';
 import { DUPLICATE_FINGERPRINT_VERSION, fingerprintPreview } from './eagle-duplicate-fingerprint';
-import {
-  scheduleDuplicateVerification,
-  executeDuplicateVerification,
-} from './eagle-duplicate-verification';
+import { executeDuplicateVerification } from './eagle-duplicate-verification';
 async function buildProjection(
   prisma: PrismaService,
   libraryMode: LibraryMode,
@@ -35,7 +32,7 @@ async function buildProjection(
     item.operation.isPrivate,
   );
   const byId = new Map(candidates.map((row) => [row.id, row]));
-  const groups = findVerifiedPixelGroups(candidates);
+  const groups = findVisualDuplicateGroups(candidates);
   await prisma.$transaction(
     async (tx) => {
       await lockOwnerPrivacyProjection(tx, item.ownerId, libraryMode);
@@ -75,8 +72,7 @@ export async function executeDuplicateIndex(
   assertActor: (tx: Prisma.TransactionClient) => Promise<void>,
 ) {
   const snapshot = item.snapshots as unknown as ScanSnapshot;
-  if (snapshot.kind === 'build')
-    return scheduleDuplicateVerification(prisma, libraryMode, item, assertActor);
+  if (snapshot.kind === 'build') return buildProjection(prisma, libraryMode, item, assertActor);
   if (snapshot.kind === 'verify')
     return executeDuplicateVerification(prisma, storage, libraryMode, item, assertActor);
   if (snapshot.kind === 'publish') return buildProjection(prisma, libraryMode, item, assertActor);

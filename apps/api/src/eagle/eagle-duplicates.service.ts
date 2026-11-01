@@ -127,11 +127,28 @@ export class EagleDuplicateService {
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 30_000 },
     );
   }
-  async members(ownerId: string, includePrivate: boolean, groupSignature: string, cursor = 0) {
+  async members(
+    ownerId: string,
+    includePrivate: boolean,
+    groupSignature: string,
+    cursor = 0,
+    filters: DuplicateListDto = {},
+  ) {
     return this.prisma.$transaction(
       async (tx) => {
-        const state = await this.read(tx, ownerId, includePrivate);
-        const group = state.groups.find((row) => row.signature === groupSignature);
+        const state = await filterDuplicateReview(
+          tx,
+          await this.read(tx, ownerId, includePrivate),
+          ownerId,
+          this.libraryMode,
+          includePrivate,
+          filters,
+        );
+        const group = state.groups.find(
+          (row) =>
+            row.signature === groupSignature &&
+            (!filters.kind || filters.kind === 'ALL' || row.kind === filters.kind),
+        );
         if (!group) throw new NotFoundException('这组结果已变化，请刷新后重试。');
         const ids = group.assetIds.slice(cursor, cursor + 24);
         const rows = await tx.eagleAsset.findMany({
@@ -186,7 +203,13 @@ export class EagleDuplicateService {
                   g.kind === input.filters.kind) &&
                 (input.ignored ? !state.ignored.has(g.signature) : state.ignored.has(g.signature)),
             )
-          : state.groups.filter((g) => g.signature === input.signature);
+          : state.groups.filter(
+              (g) =>
+                g.signature === input.signature &&
+                (!input.filters?.kind ||
+                  input.filters.kind === 'ALL' ||
+                  g.kind === input.filters.kind),
+            );
         if (!groups.length && !input.allFiltered) throw new NotFoundException('查重组不存在。');
         const keys = groups.map((group) => ({
           ownerId,

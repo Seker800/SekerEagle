@@ -4,6 +4,35 @@ export const enUS = {
 
   '自动更新暂时不可用，现有结果已保留。':
     'Automatic updates are temporarily unavailable. Existing results have been kept.',
+  '每组保留一份，清理其他项': 'Keep one per group and clean up the others',
+  '清理 {{count}} 组匹配文件': 'Clean up {{count}} matching groups',
+  改为保留这张: 'Keep this one instead',
+
+  '所选条件不保证内容完全一致，请确认已比较需要清理的文件。':
+    'Matching conditions do not prove identical content. Compare the selected files before cleanup.',
+  按条件查找: 'Find by conditions',
+  '匹配规则已更新，点击“检查新内容”更新结果。':
+    'Matching rules have changed. Check new content to update results.',
+  '正在更新画面匹配结果，完成后自动显示。':
+    'Updating visual matches. Results will appear automatically.',
+  '完全重复依据原文件哈希。按条件查找只使用勾选的条件；画面匹配可找到缩放、压缩副本，也可能包含连拍，请比较后清理。':
+    'Exact duplicates use original file hashes. Conditional matching uses only checked conditions. Visual matches include resized or recompressed copies and may include burst photos. Compare before cleanup.',
+  '画面匹配使用当前预览，预览未就绪的图片会在检查完成后加入；只按文件属性查找不需要等待画面检查。':
+    'Visual matching uses current previews. Check new content after previews become available. Matching file properties does not require visual indexing.',
+  '符合所选条件，需比较确认': 'Matches selected conditions; compare to confirm',
+  请至少选择一个匹配条件: 'Select at least one matching condition',
+  没有符合所选条件的文件: 'No files match the selected conditions',
+  '文件大小上限和编辑保护只限制范围，不能单独判断两个文件是否匹配。':
+    'Size limits and edit protection restrict the scope; they cannot establish a match on their own.',
+  '缩放、压缩等不同版本请使用“按条件查找”。':
+    'Use Find by conditions for resized, recompressed, or other versions.',
+  '查看按条件查找 {{value1}} 组': 'View {{value1}} conditional groups',
+  '这些文件符合所选条件，不代表内容完全一致。请比较后选择保留项，其余移入回收站。':
+    'These files match the selected conditions but may have different content. Compare them and choose which to keep; the others go to trash.',
+  '画面相同（包括缩放、压缩副本）': 'Same picture (including resized and recompressed copies)',
+  '只检查勾选的条件，多个条件同时满足。画面匹配包含疑似连拍，请比较后清理；缺少拍摄时间不算相同。':
+    'Only checked conditions apply; all must match. Visual matches may include burst photos. Compare before cleanup. Missing capture times do not count as equal.',
+
   不支持的操作类型: 'Unsupported operation type',
   '不支持的操作类型，无法执行。': 'This operation type is unsupported and cannot run.',
   '已选 {{value1}} 组，按保留标记处理': '{{value1}} groups selected; use marked keepers',

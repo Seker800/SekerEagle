@@ -224,6 +224,10 @@ try {
     env,
     stdio: 'inherit',
   });
+  run(process.execPath, ['--test', 'scripts/testing/library-memory.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   run(process.execPath, ['--test', 'scripts/testing/object-deletion-wakeup.test.mjs'], {
     env,
     stdio: 'inherit',

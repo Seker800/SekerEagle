@@ -1,3 +1,4 @@
+import { readMemoryColorPage } from './eagle-memory-client';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -91,7 +92,12 @@ export async function readColorAssetPage(
   color: string,
   includePrivate: boolean,
   trash: boolean,
-) {
+  useReader = true,
+): Promise<{
+  rows: Prisma.EagleAssetGetPayload<{ include: typeof assetListInclude }>[];
+  previousCursor: string | null;
+  nextCursor: string | null;
+}> {
   const key = colorPageKey(query, color, includePrivate, trash);
   const cursor = query.cursor ? decodeColorCursor(query.cursor, scope, key) : undefined;
   const newer = Boolean(cursor?.newer);
@@ -102,16 +108,28 @@ export async function readColorAssetPage(
     : Prisma.empty;
   // Eagle ranks through `colorDistancesMap[id] || 100`, including the zero-distance fallback.
   const plan = colorSearchPlan(where, color);
-  const candidates = await prisma.$queryRaw<
-    Array<{ id: string; score: number; time: Date; mediaRevision: number }>
-  >(Prisma.sql`
+  const resident = useReader
+    ? await readMemoryColorPage(scope, {
+        where,
+        color,
+        date: assetDateField(scope.libraryMode, query.sort),
+        limit: query.limit,
+        offset: query.offset ?? 0,
+        after: cursor,
+      })
+    : null;
+  const candidates =
+    resident?.map((row) => ({ ...row, time: new Date(row.time) })) ??
+    (await prisma.$queryRaw<
+      Array<{ id: string; score: number; time: Date; mediaRevision: number }>
+    >(Prisma.sql`
     ${plan.with}, ranked AS MATERIALIZED (
       SELECT asset.id,asset."mediaRevision",${date} time,coalesce(nullif(${plan.score},0),100) score
       FROM ${plan.from} WHERE ${plan.where}
     ) SELECT id,score,time,"mediaRevision" FROM ranked WHERE TRUE ${boundary}
       ORDER BY score ${Prisma.raw(newer ? 'DESC' : 'ASC')},time ${Prisma.raw(newer ? 'ASC' : 'DESC')},id ${Prisma.raw(newer ? 'ASC' : 'DESC')}
       LIMIT ${query.limit + 1} ${query.offset ? Prisma.sql`OFFSET ${query.offset}` : Prisma.empty}
-  `);
+  `));
   const hasMore = candidates.length > query.limit;
   const page = candidates.slice(0, query.limit);
   if (newer) page.reverse();
@@ -131,6 +149,8 @@ export async function readColorAssetPage(
         include: assetListInclude,
       })
     : [];
+  if (resident && rows.length !== page.length)
+    return readColorAssetPage(prisma, scope, query, where, color, includePrivate, trash, false);
   const positions = new Map(page.map((p, index) => [p.id, index]));
   rows.sort((a, b) => positions.get(a.id)! - positions.get(b.id)!);
   const position = (p: (typeof page)[number], newer?: true): ColorPosition => ({
