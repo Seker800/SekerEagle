@@ -100,3 +100,10 @@ test('semantic reader dispatches one complete page without exposing private serv
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
+
+test('photo facets capability is explicitly owned by the photo handler', () => {
+  const server = createLibraryReaderServer({ synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') }, 'test', 1024, {
+    facets: async () => ({ cameras: [], lenses: [] }),
+  });
+  server.close();
+});
