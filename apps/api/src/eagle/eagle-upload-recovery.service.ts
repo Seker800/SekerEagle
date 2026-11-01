@@ -1,12 +1,6 @@
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
-import {
-  Injectable,
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-  Inject,
-} from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleUploadService } from './eagle-upload.service';
@@ -16,10 +10,9 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 const RECOVERY_INTERVAL_MS = 60_000;
 
 @Injectable()
-export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy {
+export class EagleUploadRecoveryService {
   private readonly logger = new Logger(EagleUploadRecoveryService.name);
   private running = false;
-  private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -28,17 +21,6 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
     private readonly storage: ObjectStorageService,
     @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
-
-  onModuleInit(): void {
-    if (process.env.EAGLE_UPLOAD_RECOVERY_ENABLED === 'false') return;
-    void this.recoverPendingFinalizations();
-    this.timer = setInterval(() => void this.recoverPendingFinalizations(), RECOVERY_INTERVAL_MS);
-    this.timer.unref();
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
 
   async recoverPendingFinalizations(): Promise<void> {
     if (this.running) return;
@@ -181,7 +163,11 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
       try {
         for (const key of replacement.retiredObjectKeys) await this.storage.deleteObject(key);
         await this.prisma.eagleUploadSessionState.updateMany({
-          where: { uploadSessionId: replacement.uploadSessionId, libraryMode: this.libraryMode },
+          where: {
+            uploadSessionId: replacement.uploadSessionId,
+            libraryMode: this.libraryMode,
+            retiredObjectKeys: { equals: replacement.retiredObjectKeys },
+          },
           data: { retiredObjectKeys: [], replacementAssetId: null },
         });
       } catch (error) {

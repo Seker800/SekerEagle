@@ -10,6 +10,15 @@ import { objectStorageRuntimeOptions } from './config/runtime-config';
 import { EagleAssetOperationService } from './eagle/eagle-asset-operations.service';
 import { EagleLibraryTransferService } from './eagle/eagle-library-transfer.service';
 import { EagleService } from './eagle/eagle.service';
+import { AssetOperationBackground } from './asset-operation-background';
+import { EagleUploadService } from './eagle/eagle-upload.service';
+import { EagleUploadInspectionService } from './eagle/eagle-upload-inspection.service';
+import { EagleUploadRecoveryService } from './eagle/eagle-upload-recovery.service';
+import { EagleMediaCapabilityService } from './eagle/eagle-media-capability.service';
+import { EagleMaintenanceService } from './eagle/eagle-maintenance.service';
+import { EagleImportsService } from './eagle/import/eagle-app-import.service';
+import { PrismaEagleImportsRepository } from './eagle/import/adapters/prisma/eagle-app-import.repository';
+import { PrismaSekerEagleIngestionAdapter } from './eagle/adapters/prisma/seker-eagle-ingestion.adapter';
 
 /** Same domain services, a separate process/pool, no HTTP module or authentication secrets. */
 export function createAssetOperationExecutors(
@@ -25,6 +34,32 @@ export function createAssetOperationExecutors(
         mode,
         new EagleDuplicateService(prisma, storage, mode),
       ),
+  );
+}
+
+export function createAssetOperationBackground(
+  prisma: PrismaService,
+  storage: ObjectStorageService,
+) {
+  const imports = new EagleImportsService(
+    new PrismaEagleImportsRepository(prisma, new PrismaSekerEagleIngestionAdapter()),
+  );
+  const inspection = new EagleUploadInspectionService(storage);
+  const capabilities = new EagleMediaCapabilityService();
+  const recoveries = (['MATERIAL', 'PHOTO'] as const).map(
+    (mode) =>
+      new EagleUploadRecoveryService(
+        prisma,
+        new EagleUploadService(prisma, storage, capabilities, inspection, mode),
+        imports,
+        storage,
+        mode,
+      ),
+  );
+  return new AssetOperationBackground(
+    recoveries,
+    new EagleMaintenanceService(prisma, imports),
+    process.env.EAGLE_UPLOAD_RECOVERY_ENABLED !== 'false',
   );
 }
 
@@ -53,12 +88,13 @@ async function main() {
   let executors: ReturnType<typeof createAssetOperationExecutors> = [];
   let closing: Promise<void> | undefined;
   let wakeup: AssetOperationWakeup | undefined;
+  let background: AssetOperationBackground | undefined;
   const shutdown = () =>
     (closing ??= (async () => {
       await rm(readyFile, { force: true });
       try {
         await wakeup?.close();
-        await Promise.all(executors.map((executor) => executor.drain()));
+        await Promise.all([background?.close(), ...executors.map((executor) => executor.drain())]);
       } finally {
         storage.onModuleDestroy();
         await prisma.onModuleDestroy();
@@ -68,6 +104,8 @@ async function main() {
     await rm(readyFile, { force: true });
     await prisma.onModuleInit();
     executors = createAssetOperationExecutors(prisma, storage);
+    background = createAssetOperationBackground(prisma, storage);
+    background.start();
     for (const executor of executors) executor.startExecutor();
     wakeup = new AssetOperationWakeup(env.DATABASE_URL!, executors);
     await wakeup.start();
