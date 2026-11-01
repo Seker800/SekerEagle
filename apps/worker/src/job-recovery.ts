@@ -16,12 +16,12 @@ export async function propagateFailedDependencies(
       SELECT child.id, child."ownerId", child."libraryMode" FROM "EagleMediaJob" child
       JOIN "EagleMediaJob" parent ON parent.id=child."dependsOnJobId"
         AND parent."ownerId"=child."ownerId" AND parent."libraryMode"=child."libraryMode"
-      WHERE child.status='PENDING' AND parent.status='FAILED'
+      WHERE child.status='PENDING' AND child."dependsOnJobId" IS NOT NULL AND parent.status='FAILED'
       UNION
       SELECT child.id, child."ownerId", child."libraryMode" FROM "EagleMediaJob" child
       JOIN blocked parent ON parent.id=child."dependsOnJobId"
         AND parent."ownerId"=child."ownerId" AND parent."libraryMode"=child."libraryMode"
-      WHERE child.status='PENDING'
+      WHERE child.status='PENDING' AND child."dependsOnJobId" IS NOT NULL
     ) UPDATE "EagleMediaJob" job SET status='FAILED', "lastError"='DEPENDENCY_FAILED',
       "completedAt"=now(),"lockedAt"=NULL,"updatedAt"=now()
     FROM blocked WHERE job.id=blocked.id AND job.status='PENDING'
