@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import console from 'node:console';
+import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { performance } from 'node:perf_hooks';
@@ -8,10 +10,7 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { mediaCompletion } from '../../packages/library-core/dist/index.js';
 import { matchSmartFoldersForEmbedding } from '../../packages/library-persistence/dist/index.js';
 import { EmbeddingProcessor } from '../../apps/worker/dist/embedding-job.js';
-import {
-  publishEmbedding,
-  publishStoredEmbedding,
-} from '../../apps/worker/dist/embedding-publication.js';
+import { publishEmbedding } from '../../apps/worker/dist/embedding-publication.js';
 import {
   createTopEmbeddingSuggestion,
   activateEmbeddingSuggestionGeneration,
@@ -712,4 +711,18 @@ test('W5 API refresh keeps reviewed evidence rejected while allowing a genuinely
       data: { recommendationEnabled: true },
     });
   }
+});
+
+test('W5 API refresh refuses vectors from a space retired since the previous publication', async () => {
+  const { refreshUnclassifiedSuggestions } = await import('../../apps/api/dist/eagle/eagle-vector.persistence.js');
+  const f = await fixture();
+  await publishEmbedding(prisma, f.job, f.record.id, vector, identity, suggest);
+  await prisma.eagleVectorTagSuggestion.updateMany({ where: { ...scope, embeddingId: f.record.id }, data: { isActive: false, invalidatedAt: new Date() } });
+  const rollback = new Error('synthetic-space-rollback');
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await tx.eagleEmbeddingSpace.update({ where: { id: identity.id }, data: { isCurrent: false } });
+    const result = await refreshUnclassifiedSuggestions(tx, { ...scope, assetIds: [f.job.assetId] });
+    assert.equal(result.matched, 0);
+    throw rollback;
+  }), (error) => error === rollback);
 });

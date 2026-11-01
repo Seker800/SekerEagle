@@ -156,7 +156,6 @@ test('stored-vector activation preserves compatibility, scope and lease without 
   );
   assert.equal(reused, true);
   assert.equal(suggestions, 1);
-  const lookup = sql[0]!;
   for (const field of [
     '"ownerId"',
     '"libraryMode"',
