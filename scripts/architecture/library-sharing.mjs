@@ -220,13 +220,29 @@ function checkDatabaseBatchBudget(file, tree, report) {
     ts.isNumericLiteral(node) && [500, 512].includes(Number(node.text));
   walk(tree, (node) => {
     if (
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.initializer &&
-      literalTarget(node.initializer)
+      ts.isImportSpecifier(node) &&
+      (node.propertyName ?? node.name).text === 'OPERATION_DB_BATCH_SIZE'
     )
       rawTargets.add(node.name.text);
   });
+  // Follow simple local aliases, not arbitrary data flow or unrelated slice policies.
+  let changed;
+  do {
+    changed = false;
+    walk(tree, (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        (literalTarget(node.initializer) ||
+          (ts.isIdentifier(node.initializer) && rawTargets.has(node.initializer.text))) &&
+        !rawTargets.has(node.name.text)
+      ) {
+        rawTargets.add(node.name.text);
+        changed = true;
+      }
+    });
+  } while (changed);
   const containsRawTarget = (node) => {
     let found = false;
     walk(node, (child) => {

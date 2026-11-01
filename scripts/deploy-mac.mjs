@@ -150,7 +150,7 @@ async function waitForServiceHealth(composeFiles, service) {
 export function deployCompose(composeFiles, execute = runDocker) {
   // Build before pausing writers; schema changes run only after every writer is stopped.
   execute(composeArgs(composeFiles, ['build']), { timeoutMs: 30 * 60_000 });
-  execute(composeArgs(composeFiles, ['stop', 'gateway', 'api', 'worker']));
+  execute(composeArgs(composeFiles, ['stop', 'gateway', 'api', 'worker', 'operations']));
   execute(
     composeArgs(composeFiles, [
       'up',
