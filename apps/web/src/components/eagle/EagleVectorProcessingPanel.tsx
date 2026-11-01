@@ -62,7 +62,7 @@ export function EagleVectorProcessingPanel({
   useRefreshOnWorkspaceChanges(reload, ['TASKS', 'RECOMMENDATIONS', 'SETTINGS'], active);
   useActivityRefresh(
     reload,
-    Boolean(summary?.embeddingCoverage.running),
+    Boolean(summary && (summary.embeddingCoverage.running || summary.embeddingCoverage.queued)),
     summary?.embeddingCoverage,
     active,
     readFailure,

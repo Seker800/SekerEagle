@@ -28,6 +28,8 @@ BEGIN
     WHEN 'analysis' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
     WHEN 'operation' THEN 'op.id IS NOT NULL AND NOT op."isPrivate"'
     WHEN 'person' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
+    WHEN 'separation' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
+    WHEN 'group' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
     WHEN 'agent' THEN 'a.id IS NOT NULL AND NOT a."isPrivate"'
     ELSE 'NOT coalesce((d->>''isPrivate'')::boolean,false)' END;
   FOR scope IN EXECUTE format('
@@ -39,14 +41,17 @@ BEGIN
       AND ca."ownerId"=d->>''ownerId'' AND ca."libraryMode"::text=d->>''libraryMode''
     LEFT JOIN "EagleAssetOperation" op ON %L=''operation'' AND op.id=d->>''operationId''
       AND op."ownerId"=d->>''ownerId'' AND op."libraryMode"::text=d->>''libraryMode''
-    LEFT JOIN "EaglePhotoFace" face ON %L=''person'' AND face."personId"=d->>''id''
+    LEFT JOIN "EaglePhotoFace" face ON ((%L=''person'' AND face."personId"=d->>''id'')
+      OR (%L=''separation'' AND face."personId" IN (d->>''firstId'',d->>''secondId'')))
       AND face."ownerId"=d->>''ownerId'' AND face."libraryMode"::text=d->>''libraryMode'' AND face."isCurrent"
+    LEFT JOIN "EaglePhotoGroupMember" member ON %L=''group'' AND member."groupId"=d->>''id''
+      AND member."ownerId"=d->>''ownerId'' AND member."libraryMode"::text=d->>''libraryMode''
     LEFT JOIN "EaglePhotoAgentSuggestion" suggestion ON %L=''agent'' AND suggestion."taskId"=d->>''id''
       AND suggestion."ownerId"=d->>''ownerId'' AND suggestion."libraryMode"::text=d->>''libraryMode''
-    LEFT JOIN "EagleAsset" a ON a.id=coalesce(d->>''assetId'',ca."assetId",face."assetId",suggestion."assetId")
+    LEFT JOIN "EagleAsset" a ON a.id=coalesce(d->>''assetId'',ca."assetId",face."assetId",member."assetId",suggestion."assetId")
       AND a."ownerId"=d->>''ownerId'' AND a."libraryMode"::text=d->>''libraryMode''
     GROUP BY coalesce(d->>''ownerId'',d->>''uploaderId''),d->>''libraryMode''',
-    source,visibility,TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2])
+    source,visibility,TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2],TG_ARGV[2])
   LOOP
     IF scope.owner_id IS NOT NULL AND scope.mode IN ('MATERIAL','PHOTO') THEN
       PERFORM pg_notify('sekereagle_workspace_changes',json_build_object(
@@ -68,8 +73,8 @@ BEGIN
     ('EaglePhotoLocation','MAP,ASSETS,FOLDERS','relation'),
     ('EaglePhotoFace','PEOPLE,ASSETS','relation'),
     ('EaglePhotoPerson','PEOPLE','person'),
-    ('EaglePhotoPersonSeparation','PEOPLE','public'),
-    ('EaglePhotoGroup','ASSETS','public'),
+    ('EaglePhotoPersonSeparation','PEOPLE','separation'),
+    ('EaglePhotoGroup','ASSETS','group'),
     ('EaglePhotoGroupMember','ASSETS','relation'),
     ('EagleAssetManualTag','ASSETS,LABELS,FOLDERS,RECOMMENDATIONS','relation'),
     ('EagleAssetAiTag','ASSETS,LABELS,FOLDERS','relation'),
