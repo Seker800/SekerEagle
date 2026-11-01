@@ -34,3 +34,10 @@ test('ready-state, privacy and media-version guards are retained with no model i
   const guard = { owner: { eagleSmartFolders: { some: { id: 'folder', semanticSnapshots: { some: { isActive: true } } } } } };
   assert.deepEqual(residentSmartFolderPage(index, unready, { ...options, ordinaryMembersPossible: true, where: { AND: [{ NOT: membership }, guard] } }), []);
 });
+
+test('semantic scope discovery follows registered relation models and rejects unbounded graph queries', async () => {
+  const { semanticFolderIds } = await import('./eagle-memory-semantic');
+  assert.deepEqual(semanticFolderIds({ AND: [membership, { NOT: membership }] }), ['folder']);
+  assert.deepEqual(semanticFolderIds({ rating: 4 }), []);
+  assert.throws(() => semanticFolderIds({ embeddings: { some: { status: 'READY' } } }), /Unsupported/);
+});
