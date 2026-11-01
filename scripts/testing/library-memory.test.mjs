@@ -566,10 +566,51 @@ test('semantic resident page preserves real SQL scores, additional filters and v
         after = expected[2];
       } while (after);
       await assert.rejects(readResidentSmartFolderPage(pool, index, options, 1), /workspace/);
+      await db.eagleAsset.update({ where: { id: `${ownerId}-39` }, data: { rating: 2 } });
+      const laggedCacheRead = await readResidentSmartFolderPage(pool, index, options);
+      assert.ok(Array.isArray(laggedCacheRead));
+      const beforePublication = await rankSmartFolderMatches(
+        db,
+        scope,
+        [folderId],
+        undefined,
+        4,
+        includePrivate,
+        false,
+        undefined,
+        where,
+      );
+      let published = false;
+      const overlappingPool = {
+        connect: async () => {
+          const connection = await pool.connect();
+          return {
+            query: async (sql, values) => {
+              const result = await connection.query(sql, values);
+              if (!published && sql.includes('FROM "EagleSmartFolderSemanticMatch"')) {
+                published = true;
+                await db.eagleAsset.update({
+                  where: { id: `${ownerId}-39` },
+                  data: { rating: includePrivate ? 1 : 0 },
+                });
+                await store.synchronize(scope);
+              }
+              return result;
+            },
+            release: () => connection.release(),
+          };
+        },
+      };
+      assert.deepEqual(
+        await readResidentSmartFolderPage(overlappingPool, index, options),
+        beforePublication,
+      );
+      assert.ok(published);
+
       const server = createLibraryReaderServer(store, 'semantic-reader', 2097152, {
         smartFolderPage: (index, options) => readResidentSmartFolderPage(pool, index, options),
         semanticQuery: (index, ids, read) =>
-          withResidentSemanticGraph(pool, index, ids, (graph) => read(graph.context)),
+          withResidentSemanticGraph(pool, index, ids, (graph, view) => read(graph.context, view)),
       });
       server.listen(0, '127.0.0.1');
       await once(server, 'listening');
