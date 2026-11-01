@@ -80,3 +80,20 @@ it('stops automatic retries for revoked authentication', async () => {
   release();
   client.clear();
 });
+
+it('recalibrates immediately after reconnect, queuing one fresh read behind an older in-flight read', async () => {
+  vi.useFakeTimers();
+  let resolve!: (value: WorkspaceChanges) => void;
+  const client=new QueryClient();
+  const load=vi.fn().mockImplementationOnce(()=>new Promise<WorkspaceChanges>((done)=>{resolve=done;}))
+    .mockResolvedValue(snapshot('1'));
+  const release=acquireWorkspaceRefresh(client,'reconnect',false,load);
+  await vi.advanceTimersByTimeAsync(0);
+  window.dispatchEvent(new Event('online'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(load).toHaveBeenCalledTimes(1);
+  resolve(snapshot());
+  await vi.advanceTimersByTimeAsync(0);
+  expect(load).toHaveBeenCalledTimes(2);
+  release();client.clear();
+});
