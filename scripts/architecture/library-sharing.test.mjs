@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { checkLibrarySharing, readLibrarySources } from './library-sharing.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -127,11 +128,30 @@ test('rejects reverse dependencies through re-exports and dynamic imports', () =
 test('rejects a forked top-level workspace even if the existing page is retained', () => {
   rejectsMutation(
     'apps/web/src/App.tsx',
-    (s) =>
-      s.replace(
-        /<SekerEaglePage\b([\s\S]*?)\/>/,
-        "{libraryMode === 'MATERIAL' && <SekerEaglePage$1/>}",
-      ),
+    (s) => {
+      const tree = ts.createSourceFile(
+        'App.tsx',
+        s,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+      let target;
+      const visit = (node) => {
+        if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(tree) === 'SekerEaglePage')
+          target = node;
+        ts.forEachChild(node, visit);
+      };
+      visit(tree);
+      assert.ok(target, 'shared page must be present');
+      return (
+        s.slice(0, target.getStart(tree)) +
+        "{libraryMode === 'MATERIAL' && " +
+        s.slice(target.getStart(tree), target.end) +
+        '}' +
+        s.slice(target.end)
+      );
+    },
     'shared-composition',
   );
 });
