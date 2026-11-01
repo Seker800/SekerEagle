@@ -1,24 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
-export const WORKSPACE_CHANGE_KINDS = [
-  'ASSETS',
-  'LABELS',
-  'PEOPLE',
-  'MAP',
-  'FOLDERS',
-  'RECOMMENDATIONS',
-  'OPERATIONS',
-  'TASKS',
-  'SETTINGS',
-  'AGENT',
-] as const;
-export type WorkspaceChangeKind = (typeof WORKSPACE_CHANGE_KINDS)[number];
-export type WorkspaceChangeEvent = {
-  ownerId: string;
-  libraryMode: 'MATERIAL' | 'PHOTO';
-  kinds: readonly WorkspaceChangeKind[];
-  public: boolean;
-};
+import {
+  WORKSPACE_CHANGE_KINDS,
+  type WorkspaceChangeKind,
+  type WorkspaceChangeEvent,
+} from '@sekereagle/library-core';
 type Revisions = Partial<Record<WorkspaceChangeKind, string>>;
 
 /** Post-commit invalidation hints only. Reconnect changes the epoch instead of replaying facts. */

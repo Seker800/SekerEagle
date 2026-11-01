@@ -51,3 +51,5 @@ export * from './media-job-contract';
 
 export * from './color-search';
 export * from './color-palette';
+
+export * from './workspace-changes';
