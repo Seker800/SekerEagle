@@ -78,7 +78,7 @@ export function paletteColorScore(
   const lab = hexColorLab(target);
   const distance = (swatch: SearchColorSwatch) => {
     const color = hexColorLab(swatch.hex);
-    const d76 = Math.hypot(...lab.map((v, i) => v - color[i]!));
+    const d76 = Math.sqrt(lab.reduce((sum, value, i) => sum + (value - color[i]!) ** 2, 0));
     return deltaE2000(lab, color) < BASIC_COLOR_ACCURACY && d76 < BASIC_COLOR_ACCURACY + 50
       ? d76
       : null;
