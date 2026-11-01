@@ -379,16 +379,50 @@ test('database batching forbids raw work targets in the covered persistence path
       '\nfunction bypass(rows: unknown[]) { for (let offset = 0; offset < rows.length; offset += 500) {} }',
       '\nfunction bypass(rows: unknown[], offset: number) { return rows.slice(offset, offset + 512); }',
       '\nfunction bypass(rows: unknown[], offset: number) { const BATCH = 500; return rows.slice(offset, offset + BATCH); }',
-    ]) rejectsMutation(`apps/api/src/eagle/${file}`, (before) => before + source, 'database-batch-budget');
+    ])
+      rejectsMutation(
+        `apps/api/src/eagle/${file}`,
+        (before) => before + source,
+        'database-batch-budget',
+      );
   }
 });
 test('database batching gate permits preview decoder slots and unrelated protocol chunk sizes', () => {
   for (const [file, source] of [
-    ['apps/api/src/eagle/eagle-duplicate-index.ts', '\nfunction preview(rows: unknown[]) { for (let offset=0; offset<rows.length; offset+=2) { rows.slice(offset, offset+2); } }'],
-    ['apps/api/src/eagle/eagle-transfer-pyramid.ts', '\nfunction objectProtocol(rows: unknown[]) { return rows.slice(0, 500); }'],
+    [
+      'apps/api/src/eagle/eagle-duplicate-index.ts',
+      '\nfunction preview(rows: unknown[]) { for (let offset=0; offset<rows.length; offset+=2) { rows.slice(offset, offset+2); } }',
+    ],
+    [
+      'apps/api/src/eagle/eagle-transfer-pyramid.ts',
+      '\nfunction objectProtocol(rows: unknown[]) { return rows.slice(0, 500); }',
+    ],
   ]) {
     const sources = new Map(baseline);
     sources.set(file, sources.get(file) + source);
-    assert.ok(!checkLibrarySharing(sources).some((error) => error.rule === 'database-batch-budget'));
+    assert.ok(
+      !checkLibrarySharing(sources).some((error) => error.rule === 'database-batch-budget'),
+    );
   }
+});
+
+test('maintenance and upload recovery cannot restart themselves through API lifecycle hooks', () => {
+  for (const [file, name] of [
+    ['eagle-maintenance.service.ts', 'EagleMaintenanceService'],
+    ['eagle-upload-recovery.service.ts', 'EagleUploadRecoveryService'],
+  ]) {
+    for (const hook of ['onModuleInit', 'onApplicationBootstrap'])
+      rejectsMutation(`apps/api/src/eagle/${file}`, (source) => source.replace(`class ${name} {`, `class ${name} { ${hook}() { setInterval(() => this.runBackground(), 1000); }`), 'operations-background-host');
+    rejectsMutation(`apps/api/src/eagle/${file}`, (source) => source.replace('  ) {}', '  ) { this.startBackground(); }'), 'operations-background-host');
+  }
+});
+test('operations host must explicitly assemble recovery in both modes and maintenance before starting', () => {
+  const file = 'apps/api/src/asset-operation-executor.ts';
+  for (const mutate of [
+    (source) => source.replace('new EagleMaintenanceService(prisma, imports)', 'undefined'),
+    (source) => source.replace('new EagleUploadRecoveryService(', 'new OtherRecoveryService('),
+    (source) => source.replace('new AssetOperationBackground(', 'new OtherBackground('),
+    (source) => source.replace('    background.start();', ''),
+    (source) => source.replace("  const recoveries = (['MATERIAL', 'PHOTO'] as const)", "  const recoveries = (['MATERIAL'] as const)"),
+  ]) rejectsMutation(file, mutate, 'operations-background-host');
 });
