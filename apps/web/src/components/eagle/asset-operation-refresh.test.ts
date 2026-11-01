@@ -279,7 +279,9 @@ it.each([
   'marks an inactive %s destination stale for %s/%s without fetching its pages',
   async (kind, targetMode, view) => {
     const f = fixture();
-    const target = createEagleQueryKeys('owner', targetMode).assetList(view, { cached: 'inactive' });
+    const target = createEagleQueryKeys('owner', targetMode).assetList(view, {
+      cached: 'inactive',
+    });
     const otherOwner = createEagleQueryKeys('other', targetMode).assetList(view, {});
     const unrelatedMode = createEagleQueryKeys(
       'owner',

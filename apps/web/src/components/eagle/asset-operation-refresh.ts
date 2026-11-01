@@ -1,3 +1,4 @@
+import { assetOperationProtocol } from '@sekereagle/library-core';
 import {
   createEagleQueryKeys,
   isEagleQuery,
@@ -14,6 +15,8 @@ import type { LibraryMode } from '../../lib/library-api-scope';
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
+
+type AssetListView = 'ACTIVE' | 'PRIVATE' | 'TRASH';
 
 const coordinators = new WeakMap<QueryClient, Map<string, AssetOperationRefresher>>();
 export function getAssetOperationRefresher(client: QueryClient, ownerId: string) {
@@ -34,7 +37,7 @@ export class AssetOperationRefresher {
   private disposed = false;
   private readonly reading = new Set<string>();
   private readonly dirtyMetadata = new Set<LibraryMode>();
-  private readonly restoreModes = new Set<LibraryMode>();
+  private readonly destinationViews = new Map<LibraryMode, Set<AssetListView>>();
   private flushing: Promise<void> | undefined;
   private readonly handled = new WeakMap<object, Map<string, string>>();
   constructor(
@@ -66,7 +69,24 @@ export class AssetOperationRefresher {
               .some((query) => query.isActive())
           )
             cache.operations.confirmCounts();
-          if (this.restoreModes.delete(mode)) await this.refreshFirstPages(mode);
+          const views = this.destinationViews.get(mode);
+          if (views) {
+            this.destinationViews.delete(mode);
+            // Closed lists cannot receive missing positive members from local filtering.
+            // Mark them stale without I/O; the next intentional visit reads current facts.
+            await this.client.invalidateQueries(
+              {
+                type: 'inactive',
+                predicate: (query) =>
+                  [...views].some((view) =>
+                    isEagleAssetListKey(query.queryKey, this.ownerId, mode, view),
+                  ),
+                refetchType: 'none',
+              },
+              { cancelRefetch: false },
+            );
+            await this.refreshFirstPages(mode, [...views]);
+          }
         }
       }
     })();
@@ -167,11 +187,15 @@ export class AssetOperationRefresher {
         );
       }
       this.dirtyMetadata.add(mode);
-      if (actual.kind === 'RESTORE') this.restoreModes.add(mode);
+      const membershipChange = assetOperationProtocol(actual.kind)?.membership;
+      if (actual.completed > 0 && membershipChange === 'TRASH')
+        this.addDestination(mode, ['TRASH']);
+      if (actual.completed > 0 && membershipChange === 'ACTIVE')
+        this.addDestination(mode, ['ACTIVE', 'PRIVATE']);
       if (actual.kind === 'SEND') {
         const target = mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
         this.dirtyMetadata.add(target);
-        this.restoreModes.add(target);
+        if (actual.completed > 0) this.addDestination(target, ['ACTIVE', 'PRIVATE']);
       }
     } catch (error) {
       // Retain the intent and retry on the next status response. A lost response
@@ -183,12 +207,16 @@ export class AssetOperationRefresher {
       await this.flush().catch(() => undefined);
     }
   }
-  private async refreshFirstPages(mode: LibraryMode) {
+  private addDestination(mode: LibraryMode, views: readonly AssetListView[]) {
+    const destinations = this.destinationViews.get(mode) ?? new Set<AssetListView>();
+    for (const view of views) destinations.add(view);
+    this.destinationViews.set(mode, destinations);
+  }
+  private async refreshFirstPages(mode: LibraryMode, views: readonly AssetListView[]) {
     const queries = this.client.getQueryCache().findAll({
       predicate: (query) =>
         query.isActive() &&
-        isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
-        query.queryKey[4] !== 'TRASH',
+        views.some((view) => isEagleAssetListKey(query.queryKey, this.ownerId, mode, view)),
     });
     for (const query of queries) {
       const data = query.state.data as InfiniteData<NormalizedEagleAssetPage, string> | undefined;
