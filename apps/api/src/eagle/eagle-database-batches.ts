@@ -14,7 +14,8 @@ const statement = (
 ): DatabaseStatementBudget => ({ parametersPerRow, fixedParameters, targetRows });
 /**
  * Upper bounds include Prisma supplied defaults/timestamps. Arrays are one binding;
- * IN/OR lists expand. Resolver budgets cover each statement separately, including
+ * IN/OR lists expand. Prisma findMany also binds OFFSET even when it is zero.
+ * Resolver budgets cover each statement separately, including
  * up to two live components and restore's (id, revision) pairs; they are not sums
  * of bindings across SQL round trips. Duplicate work targets retain the prior 500.
  */
@@ -24,19 +25,20 @@ export const DATABASE_STATEMENTS = {
   operationItems: statement(14),
   // unnest binds an entire ID array once, plus owner/mode/private visibility.
   operationMembership: statement(0, 4),
-  duplicateIgnoreLookup: statement(3, 4, 500),
+  duplicateIgnoreLookup: statement(4, 4, 500),
   duplicateOperationItems: statement(14, 0, 500),
   duplicateTrashTargets: statement(4, 16, 500),
   duplicateAssetLookup: statement(1, 8, 500),
-  duplicateTagLookup: statement(1, 2, 500),
+  duplicateTagLookup: statement(1, 3, 500),
   duplicateTagInsert: statement(8, 0, 500),
   duplicateRestoreWhere: statement(2, 16, 500),
+  duplicateRatingUpdate: statement(2, 2, 500),
   duplicateGroups: statement(9, 0, 500),
-  duplicateVerificationLookup: statement(1, 6, 500),
+  duplicateVerificationLookup: statement(1, 7, 500),
   duplicateVerificationItems: statement(14, 0, 500),
   duplicateFingerprintPublish: statement(5, 6, 500),
   duplicateProofPublish: statement(4, 4, 500),
-  transferTagLookup: statement(1, 2),
+  transferTagLookup: statement(1, 3),
   transferTagGroupInsert: statement(10),
   transferTagInsert: statement(13),
   transferGroupMembershipInsert: statement(5),

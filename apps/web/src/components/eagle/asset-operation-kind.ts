@@ -1,8 +1,9 @@
 import { assetOperationProtocol, type AssetOperationKind } from '@sekereagle/library-core';
+import type { MessageId } from '../../i18n';
 import type { LibraryMode } from '../../lib/library-api-scope';
 
 type Presentation = {
-  title: string;
+  title: MessageId;
   executable: boolean;
   optimisticMembership: 'HIDE_ACTIVE' | 'HIDE_TRASH' | 'NONE';
   compensation: 'RESTORE' | null;
@@ -14,7 +15,7 @@ const titles = {
   EMPTY_TRASH: () => '清空回收站',
   DUPLICATE_SCAN: () => '检查重复图片',
   DUPLICATE_CLEANUP: () => '清理重复项',
-} satisfies Record<AssetOperationKind, (mode: LibraryMode) => string>;
+} satisfies Record<AssetOperationKind, (mode: LibraryMode) => MessageId>;
 
 /** Unknown server kinds remain visible without borrowing another operation's effects. */
 export function operationKindPresentation(kind: string, mode: LibraryMode): Presentation {

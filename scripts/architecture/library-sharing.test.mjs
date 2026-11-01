@@ -426,7 +426,11 @@ test('maintenance and upload recovery cannot restart themselves through API life
       (source) => source.replace('  ) {}', '  ) { this.startBackground(); }'),
       'operations-background-host',
     );
-    rejectsMutation(`apps/api/src/eagle/${file}`, (source) => source.replace('  ) {}', '  ) { setInterval(() => undefined, 1000); }'), 'operations-background-host');
+    rejectsMutation(
+      `apps/api/src/eagle/${file}`,
+      (source) => source.replace('  ) {}', '  ) { setInterval(() => undefined, 1000); }'),
+      'operations-background-host',
+    );
   }
 });
 test('operations host must explicitly assemble recovery in both modes and maintenance before starting', () => {

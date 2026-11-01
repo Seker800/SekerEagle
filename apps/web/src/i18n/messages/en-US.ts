@@ -1,4 +1,6 @@
 export const enUS = {
+  不支持的操作类型: 'Unsupported operation type',
+  '不支持的操作类型，无法执行。': 'This operation type is unsupported and cannot run.',
   '已选 {{value1}} 组，按保留标记处理': '{{value1}} groups selected; use marked keepers',
   按保留标记清理全部筛选结果: 'Clean all filtered groups using marked keepers',
 

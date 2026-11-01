@@ -202,6 +202,156 @@ function modeGuarded(node) {
   return false;
 }
 
+// Only the registered persistence paths use this work-target protocol. Decoder
+// slots, S3 parts and unrelated product pagination retain their own contracts.
+const databaseBatchPaths = new Set(
+  [
+    'eagle-asset-operations.service.ts',
+    'eagle-duplicates.service.ts',
+    'eagle-duplicate-cleanup.ts',
+    'eagle-duplicate-index.ts',
+    'eagle-duplicate-verification.ts',
+  ].map((name) => `apps/api/src/eagle/${name}`),
+);
+function checkDatabaseBatchBudget(file, tree, report) {
+  if (!databaseBatchPaths.has(file)) return;
+  const rawTargets = new Set();
+  const literalTarget = (node) =>
+    ts.isNumericLiteral(node) && [500, 512].includes(Number(node.text));
+  walk(tree, (node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      literalTarget(node.initializer)
+    )
+      rawTargets.add(node.name.text);
+  });
+  const containsRawTarget = (node) => {
+    let found = false;
+    walk(node, (child) => {
+      found ||= literalTarget(child) || (ts.isIdentifier(child) && rawTargets.has(child.text));
+    });
+    return found;
+  };
+  walk(tree, (node) => {
+    const rawIncrement =
+      ts.isForStatement(node) && node.incrementor && containsRawTarget(node.incrementor);
+    const rawSlice =
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === 'slice' &&
+      node.arguments.some(containsRawTarget);
+    if (rawIncrement || rawSlice)
+      report(
+        file,
+        'database-batch-budget',
+        'Use a registered database statement budget for persistence batches.',
+      );
+  });
+}
+
+const backgroundApiClasses = new Map([
+  ['apps/api/src/eagle/eagle-maintenance.service.ts', 'EagleMaintenanceService'],
+  ['apps/api/src/eagle/eagle-upload-recovery.service.ts', 'EagleUploadRecoveryService'],
+]);
+function importedIdentity(tree, local, canonical, module) {
+  return tree.statements.some(
+    (node) =>
+      ts.isImportDeclaration(node) &&
+      node.moduleSpecifier.text === module &&
+      node.importClause?.namedBindings &&
+      ts.isNamedImports(node.importClause.namedBindings) &&
+      node.importClause.namedBindings.elements.some(
+        (binding) =>
+          binding.name.text === local && (binding.propertyName ?? binding.name).text === canonical,
+      ),
+  );
+}
+function checkOperationsBackground(file, tree, report) {
+  const reject = () =>
+    report(
+      file,
+      'operations-background-host',
+      'Maintenance and upload recovery run only in the explicitly assembled operations host.',
+    );
+  const apiClass = backgroundApiClasses.get(file);
+  if (apiClass)
+    walk(tree, (node) => {
+      if (!ts.isClassDeclaration(node) || node.name?.text !== apiClass) return;
+      for (const member of node.members) {
+        const lifecycle =
+          ts.isMethodDeclaration(member) &&
+          ['onModuleInit', 'onApplicationBootstrap'].includes(member.name.getText(tree));
+        if (lifecycle) reject();
+        if (ts.isConstructorDeclaration(member) && member.body)
+          walk(member.body, (child) => {
+            if (!ts.isCallExpression(child)) return;
+            const callee = child.expression;
+            const callsWork =
+              ts.isPropertyAccessExpression(callee) &&
+              callee.expression.kind === ts.SyntaxKind.ThisKeyword;
+            const startsTimer =
+              ts.isIdentifier(callee) &&
+              (['setInterval', 'setTimeout'].includes(callee.text) ||
+                ['setInterval', 'setTimeout'].some((name) =>
+                  importedIdentity(tree, callee.text, name, 'node:timers'),
+                ));
+            if (callsWork || startsTimer) reject();
+          });
+      }
+    });
+  if (file !== 'apps/api/src/asset-operation-executor.ts') return;
+  const factory = tree.statements.find(
+    (node) =>
+      ts.isFunctionDeclaration(node) && node.name?.text === 'createAssetOperationBackground',
+  );
+  const required = [
+    ['EagleUploadRecoveryService', './eagle/eagle-upload-recovery.service'],
+    ['EagleMaintenanceService', './eagle/eagle-maintenance.service'],
+    ['AssetOperationBackground', './asset-operation-background'],
+  ];
+  const constructed = new Set();
+  let bothModes = false;
+  if (factory)
+    walk(factory, (node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression))
+        for (const [name, module] of required)
+          if (importedIdentity(tree, node.expression.text, name, module)) constructed.add(name);
+      if (ts.isArrayLiteralExpression(node))
+        bothModes ||=
+          node.elements.length === 2 &&
+          node.elements.every(ts.isStringLiteral) &&
+          new Set(node.elements.map((item) => item.text)).size === 2 &&
+          node.elements.some((item) => item.text === 'MATERIAL') &&
+          node.elements.some((item) => item.text === 'PHOTO');
+    });
+  const hosts = new Set();
+  walk(tree, (node) => {
+    if (
+      ts.isBinaryExpression(node) &&
+      node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+      ts.isIdentifier(node.left) &&
+      ts.isCallExpression(node.right) &&
+      ts.isIdentifier(node.right.expression) &&
+      node.right.expression.text === factory?.name?.text
+    )
+      hosts.add(node.left.text);
+  });
+  let started = false;
+  walk(tree, (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      hosts.has(node.expression.expression.text) &&
+      node.expression.name.text === 'start'
+    )
+      started = true;
+  });
+  if (constructed.size !== required.length || !bothModes || !started) reject();
+}
+
 /** Structural contracts, not a claim to prove arbitrary program equivalence. */
 export function checkLibrarySharing(sources) {
   const errors = [];
@@ -255,6 +405,8 @@ export function checkLibrarySharing(sources) {
       file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
     );
     trees.set(file, tree);
+    checkDatabaseBatchBudget(file, tree, report);
+    checkOperationsBackground(file, tree, report);
     for (const error of tree.parseDiagnostics) {
       report(file, 'parse-error', ts.flattenDiagnosticMessageText(error.messageText, ' '));
     }
