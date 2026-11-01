@@ -215,3 +215,32 @@ for (const scenario of [
     assert.equal(completions, scenario === 'no-cache' || scenario === 'ready' ? 0 : 1);
     assert.equal(matched, 0);
   });
+
+
+test('fresh publication locks the active model identity instead of trusting preparation', async () => {
+  const queries: string[] = [];
+  const f = fixture();
+  const client = {
+    $transaction: (work: (tx: unknown) => Promise<void>, options: unknown) =>
+      f.client.$transaction(async (tx) => {
+        const originalQuery = tx.$queryRaw;
+        tx.$queryRaw = async (query?: unknown) => {
+          queries.push((query as { sql: string }).sql);
+          return originalQuery();
+        };
+        return work(tx);
+      }, options as never),
+  };
+  await publishEmbedding(client as never, job, 'vector-1', [1, 0], f.suggest);
+  assert.ok(queries.some((sql) => sql.includes('"EagleEmbeddingSpace"')));
+});
+
+test('fresh publication writes vector bytes and READY state together', async () => {
+  const f = fixture();
+  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
+  const writes = f.calls.filter((call) => call.operation === 'vector');
+  assert.ok(writes.some((call) => {
+    const sql = (call.input as { sql: string }).sql;
+    return sql.includes('"embedding"') && sql.includes("'READY'");
+  }));
+});
