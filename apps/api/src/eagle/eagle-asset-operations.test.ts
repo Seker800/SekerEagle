@@ -657,8 +657,8 @@ test('unknown persisted operation kinds fail closed before any resource transact
   } as never, {} as never, {} as never, 'MATERIAL');
   Reflect.set(service, 'logger', { error: () => undefined });
   await (service as unknown as { execute(items: unknown[]): Promise<void> }).execute([{
-    id: 'item', ownerId: 'owner', leaseVersion: 1, assetIds: ['asset'], snapshots: [],
-    operation: { id: 'operation', ownerId: 'owner', kind: 'FUTURE_KIND', isPrivate: false },
+    id: 'item', operationId: 'operation', ownerId: 'owner', libraryMode: 'MATERIAL', leaseVersion: 1, assetIds: ['asset'], snapshots: [],
+    operation: { id: 'operation', ownerId: 'owner', libraryMode: 'MATERIAL', kind: 'FUTURE_KIND', isPrivate: false },
   }]);
   assert.equal(transactions, 0);
   assert.deepEqual(failures.map((write) => write.data), [{
