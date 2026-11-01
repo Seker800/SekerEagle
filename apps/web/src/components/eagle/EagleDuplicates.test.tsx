@@ -934,3 +934,25 @@ describe('duplicate cleanup review', () => {
     ).toBeVisible();
   });
 });
+
+it('cancelling confirmation preserves selected groups, review scroll and the initiating action', async () => {
+  const onClose = vi.fn();
+  render(onClose);
+  const selected = await screen.findByRole('checkbox', { name: '选择重复组 1' });
+  fireEvent.click(selected);
+  const review = screen.getByRole('dialog', { name: '查重清理' });
+  review.scrollTop = 320;
+  const action = screen.getByRole('button', { name: '清理所选重复组' });
+  action.focus();
+  fireEvent.click(action);
+  fireEvent(
+    screen.getByRole('alertdialog'),
+    new Event('cancel', { bubbles: true, cancelable: true }),
+  );
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(selected).toBeChecked();
+  expect(review.scrollTop).toBe(320);
+  expect(action).toHaveFocus();
+  expect(mocks.cleanup).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+});

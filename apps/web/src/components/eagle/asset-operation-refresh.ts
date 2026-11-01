@@ -32,7 +32,11 @@ export function getAssetOperationRefresher(client: QueryClient, ownerId: string)
   }
   return coordinator;
 }
-/** Read terminal receipts once and merge destination windows without replaying loaded pages. */
+/**
+ * Apply receipts once; merge destination windows without replaying loaded pages.
+ * Cancellation, retained retry intent and concurrent snapshots are specified in
+ * docs/architecture-efficiency-review-followup-2026-11-01.md.
+ */
 export class AssetOperationRefresher {
   private disposed = false;
   private readonly reading = new Set<string>();

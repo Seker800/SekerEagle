@@ -1686,7 +1686,7 @@ test('purge commits asset deletion and detached upload/capture pointers before r
       status: 'COMPLETED',
     },
   });
-  assert.equal((await f.materials.emptyTrash(f.ownerId)).affectedAssetCount, 1);
+  assert.equal((await f.materials.emptyTrashBatch(f.ownerId)).affectedAssetCount, 1);
   assert.equal(
     (await prisma.eagleAsset.findUnique({ where: { id: privateAsset.id } })).purgeAfter,
     null,

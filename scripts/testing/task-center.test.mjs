@@ -275,7 +275,8 @@ test('all manual media requeues reset exhausted recovery budgets and fence old e
       if (action === 'bulk') await new EagleProcessingService(prisma, mode).retryFailed(f.owner);
       if (action === 'vector')
         await new EagleVectorService(prisma, mode).retryFailedEmbeddings(f.owner);
-      if (action === 'purge') await new EagleService(prisma, undefined, mode).emptyTrash(f.owner);
+      if (action === 'purge')
+        await new EagleService(prisma, undefined, mode).emptyTrashBatch(f.owner);
       if (action === 'reconcile') await new EagleProcessingService(prisma, mode).reconcile(f.owner);
       if (action === 'scanMissing')
         await new EagleVectorService(prisma, mode).scanMissingEmbeddings(f.owner);

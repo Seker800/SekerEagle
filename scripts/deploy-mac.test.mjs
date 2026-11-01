@@ -223,3 +223,21 @@ test('upgrade drains operations together with old API writers before any migrati
     assert.ok(calls[stop].includes(name), `${name} must finish stopping before the next step`);
   assert.ok(stop < calls.findIndex((args) => args.includes('up')));
 });
+
+test('failure to drain the writer set never starts migrations or replacement hosts', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  const calls = [];
+  assert.throws(
+    () =>
+      deployCompose(selectComposeFiles(''), (args) => {
+        calls.push(args);
+        if (args.includes('stop')) throw Error('synthetic operations did not stop');
+        return '';
+      }),
+    /did not stop/,
+  );
+  assert.equal(
+    calls.some((args) => args.includes('up')),
+    false,
+  );
+});

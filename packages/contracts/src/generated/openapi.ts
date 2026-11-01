@@ -5757,11 +5757,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5795,11 +5797,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8268,11 +8272,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8306,11 +8312,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };

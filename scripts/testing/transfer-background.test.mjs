@@ -1,3 +1,6 @@
+import { setTimeout, clearTimeout } from 'node:timers';
+import { fork } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import sharp from 'sharp';
 import { Readable } from 'node:stream';
 import { createAssetOperationBackground } from '../../apps/api/dist/asset-operation-executor.js';
@@ -516,3 +519,166 @@ test('actual operations recovery assembly invalidates PHOTO facts when replacing
   assert.equal(replaced.originalObjectKey, objectKey);
   assert.equal(await prisma.eaglePhotoMetadata.count({ where: { assetId: original.id } }), 0);
 });
+
+for (const mode of ['MATERIAL', 'PHOTO'])
+  test(`${mode} frozen old API timers and new operations safely overlap on upload and maintenance`, async () => {
+    const ownerId = await owner();
+    const bytes = await sharp({
+      create: { width: 1, height: 1, channels: 3, background: '#88aa33' },
+    })
+      .jpeg()
+      .toBuffer();
+    const objectKey = `users/${ownerId}/uploads/${randomUUID()}`;
+    const upload = await prisma.uploadSession.create({
+      data: {
+        uploaderId: ownerId,
+        libraryMode: mode,
+        originalName: 'overlap.jpg',
+        mimeType: 'image/jpeg',
+        size: BigInt(bytes.length),
+        objectKey,
+        multipartUploadId: randomUUID(),
+        status: 'ASSEMBLED',
+        completionParts: [{ partNumber: 1, etag: 'synthetic' }],
+        eagleState: { create: {} },
+      },
+    });
+    const retained = await prisma.eagleAsset.create({ data: asset(ownerId, mode) });
+    const jobs = await Promise.all(
+      ['COMPLETED', 'COMPLETED', 'PENDING'].map((status, index) =>
+        prisma.eagleAssetProcessingJob.create({
+          data: {
+            ownerId,
+            libraryMode: mode,
+            assetId: retained.id,
+            kind: 'PURGE_ASSET',
+            lane: 'MAINTENANCE',
+            assetRevision: 1,
+            processorVersion: `overlap-${index}`,
+            status,
+            ...(status === 'COMPLETED'
+              ? { completedAt: new Date(Date.now() - (index === 0 ? 40 : 1) * 86400000) }
+              : {}),
+          },
+        }),
+      ),
+    );
+    const targetMode = mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
+    const copyId = randomUUID();
+    const copyKey = `users/${ownerId}/assets/${copyId}/original.jpg`;
+    const handoffId = randomUUID();
+    const transfers = await Promise.all(
+      [undefined, 'HANDOFF'].map((storageAction, index) =>
+        prisma.eagleLibraryTransfer.create({
+          data: {
+            id: randomUUID(),
+            ownerId,
+            sourceMode: mode,
+            targetMode,
+            sourceIds: [retained.id],
+            plan: [
+              {
+                targetId: index === 0 ? copyId : handoffId,
+                targetKey:
+                  index === 0 ? copyKey : `users/${ownerId}/assets/${handoffId}/original.jpg`,
+                ...(storageAction ? { storageAction } : {}),
+              },
+            ],
+            updatedAt: new Date(Date.now() - 2 * 86400000),
+          },
+        }),
+      ),
+    );
+    const children = ['legacy', 'current'].map((version) => {
+      const child = fork(
+        new URL('./background-host-child.mjs', import.meta.url),
+        [version, ownerId, mode],
+        {
+          env: { ...process.env, EAGLE_UPLOAD_RECOVERY_ENABLED: 'true' },
+          stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
+        },
+      );
+      const events = [];
+      child.on('message', (event) => events.push(event));
+      return { child, events, version };
+    });
+    const wait = async (check) => {
+      for (let i = 0; i < 600; i++) {
+        assert.ok(
+          children.every(
+            ({ child, events }) =>
+              child.exitCode === null && !events.some((row) => row.event === 'failed'),
+          ),
+          'a real host child failed',
+        );
+        if (check()) return;
+        await delay(25);
+      }
+      assert.fail('mixed process hosts did not finish');
+    };
+    try {
+      await wait(() =>
+        children.every(({ events }) =>
+          ['ready', 'upload-selected', 'sweep-selected'].every((name) =>
+            events.some((row) => row.event === name),
+          ),
+        ),
+      );
+      const ready = children[0].events.find((row) => row.event === 'ready');
+      assert.equal(ready.recoveryInterval, 60000);
+      assert.equal(ready.maintenanceInterval, 600000);
+      children.forEach(({ child }) => child.send('continue'));
+      await wait(() => children.every(({ events }) => events.some((row) => row.event === 'done')));
+      assert.equal(
+        (await prisma.uploadSession.findUniqueOrThrow({ where: { id: upload.id } })).status,
+        'COMPLETED',
+      );
+      assert.equal(
+        await prisma.eagleAsset.count({
+          where: { ownerId, libraryMode: mode, originalObjectKey: objectKey },
+        }),
+        1,
+      );
+      assert.equal(await prisma.eagleAssetProcessingJob.count({ where: { id: jobs[0].id } }), 0);
+      for (const job of jobs.slice(1))
+        assert.deepEqual(
+          await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } }),
+          job,
+        );
+      for (const plan of transfers)
+        assert.equal(
+          (await prisma.eagleLibraryTransfer.findUniqueOrThrow({ where: { id: plan.id } })).status,
+          'ABANDONED',
+        );
+      const deletions = await prisma.eagleObjectDeletion.findMany({ where: { ownerId } });
+      assert.equal(
+        deletions.length,
+        1,
+        'overlapping sweeps publish one cleanup intent, never HANDOFF source deletion',
+      );
+      assert.deepEqual(deletions[0].objectKeys, [copyKey]);
+      assert.deepEqual(deletions[0].prefixes, []);
+      children.forEach(({ child }) => child.send('repeat'));
+      await wait(() =>
+        children.every(({ events }) => events.some((row) => row.event === 'repeated')),
+      );
+      assert.equal(await prisma.eagleObjectDeletion.count({ where: { ownerId } }), 1);
+    } finally {
+      await Promise.all(
+        children.map(async ({ child }) => {
+          if (child.exitCode !== null) return;
+          if (child.connected) {
+            child.send('continue');
+            child.send('stop');
+          }
+          const forced = setTimeout(() => child.kill('SIGKILL'), 5000);
+          try {
+            await new Promise((resolve) => child.once('exit', resolve));
+          } finally {
+            clearTimeout(forced);
+          }
+          assert.equal(child.exitCode, 0, 'both real hosts must drain cleanly');
+        }),
+      );
+    }
+  });

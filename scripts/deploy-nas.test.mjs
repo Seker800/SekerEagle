@@ -232,6 +232,10 @@ test('large operation admission has its own adjustable gateway deadline', async 
 test('both API and independent operations receive the same bounded clear-trash budget', async () => {
   for (const services of [base.services, (await render()).services]) {
     assert.equal(
+      services.operations.environment.EAGLE_EMPTY_TRASH_BATCH_SIZE,
+      '${EAGLE_EMPTY_TRASH_BATCH_SIZE:-512}',
+    );
+    assert.equal(
       services.api.environment.EAGLE_EMPTY_TRASH_TIMEOUT_MS,
       '${EAGLE_EMPTY_TRASH_TIMEOUT_MS:-12000}',
     );

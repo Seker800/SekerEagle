@@ -391,7 +391,11 @@ test('empty trash requeues current and legacy purge identities once while preser
         where: { ownerId },
         orderBy: { id: 'desc' },
       });
-      const result = await new EagleService(db, undefined, mode).emptyTrash(ownerId, false, cutoff);
+      const result = await new EagleService(db, undefined, mode).emptyTrashBatch(
+        ownerId,
+        false,
+        cutoff,
+      );
       assert.equal(result.affectedAssetCount, 3);
       for (const before of [current, legacyRevision, legacyProcessor, legacyWithoutCurrent]) {
         const actual = await db.eagleAssetProcessingJob.findUniqueOrThrow({
@@ -460,7 +464,7 @@ for (const [mode, size] of [
   ['MATERIAL', 2048],
   ['PHOTO', 60000],
 ]) {
-  test(`${mode}: empty trash schedules the entire selection with constant bindings and one atomic SQL`, async () => {
+  test(`${mode}: empty trash drains the cutoff in bounded atomic steps with constant bindings`, async () => {
     const ownerId = randomUUID();
     await db.user.create({
       data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'synthetic-only' },
@@ -493,30 +497,66 @@ for (const [mode, size] of [
           }),
         });
       }
+      // Synthetic owners and bulk inserts replace the table distribution instantly.
+      // Refresh fixture statistics before measuring, rather than timing FK probes
+      // that still estimate this 60k-owner as a one-row owner from an earlier test.
+      await db.$executeRaw`ANALYZE "EagleAsset"`;
+      await db.$executeRaw`ANALYZE "EagleMediaJob"`;
       await flushQueries();
       events = [];
-      const result = await new EagleService(db, undefined, mode).emptyTrash(ownerId, false, cutoff);
+      const service = new EagleService(db, undefined, mode);
+      let affected = 0,
+        steps = 0;
+      while (true) {
+        const result = await service.emptyTrashBatch(ownerId, false, cutoff);
+        steps++;
+        assert.ok(
+          result.affectedAssetCount <= 512,
+          'the domain step cannot grow with the selection',
+        );
+        affected += result.affectedAssetCount;
+        if (!result.affectedAssetCount) break;
+        assert.ok(steps <= Math.ceil(size / 512));
+      }
       await flushQueries();
       const captured = events;
       const maxBindings = Math.max(...captured.map((event) => JSON.parse(event.params).length));
+      const business = captured.filter(
+        ({ query }) =>
+          query === 'BEGIN' ||
+          query === 'COMMIT' ||
+          query.includes('set_config') ||
+          query.includes('marked AS'),
+      );
+      const extra = captured.filter((event) => !business.includes(event));
       console.log(
         JSON.stringify({
           benchmark: 'empty-trash',
           mode,
           size,
+          steps,
+          transactions: captured.filter((event) => event.query === 'BEGIN').length,
           sql: captured.length,
+          additionalQueries: extra.map(({ query }) => query),
           maxBindings,
-          statementMs: captured.find((event) => event.query.includes('WITH marked AS'))?.duration,
+          maxStatementMs: Math.max(
+            ...captured
+              .filter((event) => event.query.includes('marked AS'))
+              .map((event) => event.duration),
+          ),
         }),
       );
-      assert.equal(result.affectedAssetCount, size);
-      assert.ok(
-        maxBindings <= 32,
-        `empty-trash must not materialize a selection-sized bind list; observed ${maxBindings}`,
+      assert.equal(affected, size);
+      assert.equal(steps, Math.ceil(size / 512) + 1);
+      assert.ok(maxBindings <= 32, `no selection-sized bind list; observed ${maxBindings}`);
+      assert.equal(
+        business.length,
+        4 * steps,
+        'one local budget + one bounded set statement + BEGIN/COMMIT per step',
       );
       assert.ok(
-        captured.length <= 3,
-        `one set statement plus BEGIN/COMMIT, observed ${captured.length}`,
+        extra.every(({ query }) => query.trim() === 'SELECT 1'),
+        'only separately counted connection probes may add SQL',
       );
       assert.equal(
         await db.eagleAssetProcessingJob.count({
@@ -531,7 +571,7 @@ for (const [mode, size] of [
         size,
       );
       assert.equal(
-        (await new EagleService(db, undefined, mode).emptyTrash(ownerId, false, cutoff))
+        (await new EagleService(db, undefined, mode).emptyTrashBatch(ownerId, false, cutoff))
           .affectedAssetCount,
         0,
       );
@@ -601,6 +641,10 @@ test('one-row priming cannot leave a quadratic transition join for later fifty-t
       SELECT ${prefix}||'-'||n,${ownerId},'MATERIAL','synthetic.jpg','Synthetic','synthetic','image/jpeg','jpeg',1,'users/'||${ownerId}||'/'||${prefix}||'-'||n,1,CURRENT_TIMESTAMP FROM generate_series(1,${size}) n`;
     await db.$executeRaw`INSERT INTO "EagleMediaJob" (id,"ownerId","libraryMode","assetId","assetRevision",kind,lane,"processorVersion","updatedAt")
       SELECT 'job-'||id,"ownerId","libraryMode",id,1,'GENERATE_EMBEDDING','BACKGROUND','synthetic-cardinality-v1',CURRENT_TIMESTAMP FROM "EagleAsset" WHERE "ownerId"=${ownerId}`;
+    // This regression isolates transition-join cardinality, not stale FK lookup
+    // statistics from unrelated, already-deleted synthetic owners.
+    await db.$executeRaw`ANALYZE "EagleAsset"`;
+    await db.$executeRaw`ANALYZE "EagleMediaJob"`;
     await client.query("LOAD 'auto_explain'");
     await client.query("SET client_min_messages='log'");
     await client.query("SET auto_explain.log_format='json'");

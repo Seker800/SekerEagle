@@ -427,6 +427,12 @@ test('clear trash is queued, excludes resources trashed after acceptance, and us
     data: { deletedAt: new Date(Date.now() + 1000) },
   });
   await f.service.tick();
+  assert.equal(
+    (await f.state(receipt.id)).queued,
+    1,
+    'a nonempty step is not the complete command',
+  );
+  await f.service.tick();
   assert.equal((await f.state(receipt.id)).completed, 1);
   assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: old.id } })).purgeAfter);
   assert.equal(

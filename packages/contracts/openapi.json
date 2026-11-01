@@ -2196,8 +2196,15 @@
         "operationId": "EagleController_emptyTrash",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2240,8 +2247,15 @@
         "operationId": "EagleController_emptyTrashCompat",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6198,8 +6212,15 @@
         "operationId": "PhotosController_emptyTrash",
         "parameters": [],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6242,8 +6263,15 @@
         "operationId": "PhotosController_emptyTrashCompat",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [

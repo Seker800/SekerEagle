@@ -1,3 +1,5 @@
+import console from 'node:console';
+import { setImmediate as flushQueries } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -13,7 +15,9 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+let observed = [];
+db.$on('query', (event) => observed.push(event));
 after(() => db.$disconnect());
 async function fixture(mode) {
   const ownerId = randomUUID(),
@@ -241,6 +245,83 @@ for (const mode of ['MATERIAL', 'PHOTO'])
       if (previous === undefined) delete process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS;
       else process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS = previous;
       await release;
+      await f.close();
+    }
+  });
+
+for (const mode of ['MATERIAL', 'PHOTO'])
+  test(`${mode} clear reports admission, all bounded execution steps and sampled progress separately`, async () => {
+    const f = await fixture(mode);
+    await f.locker.query('COMMIT');
+    try {
+      await db.eagleAsset.createMany({
+        data: Array.from({ length: 512 }, (_, n) => ({
+          id: randomUUID(),
+          ownerId: f.ownerId,
+          libraryMode: mode,
+          originalName: 'cost.jpg',
+          displayName: String(n),
+          normalizedDisplayName: String(n),
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          originalObjectKey: `users/${f.ownerId}/${randomUUID()}`,
+          deletedAt: new Date(Date.now() - 10000),
+        })),
+      });
+      const principal = {
+        sub: f.ownerId,
+        authVersion: 0,
+        canViewPrivate: false,
+        privacyVisibleUntil: null,
+      };
+      const operations = new EagleAssetOperationService(db, {}, f.service, mode);
+      const count = (events) => ({
+        sql: events.length,
+        transactions: events.filter((row) => row.query === 'BEGIN').length,
+        s3: 0,
+      });
+      await flushQueries();
+      observed = [];
+      await operations.enqueue(principal, {
+        operationId: randomUUID(),
+        kind: 'EMPTY_TRASH',
+        assetIds: [],
+      });
+      await flushQueries();
+      const admission = count(observed);
+      const execution = [],
+        progress = [];
+      for (let step = 0; step < 3; step++) {
+        observed = [];
+        await operations.tick();
+        await flushQueries();
+        execution.push(count(observed));
+        observed = [];
+        const status = (await operations.list(f.ownerId))[0];
+        await flushQueries();
+        progress.push(count(observed));
+        assert.equal(status.completed, step === 2 ? 1 : 0);
+        assert.equal(status.failed, 0);
+      }
+      assert.equal(await db.eagleAssetProcessingJob.count({ where: { ownerId: f.ownerId } }), 513);
+      console.log(
+        JSON.stringify({
+          benchmark: 'empty-trash-command',
+          mode,
+          assets: 513,
+          admission,
+          execution,
+          progress,
+          totalSql:
+            admission.sql +
+            execution.reduce((n, v) => n + v.sql, 0) +
+            progress.reduce((n, v) => n + v.sql, 0),
+          httpAuthIncluded: false,
+          frontendSampling: false,
+        }),
+      );
+    } finally {
       await f.close();
     }
   });

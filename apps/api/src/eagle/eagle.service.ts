@@ -1164,7 +1164,7 @@ export class EagleService {
           await transaction.$executeRaw`SELECT set_config('statement_timeout', ${`${timeout - 250}ms`}, true)`;
           if (assertPublication) await assertPublication(transaction);
           const purgeAfter = new Date();
-          // Keep the complete purge selection in PostgreSQL: no selection-sized ID/parameter list.
+          // Keep this bounded purge selection in PostgreSQL: no selection-sized ID/parameter list.
           const [result] = await transaction.$queryRaw<
             Array<{ affectedAssetCount: number }>
           >(Prisma.sql`
