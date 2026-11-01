@@ -44,6 +44,33 @@ export function EagleConfirmationDialog({
       role="alertdialog"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      onKeyDown={(event) => {
+        if (event.key !== 'Tab') return;
+        const element = event.currentTarget;
+        const controls = [
+          ...element.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
+          ),
+        ].filter((control) => !control.closest('[hidden], [inert]'));
+        const first = controls[0],
+          last = controls.at(-1);
+        if (!first) {
+          event.preventDefault();
+          element.focus();
+        } else if (
+          event.shiftKey &&
+          (document.activeElement === first || document.activeElement === element)
+        ) {
+          event.preventDefault();
+          last?.focus();
+        } else if (
+          !event.shiftKey &&
+          (document.activeElement === last || document.activeElement === element)
+        ) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         event.stopPropagation();
