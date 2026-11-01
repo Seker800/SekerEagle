@@ -1,3 +1,6 @@
+import sharp from 'sharp';
+import { Readable } from 'node:stream';
+import { createAssetOperationBackground } from '../../apps/api/dist/asset-operation-executor.js';
 import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -456,3 +459,60 @@ for (const mode of ['PHOTO', 'MATERIAL'])
       }),
     );
   });
+
+test('actual operations recovery assembly invalidates PHOTO facts when replacing an original', async () => {
+  const ownerId = await owner();
+  const original = await prisma.eagleAsset.create({ data: asset(ownerId) });
+  await prisma.eaglePhotoMetadata.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: original.id,
+      assetRevision: 1,
+      processorVersion: 'synthetic-only',
+    },
+  });
+  const bytes = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#0088cc' } })
+    .jpeg()
+    .toBuffer();
+  const objectKey = `users/${ownerId}/uploads/${randomUUID()}`;
+  await prisma.uploadSession.create({
+    data: {
+      uploaderId: ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'replacement.jpg',
+      mimeType: 'image/jpeg',
+      size: BigInt(bytes.length),
+      objectKey,
+      multipartUploadId: randomUUID(),
+      status: 'ASSEMBLED',
+      completionParts: [{ partNumber: 1, etag: 'synthetic' }],
+      eagleState: { create: { replacementAssetId: original.id } },
+    },
+  });
+  const scoped = prisma.$extends({
+    query: {
+      uploadSession: {
+        findMany: ({ args, query }) =>
+          query({ ...args, where: { ...args.where, uploaderId: ownerId } }),
+        updateMany: ({ args, query }) =>
+          query({ ...args, where: { ...args.where, uploaderId: ownerId } }),
+      },
+      eagleUploadSessionState: {
+        findMany: ({ args, query }) => query({ ...args, where: { ...args.where, ownerId } }),
+        updateMany: ({ args, query }) => query({ ...args, where: { ...args.where, ownerId } }),
+      },
+    },
+  });
+  const host = createAssetOperationBackground(scoped, {
+    headObject: async () => ({ ContentLength: bytes.length }),
+    getObject: async () => ({ Body: Readable.from([bytes]) }),
+  });
+  // Exercise the real operations provider assembly without starting unrelated maintenance discovery.
+  const photoRecovery = Reflect.get(host, 'recoveries')[1];
+  await photoRecovery.recoverPendingFinalizations();
+  const replaced = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: original.id } });
+  assert.equal(replaced.mediaRevision, 2);
+  assert.equal(replaced.originalObjectKey, objectKey);
+  assert.equal(await prisma.eaglePhotoMetadata.count({ where: { assetId: original.id } }), 0);
+});
