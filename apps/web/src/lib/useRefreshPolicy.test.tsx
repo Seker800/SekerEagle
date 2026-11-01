@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { useProgressQueryInterval } from './useRefreshPolicy';
 
 it('backs off consecutive failures and restarts at five seconds after recovery', () => {
@@ -19,4 +19,18 @@ it('backs off consecutive failures and restarts at five seconds after recovery',
   expect(next(19, true)).toBe(10000);
   expect(next(19)).toBe(5000);
   expect(next(20, true)).toBe(5000);
+});
+
+it('wakes once at a known scheduling boundary without idle progress reads', () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(0);
+    const hook = renderHook(() => useProgressQueryInterval<number>(() => false,
+      (value) => value, () => new Date(60_000)));
+    const query = {state: {data: 1,error: null,errorUpdateCount: 0}};
+    expect(hook.result.current(query)).toBe(60_000);
+    vi.setSystemTime(60_000);
+    expect(hook.result.current(query)).toBe(5000);
+    hook.unmount();
+  } finally { vi.useRealTimers(); }
 });
