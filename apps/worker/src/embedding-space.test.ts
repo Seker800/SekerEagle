@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ensureCompatibleEmbeddingSpace } from './embedding-space';
+import { ensureCompatibleEmbeddingSpace, createEmbeddingSpaceInitializer } from './embedding-space';
 
 const identity = {
   id: 'space-1',
@@ -46,4 +46,26 @@ test('compatible active space is reused without rewriting model metadata', async
     } as never,
     identity,
   );
+});
+
+
+test('stable model initialization is shared across images and retries a failed initialization', async () => {
+  let transactions = 0;
+  let compatible = false;
+  const initialize = createEmbeddingSpaceInitializer({
+    $transaction: async (work: (tx: unknown) => Promise<void>) => {
+      transactions++;
+      return work({
+        $executeRaw: async () => 1,
+        eagleEmbeddingSpace: {
+          findMany: async () => [{ ...identity, model: compatible ? identity.model : 'changed', isCurrent: true }],
+        },
+      });
+    },
+  } as never, identity);
+  await assert.rejects(initialize, /EMBEDDING_SPACE_INCOMPATIBLE/);
+  compatible = true;
+  await Promise.all(Array.from({ length: 25 }, () => initialize()));
+  await initialize();
+  assert.equal(transactions, 2);
 });

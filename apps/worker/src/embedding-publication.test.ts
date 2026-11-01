@@ -265,3 +265,31 @@ test('fresh publication writes vector bytes and READY state together', async () 
     }),
   );
 });
+
+
+test('malformed inference results fail before consuming a lease or publishing other outputs', async () => {
+  for (const vector of [[1], [NaN, 0], [0, 0], [2, 0]]) {
+    const f = fixture();
+    await assert.rejects(
+      publishEmbedding(f.client as never, job, 'vector-1', vector, identity, f.suggest),
+      /EMBEDDING_RESULT_INVALID/,
+    );
+    assert.deepEqual(f.calls, []);
+  }
+});
+
+test('a switched model cannot be published by a still-running old worker', async () => {
+  const f = fixture();
+  const client = {
+    $transaction: (work: (tx: unknown) => Promise<void>, options: unknown) =>
+      f.client.$transaction(async (tx) => {
+        tx.$queryRaw = async () => [{ id: job.assetId, spaceId: 'new-space' }];
+        return work(tx);
+      }, options as never),
+  };
+  await assert.rejects(
+    publishEmbedding(client as never, job, 'vector-1', [1, 0], identity, f.suggest),
+    /EMBEDDING_SPACE_INCOMPATIBLE/,
+  );
+  assert.deepEqual(f.calls, []);
+});
