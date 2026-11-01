@@ -64,6 +64,9 @@ test('internal reader authenticates before reading and validates scope, page and
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { revision: '1', ids: [] });
     assert.equal(reads, 1);
+    const color = await post({ ...query, action: 'colorPage', colorPage: { color: '#ffffff', date: 'chronologicalAt', limit: 40, offset: 0 } }, `Bearer ${token}`);
+    assert.equal(color.status, 200);
+    assert.deepEqual(await color.json(), { revision: '1', positions: [] });
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -73,37 +76,65 @@ test('internal reader authenticates before reading and validates scope, page and
 test('semantic reader dispatches one complete page without exposing private service data', async () => {
   const index = new LibraryMemoryIndex('owner', 'PHOTO');
   index.replace('7', []);
-  const positions = [{ assetId: 'asset', tier: 1 as const, similarity: 0.9, libraryAddedAt: '2026-11-01T00:00:00.001Z' }];
-  let calls = 0;
-  const server = createLibraryReaderServer({ synchronize: async () => index }, 'semantic-test', 2097152, {
-    smartFolderPage: async (_index, options) => {
-      calls++;
-      assert.deepEqual(options.folderIds, ['folder']);
-      return positions;
+  const positions = [
+    {
+      assetId: 'asset',
+      tier: 1 as const,
+      similarity: 0.9,
+      libraryAddedAt: '2026-11-01T00:00:00.001Z',
     },
-  });
+  ];
+  let calls = 0;
+  const server = createLibraryReaderServer(
+    { synchronize: async () => index },
+    'semantic-test',
+    2097152,
+    {
+      smartFolderPage: async (_index, options) => {
+        calls++;
+        assert.deepEqual(options.folderIds, ['folder']);
+        return positions;
+      },
+    },
+  );
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
   assert.ok(address && typeof address === 'object');
   try {
     const response = await fetch(`http://127.0.0.1:${address.port}/query`, {
-      method: 'POST', headers: { authorization: 'Bearer semantic-test', 'content-type': 'application/json' },
-      body: JSON.stringify({ scope: { ownerId: 'owner', libraryMode: 'PHOTO' }, where: {}, action: 'smartFolderPage',
-        semantic: { folderIds: ['folder'], limit: 40, ordinaryMembersPossible: false, includePrivate: false, trash: false } }),
+      method: 'POST',
+      headers: { authorization: 'Bearer semantic-test', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scope: { ownerId: 'owner', libraryMode: 'PHOTO' },
+        where: {},
+        action: 'smartFolderPage',
+        semantic: {
+          folderIds: ['folder'],
+          limit: 40,
+          ordinaryMembersPossible: false,
+          includePrivate: false,
+          trash: false,
+        },
+      }),
     });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { revision: '7', positions });
     assert.equal(calls, 1);
   } finally {
     server.closeAllConnections();
-    await new Promise<void>(resolve => server.close(() => resolve()));
+    await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
 
 test('photo facets capability is explicitly owned by the photo handler', () => {
-  const server = createLibraryReaderServer({ synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') }, 'test', 1024, {
-    facets: async () => ({ cameras: [], lenses: [] }),
-  });
+  const server = createLibraryReaderServer(
+    { synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') },
+    'test',
+    1024,
+    {
+      facets: async () => ({ cameras: [], lenses: [] }),
+    },
+  );
   server.close();
 });
