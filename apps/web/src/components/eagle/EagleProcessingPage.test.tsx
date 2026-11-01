@@ -16,7 +16,7 @@ vi.mock('../../lib/eagle-processing-admin-api', () => {
   return { ...api, createEagleProcessingAdminApi: () => api };
 });
 vi.mock('./EagleVectorProcessingPanel', () => ({
-  EagleVectorProcessingPanel: () => <div data-testid="vector-processing-panel">图片向量状态</div>,
+  EagleVectorProcessingPanel: ({ active = true }: { active?: boolean }) => <div data-testid="vector-processing-panel" data-active={String(active)}>图片向量状态</div>,
 }));
 
 const summary = {
@@ -55,6 +55,15 @@ describe('EagleProcessingPage', () => {
     vi.clearAllMocks();
     vi.mocked(api.fetchEagleProcessingSummary).mockResolvedValue(summary);
     vi.mocked(api.listEagleProcessingJobs).mockResolvedValue({ items: [], nextCursor: null });
+  });
+
+  it('does not activate hidden vector content or fetch unopened history', async () => {
+    render(<EagleProcessingPage accessToken="token" />);
+    await screen.findByRole('heading', { name: '当前任务' });
+    expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active','false');
+    expect(api.listEagleProcessingJobs).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button',{name:'图片向量',exact:true}));
+    expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active','true');
   });
 
   it('shows worker, queue metrics and background schedule', async () => {
