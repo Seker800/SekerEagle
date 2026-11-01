@@ -101,6 +101,8 @@ test('100 shared source tags resolve once and retain assignment provenance in ea
       true,
       mappings,
     );
+  assert.equal(links.length, 0, 'batch associations wait for all target rows before publication');
+  await flushTransferTagAssignments(mappings);
   assert.deepEqual(calls, { reads: 2, groups: 1, tags: 1, memberships: 2 });
   assert.equal(links.length, 100);
   assert.deepEqual(links[0], {
