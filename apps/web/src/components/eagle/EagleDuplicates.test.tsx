@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   scan: vi.fn(),
   cleanup: vi.fn(),
   ignore: vi.fn(),
+  ignoreFiltered: vi.fn(),
   operations: [] as Array<{
     id: string;
     libraryMode: string;
@@ -85,24 +86,194 @@ function render() {
 describe('duplicate cleanup review', () => {
   it('shows direct comparison cards and binds all-results cleanup to the checked filters', async () => {
     const page = await mocks.list();
-    mocks.list.mockResolvedValue({ ...page, verifiedGroups: 30, verifiedItems: 60, filteredItems: 60,
-      groups: [{ ...group, previews: ['one', 'two'].map(id => ({ id, displayName: id, originalName: id + '.jpg', format: 'jpeg', byteSize: 1000, width: 1200, height: 800, manualTags: [], renditions: [] })) }] });
+    mocks.list.mockResolvedValue({
+      ...page,
+      verifiedGroups: 30,
+      verifiedItems: 60,
+      filteredItems: 60,
+      groups: [
+        {
+          ...group,
+          previews: ['one', 'two'].map((id) => ({
+            id,
+            displayName: id,
+            originalName: id + '.jpg',
+            format: 'jpeg',
+            byteSize: 1000,
+            width: 1200,
+            height: 800,
+            manualTags: [],
+            renditions: [],
+          })),
+        },
+      ],
+    });
     render();
     await screen.findByRole('button', { name: '保留 two' });
     expect(mocks.members).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('checkbox', { name: '文件名相同' }));
     fireEvent.click(screen.getByRole('checkbox', { name: '每张文件都小于' }));
-    await waitFor(() => expect(mocks.list).toHaveBeenLastCalledWith(expect.objectContaining({ sameName: 'true', maxBytes: '10485760', protectEdits: 'true' }), expect.anything()));
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sameName: 'true', maxBytes: '10485760', protectEdits: 'true' }),
+        expect.anything(),
+      ),
+    );
     fireEvent.click(await screen.findByRole('button', { name: '保留 two' }));
     fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
-    await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledWith(expect.objectContaining({ allVerified: true, filters: expect.objectContaining({ sameName: 'true', maxBytes: '10485760' }), keepOverrides: [{ signature: group.signature, keepIds: ['two'] }] })));
+    await waitFor(() =>
+      expect(mocks.cleanup).toHaveBeenCalledWith(
+        expect.objectContaining({
+          allVerified: true,
+          filters: expect.objectContaining({ sameName: 'true', maxBytes: '10485760' }),
+          keepOverrides: [{ signature: group.signature, keepIds: ['two'] }],
+        }),
+      ),
+    );
   });
   it('changes filter scope without carrying selected groups into the new results', async () => {
     render();
     fireEvent.click(await screen.findByRole('checkbox', { name: '选择重复组 1' }));
     fireEvent.click(screen.getByRole('checkbox', { name: '尺寸相同' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '清理所选重复组' })).toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '清理所选重复组' })).toBeDisabled(),
+    );
+  });
+  it('applies all checked conditions, byte threshold and edit protection without serial requests', async () => {
+    render();
+    await screen.findByText('1 组待检查');
+    for (const name of [
+      '文件名相同',
+      '拍摄时间相同',
+      '尺寸相同',
+      '格式相同',
+      '文件大小相同',
+      '每张文件都小于',
+    ])
+      fireEvent.click(screen.getByRole('checkbox', { name }));
+    fireEvent.change(screen.getByRole('spinbutton', { name: '文件大小上限（MB）' }), {
+      target: { value: '5' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: '保护已知编辑版本' }));
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sameName: 'true',
+          sameCapturedAt: 'true',
+          sameDimensions: 'true',
+          sameFormat: 'true',
+          sameBytes: 'true',
+          maxBytes: '5242880',
+        }),
+        expect.anything(),
+      ),
+    );
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole('checkbox', { name: '每张文件都小于' }));
+    await waitFor(() => expect(mocks.list.mock.calls.at(-1)?.[0]).not.toHaveProperty('maxBytes'));
+  });
+  it('keeps every filtered photo in one request and can review the kept groups again', async () => {
+    mocks.ignoreFiltered.mockResolvedValue({ ignored: true });
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: '全部保留并不再提示' }));
+    await waitFor(() =>
+      expect(mocks.ignoreFiltered).toHaveBeenCalledWith(
+        'b'.repeat(64),
+        { protectEdits: 'true', kind: 'ALL' },
+        true,
+      ),
+    );
+    await screen.findByText('这些照片全部保留，已移入已保留分组。');
+    fireEvent.click(screen.getByRole('checkbox', { name: /查看已保留/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '恢复检查全部筛选结果' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '恢复检查全部筛选结果' }));
+    await waitFor(() =>
+      expect(mocks.ignoreFiltered).toHaveBeenLastCalledWith(
+        'b'.repeat(64),
+        { protectEdits: 'true', kind: 'ALL' },
+        false,
+      ),
+    );
+    expect(mocks.cleanup).not.toHaveBeenCalled();
+  });
+  it('retains additional keeper choices from details when bulk cleaning', async () => {
+    const page = await mocks.list();
+    mocks.list.mockResolvedValue({
+      ...page,
+      verifiedGroups: 1,
+      filteredItems: 2,
+      groups: [{ ...group, count: 3 }],
+    });
+    mocks.members.mockResolvedValue({
+      signature: group.signature,
+      total: 3,
+      nextCursor: null,
+      items: ['one', 'two', 'three'].map((id) => ({
+        id,
+        displayName: id,
+        format: 'jpeg',
+        width: 1200,
+        height: 800,
+        byteSize: 1000,
+        libraryAddedAt: '2020-01-01',
+        rating: null,
+        manualTags: [],
+        annotation: null,
+        renditions: [],
+        mediaRevision: 1,
+      })),
+    });
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: /^文件完全相同/ }));
+    fireEvent.click(await screen.findByRole('checkbox', { name: '保留 two' }));
+    fireEvent.click(screen.getByRole('button', { name: '按保留标记清理全部筛选结果' }));
+    expect(screen.getByText('保留 2 项，清理 1 项')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await waitFor(() =>
+      expect(mocks.cleanup).toHaveBeenCalledWith(
+        expect.objectContaining({
+          keepOverrides: [{ signature: group.signature, keepIds: ['one', 'two'] }],
+        }),
+      ),
+    );
+  });
+  it('explains an empty filtered result and resets conditions from either entry', async () => {
+    const page = await mocks.list();
+    mocks.list.mockImplementation(async (query: { sameName?: string }) => ({
+      ...page,
+      totalGroups: query.sameName ? 0 : 1,
+      groups: query.sameName ? [] : [group],
+    }));
+    render();
+    await screen.findByText('1 组待检查');
+    fireEvent.click(screen.getByRole('checkbox', { name: '文件名相同' }));
+    await screen.findByRole('heading', { name: '没有符合当前筛选的重复组' });
+    fireEvent.click(screen.getAllByRole('button', { name: '还原默认条件' })[0]);
+    await screen.findByText('1 组待检查');
+    fireEvent.click(screen.getByRole('checkbox', { name: '文件名相同' }));
+    await screen.findByRole('heading', { name: '没有符合当前筛选的重复组' });
+    fireEvent.click(screen.getAllByRole('button', { name: '还原默认条件' })[1]);
+    await screen.findByText('1 组待检查');
+    expect(mocks.scan).not.toHaveBeenCalled();
+  });
+  it('accepts fractional MB while restoring an empty or invalid threshold on blur', async () => {
+    render();
+    fireEvent.click(await screen.findByRole('checkbox', { name: '每张文件都小于' }));
+    const input = screen.getByRole('spinbutton', { name: '文件大小上限（MB）' });
+    fireEvent.change(input, { target: { value: '0' } });
+    fireEvent.change(input, { target: { value: '0.5' } });
+    await waitFor(() =>
+      expect(mocks.list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ maxBytes: '524288' }),
+        expect.anything(),
+      ),
+    );
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue(0.5);
   });
   it('does not restart an attempted check on reopen, but permits an explicit check', async () => {
     mocks.list.mockResolvedValue({

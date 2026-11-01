@@ -3838,12 +3838,41 @@ export interface components {
       operationId: string;
       onlyIfUnattempted?: boolean;
     };
+    DuplicateListDto: {
+      /** @enum {string} */
+      sameName?: 'true' | 'false';
+      /** @enum {string} */
+      sameCapturedAt?: 'true' | 'false';
+      /** @enum {string} */
+      sameDimensions?: 'true' | 'false';
+      /** @enum {string} */
+      sameFormat?: 'true' | 'false';
+      /** @enum {string} */
+      sameBytes?: 'true' | 'false';
+      /** @enum {string} */
+      protectEdits?: 'true' | 'false';
+      /** @description Every original must be smaller than this positive integer number of bytes. */
+      maxBytes?: string;
+      cursor?: string;
+      revision?: string;
+      /** @enum {string} */
+      kind?: 'ALL' | 'EXACT' | 'SIMILAR';
+      /** @enum {string} */
+      showIgnored?: 'true' | 'false';
+    };
+    DuplicateKeepOverrideDto: {
+      signature: string;
+      keepIds?: string[];
+      removeIds?: string[];
+    };
     DuplicateSelectionDto: {
       signature: string;
       keepIds?: string[];
       removeIds?: string[];
     };
     DuplicateActionDto: {
+      filters?: components['schemas']['DuplicateListDto'];
+      keepOverrides?: components['schemas']['DuplicateKeepOverrideDto'][];
       operationId: string;
       revision?: string;
       allExact?: boolean;
@@ -3852,7 +3881,10 @@ export interface components {
       groups?: components['schemas']['DuplicateSelectionDto'][];
     };
     DuplicateIgnoreDto: {
-      signature: string;
+      signature?: string;
+      allFiltered?: boolean;
+      revision?: string;
+      filters?: components['schemas']['DuplicateListDto'];
       ignored: boolean;
     };
     EnqueueAssetOperationDto: {
@@ -4803,6 +4835,14 @@ export interface operations {
   EagleController_listDuplicates: {
     parameters: {
       query?: {
+        sameName?: 'true' | 'false';
+        sameCapturedAt?: 'true' | 'false';
+        sameDimensions?: 'true' | 'false';
+        sameFormat?: 'true' | 'false';
+        sameBytes?: 'true' | 'false';
+        protectEdits?: 'true' | 'false';
+        /** @description Every original must be smaller than this positive integer number of bytes. */
+        maxBytes?: string;
         cursor?: string;
         revision?: string;
         kind?: 'ALL' | 'EXACT' | 'SIMILAR';
@@ -4825,6 +4865,14 @@ export interface operations {
   EagleController_duplicateMembers: {
     parameters: {
       query?: {
+        sameName?: 'true' | 'false';
+        sameCapturedAt?: 'true' | 'false';
+        sameDimensions?: 'true' | 'false';
+        sameFormat?: 'true' | 'false';
+        sameBytes?: 'true' | 'false';
+        protectEdits?: 'true' | 'false';
+        /** @description Every original must be smaller than this positive integer number of bytes. */
+        maxBytes?: string;
         cursor?: string;
         revision?: string;
         kind?: 'ALL' | 'EXACT' | 'SIMILAR';
@@ -7298,6 +7346,14 @@ export interface operations {
   PhotosController_listDuplicates: {
     parameters: {
       query?: {
+        sameName?: 'true' | 'false';
+        sameCapturedAt?: 'true' | 'false';
+        sameDimensions?: 'true' | 'false';
+        sameFormat?: 'true' | 'false';
+        sameBytes?: 'true' | 'false';
+        protectEdits?: 'true' | 'false';
+        /** @description Every original must be smaller than this positive integer number of bytes. */
+        maxBytes?: string;
         cursor?: string;
         revision?: string;
         kind?: 'ALL' | 'EXACT' | 'SIMILAR';
@@ -7320,6 +7376,14 @@ export interface operations {
   PhotosController_duplicateMembers: {
     parameters: {
       query?: {
+        sameName?: 'true' | 'false';
+        sameCapturedAt?: 'true' | 'false';
+        sameDimensions?: 'true' | 'false';
+        sameFormat?: 'true' | 'false';
+        sameBytes?: 'true' | 'false';
+        protectEdits?: 'true' | 'false';
+        /** @description Every original must be smaller than this positive integer number of bytes. */
+        maxBytes?: string;
         cursor?: string;
         revision?: string;
         kind?: 'ALL' | 'EXACT' | 'SIMILAR';

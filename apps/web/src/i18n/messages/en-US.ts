@@ -1,4 +1,40 @@
 export const enUS = {
+  '已选 {{value1}} 组，按保留标记处理': '{{value1}} groups selected; use marked keepers',
+  按保留标记清理全部筛选结果: 'Clean all filtered groups using marked keepers',
+
+  没有符合当前筛选的重复组: 'No duplicate groups match these filters',
+  '可以放宽筛选或还原默认条件，无需重新扫描。':
+    'Relax the filters or reset them; a new scan is not required.',
+
+  '按当前保留标记保留照片；未调整的组保留推荐项，其余移入回收站，可以恢复。':
+    'Keep the marked photos, using the recommendation where unchanged. Move remaining copies to Trash, where they can be restored.',
+  同时满足以下条件: 'Also require',
+  文件名相同: 'Same original filename',
+  拍摄时间相同: 'Same capture time',
+  尺寸相同: 'Same dimensions',
+  格式相同: 'Same format',
+  文件大小相同: 'Same file size',
+  每张文件都小于: 'Every file smaller than',
+  '文件大小上限（MB）': 'File size threshold (MB)',
+  保护已知编辑版本: 'Protect known edited versions',
+  '条件作用于组内每张原文件；缺少拍摄时间不算相同。编辑保护依据系统记录，不能识别所有外部修图。':
+    'Conditions apply to every original in the group. Missing capture times do not count as equal. Edit protection uses recorded relationships and cannot identify every external edit.',
+  '已恢复检查这些分组。': 'These groups are available for review again.',
+  '这些照片全部保留，已移入已保留分组。':
+    'All photos were kept. These groups are now in the kept list.',
+  '按当前保留标记每组保留一项；未调整的组使用推荐项，其余移入回收站，可以恢复。':
+    'Keep the marked photo in each group, using the recommendation where unchanged. Move the remaining copies to Trash, where they can be restored.',
+  恢复检查全部筛选结果: 'Review all filtered groups again',
+  全部保留并不再提示: 'Keep all photos and dismiss these groups',
+  '重复组对比图 {{value1}}': 'Duplicate comparison group {{value1}}',
+  保留这张: 'Keep this photo',
+  '保留此图，回收其他副本': 'Keep this photo instead',
+  '查看其余 {{value1}} 张': 'View {{value1}} more photos',
+  '正在筛选…': 'Filtering…',
+  '放大比较 {{value1}}': 'Compare {{value1}} at full size',
+  还原默认条件: 'Reset filters',
+  查看已保留: 'Show kept groups',
+
   '已保留当前检查状态；点击“检查新内容”可手动重新检查。':
     'The current check state was preserved. Select Check new content to check again manually.',
   '旧版近似结果已停用；可点击“检查新内容”重新核验原图。':

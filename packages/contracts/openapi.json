@@ -291,6 +291,69 @@
         "operationId": "EagleController_listDuplicates",
         "parameters": [
           {
+            "name": "sameName",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameCapturedAt",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameDimensions",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameFormat",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameBytes",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "protectEdits",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "maxBytes",
+            "required": false,
+            "in": "query",
+            "description": "Every original must be smaller than this positive integer number of bytes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cursor",
             "required": false,
             "in": "query",
@@ -346,6 +409,69 @@
             "name": "signature",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sameName",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameCapturedAt",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameDimensions",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameFormat",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameBytes",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "protectEdits",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "maxBytes",
+            "required": false,
+            "in": "query",
+            "description": "Every original must be smaller than this positive integer number of bytes.",
             "schema": {
               "type": "string"
             }
@@ -4167,6 +4293,69 @@
         "operationId": "PhotosController_listDuplicates",
         "parameters": [
           {
+            "name": "sameName",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameCapturedAt",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameDimensions",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameFormat",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameBytes",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "protectEdits",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "maxBytes",
+            "required": false,
+            "in": "query",
+            "description": "Every original must be smaller than this positive integer number of bytes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cursor",
             "required": false,
             "in": "query",
@@ -4222,6 +4411,69 @@
             "name": "signature",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sameName",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameCapturedAt",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameDimensions",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameFormat",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "sameBytes",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "protectEdits",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "maxBytes",
+            "required": false,
+            "in": "query",
+            "description": "Every original must be smaller than this positive integer number of bytes.",
             "schema": {
               "type": "string"
             }
@@ -8742,6 +8994,74 @@
         },
         "required": ["operationId"]
       },
+      "DuplicateListDto": {
+        "type": "object",
+        "properties": {
+          "sameName": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          "sameCapturedAt": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          "sameDimensions": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          "sameFormat": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          "sameBytes": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          "protectEdits": {
+            "type": "string",
+            "enum": ["true", "false"]
+          },
+          "maxBytes": {
+            "type": "string",
+            "description": "Every original must be smaller than this positive integer number of bytes."
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["ALL", "EXACT", "SIMILAR"]
+          },
+          "showIgnored": {
+            "type": "string",
+            "enum": ["true", "false"]
+          }
+        }
+      },
+      "DuplicateKeepOverrideDto": {
+        "type": "object",
+        "properties": {
+          "signature": {
+            "type": "string"
+          },
+          "keepIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removeIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["signature"]
+      },
       "DuplicateSelectionDto": {
         "type": "object",
         "properties": {
@@ -8766,6 +9086,15 @@
       "DuplicateActionDto": {
         "type": "object",
         "properties": {
+          "filters": {
+            "$ref": "#/components/schemas/DuplicateListDto"
+          },
+          "keepOverrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DuplicateKeepOverrideDto"
+            }
+          },
           "operationId": {
             "type": "string"
           },
@@ -8799,11 +9128,20 @@
           "signature": {
             "type": "string"
           },
+          "allFiltered": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/DuplicateListDto"
+          },
           "ignored": {
             "type": "boolean"
           }
         },
-        "required": ["signature", "ignored"]
+        "required": ["ignored"]
       },
       "EnqueueAssetOperationDto": {
         "type": "object",

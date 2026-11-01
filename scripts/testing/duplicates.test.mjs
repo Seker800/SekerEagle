@@ -776,3 +776,168 @@ test('a cancelled scan persists its attempted version without claiming complete 
   assert.equal((await f.drain(resumed.operationId)).failed, 0);
   assert.equal((await f.duplicate.list(f.ownerId, false, {})).originalCheckCompleted, true);
 });
+
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode}: filters cover every member and every page, protect edit parents, and bind bulk keep/cleanup`, async () => {
+    const f = await fixture(mode),
+      outside = await fixture(mode);
+    for (let i = 0; i < 26; i++) {
+      const sha256 = hash(`filtered-${i}`);
+      for (let j = 0; j < 2; j++)
+        await f.add({ sha256, originalName: `same-${i}.jpg`, rating: j + 1 });
+    }
+    await outside.add({ sha256: hash('foreign'), originalName: 'same.jpg' });
+    await outside.add({ sha256: hash('foreign'), originalName: 'same.jpg' });
+    const large = hash('large');
+    await f.add({ sha256: large, byteSize: 3000n });
+    await f.add({ sha256: large, byteSize: 3000n });
+    const renamed = hash('renamed');
+    await f.add({ sha256: renamed, originalName: 'a.jpg' });
+    await f.add({ sha256: renamed, originalName: 'b.jpg' });
+    const protectedHash = hash('protected'),
+      parent = await f.add({ sha256: protectedHash });
+    await f.add({ sha256: protectedHash });
+    const edited = await f.add();
+    await db.eagleAssetEditRecipe.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: mode,
+        assetId: edited.id,
+        assetRevision: 1,
+        baseAssetId: parent.id,
+        baseMediaRevision: 1,
+        recipe: {},
+      },
+    });
+    const filters = { sameName: 'true', maxBytes: '2000', protectEdits: 'true', kind: 'EXACT' };
+    await flushQueryEvents();
+    const listBefore = queries,
+      listTransactions = transactions,
+      listStart = performance.now();
+    const page = await f.duplicate.list(f.ownerId, false, filters);
+    await flushQueryEvents();
+    console.log(
+      JSON.stringify({
+        mode,
+        filteredGroups: page.totalGroups,
+        listSql: queries - listBefore,
+        listTransactions: transactions - listTransactions,
+        listMs: performance.now() - listStart,
+        s3: f.reads(),
+      }),
+    );
+    assert.equal(page.totalGroups, 26);
+    const otherKind = await f.duplicate.list(f.ownerId, false, { ...filters, kind: 'SIMILAR' });
+    assert.equal(otherKind.totalGroups, 0);
+    assert.equal(
+      otherKind.exactGroups,
+      26,
+      'category badges still describe other filtered categories',
+    );
+    assert.deepEqual(
+      await f.duplicate.cleanup(f.principal, {
+        operationId: randomUUID(),
+        allVerified: true,
+        filters: { ...filters, kind: 'SIMILAR' },
+        revision: otherKind.revision,
+      }),
+      { operationId: null },
+      'an empty selected category cannot clean another category',
+    );
+    assert.equal(page.filteredItems, 26);
+    assert.equal(page.groups.length, 24);
+    const next = await f.duplicate.list(f.ownerId, false, {
+      ...filters,
+      cursor: page.nextCursor,
+      revision: page.revision,
+    });
+    assert.equal(next.groups.length, 2);
+    assert.equal(
+      (await f.duplicate.list(f.ownerId, false, { ...filters, sameCapturedAt: 'true' }))
+        .totalGroups,
+      0,
+      'missing EXIF is not equal capture time',
+    );
+    await assert.rejects(
+      f.duplicate.cleanup(f.principal, {
+        operationId: randomUUID(),
+        allVerified: true,
+        revision: page.revision,
+        filters: { ...filters, sameName: 'false' },
+      }),
+      /变化/,
+    );
+    await assert.rejects(
+      f.duplicate.cleanup(outside.principal, {
+        operationId: randomUUID(),
+        allVerified: true,
+        revision: page.revision,
+        filters,
+      }),
+      /变化/,
+    );
+    await f.duplicate.ignore(f.ownerId, false, {
+      allFiltered: true,
+      revision: page.revision,
+      filters,
+      ignored: true,
+    });
+    assert.equal((await f.duplicate.list(f.ownerId, false, filters)).totalGroups, 0);
+    const kept = await f.duplicate.list(f.ownerId, false, { ...filters, showIgnored: 'true' });
+    assert.equal(kept.totalGroups, 26);
+    await f.duplicate.ignore(f.ownerId, false, {
+      allFiltered: true,
+      revision: kept.revision,
+      filters,
+      ignored: false,
+    });
+    const current = await f.duplicate.list(f.ownerId, false, filters);
+    const group = current.groups[0],
+      manualKeeper = group.previews.find((a) => a.id !== group.recommendedId).id;
+    await assert.rejects(
+      f.duplicate.cleanup(f.principal, {
+        operationId: randomUUID(),
+        allVerified: true,
+        revision: current.revision,
+        filters,
+        keepOverrides: [{ signature: group.signature, keepIds: [edited.id] }],
+      }),
+      /本组/,
+    );
+    await flushQueryEvents();
+    const admissionBefore = queries,
+      admissionTransactions = transactions,
+      admissionStart = performance.now();
+    const result = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      allVerified: true,
+      revision: current.revision,
+      filters,
+      keepOverrides: [{ signature: group.signature, keepIds: [manualKeeper] }],
+    });
+    await flushQueryEvents();
+    console.log(
+      JSON.stringify({
+        mode,
+        cleanupGroups: 26,
+        admissionSql: queries - admissionBefore,
+        admissionTransactions: transactions - admissionTransactions,
+        admissionMs: performance.now() - admissionStart,
+        s3: f.reads(),
+      }),
+    );
+    assert.equal((await f.drain(result.operationId)).failed, 0);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      26,
+      'all 26 groups processed, including unloaded page',
+    );
+    assert.equal((await db.eagleAsset.findUnique({ where: { id: manualKeeper } })).deletedAt, null);
+    assert.equal((await db.eagleAsset.findUnique({ where: { id: parent.id } })).deletedAt, null);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: outside.ownerId, deletedAt: { not: null } } }),
+      0,
+    );
+    assert.equal(f.reads(), 0, 'filter, batch keep and cleanup use no S3 reads');
+  });
+}

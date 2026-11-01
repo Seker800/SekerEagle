@@ -58,7 +58,14 @@ export class EagleDuplicateService {
   async list(ownerId: string, includePrivate: boolean, input: DuplicateListDto) {
     return this.prisma.$transaction(
       async (tx) => {
-        const state = await filterDuplicateReview(tx, await this.read(tx, ownerId, includePrivate), ownerId, this.libraryMode, includePrivate, input);
+        const state = await filterDuplicateReview(
+          tx,
+          await this.read(tx, ownerId, includePrivate),
+          ownerId,
+          this.libraryMode,
+          includePrivate,
+          input,
+        );
         if (input.revision && input.revision !== state.revision)
           throw new ConflictException('图库已变化，请刷新查重结果。');
         const visible = state.groups.filter(
@@ -160,17 +167,43 @@ export class EagleDuplicateService {
     return this.prisma.$transaction(
       async (tx) => {
         await lockOwnerPrivacyProjection(tx, ownerId, this.libraryMode);
-        const state = await filterDuplicateReview(tx, await this.read(tx, ownerId, includePrivate), ownerId, this.libraryMode, includePrivate, input.filters ?? {});
-        if (input.revision && input.revision !== state.revision) throw new ConflictException('图库或筛选条件已变化，请重新确认。');
+        const state = await filterDuplicateReview(
+          tx,
+          await this.read(tx, ownerId, includePrivate),
+          ownerId,
+          this.libraryMode,
+          includePrivate,
+          input.filters ?? {},
+        );
+        if (input.revision && input.revision !== state.revision)
+          throw new ConflictException('图库或筛选条件已变化，请重新确认。');
         const groups = input.allFiltered
-          ? state.groups.filter(g => input.ignored ? !state.ignored.has(g.signature) : state.ignored.has(g.signature))
-          : state.groups.filter(g => g.signature === input.signature);
+          ? state.groups.filter(
+              (g) =>
+                (!input.filters?.kind ||
+                  input.filters.kind === 'ALL' ||
+                  g.kind === input.filters.kind) &&
+                (input.ignored ? !state.ignored.has(g.signature) : state.ignored.has(g.signature)),
+            )
+          : state.groups.filter((g) => g.signature === input.signature);
         if (!groups.length && !input.allFiltered) throw new NotFoundException('查重组不存在。');
-        const keys = groups.map(group => ({ ownerId, libraryMode: this.libraryMode, signature: dismissalSignature(ownerId, this.libraryMode, group, state.byId) }));
+        const keys = groups.map((group) => ({
+          ownerId,
+          libraryMode: this.libraryMode,
+          signature: dismissalSignature(ownerId, this.libraryMode, group, state.byId),
+        }));
         for (let offset = 0; offset < keys.length; offset += 500) {
           const part = keys.slice(offset, offset + 500);
-          if (input.ignored) await tx.eagleDuplicateDismissal.createMany({ data: part, skipDuplicates: true });
-          else await tx.eagleDuplicateDismissal.deleteMany({ where: { ownerId, libraryMode: this.libraryMode, signature: { in: part.map(k => k.signature) } } });
+          if (input.ignored)
+            await tx.eagleDuplicateDismissal.createMany({ data: part, skipDuplicates: true });
+          else
+            await tx.eagleDuplicateDismissal.deleteMany({
+              where: {
+                ownerId,
+                libraryMode: this.libraryMode,
+                signature: { in: part.map((k) => k.signature) },
+              },
+            });
         }
         return { ignored: input.ignored };
       },
@@ -352,7 +385,8 @@ export class EagleDuplicateService {
           : { allExact: input.allExact ?? false, revision: input.revision, groups: input.groups },
       ),
     ];
-    if (input.filters || input.keepOverrides) request[0] = digest([request[0], input.filters, input.keepOverrides]);
+    if (input.filters || input.keepOverrides)
+      request[0] = digest([request[0], input.filters, input.keepOverrides]);
     return this.prisma.$transaction(
       async (tx) => {
         await lockOwnerPrivacyProjection(tx, principal.sub, this.libraryMode);
@@ -364,16 +398,27 @@ export class EagleDuplicateService {
           request,
         );
         if (existing) return existing;
-        const state = await filterDuplicateReview(tx, await this.read(tx, principal.sub, principal.canViewPrivate), principal.sub, this.libraryMode, principal.canViewPrivate, input.filters ?? {});
+        const state = await filterDuplicateReview(
+          tx,
+          await this.read(tx, principal.sub, principal.canViewPrivate),
+          principal.sub,
+          this.libraryMode,
+          principal.canViewPrivate,
+          input.filters ?? {},
+        );
         if (
           input.revision &&
           (input.allExact ? state.exactRevision : state.revision) !== input.revision
         )
           throw new ConflictException('图库已变化，请刷新后确认。');
-        const groupBySignature = new Map(state.groups.map((g) => [g.signature, g]));
+        const scopedGroups = state.groups.filter(
+          (g) =>
+            !input.filters?.kind || input.filters.kind === 'ALL' || g.kind === input.filters.kind,
+        );
+        const groupBySignature = new Map(scopedGroups.map((g) => [g.signature, g]));
         const choices: DuplicateSelectionDto[] =
           input.allExact || input.allVerified
-            ? state.groups
+            ? scopedGroups
                 .filter(
                   (g) =>
                     (input.allVerified || g.kind === 'EXACT') && !state.ignored.has(g.signature),
@@ -386,10 +431,18 @@ export class EagleDuplicateService {
                   return { signature, keepIds: [group.recommendedId] };
                 })
               : input.groups!;
-        if (new Set(choices.map((c) => c.signature)).size !== choices.length)
+        const choiceSignatures = new Set(choices.map((c) => c.signature));
+        if (choiceSignatures.size !== choices.length)
           throw new BadRequestException('不能重复选择同一组。');
-        const overrides = new Map(input.keepOverrides?.map(c => [c.signature, c]));
-        if (overrides.size !== (input.keepOverrides?.length ?? 0) || [...overrides.values()].some(c => !c.keepIds?.length || c.removeIds || !choices.some(choice => choice.signature === c.signature)))
+        const overrides = new Map(input.keepOverrides?.map((c) => [c.signature, c]));
+        if (
+          overrides.size !== (input.keepOverrides?.length ?? 0) ||
+          [...overrides.values()].some(
+            (c) =>
+              !!c.keepIds?.length === (c.removeIds !== undefined) ||
+              !choiceSignatures.has(c.signature),
+          )
+        )
           throw new BadRequestException('保留规则必须属于本次所选分组。');
         const plans = choices
           .map((originalChoice) => {
@@ -397,19 +450,20 @@ export class EagleDuplicateService {
             const group = groupBySignature.get(choice.signature);
             if (!group || state.ignored.has(choice.signature))
               throw new NotFoundException('查重结果已变化。');
-            if (!!choice.keepIds?.length === !!choice.removeIds?.length)
+            if (!!choice.keepIds?.length === (choice.removeIds !== undefined))
               throw new BadRequestException('请选择保留项或清理项。');
+            const memberIds = new Set(group.assetIds);
             const removed = new Set(choice.removeIds ?? []);
             if (
               removed.size !== (choice.removeIds?.length ?? 0) ||
-              [...removed].some((id) => !group.assetIds.includes(id))
+              [...removed].some((id) => !memberIds.has(id))
             )
               throw new BadRequestException('只能清理本组内容。');
             const keep = new Set(choice.keepIds ?? group.assetIds.filter((id) => !removed.has(id)));
             if (
               !keep.size ||
               (choice.keepIds && keep.size !== choice.keepIds.length) ||
-              [...keep].some((id) => !group.assetIds.includes(id))
+              [...keep].some((id) => !memberIds.has(id))
             )
               throw new BadRequestException('每组必须保留至少一项，且只能保留本组内容。');
             return {

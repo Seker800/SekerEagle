@@ -1,6 +1,16 @@
 import type { EagleAssetListItem } from './eagle-api';
 import { request } from './api-client';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
+export interface DuplicateFilters {
+  sameName?: string;
+  sameCapturedAt?: string;
+  sameDimensions?: string;
+  sameFormat?: string;
+  sameBytes?: string;
+  protectEdits?: string;
+  maxBytes?: string;
+  kind?: string;
+}
 export interface DuplicateGroupSummary {
   signature: string;
   kind: 'EXACT' | 'SIMILAR';
@@ -17,6 +27,7 @@ export interface DuplicateResults {
   revision: string;
   exactRevision: string;
   exactItems: number;
+  filteredItems?: number;
   verifiedItems?: number;
   verifiedGroups?: number;
   coverage: {
@@ -50,6 +61,8 @@ export interface DuplicateMembers {
 }
 export interface DuplicateCleanupInput {
   operationId: string;
+  filters?: DuplicateFilters;
+  keepOverrides?: Array<{ signature: string; keepIds?: string[]; removeIds?: string[] }>;
   revision?: string;
   allExact?: boolean;
   allVerified?: boolean;
@@ -60,9 +73,13 @@ export function createDuplicatesApi(mode: LibraryMode) {
   const base = libraryApiPath('/api/eagle/duplicates', mode);
   return {
     list: (
-      query: { cursor?: string; revision?: string; kind?: string; showIgnored?: string },
+      query: DuplicateFilters & { cursor?: string; revision?: string; showIgnored?: string },
       signal?: AbortSignal,
-    ) => request<DuplicateResults>(`${base}?${new URLSearchParams(query)}`, { signal }),
+    ) =>
+      request<DuplicateResults>(
+        `${base}?${new URLSearchParams(Object.entries(query).filter((entry): entry is [string, string] => entry[1] !== undefined))}`,
+        { signal },
+      ),
     members: (signature: string, cursor: string | undefined, signal?: AbortSignal) =>
       request<DuplicateMembers>(
         `${base}/${encodeURIComponent(signature)}/members?${new URLSearchParams(cursor ? { cursor } : {})}`,
@@ -80,6 +97,11 @@ export function createDuplicatesApi(mode: LibraryMode) {
       request<{ operationId: string | null; assetIds?: string[] }>(`${base}/cleanup`, {
         method: 'POST',
         body: JSON.stringify(input),
+      }),
+    ignoreFiltered: (revision: string, filters: DuplicateFilters, ignored: boolean) =>
+      request<{ ignored: boolean }>(`${base}/ignore`, {
+        method: 'POST',
+        body: JSON.stringify({ allFiltered: true, revision, filters, ignored }),
       }),
     ignore: (signature: string, ignored: boolean) =>
       request<{ ignored: boolean }>(`${base}/ignore`, {

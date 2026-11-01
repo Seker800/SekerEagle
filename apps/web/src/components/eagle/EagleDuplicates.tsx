@@ -1,3 +1,6 @@
+import { EagleDuplicatePreview } from './EagleDuplicatePreview';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { EagleDuplicateFilters } from './EagleDuplicateFilters';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { DUPLICATE_GROUPING_VERSION } from '@sekereagle/library-core';
 import { useAssetOperationActions } from './useAssetOperationActions';
@@ -9,6 +12,7 @@ import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
   createDuplicatesApi,
   type DuplicateCleanupInput,
+  type DuplicateFilters,
   type DuplicateGroupSummary,
 } from '../../lib/eagle-duplicates-api';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
@@ -45,10 +49,17 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const [kind, setKind] = useState('ALL'),
     [showIgnored, setShowIgnored] = useState(false),
     [expanded, setExpanded] = useState<string | null>(null);
+  const [filters, setFilters] = useState<DuplicateFilters>({ protectEdits: 'true' });
+  const appliedFilters = useDebouncedValue(filters, 150);
+  const filterPending = appliedFilters !== filters;
+  const [keepers, setKeepers] = useState<Map<string, { keepIds?: string[]; removeIds?: string[] }>>(
+    new Map(),
+  );
   const [confirm, setConfirm] = useState<{
     input: DuplicateCleanupInput;
     count: number;
     removeCount: number;
+    keepCount?: number;
   } | null>(null);
   const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState<Map<string, DuplicateGroupSummary>>(new Map());
@@ -99,19 +110,29 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     kind,
     showIgnored,
     DUPLICATE_GROUPING_VERSION,
+    appliedFilters,
   ];
   const results = useInfiniteQuery({
     queryKey,
     initialPageParam: undefined as { cursor: string; revision: string } | undefined,
     queryFn: ({ pageParam, signal }) =>
-      api.list({ ...pageParam, kind, showIgnored: String(showIgnored) }, signal),
+      api.list({ ...pageParam, ...appliedFilters, kind, showIgnored: String(showIgnored) }, signal),
     getNextPageParam: (last) =>
       last.nextCursor ? { cursor: last.nextCursor, revision: last.revision } : undefined,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[4] === includePrivate && previousQuery?.queryKey[5] === scopeRevision
+        ? previous
+        : undefined,
     staleTime: 30_000,
     retry: false,
   });
+  const filtering = filterPending || results.isPlaceholderData;
+  const narrowed = Object.entries(filters).some(
+    ([key, value]) => key !== 'protectEdits' && !!value,
+  );
   const data = results.data?.pages[0],
     allGroups = results.data?.pages.flatMap((p) => p.groups) ?? [];
+  const groupBySignature = new Map(allGroups.map((group) => [group.signature, group]));
   const hiddenGroups = new Set(
     changes.entries.flatMap((row) =>
       row.pending
@@ -130,7 +151,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       (showIgnored ||
         !pendingGlobal.some(
           (row) =>
-            row.duplicateInput?.allVerified ||
+            (row.duplicateInput?.allVerified &&
+              JSON.stringify(row.duplicateInput.filters ?? {}) ===
+                JSON.stringify({ ...filters, kind })) ||
             (row.duplicateInput?.allExact && group.kind === 'EXACT'),
         )),
   );
@@ -323,21 +346,67 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       setNotice('');
     }
   };
+  const keepOverrides = (signatures?: string[]) => {
+    const scope = signatures ? new Set(signatures) : undefined;
+    return [...keepers]
+      .filter(([signature]) => !scope || scope.has(signature))
+      .map(([signature, choice]) => ({ signature, ...choice }));
+  };
+  const extraKeepCount = (signatures?: string[]) =>
+    keepOverrides(signatures).reduce((sum, choice) => {
+      const group = groupBySignature.get(choice.signature);
+      return (
+        sum +
+        (group ? (choice.keepIds?.length ?? group.count - (choice.removeIds?.length ?? 0)) - 1 : 0)
+      );
+    }, 0);
+  const allRemoveCount =
+    (data?.filteredItems ?? data?.verifiedItems ?? data?.exactItems ?? 0) - extraKeepCount();
+  const selectedRemoveCount =
+    [...selected.values()].reduce((sum, group) => sum + group.count - 1, 0) -
+    extraKeepCount([...selected.keys()]);
+  const invalidKeeper = [...keepers.values()].some((choice) => choice.keepIds?.length === 0);
+  const preserve = useMutation({
+    mutationFn: () => api.ignoreFiltered(data!.revision, { ...filters, kind }, !showIgnored),
+    onSuccess: async () => {
+      setSelected(new Map());
+      setKeepers(new Map());
+      await client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'duplicates'] });
+      setNotice(
+        showIgnored ? t('已恢复检查这些分组。') : t('这些照片全部保留，已移入已保留分组。'),
+      );
+    },
+  });
+  const changeFilters = (next: DuplicateFilters) => {
+    // URLSearchParams must not stringify undefined as an active predicate.
+    setFilters(Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined)));
+    setSelected(new Map());
+    setKeepers(new Map());
+    setExpanded(null);
+  };
   const confirmAll = () => {
-    if (!data) return;
+    if (!data || filtering) return;
     setConfirm({
       input:
         data.verifiedGroups === undefined
           ? { operationId: crypto.randomUUID(), allExact: true, revision: data.exactRevision }
-          : { operationId: crypto.randomUUID(), allVerified: true, revision: data.revision },
-      count: data.verifiedGroups ?? data.exactGroups,
-      removeCount: data.verifiedItems ?? data.exactItems,
+          : {
+              operationId: crypto.randomUUID(),
+              allVerified: true,
+              revision: data.revision,
+              filters: { ...filters, kind },
+              keepOverrides: keepOverrides(),
+            },
+      count: data.totalGroups,
+      keepCount: data.totalGroups + extraKeepCount(),
+      removeCount: allRemoveCount,
     });
   };
   useEffect(() => {
     if (selectionRevision.current !== data?.revision) {
       selectionRevision.current = data?.revision;
       setSelected(new Map());
+      setKeepers(new Map());
     }
   }, [data?.revision]);
   return (
@@ -371,11 +440,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           <h3>{t('清理 {{count}} 组重复副本', { count: confirm.count })}</h3>
           <p>
             {t('保留 {{keep}} 项，清理 {{remove}} 项', {
-              keep: confirm.count,
+              keep: confirm.keepCount ?? confirm.count,
               remove: confirm.removeCount,
             })}
           </p>
-          <p>{t('每组按推荐保留一项，其余移入回收站，可以恢复。')}</p>
+          <p>{t('按当前保留标记保留照片；未调整的组保留推荐项，其余移入回收站，可以恢复。')}</p>
           <p>
             {t(
               '完全重复项的独有标签和最高评分会合并到保留项。说明、来源和编辑关系仍保存在原项目中，请先检查需要保留的信息。',
@@ -412,6 +481,8 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   aria-pressed={kind === value}
                   onClick={() => {
                     setKind(value);
+                    setSelected(new Map());
+                    setKeepers(new Map());
                     setExpanded(null);
                   }}
                 >
@@ -437,7 +508,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               </button>
             </div>
           </div>
-          <div className={styles.content}>
+          <EagleDuplicateFilters value={filters} onChange={changeFilters} />
+          <div className={styles.content} aria-busy={filtering}>
+            {filtering && <p role="status">{t('正在筛选…')}</p>}
             {!!data?.outdatedGroups && (
               <p role="status">
                 {data.originalCheckAttempted && !scanning && !scan.isPending
@@ -538,6 +611,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   </button>
                 </div>
               ))}
+            {preserve.error && <p role="alert">{preserve.error.message}</p>}
             {action.error && <p role="alert">{action.error.message}</p>}
             {notice && (
               <p role="status" className={styles.notice}>
@@ -564,34 +638,6 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               </div>
             )}
             {results.isPending && <p role="status">{t('正在读取查重结果…')}</p>}
-            {data && (
-              <div className={styles.resultTools}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={showIgnored}
-                    onChange={(event) => {
-                      setShowIgnored(event.target.checked);
-                      setExpanded(null);
-                    }}
-                  />
-                  {t('查看已忽略')} ({data.ignoredGroups})
-                </label>
-                {!showIgnored && (data.verifiedGroups ?? data.exactGroups) > 0 && (
-                  <button
-                    type="button"
-                    disabled={
-                      cleanup.isPending ||
-                      Object.keys(submitted).length > 0 ||
-                      active.some((op) => op.kind === 'DUPLICATE_CLEANUP')
-                    }
-                    onClick={confirmAll}
-                  >
-                    {t('每组保留一份，清理全部重复副本')}
-                  </button>
-                )}
-              </div>
-            )}
             {!showIgnored && groups.length > 0 && (
               <div className={styles.bulkActions}>
                 <button
@@ -609,7 +655,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 >
                   {t('选择或取消本页')}
                 </button>
-                <span>{t('已选 {{value1}} 组，每组保留一份', { value1: selected.size })}</span>
+                <span>{t('已选 {{value1}} 组，按保留标记处理', { value1: selected.size })}</span>
                 <button
                   type="button"
                   disabled={!selected.size}
@@ -619,19 +665,27 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 </button>
                 <button
                   type="button"
-                  disabled={!selected.size || cleanup.isPending}
+                  disabled={
+                    filtering ||
+                    invalidKeeper ||
+                    selectedRemoveCount <= 0 ||
+                    !selected.size ||
+                    cleanup.isPending
+                  }
                   onClick={() =>
                     setConfirm({
                       input: {
                         operationId: crypto.randomUUID(),
                         revision: data!.revision,
                         signatures: [...selected.keys()],
+                        filters: { ...filters, kind },
+                        keepOverrides: keepOverrides([...selected.keys()]),
                       },
                       count: selected.size,
-                      removeCount: [...selected.values()].reduce(
-                        (n, group) => n + group.count - 1,
-                        0,
-                      ),
+                      keepCount: selected.size + extraKeepCount([...selected.keys()]),
+                      removeCount:
+                        [...selected.values()].reduce((n, group) => n + group.count - 1, 0) -
+                        extraKeepCount([...selected.keys()]),
                     })
                   }
                 >
@@ -639,106 +693,119 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 </button>
               </div>
             )}
-            {groups.map((group, index) => (
-              <article key={group.signature} className={styles.group}>
-                {!showIgnored && (
-                  <label className={styles.groupSelection}>
-                    <input
-                      type="checkbox"
-                      aria-label={t('选择重复组 {{value1}}', { value1: index + 1 })}
-                      checked={selected.has(group.signature)}
-                      disabled={!!submitted[group.signature]}
-                      onChange={(event) =>
-                        setSelected((current) => {
-                          const next = new Map(current);
-                          if (event.target.checked) next.set(group.signature, group);
-                          else next.delete(group.signature);
-                          return next;
-                        })
-                      }
-                    />
-                    {t('每组保留推荐的一份')}
-                  </label>
-                )}
-                <button
-                  className={styles.groupHeader}
-                  type="button"
-                  disabled={!!submitted[group.signature]}
-                  aria-expanded={expanded === group.signature}
-                  onClick={() =>
-                    setExpanded((current) => (current === group.signature ? null : group.signature))
-                  }
-                >
-                  <div className={styles.previews}>
-                    {group.previews.map((asset, i) => (
-                      <div key={asset.id}>
-                        <EagleAssetThumbnail
-                          asset={asset}
-                          scheduler={scheduler}
-                          loadService={loadService}
-                          order={index * 2 + i}
-                          displayWidth={92}
-                        />
+            <div className={styles.groupList}>
+              {groups.map((group, index) => (
+                <article key={group.signature} className={styles.group}>
+                  {!showIgnored && (
+                    <label className={styles.groupSelection}>
+                      <input
+                        type="checkbox"
+                        aria-label={t('选择重复组 {{value1}}', { value1: index + 1 })}
+                        checked={selected.has(group.signature)}
+                        disabled={filtering || !!submitted[group.signature]}
+                        onChange={(event) =>
+                          setSelected((current) => {
+                            const next = new Map(current);
+                            if (event.target.checked) next.set(group.signature, group);
+                            else next.delete(group.signature);
+                            return next;
+                          })
+                        }
+                      />
+                    </label>
+                  )}
+                  <button
+                    className={styles.groupHeader}
+                    type="button"
+                    disabled={!!submitted[group.signature]}
+                    aria-expanded={expanded === group.signature}
+                    onClick={() =>
+                      setExpanded((current) =>
+                        current === group.signature ? null : group.signature,
+                      )
+                    }
+                  >
+                    <div>
+                      <div className={styles.groupSummary}>
+                        <strong>
+                          {group.kind === 'EXACT' ? t('文件完全相同') : t('原图像素完全相同')} ·{' '}
+                          {group.count} {t('项')}
+                        </strong>
+                        <small>
+                          {t('保留一项后可清理 {{size}} 文件', {
+                            size: bytes(group.removableBytes),
+                          })}
+                        </small>
                       </div>
-                    ))}
-                  </div>
-                  <div>
-                    <div className={styles.groupSummary}>
-                      <strong>
-                        {group.kind === 'EXACT' ? t('文件完全相同') : t('原图像素完全相同')} ·{' '}
-                        {group.count} {t('项')}
-                      </strong>
-                      <small>
-                        {t('保留一项后可清理 {{size}} 文件', { size: bytes(group.removableBytes) })}
-                      </small>
                     </div>
-                    <p>{group.previews[0]?.displayName}</p>
-                  </div>
-                  <span>
-                    {submitted[group.signature]
-                      ? t('已提交清理')
-                      : expanded === group.signature
-                        ? t('收起')
-                        : t('比较并选择')}
-                  </span>
-                </button>
-                {expanded === group.signature && (
-                  <DuplicateComparison
-                    key={group.signature}
+                    <span>
+                      {submitted[group.signature]
+                        ? t('已提交清理')
+                        : expanded === group.signature
+                          ? t('收起')
+                          : t('比较并选择')}
+                    </span>
+                  </button>
+                  <EagleDuplicatePreview
                     group={group}
-                    initialSelection={priorChoices.get(group.signature)}
+                    index={index}
+                    selection={keepers.get(group.signature)}
+                    disabled={filtering || !!submitted[group.signature]}
                     ignored={showIgnored}
-                    api={api}
                     scheduler={scheduler}
                     loadService={loadService}
                     scopeRevision={scopeRevision}
-                    submitting={cleanup.isPending}
-                    cleanupError={
-                      !confirm &&
-                      cleanup.variables?.groups?.some(
-                        (selected) => selected.signature === group.signature,
-                      )
-                        ? cleanup.error?.message
-                        : undefined
-                    }
-                    onIgnored={() => {
-                      advance([group.signature]);
-                      void results.refetch();
-                    }}
-                    onCleanup={(selection) => {
-                      const selectedGroups = [{ signature: group.signature, ...selection }];
-                      const previous = cleanup.variables;
-                      cleanup.mutate(
-                        cleanup.error &&
-                          JSON.stringify(previous?.groups) === JSON.stringify(selectedGroups)
-                          ? previous!
-                          : { operationId: crypto.randomUUID(), groups: selectedGroups },
+                    onKeep={(id) => {
+                      setKeepers((current) =>
+                        new Map(current).set(group.signature, { keepIds: [id] }),
                       );
+                      setExpanded(null);
                     }}
+                    onMore={() => setExpanded(group.signature)}
                   />
-                )}
-              </article>
-            ))}
+                  {expanded === group.signature && (
+                    <DuplicateComparison
+                      key={group.signature}
+                      group={group}
+                      initialSelection={
+                        keepers.get(group.signature) ?? priorChoices.get(group.signature)
+                      }
+                      ignored={showIgnored}
+                      api={api}
+                      scheduler={scheduler}
+                      loadService={loadService}
+                      scopeRevision={scopeRevision}
+                      submitting={filtering || cleanup.isPending}
+                      cleanupError={
+                        !confirm &&
+                        cleanup.variables?.groups?.some(
+                          (selected) => selected.signature === group.signature,
+                        )
+                          ? cleanup.error?.message
+                          : undefined
+                      }
+                      onSelectionChange={(choice) =>
+                        setKeepers((current) => new Map(current).set(group.signature, choice))
+                      }
+                      onIgnored={() => {
+                        advance([group.signature]);
+                        void results.refetch();
+                      }}
+                      onCleanup={(selection) => {
+                        const selectedGroups = [{ signature: group.signature, ...selection }];
+                        const previous = cleanup.variables;
+                        cleanup.mutate(
+                          cleanup.error &&
+                            JSON.stringify(previous?.groups) === JSON.stringify(selectedGroups)
+                            ? previous!
+                            : { operationId: crypto.randomUUID(), groups: selectedGroups },
+                        );
+                      }}
+                    />
+                  )}
+                </article>
+              ))}
+            </div>
             {data &&
               !groups.length &&
               !results.error &&
@@ -756,39 +823,48 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   <h3>
                     {scanning || scan.isPending
                       ? t('正在检查查重结果…')
-                      : data.outdatedGroups
-                        ? t('查重规则尚未更新')
-                        : showIgnored
-                          ? t('没有已忽略的结果')
-                          : kind === 'EXACT'
-                            ? t('没有完全重复的文件')
-                            : data.originalCheckAttempted && !data.originalCheckCompleted
-                              ? t('原图核验尚未完成')
-                              : data.coverage.indexed < data.coverage.total
-                                ? t('视觉检查尚未完成')
-                                : kind === 'SIMILAR'
-                                  ? t('未发现已核验的画面相同副本')
-                                  : t('未发现符合当前规则的重复项')}
+                      : narrowed
+                        ? t('没有符合当前筛选的重复组')
+                        : data.outdatedGroups
+                          ? t('查重规则尚未更新')
+                          : showIgnored
+                            ? t('没有已忽略的结果')
+                            : kind === 'EXACT'
+                              ? t('没有完全重复的文件')
+                              : data.originalCheckAttempted && !data.originalCheckCompleted
+                                ? t('原图核验尚未完成')
+                                : data.coverage.indexed < data.coverage.total
+                                  ? t('视觉检查尚未完成')
+                                  : kind === 'SIMILAR'
+                                    ? t('未发现已核验的画面相同副本')
+                                    : t('未发现符合当前规则的重复项')}
                   </h3>
                   <p>
                     {scanning || scan.isPending
                       ? t('后台检查完成后会自动显示结果，可以继续浏览。')
-                      : data.outdatedGroups
-                        ? data.originalCheckAttempted
-                          ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
-                          : t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
-                        : data.originalCheckAttempted &&
-                            !data.originalCheckCompleted &&
-                            kind !== 'EXACT'
-                          ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
-                          : kind === 'EXACT' && !showIgnored
-                            ? t(
-                                '文件字节不同的备份副本请查看“原图画面相同”；需先完成候选原图核验。',
-                              )
-                            : data.coverage.indexed < data.coverage.total
-                              ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
-                              : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
+                      : narrowed
+                        ? t('可以放宽筛选或还原默认条件，无需重新扫描。')
+                        : data.outdatedGroups
+                          ? data.originalCheckAttempted
+                            ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
+                            : t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
+                          : data.originalCheckAttempted &&
+                              !data.originalCheckCompleted &&
+                              kind !== 'EXACT'
+                            ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
+                            : kind === 'EXACT' && !showIgnored
+                              ? t(
+                                  '文件字节不同的备份副本请查看“原图画面相同”；需先完成候选原图核验。',
+                                )
+                              : data.coverage.indexed < data.coverage.total
+                                ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
+                                : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
                   </p>
+                  {narrowed && (
+                    <button type="button" onClick={() => changeFilters({ protectEdits: 'true' })}>
+                      {t('还原默认条件')}
+                    </button>
+                  )}
                   {!showIgnored && kind === 'EXACT' && data.similarGroups > 0 && (
                     <button
                       type="button"
@@ -827,6 +903,55 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               </button>
             )}
           </div>
+          {data && (
+            <div className={styles.resultTools}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showIgnored}
+                  onChange={(event) => {
+                    setShowIgnored(event.target.checked);
+                    setSelected(new Map());
+                    setKeepers(new Map());
+                    setExpanded(null);
+                  }}
+                />
+                {t('查看已保留')} ({data.ignoredGroups})
+              </label>
+              {data.totalGroups > 0 && (
+                <button
+                  type="button"
+                  disabled={
+                    filtering ||
+                    preserve.isPending ||
+                    cleanup.isPending ||
+                    Object.keys(submitted).length > 0
+                  }
+                  onClick={() => preserve.mutate()}
+                >
+                  {showIgnored ? t('恢复检查全部筛选结果') : t('全部保留并不再提示')}
+                </button>
+              )}
+              {!showIgnored && data.totalGroups > 0 && (
+                <button
+                  type="button"
+                  disabled={
+                    filtering ||
+                    invalidKeeper ||
+                    allRemoveCount <= 0 ||
+                    cleanup.isPending ||
+                    Object.keys(submitted).length > 0 ||
+                    active.some((op) => op.kind === 'DUPLICATE_CLEANUP')
+                  }
+                  onClick={confirmAll}
+                >
+                  {extraKeepCount() > 0
+                    ? t('按保留标记清理全部筛选结果')
+                    : t('每组保留一份，清理全部重复副本')}
+                </button>
+              )}
+            </div>
+          )}
         </>
       )}
     </dialog>
@@ -843,6 +968,7 @@ function DuplicateComparison({
   submitting,
   cleanupError,
   onIgnored,
+  onSelectionChange,
   onCleanup,
 }: {
   group: DuplicateGroupSummary;
@@ -855,6 +981,7 @@ function DuplicateComparison({
   submitting: boolean;
   cleanupError?: string;
   onIgnored: () => void;
+  onSelectionChange: (selection: { keepIds?: string[]; removeIds?: string[] }) => void;
   onCleanup: (selection: { keepIds: string[] } | { removeIds: string[] }) => void;
 }) {
   const { ownerId, libraryMode, api: workspaceApi } = useLibraryWorkspace();
@@ -862,8 +989,8 @@ function DuplicateComparison({
   const [keepIds, setKeepIds] = useState(initialSelection?.keepIds ?? [group.recommendedId]);
   const [removeIds, setRemoveIds] = useState<string[]>(initialSelection?.removeIds ?? []);
   const actionBar = useRef<HTMLDivElement>(null);
-  const isKept = (id: string) =>
-    group.kind === 'EXACT' ? keepIds.includes(id) : !removeIds.includes(id);
+  const keepMode = group.kind === 'EXACT' || !!initialSelection?.keepIds;
+  const isKept = (id: string) => (keepMode ? keepIds.includes(id) : !removeIds.includes(id));
   const members = useInfiniteQuery({
     queryKey: ['eagle', ownerId, libraryMode, 'duplicate-members', group.signature, scopeRevision],
     initialPageParam: undefined as string | undefined,
@@ -881,7 +1008,7 @@ function DuplicateComparison({
     actionBar.current?.querySelector('button')?.focus({ preventScroll: true });
   }, [members.isPending]);
   const items = members.data?.pages.flatMap((p) => p.items) ?? [];
-  const removeCount = group.kind === 'EXACT' ? group.count - keepIds.length : removeIds.length;
+  const removeCount = keepMode ? group.count - keepIds.length : removeIds.length;
   const keepCount = group.count - removeCount;
   const preview = previewIndex === null ? undefined : items[previewIndex];
   const descriptor = useQuery({
@@ -936,7 +1063,7 @@ function DuplicateComparison({
               !members.data ||
               !!members.error
             }
-            onClick={() => onCleanup(group.kind === 'EXACT' ? { keepIds } : { removeIds })}
+            onClick={() => onCleanup(keepMode ? { keepIds } : { removeIds })}
           >
             {t('保留 {{keep}} 项，清理 {{remove}} 项', {
               keep: keepCount,
@@ -969,18 +1096,19 @@ function DuplicateComparison({
                   aria-label={t('保留 {{value1}}', { value1: item.displayName })}
                   checked={isKept(item.id)}
                   onChange={(event) => {
-                    if (group.kind === 'EXACT')
-                      setKeepIds((current) =>
-                        event.target.checked
-                          ? [...current, item.id]
-                          : current.filter((id) => id !== item.id),
-                      );
-                    else
-                      setRemoveIds((current) =>
-                        event.target.checked
-                          ? current.filter((id) => id !== item.id)
-                          : [...current, item.id],
-                      );
+                    if (keepMode) {
+                      const next = event.target.checked
+                        ? [...keepIds, item.id]
+                        : keepIds.filter((id) => id !== item.id);
+                      setKeepIds(next);
+                      onSelectionChange({ keepIds: next });
+                    } else {
+                      const next = event.target.checked
+                        ? removeIds.filter((id) => id !== item.id)
+                        : [...removeIds, item.id];
+                      setRemoveIds(next);
+                      onSelectionChange({ removeIds: next });
+                    }
                   }}
                 />
                 {t('保留此项')}
