@@ -9,6 +9,18 @@ BEGIN
     source := format('(SELECT %s AS d FROM changed r EXCEPT SELECT %s AS d FROM previous r)
       UNION (SELECT %s AS d FROM previous r EXCEPT SELECT %s AS d FROM changed r)', projection, projection, projection, projection);
   ELSE source := format('SELECT %s AS d FROM changed r', projection); END IF;
+  IF TG_TABLE_NAME='EagleMediaJob' AND TG_OP='UPDATE' THEN
+    -- Keep the original global-NOTIFY-lock exemption for forward claims and leases.
+    source := 'WITH claims AS MATERIALIZED (
+      SELECT n.id FROM changed n JOIN previous o ON o.id=n.id
+      WHERE n.status=''PROCESSING'' AND o.status IN (''PENDING'',''PROCESSING'')
+        AND n."lockedAt" IS NOT NULL AND (o."lockedAt" IS NULL OR n."lockedAt">=o."lockedAt")
+        AND n."availableAt" IS NOT DISTINCT FROM o."availableAt"
+        AND n."dependsOnJobId" IS NOT DISTINCT FROM o."dependsOnJobId"
+    ), meaningful_new AS (SELECT * FROM changed WHERE id NOT IN (SELECT id FROM claims)),
+       meaningful_old AS (SELECT * FROM previous WHERE id NOT IN (SELECT id FROM claims)) ' ||
+       replace(replace(source,'FROM changed r','FROM meaningful_new r'),'FROM previous r','FROM meaningful_old r');
+  END IF;
   visibility := CASE TG_ARGV[2]
     WHEN 'private' THEN 'false'
     WHEN 'asset' THEN 'NOT (d->>''isPrivate'')::boolean'

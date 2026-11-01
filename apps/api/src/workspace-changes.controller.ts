@@ -21,7 +21,13 @@ class WorkspaceChangeScopeDto {
   })
   PHOTO!: WorkspaceChanges['scopes']['PHOTO'];
 }
+class WorkspaceHealthDto {
+  @ApiProperty({ enum: ['ONLINE', 'OFFLINE'] }) worker!: 'ONLINE' | 'OFFLINE';
+  @ApiProperty({ enum: ['READY', 'UNKNOWN', 'OFFLINE', 'DRIFTED'] }) embedding!:
+    'READY' | 'UNKNOWN' | 'OFFLINE' | 'DRIFTED';
+}
 export class WorkspaceChangesResponseDto implements WorkspaceChanges {
+  @ApiProperty({ type: WorkspaceHealthDto, required: false }) health?: WorkspaceHealthDto;
   @ApiProperty() epoch!: string;
   @ApiProperty({ type: WorkspaceChangeScopeDto }) scopes!: WorkspaceChangeScopeDto;
 }
@@ -32,9 +38,11 @@ export class WorkspaceChangesController {
   constructor(private readonly changes: WorkspaceChangesService) {}
   @Get()
   @ApiOkResponse({ type: WorkspaceChangesResponseDto })
-  snapshot(@CurrentPrincipal() principal: AuthPrincipal): WorkspaceChangesResponseDto {
+  async snapshot(
+    @CurrentPrincipal() principal: AuthPrincipal,
+  ): Promise<WorkspaceChangesResponseDto> {
     try {
-      return this.changes.snapshot(principal.sub, principal.canViewPrivate);
+      return await this.changes.snapshot(principal.sub, principal.canViewPrivate);
     } catch {
       throw new ServiceUnavailableException('自动更新暂时不可用，现有结果已保留。');
     }

@@ -1,5 +1,10 @@
 import type { EagleMediaJobKind, EagleProcessingLane } from '@prisma/client';
-import { nextBackgroundTime } from '@sekereagle/library-core';
+import {
+  nextBackgroundTime,
+  WORKSPACE_CHANGE_CHANNEL,
+  parseWorkspaceChange,
+  type WorkspaceChangeEvent,
+} from '@sekereagle/library-core';
 import { Client, type Notification } from 'pg';
 
 export const WORKER_WAKEUP_CHANNEL = 'sekereagle_worker_wakeup';
@@ -98,6 +103,7 @@ export class PostgresWakeListener {
     private readonly onWake: (payload?: string) => void,
     private readonly reportError: (error: unknown) => void,
     private readonly onObjectDeletion?: () => void,
+    private readonly onWorkspaceChange?: (event: WorkspaceChangeEvent) => void,
   ) {}
 
   async start(): Promise<void> {
@@ -129,11 +135,16 @@ export class PostgresWakeListener {
     client.on('notification', (message: Notification) => {
       if (message.channel === WORKER_WAKEUP_CHANNEL) this.onWake(message.payload);
       else if (message.channel === OBJECT_DELETION_WAKEUP_CHANNEL) this.onObjectDeletion?.();
+      else if (message.channel === WORKSPACE_CHANGE_CHANNEL) {
+        const event = parseWorkspaceChange(message.payload ?? '');
+        if (event) this.onWorkspaceChange?.(event);
+      }
     });
     try {
       await client.connect();
       await client.query(`LISTEN ${WORKER_WAKEUP_CHANNEL}`);
       if (this.onObjectDeletion) await client.query(`LISTEN ${OBJECT_DELETION_WAKEUP_CHANNEL}`);
+      if (this.onWorkspaceChange) await client.query(`LISTEN ${WORKSPACE_CHANGE_CHANNEL}`);
       this.reconnectAttempt = 0;
       this.onWake();
     } catch (error) {

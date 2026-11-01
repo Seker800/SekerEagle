@@ -152,6 +152,8 @@ export function acquireWorkspaceRefresh(
               previous.scopes[mode][kind] !== next.scopes[mode][kind],
           ),
         );
+        if (previous && JSON.stringify(previous.health) !== JSON.stringify(next.health))
+          kinds.add('TASKS');
         if (kinds.size)
           for (const query of client.getQueryCache().getAll())
             if (affected(query, ownerId, mode, kinds)) reconcile(query);

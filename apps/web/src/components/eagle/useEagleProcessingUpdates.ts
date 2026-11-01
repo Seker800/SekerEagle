@@ -55,7 +55,7 @@ export function useEagleProcessingUpdates(input: {
   );
   const interval = useProgressQueryInterval<Awaited<ReturnType<typeof listEagleAssetUpdates>>>(
     (rows) => rows.some((row) => row.lifecycleStatus === 'PROCESSING'),
-    (rows) => rows.map((row) => [row.id, row.lifecycleStatus, row.rowVersion, row.mediaRevision]),
+    (rows) => rows.map((row) => [row.id, row.lifecycleStatus, row.mediaRevision, row.renditions]),
   );
   const updatesQuery = useQuery({
     queryKey: input.updatesQueryKey(processingAssetIds),

@@ -127,7 +127,6 @@ let wakeListener: PostgresWakeListener | undefined;
 let smartFolderRunner: SmartFolderBuildRunner | undefined;
 let buildingSmartFolder = false;
 let buildingPhotoMap = false;
-let photoMapTimer: NodeJS.Timeout | undefined;
 let lastPhotoMapStep = 0;
 let stopping = false;
 let activeTagBuildCount = 0;
@@ -1500,7 +1499,6 @@ async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
   smartFolderRunner?.stop();
-  if (photoMapTimer) clearInterval(photoMapTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   wakeScheduler?.stop();
   objectDeletionRunner?.stop();
@@ -1549,6 +1547,16 @@ async function main(): Promise<void> {
     },
     reportLoopError,
     () => objectDeletionRunner?.wake(),
+    (event) => {
+      if (event.kinds.some((kind) => kind === 'MAP' || kind === 'FOLDERS' || kind === 'SETTINGS'))
+        wakeScheduler?.wakeNow();
+      if (
+        event.kinds.some(
+          (kind) => kind === 'FOLDERS' || kind === 'RECOMMENDATIONS' || kind === 'SETTINGS',
+        )
+      )
+        smartFolderRunner?.wake();
+    },
   );
   await wakeListener.start();
   heartbeatTimer = setInterval(() => void heartbeat().catch(reportLoopError), 15_000);
@@ -1587,10 +1595,6 @@ async function main(): Promise<void> {
       reportLoopError,
     );
     smartFolderRunner.wake();
-  }
-  if (runBackgroundProcessing) {
-    photoMapTimer = setInterval(() => wakeScheduler?.wakeNow(), 15000);
-    photoMapTimer.unref();
   }
   wakeScheduler.wakeNow();
 }
