@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { setImmediate as flushQueries } from 'node:timers/promises';
 import { after, test } from 'node:test';
 import console from 'node:console';
@@ -540,3 +541,123 @@ for (const [mode, size] of [
     }
   });
 }
+
+test('one-row priming cannot leave a quadratic transition join for later fifty-thousand-job updates', async () => {
+  const ownerId = randomUUID(),
+    prefix = randomUUID(),
+    size = 50000;
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  const evidence = { primingRows: 1, primingUpdates: 6, batchRows: size, phases: [], plans: [] };
+  const plans = [];
+  client.on('notice', (notice) => {
+    const start = notice.message.indexOf('{');
+    if (start < 0 || !notice.message.includes('EagleMediaJobEvent')) return;
+    try {
+      const plan = JSON.parse(notice.message.slice(start));
+      if (plan['Query Text']?.includes('FROM new_jobs current_job JOIN old_jobs previous_job'))
+        plans.push(plan);
+    } catch {
+      /* Non-plan server notices do not contain an event execution plan. */
+    }
+  });
+  const run = async (label, status, oneRow = false, heartbeat = false) => {
+    const start = plans.length;
+    await client.query(
+      `UPDATE "EagleMediaJob" SET ${heartbeat ? '"updatedAt"=CURRENT_TIMESTAMP' : `status=$2${oneRow ? ',"leaseVersion"="leaseVersion"+1' : ''}`} WHERE "ownerId"=$1${oneRow ? ' AND id=$3' : ''}`,
+      heartbeat ? [ownerId] : oneRow ? [ownerId, status, `job-${prefix}-1`] : [ownerId, status],
+    );
+    const captured = plans.slice(start);
+    assert.equal(captured.length, 1, 'auto_explain captures the actual event INSERT SELECT plan');
+    const scans = [];
+    const joins = [];
+    const visit = (node) => {
+      if (node['Node Type'] === 'Named Tuplestore Scan') scans.push(node);
+      if (node['Join Type']) joins.push(node['Node Type']);
+      for (const child of node.Plans ?? []) visit(child);
+    };
+    visit(captured[0].Plan);
+    evidence.plans.push({ label, plan: captured[0] });
+    evidence.phases.push({
+      label,
+      backendPid: client.processID,
+      rows: oneRow ? 1 : size,
+      joins,
+      scans: scans.map((scan) => ({ rows: scan['Actual Rows'], loops: scan['Actual Loops'] })),
+    });
+    assert.equal(scans.length, 2);
+    for (const scan of scans)
+      assert.ok(
+        scan['Actual Loops'] <= 2,
+        'each transition relation is scanned a bounded number of times, not once per opposite row',
+      );
+  };
+  try {
+    await client.connect();
+    evidence.backendPid = client.processID;
+    await db.user.create({
+      data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'synthetic-only' },
+    });
+    await db.$executeRaw`INSERT INTO "EagleAsset" (id,"ownerId","libraryMode","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize","originalObjectKey","mediaRevision","updatedAt")
+      SELECT ${prefix}||'-'||n,${ownerId},'MATERIAL','synthetic.jpg','Synthetic','synthetic','image/jpeg','jpeg',1,'users/'||${ownerId}||'/'||${prefix}||'-'||n,1,CURRENT_TIMESTAMP FROM generate_series(1,${size}) n`;
+    await db.$executeRaw`INSERT INTO "EagleMediaJob" (id,"ownerId","libraryMode","assetId","assetRevision",kind,lane,"processorVersion","updatedAt")
+      SELECT 'job-'||id,"ownerId","libraryMode",id,1,'GENERATE_EMBEDDING','BACKGROUND','synthetic-cardinality-v1',CURRENT_TIMESTAMP FROM "EagleAsset" WHERE "ownerId"=${ownerId}`;
+    await client.query("LOAD 'auto_explain'");
+    await client.query("SET client_min_messages='log'");
+    await client.query("SET auto_explain.log_format='json'");
+    await client.query('SET auto_explain.log_analyze=on');
+    await client.query('SET auto_explain.log_timing=off');
+    await client.query('SET auto_explain.log_buffers=on');
+    await client.query('SET auto_explain.log_nested_statements=on');
+    await client.query('SET auto_explain.log_min_duration=0');
+    for (let index = 0; index < 6; index++)
+      await run(`prime-${index}`, index % 2 ? 'PENDING' : 'FAILED', true);
+    // This test-only guard fails a cached 50k x 50k join promptly. It is not a
+    // production transaction budget or a response-time promise for arbitrary NAS.
+    await client.query("SET statement_timeout='10s'");
+    // Suppress per-row FK diagnostic noise while retaining the actual bulk
+    // INSERT SELECT plan. A real fifty-thousand-row event write exceeds 1ms.
+    await client.query('SET auto_explain.log_min_duration=1');
+    await run('large-failed', 'FAILED');
+    await run('large-requeued', 'PENDING');
+    await run('large-heartbeat', null, false, true);
+    const result = await db.eagleMediaJobEvent.groupBy({
+      where: { ownerId },
+      by: ['fromStatus', 'toStatus'],
+      _count: true,
+    });
+    const count = (fromStatus, toStatus) =>
+      result.find((row) => row.fromStatus === fromStatus && row.toStatus === toStatus)?._count ?? 0;
+    assert.equal(count(null, 'PENDING'), size);
+    assert.equal(count('PENDING', 'FAILED'), size + 3);
+    assert.equal(count('FAILED', 'PENDING'), size + 3);
+    assert.equal(
+      await db.eagleAssetProcessingJob.count({ where: { ownerId, status: 'PENDING' } }),
+      size,
+    );
+    assert.equal(
+      (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: `job-${prefix}-1` } }))
+        .leaseVersion,
+      6,
+    );
+    evidence.eventCounts = {
+      inserted: count(null, 'PENDING'),
+      failed: count('PENDING', 'FAILED'),
+      requeued: count('FAILED', 'PENDING'),
+    };
+    evidence.status = 'PASSED';
+  } catch (error) {
+    evidence.status = 'FAILED';
+    evidence.errorCode = error.code ?? null;
+    throw error;
+  } finally {
+    await client.query('SET statement_timeout=0').catch(() => undefined);
+    await client.end();
+    await db.eagleAsset.deleteMany({ where: { ownerId } });
+    await db.user.deleteMany({ where: { id: ownerId } });
+    mkdirSync('.omx/artifacts', { recursive: true });
+    writeFileSync(
+      '.omx/artifacts/media-transition-cardinality.json',
+      JSON.stringify(evidence, null, 2) + '\n',
+    );
+  }
+});
