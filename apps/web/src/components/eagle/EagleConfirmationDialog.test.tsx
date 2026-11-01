@@ -84,3 +84,10 @@ it('keeps focus inside the confirmation when submission disables the focused act
   view.rerender(show(true));
   expect(screen.getByRole('alertdialog')).toHaveFocus();
 });
+
+it('wraps Tab and Shift+Tab within the confirmation actions', () => {
+  render(<EagleConfirmationDialog title="Confirm" description="Details" onCancel={() => {}} actions={<><button>Cancel</button><button>Confirm</button></>} />);
+  const modal = screen.getByRole('alertdialog'), first = screen.getByRole('button', { name: 'Cancel' }), last = screen.getByRole('button', { name: 'Confirm' });
+  last.focus(); fireEvent.keyDown(modal, { key: 'Tab' }); expect(first).toHaveFocus();
+  fireEvent.keyDown(modal, { key: 'Tab', shiftKey: true }); expect(last).toHaveFocus();
+});
