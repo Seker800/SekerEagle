@@ -196,3 +196,39 @@ test('existing target tags keep target group and presentation without creating s
   );
   assert.equal(mappings.tags.get('source')?.groupId, 'target-group');
 });
+
+test('large transfer tag sets obey statement budgets without dropping mappings', async () => {
+  const saved: Array<Record<string, unknown>> = [];
+  let peak = 0;
+  const tx = {
+    eagleManualTag: {
+      findMany: async ({ where }: { where: { normalizedName: { in: string[] } } }) =>
+        saved.filter((tag) => where.normalizedName.in.includes(String(tag.normalizedName))),
+      createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => {
+        peak = Math.max(peak, data.length);
+        assert.ok(data.length <= 512, 'one statement must fit its configured work quantum');
+        saved.push(...data.map((tag) => ({ ...tag, id: `target-${tag.normalizedName}` })));
+      },
+    },
+  };
+  const mappings = await resolveTransferTagMappings(
+    tx as never,
+    { ownerId: 'owner', targetMode: 'MATERIAL' },
+    [
+      {
+        libraryMode: 'PHOTO',
+        manualTagLinks: Array.from({ length: 3000 }, (_, index) => ({
+          tag: {
+            id: `tag-${index}`,
+            name: `Tag ${index}`,
+            normalizedName: `tag ${index}`,
+            marksAssetsPrivate: false,
+            groupMemberships: [],
+          },
+        })),
+      },
+    ] as never,
+  );
+  assert.equal(mappings.tags.size, 3000);
+  assert.ok(peak <= 512);
+});
