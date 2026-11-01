@@ -404,9 +404,12 @@ export class EagleUploadService {
     const now = new Date();
     const assetId = randomUUID();
     const displayName = displayNameFromOriginal(session.originalName);
+    const publicationTimeoutMs = uploadPublicationTimeoutMs();
     try {
       const finalized = await this.prisma.$transaction(
         async (transaction) => {
+          // Prisma's timer alone cannot interrupt a PostgreSQL lock wait already in progress.
+          await transaction.$executeRaw`SELECT set_config('statement_timeout', ${`${publicationTimeoutMs}ms`}, true)`;
           const copySourceId = session.eagleState?.copySourceAssetId;
           let copySource: Awaited<ReturnType<typeof loadEditedCopySource>> | undefined;
           if (copySourceId || session.eagleState?.replacementAssetId)
@@ -685,7 +688,7 @@ export class EagleUploadService {
           });
           return { assetId: finalizedAssetId, duplicate };
         },
-        { timeout: uploadPublicationTimeoutMs() },
+        { timeout: publicationTimeoutMs },
       );
       return {
         uploadSessionId: session.id,
@@ -696,7 +699,8 @@ export class EagleUploadService {
     } catch (error) {
       const temporarilyBusy =
         error instanceof Prisma.PrismaClientKnownRequestError &&
-        ['P2028', 'P2024', 'P2034'].includes(error.code);
+        (['P2028', 'P2024', 'P2034'].includes(error.code) ||
+          (error.code === 'P2010' && error.meta?.code === '57014'));
       await this.prisma.uploadSession.updateMany({
         where: {
           id: session.id,
