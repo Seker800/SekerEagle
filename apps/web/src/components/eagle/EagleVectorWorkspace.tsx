@@ -159,15 +159,11 @@ export function EagleVectorWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection, imagePreview.previewImage]);
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (!busy && document.visibilityState === 'visible') void reload();
-    }, 10000);
     const onVisibilityChange = () => {
       if (!busy && document.visibilityState === 'visible') void reload();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
-      window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [busy, reload]);
