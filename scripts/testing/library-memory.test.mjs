@@ -66,9 +66,10 @@ before(async () => {
       assetRevision: 0,
       processorVersion: 'fixture',
       cameraModel: i % 3 === 0 ? null : i % 3 === 1 ? '' : 'Camera',
-        lensModel: i % 4 ? 'Lens' : null, cameraMake: 'Maker',
-        capturedAt: i % 7 ? new Date(1793491200000 + i * 86400000) : null,
-        capturedLocal: i % 7 ? `2026-11-${String(i + 1).padStart(2, '0')}T08:00:00` : null,
+      lensModel: i % 4 ? 'Lens' : null,
+      cameraMake: 'Maker',
+      capturedAt: i % 7 ? new Date(1793491200000 + i * 86400000) : null,
+      capturedLocal: i % 7 ? `2026-11-${String(i + 1).padStart(2, '0')}T08:00:00` : null,
     })),
   });
 });
@@ -114,7 +115,14 @@ test('resident predicates match the real SQL adapter across nulls, NOT, relation
     const expected = await db.$queryRaw(
       Prisma.sql`SELECT asset.id FROM "EagleAsset" asset WHERE ${compileSearchPredicate(where)} ORDER BY asset."chronologicalAt" DESC,asset.id DESC`,
     );
-    assert.deepEqual(expected, await db.eagleAsset.findMany({ where, select: { id: true }, orderBy: [{ chronologicalAt: 'desc' }, { id: 'desc' }] }));
+    assert.deepEqual(
+      expected,
+      await db.eagleAsset.findMany({
+        where,
+        select: { id: true },
+        orderBy: [{ chronologicalAt: 'desc' }, { id: 'desc' }],
+      }),
+    );
     assert.deepEqual(
       index.page(where, 'chronologicalAt', 'desc', 100, 0),
       expected.map((row) => row.id),
@@ -159,6 +167,32 @@ test('a fresh reader reconstructs the same result after acknowledged logs are pr
   );
 });
 
+test('activation waits for a pre-existing uncommitted writer instead of losing its update', async () => {
+  const id = `${other}-activation`;
+  const otherScope = { ownerId: other, libraryMode: 'PHOTO' };
+  await db.eagleAsset.create({ data: { id, ...otherScope, originalName: 'activation.jpg', displayName: 'activation', normalizedDisplayName: 'activation', mimeType: 'image/jpeg', format: 'jpg', byteSize: 1n, rating: 1, originalObjectKey: `synthetic/${id}` } });
+  let release, written;
+  const commit = new Promise((resolve) => { release = resolve; });
+  const ready = new Promise((resolve) => { written = resolve; });
+  const writer = db.$transaction(async (tx) => {
+    await tx.eagleAsset.update({ where: { id }, data: { rating: 5 } });
+    written(); await commit;
+  }, { timeout: 10000 });
+  await ready;
+  let completed = false;
+  const loading = new LibraryReadStore(pool).synchronize(otherScope).then((index) => { completed = true; return index; });
+  let blocked = false;
+  try {
+    for (let i=0;i<100 && !completed;i++) {
+      const [state] = await db.$queryRaw`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='sekereagle-library-reader' AND wait_event_type='Lock') blocked`;
+      if (state.blocked) { blocked=true; break; }
+    }
+    assert.equal(blocked, true, 'activation must join the transaction commit ordering');
+  } finally { release(); await writer; }
+  const index = await loading;
+  assert.equal(index.count({ id, rating: 5 }), 1);
+});
+
 test('shared list reads use the reader and preserve authoritative page filtering and SQL fallback', async () => {
   const savedUrl = process.env.EAGLE_READER_URL,
     savedToken = process.env.EAGLE_READER_TOKEN;
@@ -191,25 +225,39 @@ test('shared list reads use the reader and preserve authoritative page filtering
 });
 
 test('statistics reuse resident daily facts and preserve the original chart SQL for every grain', async () => {
-  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
-  const server = createLibraryReaderServer(store, 'statistics-reader', 2097152, (index, includePrivate, query) => readResidentPhotoStatistics(pool, index, includePrivate, query));
-  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const oldUrl = process.env.EAGLE_READER_URL,
+    oldToken = process.env.EAGLE_READER_TOKEN;
+  const server = createLibraryReaderServer(
+    store,
+    'statistics-reader',
+    2097152,
+    (index, includePrivate, query) =>
+      readResidentPhotoStatistics(pool, index, includePrivate, query),
+  );
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
   const url = `http://127.0.0.1:${server.address().port}`;
   const service = new PhotoStatisticsService(db);
   try {
-    for (const grain of ['day', 'week', 'month', 'year']) for (const groupBy of ['total', 'camera', 'lens']) for (const includePrivate of [false, true]) {
-      delete process.env.EAGLE_READER_URL;
-      const query = { grain, groupBy };
-      const expected = await service.get(ownerId, includePrivate, query);
-      process.env.EAGLE_READER_URL = url; process.env.EAGLE_READER_TOKEN = 'statistics-reader';
-      const hits = libraryReadMetrics.hits;
-      assert.deepEqual(await service.get(ownerId, includePrivate, query), expected);
-      assert.equal(libraryReadMetrics.hits, hits + 1);
-    }
+    for (const grain of ['day', 'week', 'month', 'year'])
+      for (const groupBy of ['total', 'camera', 'lens'])
+        for (const includePrivate of [false, true]) {
+          delete process.env.EAGLE_READER_URL;
+          const query = { grain, groupBy };
+          const expected = await service.get(ownerId, includePrivate, query);
+          process.env.EAGLE_READER_URL = url;
+          process.env.EAGLE_READER_TOKEN = 'statistics-reader';
+          const hits = libraryReadMetrics.hits;
+          assert.deepEqual(await service.get(ownerId, includePrivate, query), expected);
+          assert.equal(libraryReadMetrics.hits, hits + 1);
+        }
   } finally {
-    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
-    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = oldToken;
-    server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
+    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
+    else process.env.EAGLE_READER_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
+    else process.env.EAGLE_READER_TOKEN = oldToken;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
