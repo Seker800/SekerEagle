@@ -57,17 +57,20 @@ export async function applyOrdinaryDuplicateCleanupBatch(
   )
     throw new ConflictException('保留项或清理项已变化，请重新检查。');
   const assetIds = items.flatMap((item) => item.assetIds);
-  await resolveEagleTrashTargets(
-    tx,
-    identity,
-    assetIds,
-    false,
-    items[0]!.operation.isPrivate,
-    plans.map(({ item, snapshot }) => ({
-      assetIds: item.assetIds,
-      resourceIds: snapshot.resources.map((row) => row.id),
-    })),
-  );
+  // Non-live snapshots must describe exactly their selected resources. The shared
+  // resolver still checks newly discovered components in each bounded read.
+  for (const { item, snapshot } of plans) {
+    const selected = new Set(item.assetIds);
+    if (
+      selected.size !== snapshot.resources.length ||
+      snapshot.resources.some((row) => !selected.has(row.id))
+    )
+      throw new ConflictException('实况照片组件已变化。');
+  }
+  for (const { rows: part } of databaseBatches(assetIds, DATABASE_STATEMENTS.duplicateTrashTargets))
+    await resolveEagleTrashTargets(tx, identity, part, false, items[0]!.operation.isPrivate, [
+      { assetIds: part, resourceIds: part },
+    ]);
   const targets = new Map<string, string>();
   for (const { item, snapshot } of plans) {
     if (!snapshot.keepers.some((row) => row.id === snapshot.targetId))
@@ -105,7 +108,7 @@ export async function applyOrdinaryDuplicateCleanupBatch(
   }));
   for (const { rows: batch } of databaseBatches(
     ratings,
-    DATABASE_STATEMENTS.duplicateRestoreWhere,
+    DATABASE_STATEMENTS.duplicateRatingUpdate,
   )) {
     const changed = await tx.$executeRaw(
       Prisma.sql`UPDATE "EagleAsset" a SET rating=r.rating,"rowVersion"=a."rowVersion"+1,"updatedAt"=CURRENT_TIMESTAMP FROM (VALUES ${Prisma.join(batch.map((row) => Prisma.sql`(${row.id}::text,${row.rating}::int)`))}) AS r(id,rating) WHERE a.id=r.id AND a."ownerId"=${identity.ownerId} AND a."libraryMode"=${identity.libraryMode}::"LibraryMode"`,

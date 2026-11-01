@@ -223,15 +223,23 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     }
     const page = await f.duplicate.list(f.ownerId, false, {});
     const receipt = await f.duplicate.cleanup(f.principal, {
-      operationId: randomUUID(), revision: page.exactRevision, allExact: true,
+      operationId: randomUUID(),
+      revision: page.exactRevision,
+      allExact: true,
     });
     await flushQueryEvents();
     maxAssetReadBindings = 0;
     await f.executor.tick();
     await flushQueryEvents();
-    assert.ok(maxAssetReadBindings <= 512, `resource read exceeded budget: ${maxAssetReadBindings}`);
-    assert.equal((await f.drain(receipt.operationId)).completed, 2);
-    assert.equal(await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }), 600);
+    assert.ok(
+      maxAssetReadBindings <= 512,
+      `resource read exceeded budget: ${maxAssetReadBindings}`,
+    );
+    assert.equal((await f.drain(receipt.operationId)).completed, 600);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      600,
+    );
   });
   test(`${mode}: duplicate cleanup amortizes claims and commits across groups`, async () => {
     const f = await fixture(mode);
