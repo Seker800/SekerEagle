@@ -1051,7 +1051,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     const operation = items[0]!.operation;
     const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
     await this.prisma.$transaction(beforeWrite);
-    await this.eagle.emptyTrash(
+    const result = await this.eagle.emptyTrashBatch(
       operation.ownerId,
       operation.isPrivate,
       operation.createdAt,
@@ -1059,7 +1059,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     );
     await this.prisma.eagleAssetOperationItem.updateMany({
       where: { libraryMode: this.libraryMode, ...this.leaseWhere(items) },
-      data: { status: 'COMPLETED', leaseUntil: null },
+      // purgeAfter is the durable checkpoint. An empty bounded step proves the cutoff is drained.
+      data: { status: result.affectedAssetCount ? 'PENDING' : 'COMPLETED', leaseUntil: null },
     });
   }
   private async executeSend(items: ClaimedItem[]) {

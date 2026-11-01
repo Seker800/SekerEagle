@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { EagleDuplicateService } from './eagle-duplicates.service';
 import {
   DuplicateActionDto,
@@ -584,16 +585,24 @@ export class EagleController {
     return this.eagle.setTrash(principal.sub, input.assetIds, true, principal.canViewPrivate);
   }
 
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @HttpCode(202)
   @Delete('trash')
   @UseGuards(BrowserOriginGuard)
   emptyTrash(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.emptyTrash(principal.sub, principal.canViewPrivate);
+    return this.enqueueOperation(principal, {
+      operationId: randomUUID(),
+      kind: 'EMPTY_TRASH',
+      assetIds: [],
+    });
   }
 
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @HttpCode(202)
   @Post('trash/empty')
   @UseGuards(BrowserOriginGuard)
   emptyTrashCompat(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.emptyTrash(principal.sub, principal.canViewPrivate);
+    return this.emptyTrash(principal);
   }
 
   @Get(['tags', 'manual-tags'])

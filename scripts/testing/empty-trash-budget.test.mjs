@@ -60,7 +60,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const f = await fixture(mode);
     const release = delay(6500).then(() => f.locker.query('COMMIT'));
     try {
-      assert.deepEqual(await f.service.emptyTrash(f.ownerId), { affectedAssetCount: 1 });
+      assert.deepEqual(await f.service.emptyTrashBatch(f.ownerId), { affectedAssetCount: 1 });
       await release;
       assert.ok((await db.eagleAsset.findUniqueOrThrow({ where: { id: f.id } })).purgeAfter);
       assert.equal(
@@ -69,7 +69,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
         }),
         1,
       );
-      assert.deepEqual(await f.service.emptyTrash(f.ownerId), { affectedAssetCount: 0 });
+      assert.deepEqual(await f.service.emptyTrashBatch(f.ownerId), { affectedAssetCount: 0 });
     } finally {
       await release;
       await f.close();
@@ -113,6 +113,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       await f.locker.query('COMMIT');
       await operations.retry(principal, command.id);
       await operations.tick();
+      await operations.tick();
       assert.equal((await operations.list(f.ownerId))[0].completed, 1);
       assert.equal(
         await db.eagleAssetProcessingJob.count({
@@ -138,7 +139,7 @@ for (const mode of ['MATERIAL', 'PHOTO'])
     const revoked = new Error('synthetic lease/private grant expired');
     try {
       await assert.rejects(
-        f.service.emptyTrash(f.ownerId, false, new Date(), async () => {
+        f.service.emptyTrashBatch(f.ownerId, false, new Date(), async () => {
           if (++checks === 2) throw revoked;
         }),
         (error) => error === revoked,

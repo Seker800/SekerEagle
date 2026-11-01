@@ -26,7 +26,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       mode,
     );
     assert.deepEqual(
-      await service.emptyTrash('owner', false, new Date(1), async () => {
+      await service.emptyTrashBatch('owner', false, new Date(1), async () => {
         checks++;
       }),
       { affectedAssetCount: 42 },
@@ -56,7 +56,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
         mode,
       );
       await assert.rejects(
-        service.emptyTrash('owner'),
+        service.emptyTrashBatch('owner'),
         (error: unknown) =>
           error instanceof ServiceUnavailableException &&
           (error.getResponse() as { code: string }).code === 'EMPTY_TRASH_BUSY',
@@ -79,7 +79,7 @@ test('clear validates its own budget before entering a transaction', async () =>
         undefined,
         'PHOTO',
       );
-      await assert.rejects(service.emptyTrash('owner'), /EAGLE_EMPTY_TRASH_TIMEOUT_MS/);
+      await assert.rejects(service.emptyTrashBatch('owner'), /EAGLE_EMPTY_TRASH_TIMEOUT_MS/);
       assert.equal(entered, false);
     }
   } finally {
@@ -98,5 +98,5 @@ test('clear preserves domain/security errors', async () => {
     undefined,
     'PHOTO',
   );
-  await assert.rejects(service.emptyTrash('owner'), (error: unknown) => error === failure);
+  await assert.rejects(service.emptyTrashBatch('owner'), (error: unknown) => error === failure);
 });

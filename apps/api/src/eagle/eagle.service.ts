@@ -1,3 +1,4 @@
+import { OPERATION_EMPTY_TRASH_BATCH_SIZE } from './eagle-operation-settings';
 import {
   publicPhotoMetadataSelect,
   publicPhotoLocationSelect,
@@ -1147,11 +1148,11 @@ export class EagleService {
     return { affectedAssetCount };
   }
 
-  async emptyTrash(
+  async emptyTrashBatch(
     ownerId: string,
     includePrivate = false,
     cutoff?: Date,
-    beforeWrite?: (tx: Prisma.TransactionClient) => Promise<void>,
+    assertPublication?: (tx: Prisma.TransactionClient) => Promise<void>,
   ) {
     // Below the existing 15-second gateway deadline; never a global Prisma override.
     const timeout = Number(process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS ?? 12_000);
@@ -1161,19 +1162,23 @@ export class EagleService {
       .$transaction(
         async (transaction) => {
           await transaction.$executeRaw`SELECT set_config('statement_timeout', ${`${timeout - 250}ms`}, true)`;
-          if (beforeWrite) await beforeWrite(transaction);
+          if (assertPublication) await assertPublication(transaction);
           const purgeAfter = new Date();
           // Keep the complete purge selection in PostgreSQL: no selection-sized ID/parameter list.
           const [result] = await transaction.$queryRaw<
             Array<{ affectedAssetCount: number }>
           >(Prisma.sql`
-        WITH marked AS (
-          UPDATE "EagleAsset"
-          SET "purgeAfter"=${purgeAfter}, "rowVersion"="rowVersion"+1, "updatedAt"=CURRENT_TIMESTAMP
+        WITH selected AS (
+          SELECT id FROM "EagleAsset"
           WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode"
             AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
             ${cutoff ? Prisma.sql`AND "deletedAt"<=${cutoff}` : Prisma.empty}
             AND (${includePrivate} OR NOT "isPrivate")
+          ORDER BY id LIMIT ${OPERATION_EMPTY_TRASH_BATCH_SIZE} FOR UPDATE
+        ), marked AS (
+          UPDATE "EagleAsset"
+          SET "purgeAfter"=${purgeAfter}, "rowVersion"="rowVersion"+1, "updatedAt"=CURRENT_TIMESTAMP
+          WHERE id IN (SELECT id FROM selected)
           RETURNING id,"mediaRevision"
         ), scheduled AS (
           INSERT INTO "EagleMediaJob" AS job
@@ -1205,7 +1210,7 @@ export class EagleService {
           RETURNING job.id
         ) SELECT count(*)::int AS "affectedAssetCount" FROM marked
       `);
-          if (beforeWrite) await beforeWrite(transaction);
+          if (assertPublication) await assertPublication(transaction);
           return result!.affectedAssetCount;
         },
         { timeout },
@@ -1218,7 +1223,7 @@ export class EagleService {
         )
           throw new ServiceUnavailableException({
             code: 'EMPTY_TRASH_BUSY',
-            message: '清空回收站暂时繁忙，本次操作已回滚，请重试。',
+            message: '清空回收站暂时繁忙，当前批次已回滚；可重试原任务继续处理。',
           });
         throw error;
       });

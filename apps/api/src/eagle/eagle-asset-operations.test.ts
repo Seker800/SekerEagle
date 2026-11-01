@@ -54,6 +54,8 @@ test('both inherited controllers require authenticated browser principals and or
       'retryOperation',
       'cancelOperation',
       'undoOperation',
+      'emptyTrash',
+      'emptyTrashCompat',
     ] as const)
       assert.ok(
         (
