@@ -18,6 +18,7 @@ interface Options {
   includePrivate: boolean;
   trash: boolean;
   where: AssetSearchWhere;
+  ordinaryMembersPossible?: boolean;
 }
 
 /** Cached ranking owns pagination; the caller owns shared visibility/filtering and projection. */
@@ -25,7 +26,16 @@ export async function readSmartFolderPage<
   T extends { id: string; chronologicalAt: Date; libraryAddedAt: Date },
 >(
   prisma: PrismaService,
-  { scope, query, folderIds, folderDefinitionKey, includePrivate, trash, where }: Options,
+  {
+    scope,
+    query,
+    folderIds,
+    folderDefinitionKey,
+    includePrivate,
+    trash,
+    where,
+    ordinaryMembersPossible = true,
+  }: Options,
   readAssets: (
     where: Prisma.EagleAssetWhereInput,
     options?: {
@@ -86,7 +96,7 @@ export async function readSmartFolderPage<
     after = candidates.at(-1);
     if (candidates.length < take) break;
   }
-  if (ranked.length <= query.limit) {
+  if (ordinaryMembersPossible && ranked.length <= query.limit) {
     // A parent can union semantic and ordinary-only children. Keep ordinary members too,
     // after relevance hits, using the mode's normal date order and the same query contract.
     const dateField = assetDateField(scope.libraryMode);
