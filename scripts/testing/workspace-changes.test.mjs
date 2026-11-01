@@ -82,6 +82,11 @@ test('committed changes are discovered without scanning resources and private wr
       initial,
       'private group creation and edits must not wake public observers',
     );
+    await db.eaglePhotoAgentTask.create({data: {
+      ownerId, libraryMode:'PHOTO', kind:'CITY', scope:[{id:asset.id}],
+    }});
+    await barrier();
+    assert.deepEqual(await service.snapshot(ownerId,false),initial);
     await db.eagleAsset.update({ where: { id: asset.id }, data: { isPrivate: false } });
     await barrier();
     assert.notEqual(
@@ -92,6 +97,13 @@ test('committed changes are discovered without scanning resources and private wr
       (await service.snapshot(ownerId, false)).scopes.MATERIAL,
       initial.scopes.MATERIAL,
     );
+    const beforeTask = await service.snapshot(ownerId,false);
+    await db.eaglePhotoAgentTask.create({data: {
+      ownerId, libraryMode:'PHOTO', kind:'CITY', scope:[{id:asset.id}],
+    }});
+    await barrier();
+    assert.notEqual((await service.snapshot(ownerId,false)).scopes.PHOTO.AGENT,
+      beforeTask.scopes.PHOTO.AGENT,'public requests must be visible before suggestions exist');
     const beforeRollback = await service.snapshot(ownerId, false);
     await assert.rejects(
       db.$transaction(async (tx) => {
