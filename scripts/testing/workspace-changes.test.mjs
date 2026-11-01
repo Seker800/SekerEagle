@@ -90,12 +90,33 @@ test('committed changes are discovered without scanning resources and private wr
     );
     await barrier();
     assert.deepEqual(await service.snapshot(ownerId, false), beforeRollback);
-    const queuedJob = await db.eagleAssetProcessingJob.create({data:{ownerId,libraryMode:'PHOTO',assetId:asset.id,assetRevision:0,kind:'PROBE_MEDIA',status:'PENDING'}});
+    const queuedJob = await db.eagleAssetProcessingJob.create({
+      data: {
+        ownerId,
+        libraryMode: 'PHOTO',
+        assetId: asset.id,
+        assetRevision: 0,
+        kind: 'PROBE_MEDIA',
+        status: 'PENDING',
+      },
+    });
     await barrier();
-    const beforeClaim = await service.snapshot(ownerId,false);
-    await db.eagleAssetProcessingJob.update({where:{id:queuedJob.id},data:{status:'PROCESSING',lockedAt:new Date(),leaseVersion:{increment:1},attempts:{increment:1}}});
+    const beforeClaim = await service.snapshot(ownerId, false);
+    await db.eagleAssetProcessingJob.update({
+      where: { id: queuedJob.id },
+      data: {
+        status: 'PROCESSING',
+        lockedAt: new Date(),
+        leaseVersion: { increment: 1 },
+        attempts: { increment: 1 },
+      },
+    });
     await barrier();
-    assert.deepEqual(await service.snapshot(ownerId,false),beforeClaim,'forward claims must keep the existing NOTIFY contention exemption');
+    assert.deepEqual(
+      await service.snapshot(ownerId, false),
+      beforeClaim,
+      'forward claims must keep the existing NOTIFY contention exemption',
+    );
     // Lease-only changes cannot wake a display observer forever.
     const job = await db.eagleAssetProcessingJob.create({
       data: {
