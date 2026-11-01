@@ -73,3 +73,16 @@ test('database Date objects retain milliseconds for order and update invalidatio
   index.update('2', ['z'], [{ ...z, chronologicalAt: new Date('2026-11-01T00:00:00.002Z') }]);
   assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['z', 'a']);
 });
+
+test('a query snapshot keeps one revision while later publications replace, insert and delete rows', () => {
+  const index = new LibraryMemoryIndex('owner', 'PHOTO');
+  index.replace('1', [row('a'), row('b')]);
+  index.page({}, 'chronologicalAt', 'desc', 0, 0);
+  const snapshot = index.snapshot();
+  index.update('2', ['a', 'b', 'c'], [{ ...row('a'), rating: 4 }, row('c')]);
+  assert.equal(snapshot.revision, '1');
+  assert.equal(snapshot.count({ rating: null }), 2);
+  assert.deepEqual(snapshot.page({}, 'chronologicalAt', 'desc', 10, 0), ['b', 'a']);
+  assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['c', 'a']);
+  assert.equal(index.count({ rating: 4 }), 1);
+});
