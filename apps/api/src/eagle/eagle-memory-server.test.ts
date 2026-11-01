@@ -7,7 +7,8 @@ import { LibraryMemoryIndex } from './eagle-memory-index';
 test('reader cannot start with missing identity or an invalid body byte budget', () => {
   const store = { synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') };
   assert.throws(() => createLibraryReaderServer(store, ''), /identity/);
-  for (const bytes of [0, -1, NaN, 1.5]) assert.throws(() => createLibraryReaderServer(store, 'identity', bytes), /budget/);
+  for (const bytes of [0, -1, NaN, 1.5])
+    assert.throws(() => createLibraryReaderServer(store, 'identity', bytes), /budget/);
 });
 
 test('internal reader authenticates before reading and validates scope, page and byte bounds', async () => {
@@ -66,5 +67,36 @@ test('internal reader authenticates before reading and validates scope, page and
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('semantic reader dispatches one complete page without exposing private service data', async () => {
+  const index = new LibraryMemoryIndex('owner', 'PHOTO');
+  index.replace('7', []);
+  const positions = [{ assetId: 'asset', tier: 1 as const, similarity: 0.9, libraryAddedAt: '2026-11-01T00:00:00.001Z' }];
+  let calls = 0;
+  const server = createLibraryReaderServer({ synchronize: async () => index }, 'semantic-test', 2097152, {
+    smartFolderPage: async (_index, options) => {
+      calls++;
+      assert.deepEqual(options.folderIds, ['folder']);
+      return positions;
+    },
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/query`, {
+      method: 'POST', headers: { authorization: 'Bearer semantic-test', 'content-type': 'application/json' },
+      body: JSON.stringify({ scope: { ownerId: 'owner', libraryMode: 'PHOTO' }, where: {}, action: 'smartFolderPage',
+        semantic: { folderIds: ['folder'], limit: 40, ordinaryMembersPossible: false, includePrivate: false, trash: false } }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { revision: '7', positions });
+    assert.equal(calls, 1);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
