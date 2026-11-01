@@ -22,9 +22,12 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] }),
   owners = [];
 let queries = 0,
-  transactions = 0;
+  transactions = 0,
+  maxAssetReadBindings = 0;
 db.$on('query', (event) => {
   queries++;
+  if (event.query.startsWith('SELECT') && event.query.includes('FROM "public"."EagleAsset"'))
+    maxAssetReadBindings = Math.max(maxAssetReadBindings, JSON.parse(event.params).length);
   if (event.query === 'BEGIN') transactions++;
 });
 afterEach(async () => {
@@ -203,6 +206,32 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       0,
       'keeper metadata and removed resources must roll back together',
     );
+  });
+  test(`${mode}: multi-group cleanup keeps large resource reads inside the statement budget`, async () => {
+    const f = await fixture(mode);
+    for (let group = 0; group < 2; group++) {
+      const seed = await f.add({ sha256: hash(`wide-${group}`), rating: 5 });
+      await db.eagleAsset.createMany({
+        data: Array.from({ length: 300 }, () => ({
+          ...seed,
+          aspectRatio: undefined,
+          id: randomUUID(),
+          rating: 1,
+          originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original`,
+        })),
+      });
+    }
+    const page = await f.duplicate.list(f.ownerId, false, {});
+    const receipt = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(), revision: page.exactRevision, allExact: true,
+    });
+    await flushQueryEvents();
+    maxAssetReadBindings = 0;
+    await f.executor.tick();
+    await flushQueryEvents();
+    assert.ok(maxAssetReadBindings <= 512, `resource read exceeded budget: ${maxAssetReadBindings}`);
+    assert.equal((await f.drain(receipt.operationId)).completed, 2);
+    assert.equal(await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }), 600);
   });
   test(`${mode}: duplicate cleanup amortizes claims and commits across groups`, async () => {
     const f = await fixture(mode);
