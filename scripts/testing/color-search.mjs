@@ -293,6 +293,9 @@ try {
     () => service.listAssets(owner, { limit: 2, color: '#0000ff', cursor: first.nextCursor }),
     /颜色筛选游标/,
   );
+  // Eagle's score lookup uses `score || 100`: distinct hex colors with rounded Lab distance zero sort last.
+  const roundedZero=await service.listAssets(owner,{limit:100,color:'#fdfdfd'});
+  assert.equal(roundedZero.items[0].id,fixtures.find(row=>row.name==='gray-background').id);
   // Upgrade jobs are idempotent, current-version and thumbnail-scoped, without touching user settings.
   for (const row of fixtures.filter((row) => row.old || row.stale || row.deleted || row.private)) {
     await db.eagleAssetRendition.create({
