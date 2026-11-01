@@ -7,7 +7,14 @@ import {
   serializeAsset,
   type AssetListRecord,
 } from './eagle-asset-projection';
-import { compileSearchPredicate } from './eagle-search-predicate';
+import { compileSearchPredicate, type AssetSearchWhere } from './eagle-search-predicate';
+import {
+  findSearchAssets,
+  countSearchAssets,
+  colorCandidateWhere,
+  hasColorSearch,
+} from './eagle-asset-search';
+import { readColorAssetPage } from './eagle-color-page';
 import { sampleImageSearch } from './eagle-search-preview';
 import { mediaRequeueData } from '@sekereagle/library-core';
 import { createEditRender, readEditRender, CreateEditRenderDto } from './eagle-edit-render';
@@ -62,7 +69,7 @@ import type {
   UpdateManualTagGroupDto,
   UpdateSmartFolderDto,
 } from './eagle.dto';
-import { buildColorAnalysisWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-search';
+import { buildColorMatchWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 import { createEagleTagPhonetics } from './eagle-tag-phonetics';
 import { readAssetTimeline } from './eagle-asset-timeline';
 import { assetDateField, type EagleAssetSort } from './eagle-asset-order';
@@ -158,16 +165,13 @@ export class EagleService {
       ),
     }));
     const activeFolderQueries = folderEntries
-      .filter(
-        (entry): entry is typeof entry & { where: Prisma.EagleAssetWhereInput } =>
-          entry.where !== null,
-      )
+      .filter((entry): entry is typeof entry & { where: AssetSearchWhere } => entry.where !== null)
       .map(({ storedQuery }) => storedQuery);
     const legacyFolderFilters = activeFolderQueries
       .filter((storedQuery) => !isEagleFilterQuery(storedQuery))
       .map(readSmartFolderFilters);
     const filters = omitRepeatedSmartFolderFilters(query, legacyFolderFilters);
-    const baseConditions: Prisma.EagleAssetWhereInput[] = [
+    const baseConditions: AssetSearchWhere[] = [
       buildAssetWhere(ownerId, filters, trash, includePrivate),
     ];
     const ruleQuery = query.rules ? parseEncodedFilterQuery(query.rules) : null;
@@ -206,7 +210,7 @@ export class EagleService {
         [assetDateField(this.libraryMode, query.sort)]: { lt: new Date(query.before) },
       });
     }
-    const baseWhere: Prisma.EagleAssetWhereInput = { AND: baseConditions };
+    const baseWhere: AssetSearchWhere = { AND: baseConditions };
     const folderConditions = folderEntries.flatMap(({ where }) => (where ? [where] : []));
     const folderWhere = !smartFolder
       ? null
@@ -231,11 +235,11 @@ export class EagleService {
     }
     if (filters.search && this.imageSearch) {
       const context = await this.imageSearch.prepare(ownerId, filters.search);
-      const semanticBaseConditions: Prisma.EagleAssetWhereInput[] = [
+      const semanticBaseConditions: AssetSearchWhere[] = [
         buildAssetWhere(ownerId, { ...filters, search: undefined }, trash, includePrivate),
       ];
       semanticBaseConditions.push(...baseConditions.slice(1));
-      const semanticBaseWhere: Prisma.EagleAssetWhereInput = { AND: semanticBaseConditions };
+      const semanticBaseWhere: AssetSearchWhere = { AND: semanticBaseConditions };
       const semanticWhere = folderWhere
         ? { AND: [semanticBaseWhere, folderWhere] }
         : semanticBaseWhere;
@@ -249,13 +253,29 @@ export class EagleService {
         trash,
       );
     }
-    const cursor = query.cursor
-      ? decodeEagleAssetCursor(query.cursor, { ownerId, libraryMode: this.libraryMode }, query.sort)
+    const colorPage = filterColor
+      ? await readColorAssetPage(
+          this.prisma,
+          { ownerId, libraryMode: this.libraryMode },
+          query,
+          inLibrary(this.libraryMode, queryWhere),
+          filterColor,
+          includePrivate,
+          trash,
+        )
       : null;
+    const cursor =
+      query.cursor && !colorPage
+        ? decodeEagleAssetCursor(
+            query.cursor,
+            { ownerId, libraryMode: this.libraryMode },
+            query.sort,
+          )
+        : null;
     const dateField = assetDateField(this.libraryMode, query.sort);
     const newer = cursor?.direction === 'NEWER';
     const comparison = newer ? 'gt' : 'lt';
-    const where: Prisma.EagleAssetWhereInput = cursor
+    const where: AssetSearchWhere = cursor
       ? {
           AND: [
             queryWhere,
@@ -269,15 +289,17 @@ export class EagleService {
         }
       : queryWhere;
     const [rows, colorEligible, colorCompleted] = await Promise.all([
-      this.prisma.eagleAsset.findMany({
-        where: inLibrary(this.libraryMode, where),
-        include: assetListInclude,
-        orderBy: [{ [dateField]: newer ? 'asc' : 'desc' }, { id: newer ? 'asc' : 'desc' }],
-        take: query.limit + 1,
-        ...(query.offset ? { skip: query.offset } : {}),
-      }),
+      colorPage
+        ? Promise.resolve(colorPage.rows)
+        : findSearchAssets(this.prisma, {
+            where: inLibrary(this.libraryMode, where),
+            include: assetListInclude,
+            orderBy: [{ [dateField]: newer ? 'asc' : 'desc' }, { id: newer ? 'asc' : 'desc' }],
+            take: query.limit + 1,
+            ...(query.offset ? { skip: query.offset } : {}),
+          }),
       filterColor && !query.cursor
-        ? this.prisma.eagleAsset.count({
+        ? countSearchAssets(this.prisma, {
             where: {
               ownerId,
               deletedAt: null,
@@ -319,8 +341,9 @@ export class EagleService {
             ),
           }
         : {}),
-      previousCursor:
-        page.length && (newer ? hasMore : Boolean(cursor))
+      previousCursor: colorPage
+        ? colorPage.previousCursor
+        : page.length && (newer ? hasMore : Boolean(cursor))
           ? encodeEagleAssetCursor(
               { id: page[0]!.id, libraryAddedAt: page[0]![dateField] },
               { ownerId, libraryMode: this.libraryMode },
@@ -328,8 +351,9 @@ export class EagleService {
               'NEWER',
             )
           : null,
-      nextCursor:
-        (hasMore || newer) && page.length
+      nextCursor: colorPage
+        ? colorPage.nextCursor
+        : (hasMore || newer) && page.length
           ? encodeEagleAssetCursor(
               { id: page.at(-1)!.id, libraryAddedAt: page.at(-1)![dateField] },
               { ownerId, libraryMode: this.libraryMode },
@@ -352,7 +376,7 @@ export class EagleService {
   private async readPhotoStacks(
     ownerId: string,
     assetIds: string[],
-    queryWhere: Prisma.EagleAssetWhereInput,
+    queryWhere: AssetSearchWhere,
     includePrivate = false,
     matchIds?: (ids: string[]) => Promise<string[]>,
   ) {
@@ -369,7 +393,11 @@ export class EagleService {
         bestAssetId: true,
         bestSelectedByUser: true,
         members: {
-          where: { ownerId, libraryMode: 'PHOTO', asset: inLibrary('PHOTO', queryWhere) },
+          where: {
+            ownerId,
+            libraryMode: 'PHOTO',
+            asset: inLibrary('PHOTO', colorCandidateWhere(queryWhere)),
+          },
           orderBy: [{ asset: { createdAt: 'asc' } }, { assetId: 'asc' }],
           select: {
             assetId: true,
@@ -386,13 +414,36 @@ export class EagleService {
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
+    const eligibleColorIds = hasColorSearch(queryWhere)
+      ? new Set(
+          (
+            await findSearchAssets(this.prisma, {
+              where: {
+                AND: [
+                  queryWhere,
+                  {
+                    id: {
+                      in: groups.flatMap(({ members }) => members.map(({ assetId }) => assetId)),
+                    },
+                  },
+                ],
+              },
+              select: { id: true },
+            })
+          ).map(({ id }) => id),
+        )
+      : null;
     const matched = matchIds
       ? new Set(
           await matchIds([
-            ...new Set(groups.flatMap(({ members }) => members.map(({ assetId }) => assetId))),
+            ...new Set(
+              groups
+                .flatMap(({ members }) => members.map(({ assetId }) => assetId))
+                .filter((id) => !eligibleColorIds || eligibleColorIds.has(id)),
+            ),
           ]),
         )
-      : null;
+      : eligibleColorIds;
     const matchingGroups = matched
       ? groups.map((group) => ({
           ...group,
@@ -427,7 +478,7 @@ export class EagleService {
         ).assetId,
       }));
     if (!stacks.length) return [];
-    const covers = await this.prisma.eagleAsset.findMany({
+    const covers = await findSearchAssets(this.prisma, {
       where: {
         AND: [
           queryWhere,
@@ -450,7 +501,7 @@ export class EagleService {
   private async listRankedSearchAssets(
     ownerId: string,
     query: ListEagleAssetsDto,
-    where: Prisma.EagleAssetWhereInput,
+    where: AssetSearchWhere,
     context: ImageSearchContext,
     filterColor: string | undefined,
     includePrivate: boolean,
@@ -496,7 +547,7 @@ export class EagleService {
       const candidateIds = candidates.map((candidate) => candidate.assetId);
       exhausted = candidateIds.length < candidateBatchSize;
       if (!candidateIds.length) break;
-      const rows = await this.prisma.eagleAsset.findMany({
+      const rows = await findSearchAssets(this.prisma, {
         where: { AND: [where, { id: { in: candidateIds } }], libraryMode: this.libraryMode },
         include: assetListInclude,
       });
@@ -512,7 +563,7 @@ export class EagleService {
     const [colorEligible, colorCompleted] =
       filterColor && !query.cursor
         ? await Promise.all([
-            this.prisma.eagleAsset.count({
+            countSearchAssets(this.prisma, {
               where: {
                 ownerId,
                 deletedAt: null,
@@ -591,7 +642,7 @@ export class EagleService {
   private async listSemanticFolderAssets(
     ownerId: string,
     query: ListEagleAssetsDto,
-    where: Prisma.EagleAssetWhereInput,
+    where: AssetSearchWhere,
     folderIds: string[],
     folderDefinitionKey: string,
     includePrivate: boolean,
@@ -602,7 +653,7 @@ export class EagleService {
       this.prisma,
       { scope, query, folderIds, folderDefinitionKey, includePrivate, trash },
       (extraWhere, options) =>
-        this.prisma.eagleAsset.findMany({
+        findSearchAssets(this.prisma, {
           where: inLibrary(this.libraryMode, { AND: [where, extraWhere] }),
           include: assetListInclude,
           ...options,
@@ -658,7 +709,7 @@ export class EagleService {
     if (readEagleSemanticIntent(query))
       return this.previewSemanticFolder(ownerId, query, includePrivate);
     return {
-      count: await this.prisma.eagleAsset.count({
+      count: await countSearchAssets(this.prisma, {
         where: {
           ownerId,
           deletedAt: null,
@@ -702,7 +753,7 @@ export class EagleService {
       )!;
       // Bind this read to the selected immutable snapshot. A concurrent replacement
       // must not evaluate the old preview intent against a different active vector.
-      const where: Prisma.EagleAssetWhereInput = {
+      const where: AssetSearchWhere = {
         AND: [
           compiledWhere,
           {
@@ -748,7 +799,7 @@ export class EagleService {
       deletedAt: null,
       ...privateVisibilityWhere(includePrivate),
     };
-    const ordinaryCandidates = await this.prisma.eagleAsset.findMany({
+    const ordinaryCandidates = await findSearchAssets(this.prisma, {
       where: {
         ...scope,
         OR: [
@@ -775,7 +826,7 @@ export class EagleService {
     `)
       : [];
     const rows = sample.length
-      ? await this.prisma.eagleAsset.findMany({
+      ? await findSearchAssets(this.prisma, {
           where: {
             ...scope,
             AND: [
@@ -988,7 +1039,7 @@ export class EagleService {
   ) {
     const tagIds = [...new Set([...input.addTagIds, ...input.removeTagIds])];
     const [assets, tags] = await Promise.all([
-      this.prisma.eagleAsset.findMany({
+      findSearchAssets(this.prisma, {
         where: {
           ownerId,
           id: { in: input.assetIds },
@@ -1950,7 +2001,7 @@ function buildStoredSmartFolderWhere(
   includePrivate: boolean,
   libraryMode: LibraryMode,
   folderId?: string,
-): Prisma.EagleAssetWhereInput | null {
+): AssetSearchWhere | null {
   if (isEagleFilterQuery(query)) {
     const parsed = readEagleFilterQuery(query);
     const semantic = readEagleSemanticIntent(parsed);
@@ -1965,7 +2016,7 @@ function buildStoredSmartFolderWhere(
     );
     // Unknown is not a negative match. Check readiness in the membership query so
     // deleting/replacing a snapshot cannot broaden a negated folder.
-    const ruleWhere: Prisma.EagleAssetWhereInput = semantic
+    const ruleWhere: AssetSearchWhere = semantic
       ? {
           AND: [
             compiledWhere,
@@ -2011,7 +2062,7 @@ function readSemanticIntent(query: Prisma.InputJsonValue | Prisma.JsonValue) {
     : undefined;
 }
 
-function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {
+function buildNoAssetsWhere(ownerId: string): AssetSearchWhere {
   return { ownerId, id: { in: [] } };
 }
 
@@ -2020,8 +2071,8 @@ function buildAssetWhere(
   filters: StoredAssetFilters,
   trash: boolean,
   includePrivate: boolean,
-): Prisma.EagleAssetWhereInput {
-  const conditions: Prisma.EagleAssetWhereInput[] = [];
+): AssetSearchWhere {
+  const conditions: AssetSearchWhere[] = [];
   const search = filters.search?.normalize('NFKC').trim();
   if (search) {
     const normalizedSearch = normalizeKey(search);
@@ -2040,7 +2091,7 @@ function buildAssetWhere(
       : [];
   if (formats.length)
     conditions.push({ format: { in: formats.map((value) => value.toLowerCase()) } });
-  const tagConditions: Prisma.EagleAssetWhereInput[] = [
+  const tagConditions: AssetSearchWhere[] = [
     ...(filters.manualTagIds ?? []).map((tagId) => ({ manualTagLinks: { some: { tagId } } })),
     ...(filters.aiTagIds ?? []).map((aiTagId) => ({
       aiTagLinks: { some: { aiTagId, status: 'ACTIVE' as const } },
@@ -2057,7 +2108,7 @@ function buildAssetWhere(
   if (height) conditions.push({ height });
   const libraryAddedAt = dateRangeFilter(filters.createdFrom, filters.createdTo);
   if (libraryAddedAt) conditions.push({ libraryAddedAt });
-  if (filters.color) conditions.push({ colorAnalyses: buildColorAnalysisWhere(filters.color) });
+  if (filters.color) conditions.push(buildColorMatchWhere(filters.color));
   if (filters.privacy === 'PRIVATE' && !includePrivate) conditions.push({ isPrivate: true });
   return {
     ownerId,

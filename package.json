@@ -82,7 +82,8 @@
     "android:lab:preview": "python3 scripts/testing/android-lab-preview.py",
     "pretypecheck": "npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/photo-render-core",
     "test:server-edits": "npm run db:generate && npm run build && PHOTO_WORKBENCH_BASIC=1 PHOTO_WORKBENCH_SERVER_EDITS=1 node scripts/testing/photo-workbench.mjs",
-    "performance:web:delivery": "npm run build --workspace @sekereagle/web && node ./scripts/performance/verify-web-delivery.mjs"
+    "performance:web:delivery": "npm run build --workspace @sekereagle/web && node ./scripts/performance/verify-web-delivery.mjs",
+    "test:color-search": "npm run db:generate && npm run pretest --workspace @sekereagle/api && npm run build --workspace @sekereagle/api && node scripts/testing/color-search.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

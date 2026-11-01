@@ -7,6 +7,14 @@ import { before, after, test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { buildEagleFilterWhere } from '../../apps/api/dist/eagle/eagle-filter-query.js';
+import {
+  paletteColorScore,
+  COLOR_PALETTE_VERSION,
+} from '../../packages/library-core/dist/index.js';
+import {
+  hasColorSearch,
+  colorCandidateWhere,
+} from '../../apps/api/dist/eagle/eagle-asset-search.js';
 import { compileSearchPredicate } from '../../apps/api/dist/eagle/eagle-search-predicate.js';
 import { EagleImageSearchService } from '../../apps/api/dist/eagle/eagle-image-search.service.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
@@ -204,7 +212,7 @@ before(async () => {
           libraryMode,
           assetId: id,
           assetRevision: 1,
-          processorVersion: 'color-v3-thumbnail',
+          processorVersion: 'color-v4-eagle-basic',
           status: 'COMPLETED',
           isCurrent: true,
         },
@@ -233,11 +241,37 @@ before(async () => {
 });
 after(() => db.$disconnect());
 async function parity(where) {
-  const canonical = await db.eagleAsset.findMany({
-    where,
-    select: { id: true },
-    orderBy: { id: 'asc' },
-  });
+  let canonical;
+  if (hasColorSearch(where)) {
+    const candidates = await db.eagleAsset.findMany({
+      where: colorCandidateWhere(where),
+      include: {
+        colorAnalyses: {
+          where: { isCurrent: true, status: 'COMPLETED', processorVersion: COLOR_PALETTE_VERSION },
+          include: { swatches: { orderBy: { rank: 'asc' } } },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+    const matches = (node, row) => {
+      if (node.colorMatch) {
+        const analysis = row.colorAnalyses.find((a) => a.assetRevision === row.mediaRevision);
+        return !!analysis && paletteColorScore(node.colorMatch, analysis.swatches) !== null;
+      }
+      const list = (value) => (Array.isArray(value) ? value : [value]);
+      return (
+        (!node.AND || list(node.AND).every((n) => matches(n, row))) &&
+        (!node.OR || list(node.OR).some((n) => matches(n, row))) &&
+        (!node.NOT || list(node.NOT).every((n) => !matches(n, row)))
+      );
+    };
+    canonical = candidates.filter((row) => matches(where, row)).map(({ id }) => ({ id }));
+  } else
+    canonical = await db.eagleAsset.findMany({
+      where,
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
   const predicate = compileSearchPredicate(where);
   const actual =
     await db.$queryRaw`SELECT asset.id FROM "EagleAsset" asset WHERE ${predicate} ORDER BY asset.id`;

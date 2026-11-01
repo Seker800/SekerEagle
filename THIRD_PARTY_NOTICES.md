@@ -129,3 +129,13 @@ OpenStreetMap data: https://www.openstreetmap.org/copyright ; ODbL:
 https://opendatacommons.org/licenses/odbl/1-0/ . Preserve source attribution and
 applicable database sharing obligations when redistributing map archives.
 Geographic archives are separate from the Apache-2.0 application source.
+
+## Basic color quantization
+
+`packages/library-core/src/vendor/quantize.js` uses the MIT-licensed MMCQ
+implementation by Nick Rabinowitz, ported to Node.js by Olivier Lesnicki
+(Copyright 2014 Olivier Lesnicki), with the raw RGBA histogram variant and
+settings inspected in Eagle 4.0 Build 23. Local changes are module export, type annotations,
+local-variable scoping, removal of unused arguments and formatting. Upstream: https://github.com/olivierlesnicki/quantize.
+Complete license: `third-party/color-search/quantize-LICENSE.txt`.
+Eagle's application UI and proprietary filter source are not redistributed.

@@ -19,7 +19,7 @@ test('reconciler creates every missing current-version image task', async () => 
             assetId: 'asset-1',
             assetRevision: 1,
             kind: 'EXTRACT_COLOR_PALETTE',
-            processorVersion: 'color-v3-thumbnail',
+            processorVersion: 'color-v4-eagle-basic',
           },
           {
             id: 'rendition-job-1',
@@ -64,7 +64,7 @@ test('reconciler creates every missing current-version image task', async () => 
     assetRevision: 3,
     kind: 'EXTRACT_COLOR_PALETTE',
     lane: 'BACKGROUND',
-    processorVersion: 'color-v3-thumbnail',
+    processorVersion: 'color-v4-eagle-basic',
     dependsOnJobId: 'rendition-job-2',
   });
   assert.equal(

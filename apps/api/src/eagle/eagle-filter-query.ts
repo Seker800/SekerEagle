@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import type { AssetSearchWhere } from './eagle-search-predicate';
 import {
   assertEagleFilterQueryMode,
   isActiveEagleFilterRule,
@@ -8,7 +9,7 @@ import {
   type EagleFilterQuery,
   type EagleFilterRule,
 } from '@sekereagle/eagle-filter-core';
-import { buildColorAnalysisWhere } from './eagle-color-search';
+import { buildColorMatchWhere } from './eagle-color-search';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -23,8 +24,8 @@ export function readEagleFilterQuery(value: unknown): EagleFilterQuery {
 export function buildEagleFilterWhere(
   query: EagleFilterQuery,
   libraryMode: 'MATERIAL' | 'PHOTO' = 'MATERIAL',
-  semanticWhere?: Prisma.EagleAssetWhereInput,
-): Prisma.EagleAssetWhereInput {
+  semanticWhere?: AssetSearchWhere,
+): AssetSearchWhere {
   assertFilterMode(query, libraryMode);
   if (
     (query.semantic ||
@@ -36,7 +37,7 @@ export function buildEagleFilterWhere(
     throw new BadRequestException('画面内容需要通过智能文件夹或预览查询。');
   const conditions = query.conditions
     .map((condition) => buildConditionWhere(condition, semanticWhere))
-    .filter((where): where is Prisma.EagleAssetWhereInput => where !== null);
+    .filter((where): where is AssetSearchWhere => where !== null);
   return conditions.length || query.semantic
     ? { AND: [...conditions, ...(query.semantic ? [semanticWhere!] : [])] }
     : {};
@@ -61,18 +62,17 @@ export function readEagleFilterTagDependencies(query: EagleFilterQuery): {
 
 function buildConditionWhere(
   condition: EagleFilterCondition,
-  semanticWhere?: Prisma.EagleAssetWhereInput,
-): Prisma.EagleAssetWhereInput | null {
+  semanticWhere?: AssetSearchWhere,
+): AssetSearchWhere | null {
   const rules = condition.rules
     .filter(isActiveEagleFilterRule)
     .map((rule) => (rule.field === 'SEMANTIC' ? semanticWhere! : buildRuleWhere(rule)));
   if (!rules.length) return null;
-  const group: Prisma.EagleAssetWhereInput =
-    condition.match === 'ALL' ? { AND: rules } : { OR: rules };
+  const group: AssetSearchWhere = condition.match === 'ALL' ? { AND: rules } : { OR: rules };
   return condition.result === 'NOT_MATCH' ? { NOT: group } : group;
 }
 
-function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
+function buildRuleWhere(rule: EagleFilterRule): AssetSearchWhere {
   switch (rule.field) {
     case 'SEMANTIC':
       throw new BadRequestException('画面内容需要匹配上下文。');
@@ -152,7 +152,7 @@ function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
     case 'COLOR': {
       const color = readString(rule);
       if (!HEX_COLOR.test(color)) throw new BadRequestException('颜色筛选值无效。');
-      return { colorAnalyses: buildColorAnalysisWhere(color) };
+      return buildColorMatchWhere(color);
     }
     case 'ADDED_AT':
       return { libraryAddedAt: buildDateFilter(rule) };
@@ -165,7 +165,7 @@ function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
 function buildTextWhere(
   field: 'NAME' | 'DESCRIPTION' | 'SOURCE_URL',
   rule: EagleFilterRule,
-): Prisma.EagleAssetWhereInput {
+): AssetSearchWhere {
   if (field === 'NAME') {
     const value =
       typeof rule.value === 'string' ? rule.value.normalize('NFKC').toLocaleLowerCase() : '';
@@ -216,16 +216,13 @@ function textFilter(operator: EagleFilterRule['operator'], value: string): Prism
   }
 }
 
-function buildTagWhere(
-  source: 'MANUAL' | 'AI',
-  rule: EagleFilterRule,
-): Prisma.EagleAssetWhereInput {
+function buildTagWhere(source: 'MANUAL' | 'AI', rule: EagleFilterRule): AssetSearchWhere {
   const ids = readStringArray(rule);
-  const some = (id?: string): Prisma.EagleAssetWhereInput =>
+  const some = (id?: string): AssetSearchWhere =>
     source === 'MANUAL'
       ? { manualTagLinks: { some: id ? { tagId: id } : {} } }
       : { aiTagLinks: { some: { ...(id ? { aiTagId: id } : {}), status: 'ACTIVE' } } };
-  const none = (selectedIds?: string[]): Prisma.EagleAssetWhereInput =>
+  const none = (selectedIds?: string[]): AssetSearchWhere =>
     source === 'MANUAL'
       ? { manualTagLinks: { none: selectedIds ? { tagId: { in: selectedIds } } : {} } }
       : {
@@ -249,7 +246,7 @@ function buildTagWhere(
   }
 }
 
-function buildRatingWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
+function buildRatingWhere(rule: EagleFilterRule): AssetSearchWhere {
   const value = Number(readString(rule));
   if (!Number.isInteger(value) || value < 0 || value > 5)
     throw new BadRequestException('评分筛选值无效。');
@@ -330,9 +327,9 @@ function buildDateFilter(rule: EagleFilterRule): Prisma.DateTimeFilter {
   return { gt: dates[0] };
 }
 
-function buildShapeWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
+function buildShapeWhere(rule: EagleFilterRule): AssetSearchWhere {
   const shape = readString(rule);
-  const ranges: Record<string, Prisma.EagleAssetWhereInput> = {
+  const ranges: Record<string, AssetSearchWhere> = {
     LANDSCAPE: { aspectRatio: { gt: 1.05, lte: 2 } },
     PORTRAIT: { aspectRatio: { gte: 0.5, lt: 0.95 } },
     SQUARE: { aspectRatio: { gte: 0.95, lte: 1.05 } },

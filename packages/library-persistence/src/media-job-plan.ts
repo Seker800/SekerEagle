@@ -1,9 +1,12 @@
-import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
+import {
+  PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION,
+  COLOR_PALETTE_VERSION,
+} from '@sekereagle/library-core';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 
 export const RENDITION_PROCESSOR_VERSION = 'rendition-v2';
-export const COLOR_THUMBNAIL_PROCESSOR_VERSION = 'color-v3-thumbnail';
+export const COLOR_THUMBNAIL_PROCESSOR_VERSION = COLOR_PALETTE_VERSION;
 export const PYRAMID_PROCESSOR_VERSION = 'pyramid-v1';
 export const EMBEDDING_PROCESSOR_VERSION = 'qwen3-vl-embedding-2b-1024-v1';
 export const IMAGE_PYRAMID_DIMENSION_THRESHOLD = 4_096;

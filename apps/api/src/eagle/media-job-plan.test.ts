@@ -41,7 +41,7 @@ test('large images get dependent palette and pyramid jobs after renditions', () 
         assetRevision: 2,
         kind: 'EXTRACT_COLOR_PALETTE',
         lane: 'BACKGROUND',
-        processorVersion: 'color-v3-thumbnail',
+        processorVersion: 'color-v4-eagle-basic',
         dependsOnJobId: 'rendition-job',
       },
       {

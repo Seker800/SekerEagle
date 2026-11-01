@@ -1,3 +1,4 @@
+import { COLOR_PALETTE_VERSION } from '@sekereagle/library-core';
 import type { EagleMediaJobKind } from '@prisma/client';
 import sharp from 'sharp';
 import { isCameraRawMime } from '@sekereagle/library-core';
@@ -67,7 +68,8 @@ export async function processImageWork(source: AsyncIterable<Uint8Array>, work: 
         ]);
         return {
           metadata,
-          palette: extractRepresentativeColors(data, info.channels, info.width * info.height, 6),
+          paletteVersion: COLOR_PALETTE_VERSION,
+          palette: extractRepresentativeColors(data, info.channels, info.width * info.height, 12),
           rendered: null,
         };
       }
@@ -245,8 +247,14 @@ export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<I
       throw new Error('INVALID_IMAGE_RESULT');
     entry.spec = spec;
   }
+  if (
+    work.kind === 'EXTRACT_COLOR_PALETTE' &&
+    work.processorVersion === COLOR_PALETTE_VERSION &&
+    (!('paletteVersion' in value.result) || value.result.paletteVersion !== COLOR_PALETTE_VERSION)
+  )
+    throw new Error('COLOR_PROCESSOR_VERSION_MISMATCH');
   if (value.result.palette) {
-    if (!Array.isArray(value.result.palette) || value.result.palette.length > 6)
+    if (!Array.isArray(value.result.palette) || value.result.palette.length > 12)
       throw new Error('INVALID_IMAGE_RESULT');
     value.result.palette = value.result.palette.map((s) => {
       if (

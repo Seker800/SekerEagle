@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { encodeEagleAssetCursor } from './eagle-cursor';
+import { encodeColorCursor, colorPageKey } from './eagle-color-page';
 import { EagleService } from './eagle.service';
 
 test('a parent smart folder evaluates itself and its direct children as a union', async () => {
@@ -140,6 +140,7 @@ test('ANY tag matching combines every selected manual and AI tag into one union'
 test('color filtering reports original global image-analysis coverage', async () => {
   const service = new EagleService(
     {
+      $queryRaw: async () => [],
       eagleAsset: {
         findMany: async () => [],
         count: async () => 10,
@@ -156,7 +157,7 @@ test('color filtering reports original global image-analysis coverage', async ()
     eligible: 10,
     completed: 7,
     percentage: 70,
-    processorVersion: 'color-v3-thumbnail',
+    processorVersion: 'color-v4-eagle-basic',
   });
 });
 
@@ -255,7 +256,7 @@ test('image search preserves the ranked order without resolving AI tags', async 
     {
       $queryRaw: async (query: unknown) => {
         rankingQuery = JSON.stringify(query);
-        return [{ assetId: 'manual-asset' }, { assetId: 'ai-asset' }];
+        return [{ id: 'manual-asset' }, { id: 'ai-asset' }];
       },
       eagleAssetColorAnalysis: {
         count: async () => {
@@ -582,6 +583,7 @@ test('color pagination does not recount coverage already returned with the first
   let counts = 0;
   const service = new EagleService(
     {
+      $queryRaw: async () => [],
       eagleAsset: {
         findMany: async () => [],
         count: async () => {
@@ -599,9 +601,10 @@ test('color pagination does not recount coverage already returned with the first
     undefined,
     'MATERIAL',
   );
-  const cursor = encodeEagleAssetCursor(
-    { id: 'asset', libraryAddedAt: new Date('2026-01-01') },
+  const cursor = encodeColorCursor(
+    { id: 'asset', score: 1, time: '2026-01-01T00:00:00.000Z' },
     { ownerId: 'owner-1', libraryMode: 'MATERIAL' },
+    colorPageKey({ limit: 30, color: '#abcdef' }, '#abcdef', false, false),
   );
   const result = await service.listAssets('owner-1', { limit: 30, color: '#abcdef', cursor });
   assert.equal(counts, 0);

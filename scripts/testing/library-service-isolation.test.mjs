@@ -2700,7 +2700,7 @@ test('a round trip keeps archived photography and complete analyses without fake
       libraryMode: 'PHOTO',
       assetId: f.photo.id,
       assetRevision: 0,
-      processorVersion: 'color-v3-thumbnail',
+      processorVersion: 'color-v4-eagle-basic',
       status: 'COMPLETED',
       isCurrent: true,
       swatches: {

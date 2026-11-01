@@ -187,7 +187,10 @@ function scalar(
 }
 
 /** Keep eligibility inside PostgreSQL instead of materializing an entire library's IDs in Node. */
-export function compileSearchPredicate(where: AssetSearchWhere): Prisma.Sql {
+export function compileSearchPredicate(
+  where: AssetSearchWhere,
+  colorScores?: ReadonlyMap<string, Prisma.Sql>,
+): Prisma.Sql {
   let sequence = 0;
   const visit = (name: string, alias: string, input: unknown, preserveNull = false): Prisma.Sql => {
     const definition = models[name]!;
@@ -209,7 +212,9 @@ export function compileSearchPredicate(where: AssetSearchWhere): Prisma.Sql {
         );
       } else if (key === 'colorMatch' && name === 'asset') {
         if (typeof value !== 'string') throw new Error('Unsupported search color');
-        parts.push(Prisma.sql`${colorScoreSql(value, alias)} IS NOT NULL`);
+        parts.push(
+          Prisma.sql`${colorScores?.get(value.toLowerCase()) ?? colorScoreSql(value, alias)} IS NOT NULL`,
+        );
       } else if (definition.fields.has(key)) {
         parts.push(scalar(column(key), value, definition.enums[key]));
       } else {
