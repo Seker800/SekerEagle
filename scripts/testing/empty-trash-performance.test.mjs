@@ -225,6 +225,78 @@ test('media job transition batches amortize triggers and preserve scoped evidenc
         ['media-ready:EMBEDDING', 'media-ready:NAS'],
         'mixed inserts wake each resource once without a generic broadcast',
       );
+      // One upsert statement contains a newly inserted embedding, a requeued
+      // pending purge, and a processing purge whose lease must remain untouched.
+      const pending = await db.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: { id: jobs[0].id },
+      });
+      await db.eagleAssetProcessingJob.update({
+        where: { id: jobs[1].id },
+        data: { status: 'PROCESSING', leaseVersion: { increment: 1 }, lockedAt: new Date() },
+      });
+      const processing = await db.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: { id: jobs[1].id },
+      });
+      const [latest] = await db.eagleMediaJobEvent.findMany({
+        where: scope,
+        orderBy: { id: 'desc' },
+        take: 1,
+      });
+      await barrier();
+      const upsertWakeups = notifications.length;
+      const newId = randomUUID();
+      const input = [
+        { id: randomUUID(), assetId: pending.assetId, kind: 'PURGE_ASSET', processor: 'v1' },
+        { id: randomUUID(), assetId: processing.assetId, kind: 'PURGE_ASSET', processor: 'v1' },
+        {
+          id: newId,
+          assetId: jobs[2].assetId,
+          kind: 'GENERATE_EMBEDDING',
+          processor: 'mixed-upsert-v1',
+        },
+      ];
+      const published = await db.$queryRaw(Prisma.sql`
+        INSERT INTO "EagleMediaJob" AS job
+          (id,"ownerId","libraryMode","assetId",kind,lane,"assetRevision","processorVersion",status,attempts,"recoveryCount","leaseVersion","availableAt","updatedAt")
+        SELECT input.id,${ownerId},${mode}::"LibraryMode",input."assetId",input.kind,'MAINTENANCE'::"EagleProcessingLane",0,input."processorVersion",'PENDING'::"EagleMediaJobStatus",0,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
+        FROM (VALUES ${Prisma.join(input.map((row) => Prisma.sql`(${row.id},${row.assetId},${row.kind}::"EagleMediaJobKind",${row.processor})`))}) AS input(id,"assetId",kind,"processorVersion")
+        ON CONFLICT ("assetId",kind,"assetRevision","processorVersion") DO UPDATE
+        SET status='PENDING',attempts=0,"recoveryCount"=0,"leaseVersion"=job."leaseVersion"+1,"availableAt"=EXCLUDED."availableAt","lockedAt"=NULL,"updatedAt"=CURRENT_TIMESTAMP
+        WHERE job."ownerId"=EXCLUDED."ownerId" AND job."libraryMode"=EXCLUDED."libraryMode" AND job.status IN ('PENDING','FAILED','COMPLETED')
+        RETURNING id`);
+      assert.deepEqual(new Set(published.map((row) => row.id)), new Set([pending.id, newId]));
+      const upsertEvents = await db.eagleMediaJobEvent.findMany({
+        where: { ...scope, id: { gt: latest.id } },
+      });
+      assert.equal(
+        upsertEvents.length,
+        2,
+        'one INSERT and one real UPDATE append exactly two events; skipped conflicts append none',
+      );
+      assert.deepEqual(
+        new Set(upsertEvents.map((event) => event.jobId)),
+        new Set([pending.id, newId]),
+      );
+      for (const event of upsertEvents) {
+        assert.equal(event.ownerId, ownerId);
+        assert.equal(event.libraryMode, mode);
+        assert.equal(event.fromStatus, event.jobId === newId ? null : 'PENDING');
+        assert.equal(event.toStatus, 'PENDING');
+        assert.equal(event.leaseVersion, event.jobId === newId ? 1 : pending.leaseVersion + 1);
+        assert.equal(event.attempts, 0);
+        assert.equal(event.recoveryCount, 0);
+      }
+      assert.deepEqual(
+        await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: processing.id } }),
+        processing,
+        'a skipped processing conflict retains its full state and lease',
+      );
+      await barrier();
+      assert.deepEqual(
+        notifications.slice(upsertWakeups).sort(),
+        ['media-ready:EMBEDDING', 'media-ready:NAS'],
+        'mixed upsert notifications retain each affected resource once',
+      );
     }
   } finally {
     await db.eagleAsset.deleteMany({ where: { ownerId } });
