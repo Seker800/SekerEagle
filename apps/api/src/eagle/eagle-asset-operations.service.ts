@@ -8,6 +8,7 @@ import {
 import {
   BadRequestException,
   RequestTimeoutException,
+  ServiceUnavailableException,
   ConflictException,
   Inject,
   Injectable,
@@ -1227,7 +1228,10 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           ? 'ASSET_UNAVAILABLE'
           : error instanceof ConflictException
             ? 'ASSET_CHANGED'
-            : error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028'
+            : (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2028') ||
+                (error instanceof ServiceUnavailableException &&
+                  typeof error.getResponse() === 'object' &&
+                  (error.getResponse() as { code?: string }).code === 'EMPTY_TRASH_BUSY')
               ? 'TRANSACTION_TIMEOUT'
               : 'OPERATION_FAILED');
     this.logger.error({
