@@ -16,6 +16,7 @@ export const createLibraryReadPool = (connectionString: string) =>
   new Pool({
     connectionString,
     max: 2,
+    options: '-c timezone=UTC',
     connectionTimeoutMillis: 3000,
     application_name: 'sekereagle-library-reader',
   });

@@ -1,3 +1,4 @@
+import { assertSafeRuntimeTarget } from '@sekereagle/config';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLibraryReaderServer } from './eagle/eagle-memory-server';
 import { createLibraryReadPool, LibraryReadStore } from './eagle/eagle-memory-store';
@@ -6,13 +7,15 @@ import {
   residentStatisticsDaily,
 } from './photos/photo-statistics-memory';
 import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
-import { readResidentSmartFolderPage } from './eagle/eagle-memory-semantic-store';
+import { readResidentSmartFolderPage, withResidentSemanticGraph } from './eagle/eagle-memory-semantic-store';
 import { residentPersonCounts } from './photos/photo-people-memory';
 
 /** Explicit standalone entry. Importing shared HTTP providers never starts it. */
 export async function startLibraryReader(env = process.env) {
   if (!env.DATABASE_URL || !env.EAGLE_READER_TOKEN)
     throw new Error('Reader database and service identity are required');
+  assertSafeRuntimeTarget({ databaseUrl: env.DATABASE_URL,
+    s3Endpoint: env.S3_ENDPOINT ?? 'http://minio:9000', s3Bucket: env.S3_BUCKET ?? 'sekereagle-reader-unused' });
   const url = new URL(env.DATABASE_URL);
   if (!url.searchParams.has('connection_limit')) url.searchParams.set('connection_limit', '2');
   const db = createLibraryReadPool(url.toString());
@@ -25,6 +28,7 @@ export async function startLibraryReader(env = process.env) {
       statistics: (index, includePrivate, query) =>
         readResidentPhotoStatistics(db, index, includePrivate, query),
       peopleCounts: residentPersonCounts,
+      semanticQuery: (index, ids, read) => withResidentSemanticGraph(db, index, ids, graph => read(graph.context)),
       smartFolderPage: (index, options) => readResidentSmartFolderPage(db, index, options),
     },
   );
@@ -36,6 +40,7 @@ export async function startLibraryReader(env = process.env) {
   };
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
+  try {
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(
@@ -51,7 +56,6 @@ export async function startLibraryReader(env = process.env) {
       'SELECT "ownerId","libraryMode" FROM "EagleLibraryReadState"',
     )
   ).rows;
-  try {
     for (const scope of scopes) {
       if (stopping) break;
       prime(await store.synchronize(scope));
