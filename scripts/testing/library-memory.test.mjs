@@ -456,12 +456,13 @@ test('semantic resident page preserves real SQL scores, additional filters and v
   try {
     await db.eagleEmbeddingSpace.create({ data: { id: spaceId, model: 'fixture', revision: spaceId,
       dimensions: 1024, instructionVersion: 'fixture', preprocessingVersion: 'fixture', normalized: true } });
-    await db.eagleSmartFolder.create({ data: { id: folderId, ...scope, name: 'fixture', query: { version: 2, conditions: [] } } });
+    await db.eagleSmartFolder.create({ data: { id: folderId, ...scope, name: 'fixture', normalizedName: 'fixture', queryJson: { version: 2, conditions: [] } } });
     await db.eagleSmartFolderSemanticSnapshot.create({ data: { id: snapshotId, ...scope, folderId,
-      intentKey: 'fixture', text: 'fixture', breadth: 'BALANCED', threshold: 0, spaceId, isActive: true, status: 'READY' } });
+      intentKey: 'fixture', text: 'fixture', breadth: 'BALANCED', threshold: 0, spaceId, isActive: false, status: 'READY' } });
+    await db.$executeRaw(Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot" SET "isActive"=true,"queryVector"=${JSON.stringify([1,...Array(1023).fill(0)])}::vector WHERE id=${snapshotId}`);
     for (let n = 0; n < 30; n++) {
       const embedding = await db.eagleAssetEmbedding.create({ data: { ...scope, assetId: `${ownerId}-${n}`, assetRevision: 0,
-        spaceId, status: 'COMPLETED', isCurrent: true } });
+        spaceId, status: 'READY', isCurrent: true } });
       await db.eagleSmartFolderSemanticMatch.create({ data: { ...scope, snapshotId, embeddingId: embedding.id, similarity: Math.floor(n / 3) / 10 } });
     }
     const index = await store.synchronize(scope);
