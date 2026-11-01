@@ -120,7 +120,7 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
       libraryApiPath(`/api/eagle/vector/${path}`, libraryMode),
       init,
       undefined,
-      '向量服务请求失败（{{value1}}）',
+      '请求失败（{{value1}}）',
     );
   }
 
@@ -142,6 +142,10 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
 
   function fetchEagleVectorSummary() {
     return request<EagleVectorSummary>('summary');
+  }
+
+  function fetchEagleReviewSummary() {
+    return request<Pick<EagleVectorSummary, 'suggestions'>>('review-summary');
   }
 
   function listEagleVectorTags(query?: string) {
@@ -234,6 +238,7 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
     getVectorThumbnailUrl,
     getVectorPreviewUrl,
     fetchEagleVectorSummary,
+    fetchEagleReviewSummary,
     listEagleVectorTags,
     setEagleVectorTagEnabled,
     rebuildEagleVectorTag,
@@ -250,6 +255,7 @@ export const {
   getVectorThumbnailUrl,
   getVectorPreviewUrl,
   fetchEagleVectorSummary,
+  fetchEagleReviewSummary,
   listEagleVectorTags,
   setEagleVectorTagEnabled,
   rebuildEagleVectorTag,

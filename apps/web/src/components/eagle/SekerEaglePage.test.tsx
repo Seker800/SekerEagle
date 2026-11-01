@@ -136,7 +136,7 @@ const moveEagleSmartFolderMock = vi.fn();
 const listEagleAssetUpdatesMock = vi.fn();
 const getEaglePyramidDescriptorMock = vi.fn();
 const countEagleAssetsMock = vi.fn();
-const fetchEagleVectorSummaryMock = vi.fn();
+const fetchEagleReviewSummaryMock = vi.fn();
 const canCopyImageToClipboardMock = vi.fn();
 const copyImageToClipboardMock = vi.fn();
 const saveOriginalFileMock = vi.fn();
@@ -194,7 +194,7 @@ vi.mock('./EagleTaskCenter', () => ({
 
 vi.mock('../../lib/eagle-vector-api', () => {
   const api = {
-    fetchEagleVectorSummary: (...args: unknown[]) => fetchEagleVectorSummaryMock(...args),
+    fetchEagleReviewSummary: (...args: unknown[]) => fetchEagleReviewSummaryMock(...args),
   };
   return { ...api, createEagleVectorApi: () => api };
 });
@@ -475,7 +475,7 @@ describe('SekerEaglePage', () => {
     });
     listEagleAssetUpdatesMock.mockResolvedValue([]);
     uploadEagleAssetMock.mockResolvedValue({ duplicate: false });
-    fetchEagleVectorSummaryMock.mockResolvedValue({
+    fetchEagleReviewSummaryMock.mockResolvedValue({
       tags: { enabled: 15, ready: 12, awaitingCenter: 3 },
       suggestions: { unclassified: 38, pending: 32 },
     });
