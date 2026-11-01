@@ -233,8 +233,18 @@ try {
     kind: 'EMPTY_TRASH',
     assetIds: [],
   });
-  await material.tick();
-  assert.equal((await material.list(ownerId)).find((row) => row.id === empty.id).completed, 1);
+  // Clearing a cutoff checkpoints each bounded step; a later empty step confirms completion.
+  const clearDeadline = performance.now() + 30000;
+  let clearProgress;
+  do {
+    await material.tick();
+    clearProgress = (await material.list(ownerId)).find((row) => row.id === empty.id);
+    assert.equal(clearProgress.failed, 0, 'real-storage clear must not fail');
+    if (clearProgress.completed === 1) break;
+    assert.ok(performance.now() < clearDeadline, 'real-storage clear must drain its cutoff');
+    await delay(10);
+  } while (true);
+  assert.equal(clearProgress.completed, 1);
   // Exercise the actual worker's wake path, not a test loop that calls drain
   // repeatedly and could conceal a missing production self-wakeup.
   const cleanupKeys = Array.from(
