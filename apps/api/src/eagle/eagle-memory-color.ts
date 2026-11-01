@@ -13,15 +13,16 @@ export interface MemoryColorPageOptions {
 /** Preserve Eagle's score-or-100 order and the existing SQL cursor's inverse traversal. */
 export function residentColorPage(index: LibraryMemoryIndex, options: MemoryColorPageOptions, context?: MemorySearchContext): MemoryColorPosition[] {
   const score = createMemoryColorScorer();
-  const positions: MemoryColorPosition[] = [];
-  const compare = (a: { id: string; score: number; time: string }, b: { id: string; score: number; time: string }) =>
-    a.score - b.score || Date.parse(b.time) - Date.parse(a.time) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  const positions: Array<Omit<MemoryColorPosition, 'time'> & { time: number }> = [];
+  const after = options.after ? { ...options.after, time: Date.parse(options.after.time) } : undefined;
+  const compare = (a: { id: string; score: number; time: number }, b: { id: string; score: number; time: number }) =>
+    a.score - b.score || b.time - a.time || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
   index.forEach(options.where, row => {
     const position = { id: String(row.id), score: score(row, options.color) || 100,
-      time: new Date(memoryDateTime(row[options.date])).toISOString(), mediaRevision: Number(row.mediaRevision) };
-    if (options.after && (options.after.newer ? compare(position, options.after) >= 0 : compare(position, options.after) <= 0)) return;
+      time: memoryDateTime(row[options.date]), mediaRevision: Number(row.mediaRevision) };
+    if (after && (after.newer ? compare(position, after) >= 0 : compare(position, after) <= 0)) return;
     positions.push(position);
   }, context);
   positions.sort((a, b) => options.after?.newer ? -compare(a, b) : compare(a, b));
-  return positions.slice(options.offset, options.offset + options.limit + 1);
+  return positions.slice(options.offset, options.offset + options.limit + 1).map(row => ({ ...row, time: new Date(row.time).toISOString() }));
 }

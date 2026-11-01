@@ -1,15 +1,28 @@
 import { z } from 'zod';
 
-export const memorySearchPositions = z.array(z.object({
-  assetId: z.string().min(1), tier: z.union([z.literal(0), z.literal(1)]),
-  similarity: z.number().finite(), libraryAddedAt: z.string().datetime(),
-}).strict());
-export const memorySemanticOptions = z.object({
-  folderIds: z.array(z.string().min(1)).min(1), limit: z.number().int().positive().safe(),
-  ordinaryMembersPossible: z.boolean(), includePrivate: z.boolean(), trash: z.boolean(),
-  after: memorySearchPositions.element.optional(),
-}).strict();
-export const memoryPhotoFacets = z.object({ cameras: z.array(z.string()), lenses: z.array(z.string()) }).strict();
+export const memorySearchPositions = z.array(
+  z
+    .object({
+      assetId: z.string().min(1),
+      tier: z.union([z.literal(0), z.literal(1)]),
+      similarity: z.number().finite(),
+      libraryAddedAt: z.string().datetime(),
+    })
+    .strict(),
+);
+export const memorySemanticOptions = z
+  .object({
+    folderIds: z.array(z.string().min(1)).min(1),
+    limit: z.number().int().positive().safe(),
+    ordinaryMembersPossible: z.boolean(),
+    includePrivate: z.boolean(),
+    trash: z.boolean(),
+    after: memorySearchPositions.element.optional(),
+  })
+  .strict();
+export const memoryPhotoFacets = z
+  .object({ cameras: z.array(z.string()), lenses: z.array(z.string()) })
+  .strict();
 const usage = z.object({ key: z.string(), count: z.number().int().nonnegative() });
 export const memoryPersonCounts = z.array(
   z.object({ id: z.string(), photos: z.number().int().nonnegative() }).strict(),
@@ -49,19 +62,25 @@ export const decodeMemoryQuery = (text: string): unknown =>
   });
 
 export const memoryStatisticsQuery = z
-      .object({
-        grain: z.enum(['day', 'week', 'month', 'year']).optional(),
-        groupBy: z.enum(['total', 'camera', 'lens']).optional(),
-        start: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/)
-          .optional(),
-        end: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/)
-          .optional(),
-        cameras: z.array(z.string()).optional(),
-        lenses: z.array(z.string()).optional(),
-        lensKeys: z.array(z.string()).optional(),
-      })
-      .strict();
+  .object({
+    grain: z.enum(['day', 'week', 'month', 'year']).optional(),
+    groupBy: z.enum(['total', 'camera', 'lens']).optional(),
+    start: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    end: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    cameras: z.array(z.string()).optional(),
+    lenses: z.array(z.string()).optional(),
+    lensKeys: z.array(z.string()).optional(),
+  })
+  .strict();
+
+export const memoryColorPosition = z.object({ id: z.string().min(1), score: z.number().finite().nonnegative(), time: z.string().datetime(), mediaRevision: z.number().int().nonnegative() }).strict();
+export const memoryColorOptions = z.object({ color: z.string().regex(/^#[0-9a-f]{6}$/i), date: z.enum(['chronologicalAt', 'libraryAddedAt']),
+  limit: z.number().int().positive().safe(), offset: z.number().int().nonnegative().safe(),
+  after: memoryColorPosition.omit({ mediaRevision: true }).extend({ newer: z.literal(true).optional() }).optional(),
+}).strict();

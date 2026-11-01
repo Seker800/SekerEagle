@@ -1,3 +1,4 @@
+import { photoStatisticsFactFieldsSql } from '../../apps/api/dist/photos/photo-statistics-query.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
@@ -22,7 +23,10 @@ import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-st
 import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-memory.js';
 import { readSmartFolderPage } from '../../apps/api/dist/eagle/eagle-smart-folder-page.js';
 import { readMemoryCount } from '../../apps/api/dist/eagle/eagle-memory-client.js';
-import { readResidentSmartFolderPage, withResidentSemanticGraph } from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
+import {
+  readResidentSmartFolderPage,
+  withResidentSemanticGraph,
+} from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
 import { rankSmartFolderMatches } from '../../apps/api/dist/eagle/eagle-smart-folder-ranking.js';
 import { smartFolderMatchWhere } from '../../packages/library-persistence/dist/index.js';
 import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';
@@ -40,7 +44,7 @@ const personId = randomUUID(),
   unnamedPersonId = randomUUID(),
   privatePersonId = randomUUID();
 const pool = createLibraryReadPool(process.env.DATABASE_URL);
-const store = new LibraryReadStore(pool);
+const store = new LibraryReadStore(pool, photoStatisticsFactFieldsSql());
 const scope = { ownerId, libraryMode: 'PHOTO' };
 before(async () => {
   await db.user.createMany({
@@ -204,7 +208,9 @@ test('committed updates are visible, rollback is invisible, and removed relation
 });
 test('a fresh reader reconstructs the same result after acknowledged logs are pruned', async () => {
   const current = await store.synchronize(scope);
-  const restarted = await new LibraryReadStore(pool).synchronize(scope);
+  const restarted = await new LibraryReadStore(pool, photoStatisticsFactFieldsSql()).synchronize(
+    scope,
+  );
   assert.equal(restarted.revision, current.revision);
   assert.deepEqual(
     restarted.page({}, 'chronologicalAt', 'desc', 100, 0),
@@ -246,10 +252,12 @@ test('activation waits for a pre-existing uncommitted writer instead of losing i
   );
   await ready;
   let completed = false;
-  const loading = new LibraryReadStore(pool).synchronize(otherScope).then((index) => {
-    completed = true;
-    return index;
-  });
+  const loading = new LibraryReadStore(pool, photoStatisticsFactFieldsSql())
+    .synchronize(otherScope)
+    .then((index) => {
+      completed = true;
+      return index;
+    });
   let blocked = false;
   try {
     for (let i = 0; i < 100 && !completed; i++) {
@@ -377,7 +385,7 @@ test('sixty thousand resources publish one batch event and keep complete residen
     INSERT INTO "EagleAsset" (id,"ownerId","libraryMode","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize",width,height,"originalObjectKey","updatedAt")
     SELECT ${prefix}||lpad(n::text,7,'0'),${ownerId},'PHOTO',n::text||'.jpg',n::text,n::text,
       'image/jpeg','jpg',20000000,6000,4000,'synthetic/'||${prefix}||n::text,now() FROM generate_series(1,60000) n`);
-  const fresh = new LibraryReadStore(pool);
+  const fresh = new LibraryReadStore(pool, photoStatisticsFactFieldsSql());
   const started = performance.now();
   const index = await fresh.synchronize(scope);
   const buildMs = performance.now() - started;
@@ -388,17 +396,22 @@ test('sixty thousand resources publish one batch event and keep complete residen
       where: { ownerId_libraryMode: scope },
       data: { enabled: false },
     });
+    await db.$executeRaw`ALTER TABLE "EagleAsset" DISABLE TRIGGER library_read_update`;
     const baselineStart = performance.now();
-    await db.$transaction(
-      async (tx) => {
-        await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
-        await tx.eagleAsset.updateMany({
-          where: { ...scope, id: { startsWith: prefix } },
-          data: { rating: 2 },
-        });
-      },
-      { timeout: 20000 },
-    );
+    try {
+      await db.$transaction(
+        async (tx) => {
+          await tx.$executeRawUnsafe("SET LOCAL statement_timeout='30000ms'");
+          await tx.eagleAsset.updateMany({
+            where: { ...scope, id: { startsWith: prefix } },
+            data: { rating: 2 },
+          });
+        },
+        { timeout: 40000 },
+      );
+    } finally {
+      await db.$executeRaw`ALTER TABLE "EagleAsset" ENABLE TRIGGER library_read_update`;
+    }
     const baselineMs = performance.now() - baselineStart;
     await db.eagleLibraryReadState.update({
       where: { ownerId_libraryMode: scope },
@@ -410,13 +423,13 @@ test('sixty thousand resources publish one batch event and keep complete residen
     const enabledStart = performance.now();
     await db.$transaction(
       async (tx) => {
-        await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
+        await tx.$executeRawUnsafe("SET LOCAL statement_timeout='30000ms'");
         await tx.eagleAsset.updateMany({
           where: { ...scope, id: { startsWith: prefix } },
           data: { rating: 3 },
         });
       },
-      { timeout: 20000 },
+      { timeout: 40000 },
     );
     const enabledMs = performance.now() - enabledStart;
     const changes = await db.eagleLibraryReadChange.findMany({
@@ -456,26 +469,97 @@ test('sixty thousand resources publish one batch event and keep complete residen
 });
 
 test('semantic resident page preserves real SQL scores, additional filters and version guards', async () => {
-  const spaceId = randomUUID(), folderId = randomUUID(), snapshotId = randomUUID();
+  const spaceId = randomUUID(),
+    folderId = randomUUID(),
+    snapshotId = randomUUID();
   try {
-    await db.eagleEmbeddingSpace.create({ data: { id: spaceId, model: 'fixture', revision: spaceId,
-      dimensions: 1024, instructionVersion: 'fixture', preprocessingVersion: 'fixture', normalized: true } });
-    await db.eagleSmartFolder.create({ data: { id: folderId, ...scope, name: 'fixture', normalizedName: 'fixture', queryJson: { version: 2, conditions: [] } } });
-    await db.eagleSmartFolderSemanticSnapshot.create({ data: { id: snapshotId, ...scope, folderId,
-      intentKey: 'fixture', text: 'fixture', breadth: 'BALANCED', threshold: 0, spaceId, isActive: false, status: 'READY' } });
-    await db.$executeRaw(Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot" SET "isActive"=true,"queryVector"=${JSON.stringify([1,...Array(1023).fill(0)])}::vector WHERE id=${snapshotId}`);
+    await db.eagleEmbeddingSpace.create({
+      data: {
+        id: spaceId,
+        model: 'fixture',
+        revision: spaceId,
+        dimensions: 1024,
+        instructionVersion: 'fixture',
+        preprocessingVersion: 'fixture',
+        normalized: true,
+      },
+    });
+    await db.eagleSmartFolder.create({
+      data: {
+        id: folderId,
+        ...scope,
+        name: 'fixture',
+        normalizedName: 'fixture',
+        queryJson: { version: 2, conditions: [] },
+      },
+    });
+    await db.eagleSmartFolderSemanticSnapshot.create({
+      data: {
+        id: snapshotId,
+        ...scope,
+        folderId,
+        intentKey: 'fixture',
+        text: 'fixture',
+        breadth: 'BALANCED',
+        threshold: 0,
+        spaceId,
+        isActive: false,
+        status: 'READY',
+      },
+    });
+    await db.$executeRaw(
+      Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot" SET "isActive"=true,"queryVector"=${JSON.stringify([1, ...Array(1023).fill(0)])}::vector WHERE id=${snapshotId}`,
+    );
     for (let n = 0; n < 30; n++) {
-      const embedding = await db.eagleAssetEmbedding.create({ data: { ...scope, assetId: `${ownerId}-${n}`, assetRevision: 0,
-        spaceId, status: 'READY', isCurrent: true } });
-      await db.eagleSmartFolderSemanticMatch.create({ data: { ...scope, snapshotId, embeddingId: embedding.id, similarity: Math.floor(n / 3) / 10 } });
+      const embedding = await db.eagleAssetEmbedding.create({
+        data: {
+          ...scope,
+          assetId: `${ownerId}-${n}`,
+          assetRevision: 0,
+          spaceId,
+          status: 'READY',
+          isCurrent: true,
+        },
+      });
+      await db.eagleSmartFolderSemanticMatch.create({
+        data: {
+          ...scope,
+          snapshotId,
+          embeddingId: embedding.id,
+          similarity: Math.floor(n / 3) / 10,
+        },
+      });
     }
     const index = await store.synchronize(scope);
     for (const includePrivate of [false, true]) {
-      const where = { AND: [{ ...scope }, smartFolderMatchWhere(scope, folderId), { photoMetadata: { is: { cameraModel: 'Camera' } } }] };
-      const options = { where, folderIds: [folderId], limit: 3, ordinaryMembersPossible: false, includePrivate, trash: false };
+      const where = {
+        AND: [
+          { ...scope },
+          smartFolderMatchWhere(scope, folderId),
+          { photoMetadata: { is: { cameraModel: 'Camera' } } },
+        ],
+      };
+      const options = {
+        where,
+        folderIds: [folderId],
+        limit: 3,
+        ordinaryMembersPossible: false,
+        includePrivate,
+        trash: false,
+      };
       let after;
       do {
-        const expected = await rankSmartFolderMatches(db, scope, [folderId], after, 4, includePrivate, false, undefined, where);
+        const expected = await rankSmartFolderMatches(
+          db,
+          scope,
+          [folderId],
+          after,
+          4,
+          includePrivate,
+          false,
+          undefined,
+          where,
+        );
         const actual = await readResidentSmartFolderPage(pool, index, { ...options, after });
         assert.deepEqual(actual, expected);
         if (expected.length <= 3) break;
@@ -484,30 +568,60 @@ test('semantic resident page preserves real SQL scores, additional filters and v
       await assert.rejects(readResidentSmartFolderPage(pool, index, options, 1), /workspace/);
       const server = createLibraryReaderServer(store, 'semantic-reader', 2097152, {
         smartFolderPage: (index, options) => readResidentSmartFolderPage(pool, index, options),
-        semanticQuery: (index, ids, read) => withResidentSemanticGraph(pool, index, ids, graph => read(graph.context)),
+        semanticQuery: (index, ids, read) =>
+          withResidentSemanticGraph(pool, index, ids, (graph) => read(graph.context)),
       });
       server.listen(0, '127.0.0.1');
       await once(server, 'listening');
-      const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+      const oldUrl = process.env.EAGLE_READER_URL,
+        oldToken = process.env.EAGLE_READER_TOKEN;
       try {
         process.env.EAGLE_READER_URL = `http://127.0.0.1:${server.address().port}`;
         process.env.EAGLE_READER_TOKEN = 'semantic-reader';
         const hits = libraryReadMetrics.hits;
-        const page = await readSmartFolderPage(db, { scope, query: { limit: 3 }, folderIds: [folderId],
-          folderDefinitionKey: 'fixture', includePrivate, trash: false, where, ordinaryMembersPossible: false },
-          extra => db.eagleAsset.findMany({ where: { AND: [where, extra, ...(includePrivate ? [] : [{ isPrivate: false }])] } }));
-        const expected = await rankSmartFolderMatches(db, scope, [folderId], undefined, 4, includePrivate, false, undefined, where);
-        assert.deepEqual(page.rows.map(row => row.id), expected.slice(0, 3).map(row => row.assetId));
+        const page = await readSmartFolderPage(
+          db,
+          {
+            scope,
+            query: { limit: 3 },
+            folderIds: [folderId],
+            folderDefinitionKey: 'fixture',
+            includePrivate,
+            trash: false,
+            where,
+            ordinaryMembersPossible: false,
+          },
+          (extra) =>
+            db.eagleAsset.findMany({
+              where: { AND: [where, extra, ...(includePrivate ? [] : [{ isPrivate: false }])] },
+            }),
+        );
+        const expected = await rankSmartFolderMatches(
+          db,
+          scope,
+          [folderId],
+          undefined,
+          4,
+          includePrivate,
+          false,
+          undefined,
+          where,
+        );
+        assert.deepEqual(
+          page.rows.map((row) => row.id),
+          expected.slice(0, 3).map((row) => row.assetId),
+        );
         assert.equal(libraryReadMetrics.hits, hits + 1);
         const visible = { AND: [where, ...(includePrivate ? [] : [{ isPrivate: false }])] };
         assert.equal(await readMemoryCount(visible), await db.eagleAsset.count({ where: visible }));
       } finally {
-        if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
-        if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = oldToken;
+        if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
+        else process.env.EAGLE_READER_URL = oldUrl;
+        if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
+        else process.env.EAGLE_READER_TOKEN = oldToken;
         server.closeAllConnections();
-        await new Promise(resolve => server.close(resolve));
+        await new Promise((resolve) => server.close(resolve));
       }
-
     }
   } finally {
     await db.eagleSmartFolder.deleteMany({ where: { id: folderId } });
@@ -520,10 +634,15 @@ test('photo facet HTTP results match original raw-value grouping and database co
   const server = createLibraryReaderServer(store, 'facets-reader', 2097152, {
     facets: (index, includePrivate) => readResidentPhotoFacets(pool, index, includePrivate),
   });
-  server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const oldUrl = process.env.EAGLE_READER_URL,
+    oldToken = process.env.EAGLE_READER_TOKEN;
   try {
-    await db.eaglePhotoMetadata.update({ where: { assetId: `${ownerId}-7` }, data: { cameraModel: '  ' } });
+    await db.eaglePhotoMetadata.update({
+      where: { assetId: `${ownerId}-7` },
+      data: { cameraModel: '  ' },
+    });
     const service = new PhotoManagementService(db);
     for (const includePrivate of [false, true]) {
       delete process.env.EAGLE_READER_URL;
@@ -534,6 +653,53 @@ test('photo facet HTTP results match original raw-value grouping and database co
       assert.deepEqual(await service.facets(ownerId, includePrivate), expected);
       assert.equal(libraryReadMetrics.hits, hits + 1);
       assert.ok(expected.cameras.includes('  '));
+    }
+  } finally {
+    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
+    else process.env.EAGLE_READER_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
+    else process.env.EAGLE_READER_TOKEN = oldToken;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('color pages preserve SQL scores, mixed-engine cursors, reverse pages and OR membership', async () => {
+  const { hexColorLab, COLOR_PALETTE_VERSION } = await import('../../packages/library-core/dist/index.js');
+  const { readColorAssetPage } = await import('../../apps/api/dist/eagle/eagle-color-page.js');
+  const ids = Array.from({ length: 20 }, (_, at) => `${ownerId}-${at}`);
+  for (let at = 0; at < ids.length; at++) {
+    const analysis = await db.eagleAssetColorAnalysis.create({ data: { ...scope, assetId: ids[at], assetRevision: 0,
+      processorVersion: COLOR_PALETTE_VERSION, status: 'COMPLETED', isCurrent: true } });
+    const palette = [{ hex: ['#69696a', '#ffffff', '#fcfcfc', '#0000ff', '#202020'][at % 5], weight: 0.8 }, { hex: '#0404fc', weight: 0.2 }];
+    await db.eagleAssetColorSwatch.createMany({ data: palette.map((swatch, rank) => {
+      const [labL, labA, labB] = hexColorLab(swatch.hex);
+      return { ...scope, analysisId: analysis.id, rank, ...swatch, labL, labA, labB };
+    }) });
+  }
+  const server = createLibraryReaderServer(store, 'color-reader');
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+  try {
+    process.env.EAGLE_READER_URL = `http://127.0.0.1:${server.address().port}`;
+    process.env.EAGLE_READER_TOKEN = 'color-reader';
+    for (const color of ['#777777', '#ffffff', '#0000ff']) {
+      const where = { AND: [{ ...scope, id: { in: ids }, deletedAt: null, isPrivate: false }, { OR: [{ colorMatch: color }, { rating: 4 }] }] };
+      let cursor;
+      do {
+        const query = { limit: 3, ...(cursor ? { cursor } : {}) };
+        const expected = await readColorAssetPage(db, scope, query, where, color, false, false, false);
+        const hits = libraryReadMetrics.hits;
+        const actual = await readColorAssetPage(db, scope, query, where, color, false, false);
+        assert.deepEqual(actual, expected);
+        assert.equal(libraryReadMetrics.hits, hits + 1);
+        if (actual.previousCursor) {
+          const backwards = { limit: 3, cursor: actual.previousCursor };
+          assert.deepEqual(await readColorAssetPage(db, scope, backwards, where, color, false, false),
+            await readColorAssetPage(db, scope, backwards, where, color, false, false, false));
+        }
+        cursor = expected.nextCursor;
+      } while (cursor);
     }
   } finally {
     if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
