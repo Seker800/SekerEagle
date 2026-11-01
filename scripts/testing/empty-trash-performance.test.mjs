@@ -619,7 +619,13 @@ test('one-row priming cannot leave a quadratic transition join for later fifty-t
     await client.query('SET auto_explain.log_min_duration=1');
     await run('large-failed', 'FAILED');
     await run('large-requeued', 'PENDING');
+    const eventsBeforeHeartbeat = await db.eagleMediaJobEvent.count({ where: { ownerId } });
     await run('large-heartbeat', null, false, true);
+    assert.equal(
+      await db.eagleMediaJobEvent.count({ where: { ownerId } }),
+      eventsBeforeHeartbeat,
+      'fifty-thousand heartbeat rows append zero events',
+    );
     const result = await db.eagleMediaJobEvent.groupBy({
       where: { ownerId },
       by: ['fromStatus', 'toStatus'],

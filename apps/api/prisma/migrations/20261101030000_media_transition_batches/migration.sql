@@ -22,11 +22,17 @@ CREATE TRIGGER eagle_media_transition_insert AFTER INSERT ON "EagleMediaJob"
 
 CREATE OR REPLACE FUNCTION record_eagle_media_updates() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
+  -- Transition relations belong to this statement: a backend may first update
+  -- one lease, then fifty thousand statuses. A cached SPI join can retain the
+  -- single-row nested-loop estimate. Replan this fixed SQL against the actual
+  -- transition cardinality on each invocation; no planner or memory overrides.
+  EXECUTE $event_rows$
   INSERT INTO "EagleMediaJobEvent" ("ownerId","libraryMode","jobId","fromStatus","toStatus","leaseVersion",attempts,"recoveryCount")
   SELECT current_job."ownerId",current_job."libraryMode",current_job.id,previous_job.status,
     current_job.status,current_job."leaseVersion",current_job.attempts,current_job."recoveryCount"
   FROM new_jobs current_job JOIN old_jobs previous_job ON previous_job.id=current_job.id
   WHERE (previous_job.status,previous_job."leaseVersion") IS DISTINCT FROM (current_job.status,current_job."leaseVersion");
+  $event_rows$;
   RETURN NULL;
 END;
 $$;
