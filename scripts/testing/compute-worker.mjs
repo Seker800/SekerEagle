@@ -27,6 +27,13 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
+// Both are real process dependencies of the remote-video fixture. Fail before opening
+// a database client or starting servers instead of surfacing a later generic HTTP 500.
+for (const [configuredPath, fallback] of [
+  [process.env.FFMPEG_PATH, 'ffmpeg'],
+  [process.env.FFPROBE_PATH, 'ffprobe'],
+])
+  await promisify(execFile)(configuredPath?.trim() || fallback, ['-version'], { timeout: 3000 });
 const db = new PrismaClient(),
   ownerId = randomUUID(),
   directory = await mkdtemp(join(tmpdir(), 'eagle-compute-worker-'));
@@ -81,8 +88,8 @@ try {
         model: 'Synthetic/Compute-2B',
         revision: 'fixed-test-revision',
         dimensions: 1024,
-        instructionVersion: 'synthetic-v1',
-        preprocessingVersion: 'synthetic-v1',
+        instructionVersion: 'image-retrieval-v1',
+        preprocessingVersion: 'preview-webp-v1',
         normalized: true,
         isCurrent: true,
       },
@@ -408,6 +415,23 @@ try {
     'PROCESSING',
   );
   assert.ok(embeddingCalls > 0);
+  const publishedSpace = await db.eagleEmbeddingSpace.findUniqueOrThrow({
+    where: { id: space.id },
+  });
+  for (const field of [
+    'model',
+    'revision',
+    'dimensions',
+    'instructionVersion',
+    'preprocessingVersion',
+    'normalized',
+    'isCurrent',
+  ])
+    assert.equal(
+      publishedSpace[field],
+      space[field],
+      `worker must preserve configured space ${field}`,
+    );
   assert.ok(puts >= 3);
   assert.ok(fleet.snapshot().nodes.find((n) => n.id === 'mac-media').completed >= 1);
   assert.match(events, /"resource":"REMOTE_MEDIA"/);
