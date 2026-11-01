@@ -126,6 +126,11 @@ test('media job transition batches amortize triggers and preserve scoped evidenc
         ),
       );
       await barrier();
+      assert.equal(
+        notifications.length,
+        before + 1,
+        'claiming PENDING jobs does not broadcast runnable work',
+      );
       const unchangedWakeups = notifications.length;
       await db.eagleAssetProcessingJob.updateMany({
         where: scope,
