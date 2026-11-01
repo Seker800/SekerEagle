@@ -15,6 +15,8 @@ import { libraryReadMetrics } from '../../apps/api/dist/eagle/eagle-memory-clien
 import { once } from 'node:events';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
+import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
+import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -64,6 +66,9 @@ before(async () => {
       assetRevision: 0,
       processorVersion: 'fixture',
       cameraModel: i % 3 === 0 ? null : i % 3 === 1 ? '' : 'Camera',
+        lensModel: i % 4 ? 'Lens' : null, cameraMake: 'Maker',
+        capturedAt: i % 7 ? new Date(1793491200000 + i * 86400000) : null,
+        capturedLocal: i % 7 ? `2026-11-${String(i + 1).padStart(2, '0')}T08:00:00` : null,
     })),
   });
 });
@@ -182,6 +187,29 @@ test('shared list reads use the reader and preserve authoritative page filtering
     else process.env.EAGLE_READER_TOKEN = savedToken;
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('statistics reuse resident daily facts and preserve the original chart SQL for every grain', async () => {
+  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+  const server = createLibraryReaderServer(store, 'statistics-reader', 2097152, (index, includePrivate, query) => readResidentPhotoStatistics(pool, index, includePrivate, query));
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const service = new PhotoStatisticsService(db);
+  try {
+    for (const grain of ['day', 'week', 'month', 'year']) for (const groupBy of ['total', 'camera', 'lens']) for (const includePrivate of [false, true]) {
+      delete process.env.EAGLE_READER_URL;
+      const query = { grain, groupBy };
+      const expected = await service.get(ownerId, includePrivate, query);
+      process.env.EAGLE_READER_URL = url; process.env.EAGLE_READER_TOKEN = 'statistics-reader';
+      const hits = libraryReadMetrics.hits;
+      assert.deepEqual(await service.get(ownerId, includePrivate, query), expected);
+      assert.equal(libraryReadMetrics.hits, hits + 1);
+    }
+  } finally {
+    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = oldToken;
+    server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
   }
 });
 
