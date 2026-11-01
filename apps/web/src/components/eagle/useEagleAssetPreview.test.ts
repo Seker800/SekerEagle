@@ -4,8 +4,14 @@ import { expect, it, vi } from 'vitest';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { useEagleAssetPreview } from './useEagleAssetPreview';
 
-const image = { id: 'image', displayName: 'Image', mimeType: 'image/jpeg', lifecycleStatus: 'READY', mediaRevision: 1,
-  renditions: [{ id: 'preview', revision: 1, kind: 'PREVIEW', mimeType: 'image/webp' }] } as EagleAssetListItem;
+const image = {
+  id: 'image',
+  displayName: 'Image',
+  mimeType: 'image/jpeg',
+  lifecycleStatus: 'READY',
+  mediaRevision: 1,
+  renditions: [{ id: 'preview', revision: 1, kind: 'PREVIEW', mimeType: 'image/webp' }],
+} as EagleAssetListItem;
 const video = { ...image, id: 'video', mimeType: 'video/mp4' };
 
 it('replaces images, video and stack previews through one open and close lifecycle', () => {
@@ -25,7 +31,9 @@ it('replaces images, video and stack previews through one open and close lifecyc
 });
 
 it('drops private previews and their gallery context when the workspace scope changes', () => {
-  const { result, rerender } = renderHook(({ scope }) => useEagleAssetPreview(scope), { initialProps: { scope: 'private' } });
+  const { result, rerender } = renderHook(({ scope }) => useEagleAssetPreview(scope), {
+    initialProps: { scope: 'private' },
+  });
   act(() => result.current.open(image, [image]));
   rerender({ scope: 'public' });
   expect(result.current.previewImage).toBeNull();

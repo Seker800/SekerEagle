@@ -1,7 +1,5 @@
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
-import { fetchWithBrowserSession } from './api-client';
-
-import { errorFromResponse } from './api-error';
+import { request as requestJson } from './api-client';
 
 import { createEagleApi, getEagleRenditionContentUrl as defaultRenditionUrl } from './eagle-api';
 
@@ -118,19 +116,12 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
       : defaultRenditionUrl(...args);
 
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetchWithBrowserSession(
+    return requestJson<T>(
       libraryApiPath(`/api/eagle/vector/${path}`, libraryMode),
-      {
-        ...init,
-        headers: init?.body
-          ? { 'content-type': 'application/json', ...init.headers }
-          : init?.headers,
-      },
+      init,
+      undefined,
+      '向量服务请求失败（{{value1}}）',
     );
-    if (!response.ok) {
-      throw await errorFromResponse(response, '向量服务请求失败（{{value1}}）');
-    }
-    return response.json() as Promise<T>;
   }
 
   const getVectorThumbnailUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) => {

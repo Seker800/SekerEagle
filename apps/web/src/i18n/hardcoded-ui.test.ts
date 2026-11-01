@@ -69,7 +69,8 @@ function isTranslationMessage(node: ts.StringLiteralLike): boolean {
       ((node.parent.expression.text === 't' && node.parent.arguments[0] === node) ||
         (node.parent.expression.text === 'tForLocale' && node.parent.arguments[1] === node) ||
         (node.parent.expression.text === 'errorFromResponse' &&
-          node.parent.arguments[1] === node))) ||
+          node.parent.arguments[1] === node) ||
+        (node.parent.expression.text === 'requestJson' && node.parent.arguments[3] === node))) ||
     isErrorCodeMessage(node)
   );
 }
@@ -106,6 +107,24 @@ it('recognizes the message argument of the fixed-locale translator without exemp
   };
   visit(source);
   expect(isTranslationMessage(calls[0].arguments[1] as ts.StringLiteral)).toBe(true);
+  expect(isTranslationMessage(calls[0].arguments[0] as ts.StringLiteral)).toBe(false);
+  expect(isTranslationMessage(calls[1].arguments[0] as ts.StringLiteral)).toBe(false);
+});
+
+it('recognizes only the typed request fallback passed through errorFromResponse', () => {
+  const source = ts.createSourceFile(
+    'example.ts',
+    "requestJson('请求路径', undefined, 30000, '请求失败（{{value1}}）'); other('请求失败（{{value1}}）');",
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const calls: ts.CallExpression[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node)) calls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  expect(isTranslationMessage(calls[0].arguments[3] as ts.StringLiteral)).toBe(true);
   expect(isTranslationMessage(calls[0].arguments[0] as ts.StringLiteral)).toBe(false);
   expect(isTranslationMessage(calls[1].arguments[0] as ts.StringLiteral)).toBe(false);
 });

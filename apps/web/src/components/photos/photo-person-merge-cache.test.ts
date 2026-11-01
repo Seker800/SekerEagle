@@ -86,10 +86,20 @@ it('removes private merge targets from public filter options as well as director
   const c = new QueryClient();
   const publicOptions = ['eagle', 'owner', 'PHOTO', 'people', 'options', false];
   const privateOptions = ['eagle', 'owner', 'PHOTO', 'people', 'options', true];
-  for (const key of [publicOptions, privateOptions]) c.setQueryData(key, {
-    pages: [{ people: [{ id: 'a' }, { id: 'b' }] }], pageParams: [undefined],
+  for (const key of [publicOptions, privateOptions])
+    c.setQueryData(key, {
+      pages: [{ people: [{ id: 'a' }, { id: 'b' }] }],
+      pageParams: [undefined],
+    });
+  applyPhotoPersonMerge(c, 'owner', {
+    id: 'a',
+    rowVersion: 2,
+    photoCount: 2,
+    mergedIds: ['b'],
+    marksAssetsPrivate: true,
   });
-  applyPhotoPersonMerge(c, 'owner', { id: 'a', rowVersion: 2, photoCount: 2, mergedIds: ['b'], marksAssetsPrivate: true });
   expect(c.getQueryData(publicOptions)).toMatchObject({ pages: [{ people: [] }] });
-  expect(c.getQueryData(privateOptions)).toMatchObject({ pages: [{ people: [{ id: 'a', marksAssetsPrivate: true }] }] });
+  expect(c.getQueryData(privateOptions)).toMatchObject({
+    pages: [{ people: [{ id: 'a', marksAssetsPrivate: true }] }],
+  });
 });

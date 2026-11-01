@@ -1,3 +1,4 @@
+import type { EagleAssetListResponseDto, EagleAssetResponseDto } from './eagle-asset-response.dto';
 import { Prisma } from '@prisma/client';
 import { COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 
@@ -79,7 +80,7 @@ export const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
 
 export type AssetListRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetListInclude }>;
 export type AssetRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetInclude }>;
-export function serializeAsset(asset: AssetRecord) {
+export function serializeAsset(asset: AssetRecord): EagleAssetResponseDto {
   const { annotation, aiTagLinks, colorAnalyses, photoFaces, ...listRecord } = asset;
   const privacyReasons = asset.isPrivate
     ? [
@@ -114,7 +115,7 @@ export function serializeAsset(asset: AssetRecord) {
   };
 }
 
-export function serializeAssetList(asset: AssetListRecord) {
+export function serializeAssetList(asset: AssetListRecord): EagleAssetListResponseDto {
   const { manualTagLinks, ...record } = asset;
   const safe = {
     id: record.id,

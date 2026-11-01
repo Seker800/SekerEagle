@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { applyPhotoPersonMerge } from './photo-person-merge-cache';
 import { ApiError } from '../../lib/api-error';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -41,15 +42,10 @@ export function PhotoPeopleReview({
   preview: (asset: EagleAssetListItem) => string | null;
 }) {
   const client = useQueryClient();
-  const queryKey = [
-    'eagle',
-    ownerId,
-    'PHOTO',
-    'person-review',
+  const queryKey = createEagleQueryKeys(ownerId, 'PHOTO').photoPersonReviewScope(
     includePrivate,
     scopeRevision,
-    'count-first-v3',
-  ];
+  );
   const query = useInfiniteQuery({
     queryKey,
     initialPageParam: undefined as string | undefined,

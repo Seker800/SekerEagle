@@ -4,19 +4,17 @@ import type {
   TaskFamily,
   TaskTransitionEvent,
 } from '@sekereagle/library-core';
-import { fetchWithBrowserSession } from './api-client';
-import { errorFromResponse } from './api-error';
+import { request as requestJson } from './api-client';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 
 export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') {
   async function request<T>(suffix = '', init?: RequestInit, timeoutMs?: number): Promise<T> {
-    const response = await fetchWithBrowserSession(
+    return requestJson<T>(
       libraryApiPath(`/api/eagle/tasks${suffix}`, libraryMode),
       init,
       timeoutMs,
+      '读取任务中心失败（{{value1}}）',
     );
-    if (!response.ok) throw await errorFromResponse(response, '读取任务中心失败（{{value1}}）');
-    return response.json() as Promise<T>;
   }
   return {
     updateEagleTaskPolicy: (policy: { family: TaskFamily; paused: boolean; priority?: number }) =>

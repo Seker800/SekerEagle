@@ -18,6 +18,11 @@ import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
+import { EagleAssetPageResponseDto, EagleAssetResponseDto } from './eagle-asset-response.dto';
+import {
+  EagleOperationResultsResponseDto,
+  EagleOperationSummaryResponseDto,
+} from './eagle-operation-response.dto';
 import { Optional } from '@nestjs/common';
 import { SendEagleAssetsDto } from './eagle.dto';
 import {
@@ -38,7 +43,14 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { ApiCookieAuth, ApiOkResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
+import {
+  ApiCookieAuth,
+  ApiOkResponse,
+  ApiAcceptedResponse,
+  ApiCreatedResponse,
+  ApiTags,
+  ApiHeader,
+} from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { Readable } from 'node:stream';
 import {
@@ -130,6 +142,7 @@ export class EagleController {
     return this.duplicates!.ignore(principal.sub, principal.canViewPrivate, input);
   }
 
+  @ApiCreatedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('operations')
   @UseGuards(BrowserOriginGuard)
   enqueueOperation(
@@ -139,6 +152,7 @@ export class EagleController {
     if (!this.operations) throw new Error('Asset operation service is unavailable');
     return this.operations.enqueue(principal, input);
   }
+  @ApiOkResponse({ type: [EagleOperationSummaryResponseDto] })
   @Get('operations')
   listOperations(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -150,6 +164,7 @@ export class EagleController {
       principal.canViewPrivate && query.publicOnly !== 'true',
     );
   }
+  @ApiOkResponse({ type: EagleOperationResultsResponseDto })
   @Get('operations/:operationId/results')
   operationResults(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -158,6 +173,7 @@ export class EagleController {
   ) {
     return this.operations!.results(principal, id, query);
   }
+  @ApiCreatedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('operations/:operationId/undo')
   @UseGuards(BrowserOriginGuard)
   undoOperation(
@@ -167,6 +183,7 @@ export class EagleController {
   ) {
     return this.operations!.undo(principal, id, input.operationId);
   }
+  @ApiCreatedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('operations/:operationId/retry')
   @UseGuards(BrowserOriginGuard)
   retryOperation(
@@ -176,6 +193,7 @@ export class EagleController {
     if (!this.operations) throw new Error('Asset operation service is unavailable');
     return this.operations.retry(principal, operationId);
   }
+  @ApiCreatedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('operations/:operationId/cancel')
   @UseGuards(BrowserOriginGuard)
   cancelOperation(
@@ -186,6 +204,7 @@ export class EagleController {
     return this.operations.cancel(principal, operationId);
   }
 
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('assets/batch/send')
   @HttpCode(202)
   @UseGuards(BrowserOriginGuard)
@@ -235,8 +254,12 @@ export class EagleController {
   ) {
     return this.eagle.saveEditRecipe(principal.sub, id, input, principal.canViewPrivate);
   }
+  @ApiOkResponse({ type: EagleAssetPageResponseDto })
   @Get('assets')
-  listAssets(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
+  listAssets(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Query() query: ListEagleAssetsDto,
+  ): Promise<EagleAssetPageResponseDto> {
     return this.eagle.listAssets(principal.sub, query, {
       includePrivate: principal.canViewPrivate,
     });
@@ -281,6 +304,7 @@ export class EagleController {
     return this.eagle.locateAsset(principal.sub, assetId, principal.canViewPrivate);
   }
 
+  @ApiOkResponse({ type: EagleAssetResponseDto })
   @Get('assets/:assetId')
   getAsset(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -291,6 +315,7 @@ export class EagleController {
     });
   }
 
+  @ApiOkResponse({ type: EagleAssetResponseDto })
   @Get('trash/:assetId')
   getTrashAsset(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -541,8 +566,12 @@ export class EagleController {
     return this.eagle.setTrash(principal.sub, input.assetIds, true, principal.canViewPrivate);
   }
 
+  @ApiOkResponse({ type: EagleAssetPageResponseDto })
   @Get('trash')
-  listTrash(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
+  listTrash(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Query() query: ListEagleAssetsDto,
+  ): Promise<EagleAssetPageResponseDto> {
     return this.eagle.listAssets(principal.sub, query, {
       trash: true,
       includePrivate: principal.canViewPrivate,

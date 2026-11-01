@@ -119,11 +119,73 @@ export function checkRuntimeBoundaries(sources, parsedTrees = new Map()) {
         }
       }
     });
-    const schema = sources.get('apps/api/prisma/schema.prisma');
-    if (schema)
+    const domainFile = 'apps/api/src/model-ownership.ts';
+    const domainSource = sources.get(domainFile);
+    if (!domainSource) report(domainFile, 'capability-ownership', 'Model ownership is required.');
+    else {
+      const domainTree =
+        parsedTrees.get(domainFile) ??
+        ts.createSourceFile(domainFile, domainSource, ts.ScriptTarget.Latest, true);
+      walk(domainTree, (node) => {
+        if (
+          !ts.isVariableDeclaration(node) ||
+          node.name.getText(domainTree) !== 'PERSISTED_MODEL_OWNERS'
+        )
+          return;
+        const array = unwrap(node.initializer);
+        if (!array || !ts.isArrayLiteralExpression(array)) {
+          report(domainFile, 'capability-ownership', 'Model owners must be explicit records.');
+          return;
+        }
+        const domainIds = new Set(capabilities.keys());
+        for (const entry of array.elements) {
+          if (!ts.isObjectLiteralExpression(entry)) {
+            report(domainFile, 'capability-ownership', 'Register model owners explicitly.');
+            continue;
+          }
+          const values = fields(entry, domainTree),
+            id = values.get('id')?.text;
+          const tables = strings(values.get('tables'));
+          if (!id || domainIds.has(id) || !tables.length)
+            report(
+              domainFile,
+              'capability-ownership',
+              'Domain owners need unique identities and explicit models.',
+            );
+          domainIds.add(id);
+          for (const table of tables) {
+            if (tableOwners.has(table))
+              report(
+                domainFile,
+                'capability-ownership',
+                `Persisted model ${table} has more than one owner.`,
+              );
+            tableOwners.set(table, id);
+          }
+        }
+      });
+    }
+    const schemaFile = 'apps/api/prisma/schema.prisma';
+    const schema = sources.get(schemaFile);
+    if (!schema) report(schemaFile, 'capability-ownership', 'The persisted schema is required.');
+    else {
+      // Ignore comments so examples cannot masquerade as live models.
+      const models = new Set(
+        [
+          ...schema.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu, '').matchAll(/\bmodel\s+(\w+)\s*\{/gu),
+        ].map((match) => match[1]),
+      );
       for (const table of tableOwners.keys())
-        if (!new RegExp(`\\bmodel\\s+${table}\\s*\\{`, 'u').test(schema))
+        if (!models.has(table))
           report(registry, 'capability-ownership', `Unknown persisted model ${table}.`);
+      for (const table of models)
+        if (!tableOwners.has(table))
+          report(
+            schemaFile,
+            'capability-ownership',
+            `Persisted model ${table} needs exactly one capability or domain owner.`,
+          );
+    }
     for (const [id, dependencies] of capabilities) {
       if (dependencies.some((dep) => dep === id || !capabilities.has(dep)))
         report(

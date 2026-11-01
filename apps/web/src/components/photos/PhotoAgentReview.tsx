@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useRef, useState } from 'react';
 import { EagleAssetActionMenu } from '../eagle/EagleAssetActionMenu';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,7 +48,7 @@ const pending = (row: PhotoAgentTaskSummary) =>
 export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }) {
   const { ownerId } = useLibraryWorkspace();
   const client = useQueryClient();
-  const key = ['eagle', ownerId, 'PHOTO', 'agent', includePrivate];
+  const key = createEagleQueryKeys(ownerId, 'PHOTO').photoAgent(includePrivate);
   const [taskId, setTaskId] = useState('');
   const [filter, setFilter] = useState<'pending' | 'done' | 'all'>('pending');
   const tasks = useInfiniteQuery({
@@ -70,7 +71,10 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
   );
   async function refresh() {
     // Invalidate library views for their next visit without waiting for unrelated statistics.
-    await client.invalidateQueries({ queryKey: ['eagle', ownerId], refetchType: 'none' });
+    await client.invalidateQueries({
+      queryKey: createEagleQueryKeys(ownerId, 'PHOTO').owner,
+      refetchType: 'none',
+    });
     await Promise.all([
       client.invalidateQueries({ queryKey: [...key, 'tasks'] }),
       ...(taskId
@@ -593,7 +597,7 @@ function RequestHistory({
   const { ownerId } = useLibraryWorkspace();
   const [historyOpen, setHistoryOpen] = useState(false);
   const history = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'agent', includePrivate, 'history', task.id],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoAgentHistory(includePrivate, task.id),
     queryFn: ({ pageParam, signal }) => getPhotoAgentHistory(task.id, pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next ?? undefined,

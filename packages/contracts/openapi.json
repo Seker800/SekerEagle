@@ -495,7 +495,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -520,7 +527,17 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -563,7 +580,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationResultsResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -599,7 +623,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -625,7 +656,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -651,7 +689,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -678,7 +723,14 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1087,7 +1139,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetPageResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1275,7 +1334,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1335,7 +1401,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1976,7 +2049,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetPageResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4291,7 +4371,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4316,7 +4403,17 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4359,7 +4456,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationResultsResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4395,7 +4499,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4421,7 +4532,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4447,7 +4565,14 @@
         ],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4474,7 +4599,14 @@
         },
         "responses": {
           "202": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4883,7 +5015,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetPageResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5071,7 +5210,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5131,7 +5277,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5772,7 +5925,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleAssetPageResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -8664,6 +8824,155 @@
         },
         "required": ["operationId", "kind", "assetIds"]
       },
+      "EagleOperationErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          }
+        },
+        "required": ["code", "count"]
+      },
+      "EagleOperationSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "undoOf": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "SEND",
+              "TRASH",
+              "RESTORE",
+              "EMPTY_TRASH",
+              "DUPLICATE_SCAN",
+              "DUPLICATE_CLEANUP"
+            ]
+          },
+          "libraryMode": {
+            "type": "string",
+            "enum": ["MATERIAL", "PHOTO"]
+          },
+          "total": {
+            "type": "number"
+          },
+          "completed": {
+            "type": "number"
+          },
+          "skipped": {
+            "type": "number"
+          },
+          "failed": {
+            "type": "number"
+          },
+          "queued": {
+            "type": "number"
+          },
+          "running": {
+            "type": "number"
+          },
+          "cancelled": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["QUEUED", "RUNNING", "COMPLETED", "STOPPED"]
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleOperationErrorResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "libraryMode",
+          "total",
+          "completed",
+          "failed",
+          "queued",
+          "running",
+          "cancelled",
+          "state",
+          "errors"
+        ]
+      },
+      "EagleMembershipResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "rowVersion": {
+            "type": "number",
+            "nullable": true
+          },
+          "state": {
+            "type": "string",
+            "enum": ["ACTIVE", "TRASH", "UNAVAILABLE"]
+          }
+        },
+        "required": ["id", "rowVersion", "state"]
+      },
+      "EagleOperationReceiptResponseDto": {
+        "type": "object",
+        "properties": {
+          "groupSignature": {
+            "type": "string"
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": ["assetIds", "status", "errorCode"]
+      },
+      "EagleOperationResultsResponseDto": {
+        "type": "object",
+        "properties": {
+          "membership": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleMembershipResponseDto"
+            }
+          },
+          "operation": {
+            "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleOperationReceiptResponseDto"
+            }
+          },
+          "nextCursor": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": ["membership", "operation", "revision", "receipts", "nextCursor"]
+      },
       "UndoAssetOperationDto": {
         "type": "object",
         "properties": {
@@ -8836,15 +9145,145 @@
         },
         "required": ["mediaRevision", "recipe"]
       },
-      "CountEagleAssetsDto": {
+      "EagleLivePhotoMotionResponseDto": {
         "type": "object",
         "properties": {
-          "query": {
-            "type": "object",
-            "additionalProperties": true
+          "assetId": {
+            "type": "string"
+          },
+          "renditionId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "number"
           }
         },
-        "required": ["query"]
+        "required": ["assetId", "renditionId", "revision"]
+      },
+      "EaglePhotoMetadataResponseDto": {
+        "type": "object",
+        "properties": {
+          "captureMetadataInherited": {
+            "type": "boolean"
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "capturedLocal": {
+            "type": "string",
+            "nullable": true
+          },
+          "captureTimeZoneKnown": {
+            "type": "boolean"
+          },
+          "cameraMake": {
+            "type": "string",
+            "nullable": true
+          },
+          "cameraModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "lensModel": {
+            "type": "string",
+            "nullable": true
+          },
+          "focalLength": {
+            "type": "number",
+            "nullable": true
+          },
+          "aperture": {
+            "type": "number",
+            "nullable": true
+          },
+          "exposureSeconds": {
+            "type": "number",
+            "nullable": true
+          },
+          "iso": {
+            "type": "number",
+            "nullable": true
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "altitude": {
+            "type": "number",
+            "nullable": true
+          },
+          "sharpnessScore": {
+            "type": "number",
+            "nullable": true
+          },
+          "perceptualHash": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "capturedAt",
+          "capturedLocal",
+          "captureTimeZoneKnown",
+          "cameraMake",
+          "cameraModel",
+          "lensModel",
+          "focalLength",
+          "aperture",
+          "exposureSeconds",
+          "iso",
+          "latitude",
+          "longitude",
+          "altitude",
+          "sharpnessScore",
+          "perceptualHash"
+        ]
+      },
+      "EaglePhotoLocationResponseDto": {
+        "type": "object",
+        "properties": {
+          "assetRevision": {
+            "type": "number"
+          },
+          "cityId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string",
+            "enum": ["INFERRED", "MANUAL"]
+          }
+        },
+        "required": [
+          "assetRevision",
+          "cityId",
+          "name",
+          "country",
+          "region",
+          "latitude",
+          "longitude",
+          "source"
+        ]
       },
       "EagleRenditionResponseDto": {
         "type": "object",
@@ -8878,6 +9317,275 @@
           }
         },
         "required": ["id", "variant", "kind", "revision", "mimeType", "byteSize", "width", "height"]
+      },
+      "EagleManualTagResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": ["id", "name", "color"]
+      },
+      "EagleAssetListResponseDto": {
+        "type": "object",
+        "properties": {
+          "livePhotoMotion": {
+            "$ref": "#/components/schemas/EagleLivePhotoMotionResponseDto"
+          },
+          "chronologicalAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "photoMetadata": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EaglePhotoMetadataResponseDto"
+              }
+            ]
+          },
+          "photoLocation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EaglePhotoLocationResponseDto"
+              }
+            ]
+          },
+          "libraryMode": {
+            "type": "string",
+            "enum": ["MATERIAL", "PHOTO"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "number",
+            "nullable": true
+          },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": ["PROCESSING", "READY", "FAILED"]
+          },
+          "mediaErrorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaRevision": {
+            "type": "number"
+          },
+          "rowVersion": {
+            "type": "number"
+          },
+          "rating": {
+            "type": "number",
+            "nullable": true,
+            "enum": [1, 2, 3, 4, 5]
+          },
+          "isPrivate": {
+            "type": "boolean"
+          },
+          "libraryAddedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "originalUrl": {
+            "type": "string"
+          },
+          "renditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleRenditionResponseDto"
+            }
+          },
+          "manualTags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleManualTagResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "originalName",
+          "displayName",
+          "mimeType",
+          "format",
+          "byteSize",
+          "width",
+          "height",
+          "durationMs",
+          "lifecycleStatus",
+          "mediaErrorCode",
+          "mediaRevision",
+          "rowVersion",
+          "rating",
+          "libraryAddedAt",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "renditions",
+          "manualTags"
+        ]
+      },
+      "EaglePhotoStackResponseDto": {
+        "type": "object",
+        "properties": {
+          "timelineAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "processingAssetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "bestAssetId": {
+            "type": "string"
+          },
+          "bestSelectedByUser": {
+            "type": "boolean"
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cover": {
+            "$ref": "#/components/schemas/EagleAssetListResponseDto"
+          }
+        },
+        "required": ["id", "bestAssetId", "bestSelectedByUser", "assetIds", "cover"]
+      },
+      "EagleColorCoverageResponseDto": {
+        "type": "object",
+        "properties": {
+          "eligible": {
+            "type": "number"
+          },
+          "completed": {
+            "type": "number"
+          },
+          "percentage": {
+            "type": "number"
+          },
+          "processorVersion": {
+            "type": "string"
+          }
+        },
+        "required": ["eligible", "completed", "percentage", "processorVersion"]
+      },
+      "EagleImageSearchResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["READY", "UNAVAILABLE"]
+          },
+          "spaceId": {
+            "type": "string"
+          }
+        },
+        "required": ["status", "spaceId"]
+      },
+      "EagleAssetPageResponseDto": {
+        "type": "object",
+        "properties": {
+          "previousCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "photoStacks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EaglePhotoStackResponseDto"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleAssetListResponseDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "colorCoverage": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EagleColorCoverageResponseDto"
+              }
+            ]
+          },
+          "imageSearch": {
+            "$ref": "#/components/schemas/EagleImageSearchResponseDto"
+          }
+        },
+        "required": ["items", "nextCursor", "colorCoverage"]
+      },
+      "CountEagleAssetsDto": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["query"]
       },
       "EagleAssetUpdateResponseDto": {
         "type": "object",
@@ -8965,6 +9673,295 @@
           }
         },
         "required": ["days", "total"]
+      },
+      "EaglePrivacyReasonResponseDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["TAG", "PERSON"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": ["kind", "id", "name"]
+      },
+      "EagleAnnotationResponseDto": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "sourceUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": ["color", "description", "sourceUrl"]
+      },
+      "EagleAiTagResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "HIDDEN", "REJECTED"]
+          }
+        },
+        "required": ["id", "name", "confidence", "status"]
+      },
+      "EagleColorSwatchResponseDto": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "number"
+          },
+          "hex": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number"
+          },
+          "labL": {
+            "type": "number"
+          },
+          "labA": {
+            "type": "number"
+          },
+          "labB": {
+            "type": "number"
+          }
+        },
+        "required": ["rank", "hex", "weight", "labL", "labA", "labB"]
+      },
+      "EagleColorAnalysisResponseDto": {
+        "type": "object",
+        "properties": {
+          "assetRevision": {
+            "type": "number"
+          },
+          "processorVersion": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "RUNNING", "COMPLETED", "FAILED"]
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "swatches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleColorSwatchResponseDto"
+            }
+          }
+        },
+        "required": [
+          "assetRevision",
+          "processorVersion",
+          "status",
+          "lastError",
+          "completedAt",
+          "swatches"
+        ]
+      },
+      "EagleAssetResponseDto": {
+        "type": "object",
+        "properties": {
+          "livePhotoMotion": {
+            "$ref": "#/components/schemas/EagleLivePhotoMotionResponseDto"
+          },
+          "chronologicalAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "photoMetadata": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EaglePhotoMetadataResponseDto"
+              }
+            ]
+          },
+          "photoLocation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EaglePhotoLocationResponseDto"
+              }
+            ]
+          },
+          "libraryMode": {
+            "type": "string",
+            "enum": ["MATERIAL", "PHOTO"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          },
+          "durationMs": {
+            "type": "number",
+            "nullable": true
+          },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": ["PROCESSING", "READY", "FAILED"]
+          },
+          "mediaErrorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "mediaRevision": {
+            "type": "number"
+          },
+          "rowVersion": {
+            "type": "number"
+          },
+          "rating": {
+            "type": "number",
+            "nullable": true,
+            "enum": [1, 2, 3, 4, 5]
+          },
+          "isPrivate": {
+            "type": "boolean"
+          },
+          "libraryAddedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "originalUrl": {
+            "type": "string"
+          },
+          "renditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleRenditionResponseDto"
+            }
+          },
+          "manualTags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleManualTagResponseDto"
+            }
+          },
+          "privacyReasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EaglePrivacyReasonResponseDto"
+            }
+          },
+          "annotation": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EagleAnnotationResponseDto"
+              }
+            ]
+          },
+          "aiTags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleAiTagResponseDto"
+            }
+          },
+          "colorAnalysis": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/EagleColorAnalysisResponseDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "originalName",
+          "displayName",
+          "mimeType",
+          "format",
+          "byteSize",
+          "width",
+          "height",
+          "durationMs",
+          "lifecycleStatus",
+          "mediaErrorCode",
+          "mediaRevision",
+          "rowVersion",
+          "rating",
+          "libraryAddedAt",
+          "createdAt",
+          "updatedAt",
+          "deletedAt",
+          "renditions",
+          "manualTags",
+          "annotation",
+          "aiTags",
+          "colorAnalysis"
+        ]
       },
       "BatchUpdateEagleAssetsDto": {
         "type": "object",

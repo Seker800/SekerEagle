@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { IconStar, IconStarFilled, IconLayersSubtract } from '@tabler/icons-react';
 import { PhotoStackFilmstrip, stackAssetKey } from './PhotoStackFilmstrip';
 import { needsEagleImagePyramid } from '../eagle/eagle-media-sources';
@@ -34,7 +35,7 @@ export function PhotoStackLightbox({
   });
   const displayed = currentId === stack.cover.id ? stack.cover : asset.data;
   const pyramid = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'pyramid', currentId],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').pyramid(currentId),
     queryFn: ({ signal }) => api.getEaglePyramidDescriptor('', currentId, signal),
     enabled: !!displayed && needsEagleImagePyramid(displayed.width, displayed.height),
     retry: false,
@@ -52,7 +53,7 @@ export function PhotoStackLightbox({
     setError(null);
     try {
       await updatePhotoGroup(stack.id, { bestAssetId: currentId });
-      await client.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO'] });
+      await client.invalidateQueries({ queryKey: createEagleQueryKeys(ownerId, 'PHOTO').root });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
@@ -103,7 +104,9 @@ export function PhotoStackLightbox({
               setError(null);
               void updatePhotoGroup(stack.id, { dismissed: true })
                 .then(async () => {
-                  await client.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO'] });
+                  await client.invalidateQueries({
+                    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').root,
+                  });
                   onClose();
                 })
                 .catch((reason: unknown) =>

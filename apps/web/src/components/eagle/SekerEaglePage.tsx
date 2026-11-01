@@ -36,7 +36,6 @@ import {
   getPhotoTimelineMonth,
 } from '../photos/photo-timeline-sections';
 import { EagleSendAssetsMenuItem } from './EagleSendAssetsMenuItem';
-import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
 import { collapsePhotoStacks } from '../photos/photo-stacks';
 import { PhotoStackLightbox } from '../photos/PhotoStackLightbox';
@@ -95,12 +94,11 @@ import {
 } from '@tabler/icons-react';
 import sekerEagleLogo from '../../assets/seker-eagle-logo.svg';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
+import { useEagleAssetPreview } from './useEagleAssetPreview';
 import {
   type EagleAsset,
   type EagleAssetListItem,
   type EagleAssetFilters,
-  type EagleAssetChanges,
   type EagleAssetVersion,
   type EagleManualTag,
   type EagleSmartFolder,
@@ -141,7 +139,9 @@ import {
 } from './EagleQuickFilterBar';
 import { EagleTagPage } from './EagleTagPage';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
-import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
+import type { EagleSelectionGesture } from './eagle-selection';
+import { useEagleMetadataDraft } from './useEagleMetadataDraft';
+import { useEagleSelectionController } from './useEagleSelectionController';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
 import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
 import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
@@ -191,10 +191,6 @@ interface SekerEaglePageProps {
   privacyRulesRevision?: number;
   onPrivacyRulesChange?: () => void;
 }
-type EagleAssetContextMenu = {
-  x: number;
-  y: number;
-};
 type EagleTagPickerState = {
   mode: 'add' | 'remove';
   assetIds: string[];
@@ -336,11 +332,6 @@ export function SekerEaglePage({
   const pageSentinelRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
   const importDragActiveRef = useRef(false);
-  const selectionAnchorIdRef = useRef<string | null>(null);
-  const editorAssetIdRef = useRef<string | null>(null);
-  const editorDirtyRef = useRef(false);
-  const editorDirtyFieldsRef = useRef<Set<keyof EagleAssetChanges>>(new Set());
-  const editorRevisionRef = useRef(0);
   const privacyStateRef = useRef(
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
@@ -368,24 +359,22 @@ export function SekerEaglePage({
   const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
-  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
-  const [previewContext, setPreviewContext] = useState<{
-    scope: string;
-    items: EagleAssetListItem[];
-  } | null>(null);
-  const [isBatchSelection, setIsBatchSelection] = useState(
-    () => !privateVisible && (workspaceCache.browse?.isBatchSelection ?? false),
-  );
   const compact = useCompactLayout();
   const [mobileMore, setMobileMore] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(
-    () => !privateVisible && (workspaceCache.browse?.selectionMode ?? false),
+  const selection = useEagleSelectionController(
+    !privateVisible ? (workspaceCache.browse ?? {}) : {},
   );
-  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>(() =>
-    !privateVisible ? [...(workspaceCache.browse?.selectedAssetIds ?? [])] : [],
-  );
-  const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
+  const {
+    selectedAssetIds,
+    selectedAssetId,
+    isBatchSelection,
+    selectionMode,
+    assetContextMenu,
+    setSelectionMode,
+    setAssetContextMenu,
+    clear: clearAssetSelection,
+  } = selection;
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
   const [filterResetKey, setFilterResetKey] = useState(0);
   const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250, filterResetKey);
@@ -402,9 +391,6 @@ export function SekerEaglePage({
     () => !privateVisible && (workspaceCache.browse?.filtersExpanded ?? false),
   );
   const filterPanelId = useId();
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(() =>
-    !privateVisible ? (workspaceCache.browse?.selectedAssetId ?? null) : null,
-  );
   const [isInspectorVisible, setIsInspectorVisible] = useState(
     () => !privateVisible && (workspaceCache.browse?.isInspectorVisible ?? false),
   );
@@ -415,11 +401,10 @@ export function SekerEaglePage({
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
   const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
-  const [editorTitle, setEditorTitle] = useState('');
-  const [editorDescription, setEditorDescription] = useState('');
-  const [editorSourceUrl, setEditorSourceUrl] = useState('');
-  const imagePreview = useImagePreviewState();
   const editingScope = `${storeScope}:${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
+  const metadataDraft = useEagleMetadataDraft(editingScope);
+  const imagePreview = useEagleAssetPreview(editingScope);
+  const previewAssetId = imagePreview.assetId;
   const photoEditing = useEaglePhotoEditing({
     accessToken,
     ownerId,
@@ -471,8 +456,6 @@ export function SekerEaglePage({
       setLibraryView('ACTIVE');
       setPhotoView('timeline');
       setTimelineCursor('');
-      setPreviewAssetId(null);
-      setPreviewContext(null);
       imagePreview.closePreview();
       setAssetContextMenu(null);
     },
@@ -632,11 +615,7 @@ export function SekerEaglePage({
   useEffect(() => {
     if (previousSelectionScope.current === selectionScope) return;
     previousSelectionScope.current = selectionScope;
-    setSelectedAssetId(null);
-    setSelectedAssetIds([]);
-    setAssetContextMenu(null);
-    setIsBatchSelection(false);
-    selectionAnchorIdRef.current = null;
+    clearAssetSelection({ preserveMode: true });
   }, [selectionScope]);
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys, {
@@ -646,7 +625,7 @@ export function SekerEaglePage({
     });
   useAssetOperationProgress(privateVisible, true);
   const vectorSummaryQuery = useQuery({
-    queryKey: [...queryKeys.root, 'vector-summary'],
+    queryKey: queryKeys.vectorSummary,
     queryFn: fetchEagleVectorSummary,
     staleTime: 60_000,
     enabled: true,
@@ -668,15 +647,8 @@ export function SekerEaglePage({
     thumbnailScheduler.clear({ abortActive: true });
     thumbnailLoadService.dispose();
     assetStore.clear();
-    setPreviewAssetId(null);
-    setPreviewContext(null);
     imagePreview.closePreview();
-    setSelectedAssetIds([]);
-    setSelectedAssetId(null);
-    setIsBatchSelection(false);
-    setSelectionMode(false);
-    setAssetContextMenu(null);
-    selectionAnchorIdRef.current = null;
+    clearAssetSelection();
     void queryClient.resetQueries({ queryKey: queryKeys.root });
   }, [
     workspaceCache,
@@ -706,24 +678,12 @@ export function SekerEaglePage({
     updateSmartFolderMutation,
     moveSmartFolderMutation,
   } = useEagleMutations(accessToken, queryKeys, {
-    onMetadataSaved: (assetId, revision) => {
-      if (editorAssetIdRef.current === assetId && editorRevisionRef.current === revision) {
-        editorDirtyRef.current = false;
-        editorDirtyFieldsRef.current.clear();
-      }
-    },
+    onMetadataSaved: metadataDraft.saved,
     onBatchTagsApplied: () => setTagPicker(null),
     onAssetPrivacyChanged: resetAssetPrivacyState,
     onOperationStarted: () => {
-      setPreviewAssetId(null);
-      setPreviewContext(null);
       imagePreview.closePreview();
-      setSelectedAssetIds([]);
-      setSelectedAssetId(null);
-      setIsBatchSelection(false);
-      setSelectionMode(false);
-      setAssetContextMenu(null);
-      selectionAnchorIdRef.current = null;
+      clearAssetSelection();
     },
     onSmartFolderCreated: () => setIsSmartFolderDialogOpen(false),
     onSmartFolderUpdated: (folder, changes) => {
@@ -822,11 +782,7 @@ export function SekerEaglePage({
       assetsQuery.isPlaceholderData
     )
       return;
-    setSelectedAssetIds((current) => {
-      const next = current.filter((id) => assetsById.has(id));
-      return next.length === current.length ? current : next;
-    });
-    if (selectedAssetId && !assetsById.has(selectedAssetId)) setSelectedAssetId(null);
+    selection.reconcile(new Set(assetsById.keys()));
   }, [
     isAssetView,
     showsAssetControls,
@@ -1029,8 +985,7 @@ export function SekerEaglePage({
   const manualTagGroups = manualTagGroupsQuery.data ?? [];
   const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];
-  const previewScopeValid = !previewContext || previewContext.scope === editingScope;
-  const previewAssets = previewContext ? (previewScopeValid ? previewContext.items : []) : assets;
+  const previewAssets = imagePreview.context ?? assets;
   const previewAsset = previewAssets.find((asset) => asset.id === previewAssetId) ?? null;
   const previewImageAsset = imagePreview.previewImage?.assetId
     ? (previewAssets.find((asset) => asset.id === imagePreview.previewImage?.assetId) ?? null)
@@ -1039,7 +994,7 @@ export function SekerEaglePage({
     previewImageAsset && needsEagleImagePyramid(previewImageAsset.width, previewImageAsset.height),
   );
   const previewPyramidQuery = useQuery({
-    queryKey: [...queryKeys.root, 'pyramid', imagePreview.previewImage?.assetId ?? 'none'],
+    queryKey: queryKeys.pyramid(imagePreview.previewImage?.assetId ?? 'none'),
     queryFn: ({ signal }) =>
       getEaglePyramidDescriptor(accessToken, imagePreview.previewImage!.assetId!, signal),
     enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
@@ -1072,49 +1027,25 @@ export function SekerEaglePage({
   const color = quickFilters.color;
   useEffect(() => {
     if (!isInspectorVisible || !selectedAsset) return;
-    const isNewAsset = editorAssetIdRef.current !== selectedAsset.id;
-    if (isNewAsset) {
-      metadataMutation.reset();
-      editorAssetIdRef.current = selectedAsset.id;
-      editorDirtyRef.current = false;
-      editorDirtyFieldsRef.current.clear();
-      editorRevisionRef.current = 0;
-    } else if (editorDirtyRef.current) {
-      return;
-    }
-    setEditorTitle(selectedAsset.displayName);
-    setEditorDescription(selectedAsset.annotation?.description ?? '');
-    setEditorSourceUrl(selectedAsset.annotation?.sourceUrl ?? '');
+    if (metadataDraft.assetId !== selectedAsset.id) metadataMutation.reset();
+    metadataDraft.load(selectedAsset);
   }, [
     isInspectorVisible,
     selectedAsset?.id,
     selectedAsset?.updatedAt,
     selectedAssetQuery.dataUpdatedAt,
+    editingScope,
   ]);
   const saveEditedMetadata = () => {
     if (
       !selectedAsset ||
       isSelectedAssetReadOnly ||
-      !editorDirtyRef.current ||
-      !editorTitle.trim() ||
       metadataFormRef.current?.checkValidity() === false
-    ) {
+    )
       return;
-    }
-    const input: Pick<EagleAssetChanges, 'displayName' | 'description' | 'sourceUrl'> = {};
-    if (editorDirtyFieldsRef.current.has('displayName')) input.displayName = editorTitle;
-    if (editorDirtyFieldsRef.current.has('description')) {
-      input.description = editorDescription.trim() || null;
-    }
-    if (editorDirtyFieldsRef.current.has('sourceUrl')) {
-      input.sourceUrl = editorSourceUrl.trim() || null;
-    }
-    metadataMutation.mutate({
-      assetId: selectedAsset.id,
-      assets: selectedAssetVersions,
-      revision: editorRevisionRef.current,
-      input,
-    });
+    const submission = metadataDraft.submission();
+    if (submission?.assetId === selectedAsset.id)
+      metadataMutation.mutate({ ...submission, assets: selectedAssetVersions });
   };
   useEffect(
     () => () => {
@@ -1180,41 +1111,20 @@ export function SekerEaglePage({
     ) {
       resetFilters();
     }
-    setSelectedAssetIds([]);
-    setSelectedAssetId(null);
-    setIsBatchSelection(false);
-    setSelectionMode(false);
-    setAssetContextMenu(null);
+    clearAssetSelection();
     setTagPicker(null);
-    selectionAnchorIdRef.current = null;
   };
   const changeLibraryView = (view: EagleLibraryView) => navigateLibrary({ view });
   const openLibraryRoot = (photoView: EaglePhotoView = 'timeline') =>
     navigateLibrary({ view: 'ACTIVE', photoView });
   const applySmartFolder = (folder: EagleSmartFolder) =>
     navigateLibrary({ view: 'SMART_FOLDER', folder });
-  const selectAsset = (assetId: string, gesture: EagleSelectionGesture) => {
-    const nextSelection = applyEagleSelection({
-      orderedIds: assets.map((asset) => asset.id),
-      selectedIds: selectedAssetIds,
-      activeId: selectedAssetId,
-      anchorId: selectionAnchorIdRef.current,
-      clickedId: assetId,
+  const selectAsset = (assetId: string, gesture: EagleSelectionGesture) =>
+    selection.select(
+      assets.map((asset) => asset.id),
+      assetId,
       gesture,
-    });
-    setSelectedAssetIds(nextSelection.selectedIds);
-    setSelectedAssetId(nextSelection.activeId);
-    setIsBatchSelection(nextSelection.isBatchSelection);
-    selectionAnchorIdRef.current = nextSelection.anchorId;
-  };
-  const clearAssetSelection = useCallback(() => {
-    setSelectedAssetIds([]);
-    setSelectedAssetId(null);
-    setIsBatchSelection(false);
-    setSelectionMode(false);
-    setAssetContextMenu(null);
-    selectionAnchorIdRef.current = null;
-  }, []);
+    );
   useEffect(() => {
     if (tagPicker) return undefined;
     if (!selectionMode && !isBatchSelection && !assetContextMenu) return undefined;
@@ -1399,31 +1309,15 @@ export function SekerEaglePage({
   });
   const openAssetPreview = (asset: EagleAssetListItem, context?: EagleAssetListItem[]) => {
     const items = context ?? (assetsById.has(asset.id) ? [] : [asset]);
-    setPreviewContext(items.length ? { scope: editingScope, items } : null);
-    if (photoStacks.some((stack) => stack.assetIds.includes(asset.id))) {
-      setPreviewAssetId(asset.id);
-      return;
-    }
-    if (isCameraVideoMime(asset.mimeType)) {
-      setPreviewAssetId(asset.id);
-      return;
-    }
-    const src = getEaglePreviewContentUrl(asset);
-    if (src) {
+    if (
+      imagePreview.open(
+        asset,
+        items,
+        photoStacks.some((stack) => stack.assetIds.includes(asset.id)),
+      ) === 'image'
+    )
       preloadEagleImageViewer();
-      imagePreview.setPreviewImage({
-        src,
-        alt: asset.displayName,
-        assetId: asset.id,
-        motionSrc: getEagleLivePhotoContentUrl(asset),
-      });
-    }
   };
-  useEffect(() => {
-    setPreviewContext(null);
-    setPreviewAssetId(null);
-    imagePreview.closePreview();
-  }, [editingScope, imagePreview.closePreview]);
   const previewNavigation = useEaglePreviewNavigation(
     previewAssets,
     imagePreview.previewImage,
@@ -2315,7 +2209,7 @@ export function SekerEaglePage({
                     (assetsQuery.isFetching && !assetsQuery.isFetchingNextPage)
                   }
                   data-bidirectional={Boolean(browserCursor)}
-                  onClick={clearAssetSelection}
+                  onClick={() => clearAssetSelection()}
                   onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
                 >
                   <div className={styles.scrollContent}>
@@ -2634,12 +2528,9 @@ export function SekerEaglePage({
                           aria-label={t('素材标题')}
                           maxLength={255}
                           disabled={isSelectedAssetReadOnly}
-                          value={editorTitle}
+                          value={metadataDraft.values.displayName}
                           onChange={(event) => {
-                            editorDirtyRef.current = true;
-                            editorDirtyFieldsRef.current.add('displayName');
-                            editorRevisionRef.current += 1;
-                            setEditorTitle(event.target.value);
+                            metadataDraft.change('displayName', event.target.value);
                           }}
                           onBlur={saveEditedMetadata}
                         />
@@ -2775,12 +2666,9 @@ export function SekerEaglePage({
                         maxLength={4000}
                         disabled={isSelectedAssetReadOnly}
                         rows={4}
-                        value={editorDescription}
+                        value={metadataDraft.values.description}
                         onChange={(event) => {
-                          editorDirtyRef.current = true;
-                          editorDirtyFieldsRef.current.add('description');
-                          editorRevisionRef.current += 1;
-                          setEditorDescription(event.target.value);
+                          metadataDraft.change('description', event.target.value);
                         }}
                         onBlur={saveEditedMetadata}
                       />
@@ -2793,12 +2681,9 @@ export function SekerEaglePage({
                         disabled={isSelectedAssetReadOnly}
                         placeholder="https://"
                         type="url"
-                        value={editorSourceUrl}
+                        value={metadataDraft.values.sourceUrl}
                         onChange={(event) => {
-                          editorDirtyRef.current = true;
-                          editorDirtyFieldsRef.current.add('sourceUrl');
-                          editorRevisionRef.current += 1;
-                          setEditorSourceUrl(event.target.value);
+                          metadataDraft.change('sourceUrl', event.target.value);
                         }}
                         onBlur={(event) => {
                           if (event.currentTarget.checkValidity()) saveEditedMetadata();
@@ -2811,7 +2696,7 @@ export function SekerEaglePage({
                       {' ' + t('正在自动保存…') + ' '}
                     </p>
                   )}
-                  {metadataMutation.isSuccess && !editorDirtyRef.current && (
+                  {metadataMutation.isSuccess && !metadataDraft.dirty && (
                     <p className={styles.saveFeedback} role="status">
                       {' ' + t('已自动保存') + ' '}
                     </p>
@@ -2966,11 +2851,7 @@ export function SekerEaglePage({
                 label={libraryMode === 'PHOTO' ? t('发送到素材') : t('发送到照片')}
                 disabled={selectedTransferAssets.some((asset) => asset.lifecycleStatus !== 'READY')}
                 onQueued={() => {
-                  setAssetContextMenu(null);
-                  setSelectedAssetIds([]);
-                  setSelectedAssetId(null);
-                  setIsBatchSelection(false);
-                  setSelectionMode(false);
+                  clearAssetSelection();
                 }}
               />
             )}
@@ -3143,7 +3024,7 @@ export function SekerEaglePage({
           stack={previewStack}
           onEdit={libraryView === 'TRASH' ? undefined : openPhotoEditor}
           onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
-          onClose={() => setPreviewAssetId(null)}
+          onClose={imagePreview.closePreview}
         />
       ) : (
         previewAsset && (
@@ -3151,11 +3032,11 @@ export function SekerEaglePage({
             asset={previewAsset}
             onEdit={libraryView === 'TRASH' ? undefined : openPhotoEditor}
             onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
-            onClose={() => setPreviewAssetId(null)}
+            onClose={imagePreview.closePreview}
           />
         )
       )}
-      {imagePreview.previewImage && previewScopeValid ? (
+      {imagePreview.previewImage ? (
         <EagleImageViewer
           asset={previewImageAsset ?? undefined}
           readOnly={libraryView === 'TRASH'}

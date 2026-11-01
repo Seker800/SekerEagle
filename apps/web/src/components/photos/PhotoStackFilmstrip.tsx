@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronLeft, IconChevronRight, IconPhoto, IconStarFilled } from '@tabler/icons-react';
@@ -7,7 +8,7 @@ import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { t } from '../../i18n';
 import styles from './PhotoStackFilmstrip.module.css';
 export const stackAssetKey = (ownerId: string, assetId: string) =>
-  ['eagle', ownerId, 'PHOTO', 'stack-asset', assetId] as const;
+  createEagleQueryKeys(ownerId, 'PHOTO').photoStackAsset(assetId);
 export function PhotoStackFilmstrip({
   stack,
   selectedId,

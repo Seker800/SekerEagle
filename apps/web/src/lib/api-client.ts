@@ -1,3 +1,4 @@
+import type { MessageId } from '../i18n';
 import { errorFromResponse } from './api-error';
 const REFRESH_PATH = '/api/auth/refresh';
 const NON_REFRESHABLE_PATHS = new Set(['/api/auth/login', REFRESH_PATH]);
@@ -76,7 +77,12 @@ export async function fetchWithBrowserSession(
   if (epoch !== authEpoch || loggingOut) sessionEnded();
   return retry;
 }
-export async function request<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
+export async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+  fallback?: MessageId,
+): Promise<T> {
   const response = await fetchWithBrowserSession(
     path,
     {
@@ -86,7 +92,9 @@ export async function request<T>(path: string, init?: RequestInit, timeoutMs?: n
     timeoutMs,
   );
   if (!response.ok) {
-    throw await errorFromResponse(response, '请求失败（{{value1}}）');
+    throw await (fallback
+      ? errorFromResponse(response, fallback)
+      : errorFromResponse(response, '请求失败（{{value1}}）'));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;

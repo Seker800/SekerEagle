@@ -8,17 +8,23 @@ export interface PreviewImage {
 }
 
 export function useImagePreviewState() {
-  const [previewImage, setPreviewImageInner] = useState<PreviewImage | null>(null);
+  const [previewImage, setPreviewImage] = useState<PreviewImage | null>(null);
+  const closePreview = useCallback(() => setPreviewImage(null), []);
+  useImagePreviewLifecycle(previewImage, closePreview);
+  return { closePreview, previewImage, setPreviewImage };
+}
 
-  const setPreviewImage = useCallback((next: PreviewImage | null) => {
-    setPreviewImageInner((current) => {
-      if (current?.src.startsWith('blob:') && current.src !== next?.src) {
-        URL.revokeObjectURL(current.src);
-      }
-      return next;
-    });
-  }, []);
-
+/** Shared image resource lifecycle for standalone and library preview owners. */
+export function useImagePreviewLifecycle(
+  previewImage: PreviewImage | null,
+  closePreview: () => void,
+) {
+  useEffect(
+    () => () => {
+      if (previewImage?.src.startsWith('blob:')) URL.revokeObjectURL(previewImage.src);
+    },
+    [previewImage?.src],
+  );
   useEffect(() => {
     if (!previewImage) {
       return;
@@ -29,7 +35,7 @@ export function useImagePreviewState() {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setPreviewImage(null);
+        closePreview();
       }
     };
 
@@ -38,15 +44,5 @@ export function useImagePreviewState() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [previewImage, setPreviewImage]);
-
-  const closePreview = useCallback(() => {
-    setPreviewImage(null);
-  }, [setPreviewImage]);
-
-  return {
-    closePreview,
-    previewImage,
-    setPreviewImage,
-  };
+  }, [previewImage !== null, closePreview]);
 }

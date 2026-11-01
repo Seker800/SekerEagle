@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
@@ -6,7 +7,7 @@ import styles from './PhotoAgentReview.module.css';
 
 export function PhotoAgentInstructions({ ownerId }: { ownerId: string }) {
   const client = useQueryClient();
-  const key = ['eagle', ownerId, 'PHOTO', 'agent', 'instructions'];
+  const key = createEagleQueryKeys(ownerId, 'PHOTO').photoAgentInstructions;
   const query = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => getPhotoAgentInstructions(signal),

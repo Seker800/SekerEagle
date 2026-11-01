@@ -3861,6 +3861,47 @@ export interface components {
       kind: 'SEND' | 'TRASH' | 'RESTORE' | 'EMPTY_TRASH';
       assetIds: string[];
     };
+    EagleOperationErrorResponseDto: {
+      code: string;
+      count: number;
+    };
+    EagleOperationSummaryResponseDto: {
+      undoOf?: string;
+      id: string;
+      /** @enum {string} */
+      kind: 'SEND' | 'TRASH' | 'RESTORE' | 'EMPTY_TRASH' | 'DUPLICATE_SCAN' | 'DUPLICATE_CLEANUP';
+      /** @enum {string} */
+      libraryMode: 'MATERIAL' | 'PHOTO';
+      total: number;
+      completed: number;
+      skipped?: number;
+      failed: number;
+      queued: number;
+      running: number;
+      cancelled: number;
+      /** @enum {string} */
+      state: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'STOPPED';
+      errors: components['schemas']['EagleOperationErrorResponseDto'][];
+    };
+    EagleMembershipResponseDto: {
+      id: string;
+      rowVersion: number | null;
+      /** @enum {string} */
+      state: 'ACTIVE' | 'TRASH' | 'UNAVAILABLE';
+    };
+    EagleOperationReceiptResponseDto: {
+      groupSignature?: string;
+      assetIds: string[];
+      status: string;
+      errorCode: string | null;
+    };
+    EagleOperationResultsResponseDto: {
+      membership: components['schemas']['EagleMembershipResponseDto'][];
+      operation: components['schemas']['EagleOperationSummaryResponseDto'];
+      revision: string;
+      receipts: components['schemas']['EagleOperationReceiptResponseDto'][];
+      nextCursor: number | null;
+    };
     UndoAssetOperationDto: {
       /** Format: uuid */
       operationId: string;
@@ -3958,10 +3999,40 @@ export interface components {
       mediaRevision: number;
       recipe: Record<string, never>;
     };
-    CountEagleAssetsDto: {
-      query: {
-        [key: string]: unknown;
-      };
+    EagleLivePhotoMotionResponseDto: {
+      assetId: string;
+      renditionId: string;
+      revision: number;
+    };
+    EaglePhotoMetadataResponseDto: {
+      captureMetadataInherited?: boolean;
+      /** Format: date-time */
+      capturedAt: string | null;
+      capturedLocal: string | null;
+      captureTimeZoneKnown: boolean;
+      cameraMake: string | null;
+      cameraModel: string | null;
+      lensModel: string | null;
+      focalLength: number | null;
+      aperture: number | null;
+      exposureSeconds: number | null;
+      iso: number | null;
+      latitude: number | null;
+      longitude: number | null;
+      altitude: number | null;
+      sharpnessScore: number | null;
+      perceptualHash: string | null;
+    };
+    EaglePhotoLocationResponseDto: {
+      assetRevision: number;
+      cityId: string;
+      name: string;
+      country: string;
+      region: string;
+      latitude: number;
+      longitude: number;
+      /** @enum {string} */
+      source: 'INFERRED' | 'MANUAL';
     };
     EagleRenditionResponseDto: {
       id: string;
@@ -3973,6 +4044,82 @@ export interface components {
       byteSize: number;
       width: number | null;
       height: number | null;
+    };
+    EagleManualTagResponseDto: {
+      id: string;
+      name: string;
+      color: string | null;
+    };
+    EagleAssetListResponseDto: {
+      livePhotoMotion?: components['schemas']['EagleLivePhotoMotionResponseDto'];
+      /** Format: date-time */
+      chronologicalAt?: string;
+      photoMetadata?: components['schemas']['EaglePhotoMetadataResponseDto'] | null;
+      photoLocation?: components['schemas']['EaglePhotoLocationResponseDto'] | null;
+      /** @enum {string} */
+      libraryMode?: 'MATERIAL' | 'PHOTO';
+      id: string;
+      originalName: string;
+      displayName: string;
+      mimeType: string;
+      format: string;
+      byteSize: number;
+      width: number | null;
+      height: number | null;
+      durationMs: number | null;
+      /** @enum {string} */
+      lifecycleStatus: 'PROCESSING' | 'READY' | 'FAILED';
+      mediaErrorCode: string | null;
+      mediaRevision: number;
+      rowVersion: number;
+      /** @enum {number|null} */
+      rating: 1 | 2 | 3 | 4 | 5 | null;
+      isPrivate?: boolean;
+      /** Format: date-time */
+      libraryAddedAt: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date-time */
+      deletedAt: string | null;
+      originalUrl?: string;
+      renditions: components['schemas']['EagleRenditionResponseDto'][];
+      manualTags: components['schemas']['EagleManualTagResponseDto'][];
+    };
+    EaglePhotoStackResponseDto: {
+      /** Format: date-time */
+      timelineAt?: string;
+      processingAssetIds?: string[];
+      id: string;
+      bestAssetId: string;
+      bestSelectedByUser: boolean;
+      assetIds: string[];
+      cover: components['schemas']['EagleAssetListResponseDto'];
+    };
+    EagleColorCoverageResponseDto: {
+      eligible: number;
+      completed: number;
+      percentage: number;
+      processorVersion: string;
+    };
+    EagleImageSearchResponseDto: {
+      /** @enum {string} */
+      status: 'READY' | 'UNAVAILABLE';
+      spaceId: string;
+    };
+    EagleAssetPageResponseDto: {
+      previousCursor?: string | null;
+      photoStacks?: components['schemas']['EaglePhotoStackResponseDto'][];
+      items: components['schemas']['EagleAssetListResponseDto'][];
+      nextCursor: string | null;
+      colorCoverage: components['schemas']['EagleColorCoverageResponseDto'] | null;
+      imageSearch?: components['schemas']['EagleImageSearchResponseDto'];
+    };
+    CountEagleAssetsDto: {
+      query: {
+        [key: string]: unknown;
+      };
     };
     EagleAssetUpdateResponseDto: {
       id: string;
@@ -3997,6 +4144,83 @@ export interface components {
     AssetTimelineResponseDto: {
       days: components['schemas']['AssetTimelineDayResponseDto'][];
       total: number;
+    };
+    EaglePrivacyReasonResponseDto: {
+      /** @enum {string} */
+      kind: 'TAG' | 'PERSON';
+      id: string;
+      name: string | null;
+    };
+    EagleAnnotationResponseDto: {
+      color: string | null;
+      description: string | null;
+      sourceUrl: string | null;
+    };
+    EagleAiTagResponseDto: {
+      id: string;
+      name: string;
+      confidence: number;
+      /** @enum {string} */
+      status: 'ACTIVE' | 'HIDDEN' | 'REJECTED';
+    };
+    EagleColorSwatchResponseDto: {
+      rank: number;
+      hex: string;
+      weight: number;
+      labL: number;
+      labA: number;
+      labB: number;
+    };
+    EagleColorAnalysisResponseDto: {
+      assetRevision: number;
+      processorVersion: string;
+      /** @enum {string} */
+      status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+      lastError: string | null;
+      /** Format: date-time */
+      completedAt: string | null;
+      swatches: components['schemas']['EagleColorSwatchResponseDto'][];
+    };
+    EagleAssetResponseDto: {
+      livePhotoMotion?: components['schemas']['EagleLivePhotoMotionResponseDto'];
+      /** Format: date-time */
+      chronologicalAt?: string;
+      photoMetadata?: components['schemas']['EaglePhotoMetadataResponseDto'] | null;
+      photoLocation?: components['schemas']['EaglePhotoLocationResponseDto'] | null;
+      /** @enum {string} */
+      libraryMode?: 'MATERIAL' | 'PHOTO';
+      id: string;
+      originalName: string;
+      displayName: string;
+      mimeType: string;
+      format: string;
+      byteSize: number;
+      width: number | null;
+      height: number | null;
+      durationMs: number | null;
+      /** @enum {string} */
+      lifecycleStatus: 'PROCESSING' | 'READY' | 'FAILED';
+      mediaErrorCode: string | null;
+      mediaRevision: number;
+      rowVersion: number;
+      /** @enum {number|null} */
+      rating: 1 | 2 | 3 | 4 | 5 | null;
+      isPrivate?: boolean;
+      /** Format: date-time */
+      libraryAddedAt: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date-time */
+      deletedAt: string | null;
+      originalUrl?: string;
+      renditions: components['schemas']['EagleRenditionResponseDto'][];
+      manualTags: components['schemas']['EagleManualTagResponseDto'][];
+      privacyReasons?: components['schemas']['EaglePrivacyReasonResponseDto'][];
+      annotation: components['schemas']['EagleAnnotationResponseDto'] | null;
+      aiTags: components['schemas']['EagleAiTagResponseDto'][];
+      colorAnalysis: components['schemas']['EagleColorAnalysisResponseDto'] | null;
     };
     BatchUpdateEagleAssetsDto: Record<string, never>;
     UpdateEagleAssetDto: {
@@ -4700,7 +4924,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'][];
+        };
       };
     };
   };
@@ -4721,7 +4947,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -4743,7 +4971,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationResultsResponseDto'];
+        };
       };
     };
   };
@@ -4766,7 +4996,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -4785,7 +5017,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -4804,7 +5038,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -4825,7 +5061,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -4981,7 +5219,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetPageResponseDto'];
+        };
       };
     };
   };
@@ -5104,7 +5344,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetResponseDto'];
+        };
       };
     };
   };
@@ -5146,7 +5388,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetResponseDto'];
+        };
       };
     };
   };
@@ -5450,7 +5694,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetPageResponseDto'];
+        };
       };
     };
   };
@@ -7173,7 +7419,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'][];
+        };
       };
     };
   };
@@ -7194,7 +7442,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7216,7 +7466,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationResultsResponseDto'];
+        };
       };
     };
   };
@@ -7239,7 +7491,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7258,7 +7512,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7277,7 +7533,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7298,7 +7556,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7454,7 +7714,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetPageResponseDto'];
+        };
       };
     };
   };
@@ -7577,7 +7839,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetResponseDto'];
+        };
       };
     };
   };
@@ -7619,7 +7883,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetResponseDto'];
+        };
       };
     };
   };
@@ -7923,7 +8189,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetPageResponseDto'];
+        };
       };
     };
   };

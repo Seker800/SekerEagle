@@ -6,123 +6,22 @@ import { normalizeCameraMimeType } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { t } from '../i18n';
 
-import { errorFromResponse } from './api-error';
-
 import type { EagleFilterQuery, LegacyEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 
-import { fetchWithBrowserSession } from './api-client';
+import { request as requestJson } from './api-client';
 
 import { resolveEagleRenditionUrl } from './media-resolver';
 
 import { resolveObjectUploadUrl } from './object-upload-url';
 
-export interface EagleRendition {
-  id: string;
-  variant?: string;
-  kind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
-  revision: number;
-  mimeType: string;
-  byteSize: number;
-  width: number | null;
-  height: number | null;
-}
-
-export interface EagleManualTagRef {
-  id: string;
-  name: string;
-  color: string | null;
-}
-
-export interface EagleAiTagRef {
-  id: string;
-  name: string;
-  confidence: number;
-  status: 'ACTIVE' | 'HIDDEN' | 'REJECTED';
-}
-
-export interface EagleColorAnalysis {
-  assetRevision: number;
-  processorVersion: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-  lastError: string | null;
-  completedAt: string | null;
-  swatches: Array<{
-    rank: number;
-    hex: string;
-    weight: number;
-    labL: number;
-    labA: number;
-    labB: number;
-  }>;
-}
-
-export interface PhotoMetadata {
-  captureMetadataInherited?: boolean;
-  capturedAt: string | null;
-  capturedLocal: string | null;
-  captureTimeZoneKnown: boolean;
-  cameraMake: string | null;
-  cameraModel: string | null;
-  lensModel: string | null;
-  focalLength: number | null;
-  aperture: number | null;
-  exposureSeconds: number | null;
-  iso: number | null;
-  latitude: number | null;
-  longitude: number | null;
-  altitude: number | null;
-  sharpnessScore: number | null;
-  perceptualHash: string | null;
-}
-export interface PhotoLocation {
-  assetRevision: number;
-  cityId: string;
-  name: string;
-  country: string;
-  region: string;
-  latitude: number;
-  longitude: number;
-  source: 'INFERRED' | 'MANUAL';
-}
-export interface EagleAssetListItem {
-  livePhotoMotion?: { assetId: string; renditionId: string; revision: number };
-  chronologicalAt?: string;
-  photoMetadata?: PhotoMetadata | null;
-  photoLocation?: PhotoLocation | null;
-  libraryMode?: LibraryMode;
-  id: string;
-  originalName: string;
-  displayName: string;
-  mimeType: string;
-  format: string;
-  byteSize: number;
-  width: number | null;
-  height: number | null;
-  durationMs: number | null;
-  lifecycleStatus: 'PROCESSING' | 'READY' | 'FAILED';
-  mediaErrorCode: string | null;
-  mediaRevision: number;
-  rowVersion: number;
-  rating: 1 | 2 | 3 | 4 | 5 | null;
-  isPrivate?: boolean;
-  libraryAddedAt: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string | null;
-  renditions: EagleRendition[];
-  manualTags: EagleManualTagRef[];
-}
-
-export interface EagleAsset extends EagleAssetListItem {
-  privacyReasons?: Array<{ kind: 'TAG' | 'PERSON'; id: string; name: string | null }>;
-  annotation: {
-    color: string | null;
-    description: string | null;
-    sourceUrl: string | null;
-  } | null;
-  aiTags: EagleAiTagRef[];
-  colorAnalysis: EagleColorAnalysis | null;
-}
+export type EagleRendition = components['schemas']['EagleRenditionResponseDto'];
+export type EagleManualTagRef = components['schemas']['EagleManualTagResponseDto'];
+export type EagleAiTagRef = components['schemas']['EagleAiTagResponseDto'];
+export type EagleColorAnalysis = components['schemas']['EagleColorAnalysisResponseDto'];
+export type PhotoMetadata = components['schemas']['EaglePhotoMetadataResponseDto'];
+export type PhotoLocation = components['schemas']['EaglePhotoLocationResponseDto'];
+export type EagleAssetListItem = components['schemas']['EagleAssetListResponseDto'];
+export type EagleAsset = components['schemas']['EagleAssetResponseDto'];
 
 type EagleAssetUpdateContract = components['schemas']['EagleAssetUpdateResponseDto'];
 export interface EagleAssetUpdate extends EagleAssetUpdateContract {
@@ -256,28 +155,8 @@ export interface EagleAssetChanges {
   sourceUrl?: string | null;
 }
 
-export interface EaglePhotoStack {
-  timelineAt?: string;
-  processingAssetIds?: string[];
-  id: string;
-  bestAssetId: string;
-  bestSelectedByUser: boolean;
-  assetIds: string[];
-  cover: EagleAssetListItem;
-}
-export interface EagleAssetPage {
-  previousCursor?: string | null;
-  photoStacks?: EaglePhotoStack[];
-  items: EagleAssetListItem[];
-  nextCursor: string | null;
-  colorCoverage: {
-    eligible: number;
-    completed: number;
-    percentage: number;
-    processorVersion: string;
-  } | null;
-  imageSearch?: { status: 'READY' | 'UNAVAILABLE'; spaceId: string };
-}
+export type EaglePhotoStack = components['schemas']['EaglePhotoStackResponseDto'];
+export type EagleAssetPage = components['schemas']['EagleAssetPageResponseDto'];
 
 export type EagleSmartFolderFilters = Omit<
   EagleAssetFilters,
@@ -299,22 +178,12 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }
   >();
   async function api<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
-    const response = await fetchWithBrowserSession(
+    return requestJson<T>(
       libraryApiPath(`/api${path}`, libraryMode),
-      {
-        ...init,
-        headers: init?.body
-          ? { 'content-type': 'application/json', ...init.headers }
-          : init?.headers,
-      },
+      init,
       timeoutMs ??
         (/^\/eagle\/uploads\/[a-fA-F0-9-]{36}\/complete$/.test(path) ? 660_000 : undefined),
     );
-    if (!response.ok) {
-      throw await errorFromResponse(response, '请求失败（{{value1}}）');
-    }
-    if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
   }
 
   function assetQuery(filters: EagleAssetFilters): string {

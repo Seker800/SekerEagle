@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
@@ -42,7 +43,10 @@ export function PhotoPersonMergeSelection({
     };
   }, []);
   const targets = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people-merge-targets', includePrivate, scopeRevision],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleMergeTargets(
+      includePrivate,
+      scopeRevision,
+    ),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPeopleOptions(pageParam, signal, 'NAMED'),
     getNextPageParam: (page) => page.nextCursor ?? undefined,

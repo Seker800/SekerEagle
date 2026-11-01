@@ -1,9 +1,8 @@
+import type { components } from '@sekereagle/contracts';
+type AssetOperationSummary = components['schemas']['EagleOperationSummaryResponseDto'];
+type AssetOperationResults = components['schemas']['EagleOperationResultsResponseDto'];
 import { EAGLE_OPERATION_REQUEST_TIMEOUT_MS } from './eagle-operation-request';
-import type {
-  AssetOperationKind,
-  AssetOperationSummary,
-  AssetOperationResults,
-} from '@sekereagle/library-core';
+import type { AssetOperationKind } from '@sekereagle/library-core';
 import { request } from './api-client';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 export function createAssetOperationsApi(mode: LibraryMode) {

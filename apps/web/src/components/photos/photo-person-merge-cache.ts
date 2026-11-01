@@ -1,3 +1,8 @@
+import {
+  createEagleQueryKeys,
+  isPhotoPeopleProjection,
+  photoQueryVisibility,
+} from '../eagle/eagle-query-keys';
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 import type { PhotoPerson, PhotoPersonMergeResult } from '../../lib/photo-management-api';
 
@@ -9,13 +14,10 @@ export function applyPhotoPersonMerge(
 ) {
   const removed = new Set(result.mergedIds);
   for (const query of client.getQueryCache().findAll({
-    predicate: (query) =>
-      query.queryKey[0] === 'eagle' &&
-      query.queryKey[1] === ownerId &&
-      query.queryKey[2] === 'PHOTO' &&
-      (query.queryKey[3] === 'people' || query.queryKey[3] === 'people-merge-targets'),
+    predicate: (query) => isPhotoPeopleProjection(query.queryKey, ownerId),
   })) {
-    const hiddenTarget = result.marksAssetsPrivate && query.queryKey[4] === false;
+    const hiddenTarget =
+      result.marksAssetsPrivate && photoQueryVisibility(query.queryKey, ownerId) === false;
     client.setQueryData<InfiniteData<{ people: PhotoPerson[] }>>(query.queryKey, (current) =>
       current
         ? {
@@ -32,10 +34,11 @@ export function applyPhotoPersonMerge(
   }
   for (const query of client
     .getQueryCache()
-    .findAll({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-review'] })) {
+    .findAll({ queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPersonReview })) {
     if (!query.state.data || typeof query.state.data !== 'object' || !('pages' in query.state.data))
       continue;
-    const hiddenTarget = result.marksAssetsPrivate && query.queryKey[4] === false;
+    const hiddenTarget =
+      result.marksAssetsPrivate && photoQueryVisibility(query.queryKey, ownerId) === false;
     client.setQueryData<{ removed: string[]; updates: Record<string, Partial<PhotoPerson>> }>(
       [...query.queryKey, 'edits'],
       (old) => ({
@@ -47,7 +50,7 @@ export function applyPhotoPersonMerge(
     );
   }
   void client.invalidateQueries({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people-merge-targets'],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleMergeTargetRoot,
     refetchType: 'none',
   });
 }

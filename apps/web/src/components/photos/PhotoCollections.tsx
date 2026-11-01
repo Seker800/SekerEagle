@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { PhotoPersonMergeSelection } from './PhotoPersonMergeSelection';
 import { applyPhotoPersonMerge } from './photo-person-merge-cache';
 import { usePhotoPeople } from './use-photo-people';
@@ -40,7 +41,7 @@ export function PhotoCollections({
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const [view, setView] = useState<'NAMED' | 'ALL' | 'REVIEW'>('NAMED');
   const summary = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people-summary', includePrivate],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleSummaryScope(includePrivate),
     queryFn: getPhotoPeopleSummary,
   });
   const people = usePhotoPeople(
@@ -87,19 +88,23 @@ export function PhotoCollections({
       }
       if (!changesPrivacy)
         await queryClient.invalidateQueries({
-          queryKey: ['eagle', ownerId, 'PHOTO', 'asset-detail'],
+          queryKey: createEagleQueryKeys(ownerId, 'PHOTO').assetDetails,
         });
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people'] }),
+        queryClient.invalidateQueries({
+          queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeople,
+        }),
         summary.refetch(),
         ...(refreshReview
           ? [
               queryClient.invalidateQueries({
-                queryKey: ['eagle', ownerId, 'PHOTO', 'person-review'],
+                queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPersonReview,
               }),
             ]
           : []),
-        queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
+        queryClient.invalidateQueries({
+          queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPersonFaces,
+        }),
       ]);
       return true;
     } catch (reason) {
@@ -113,8 +118,12 @@ export function PhotoCollections({
   async function afterReviewChange(changesPrivacy: boolean) {
     if (changesPrivacy) return perform(async () => {}, true, false);
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people-summary'] }),
-      queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
+      queryClient.invalidateQueries({
+        queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleSummary,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPersonFaces,
+      }),
     ]);
   }
   const thumbnail = (asset: EagleAssetListItem) => {
@@ -217,7 +226,7 @@ export function PhotoCollections({
                   onPendingChange={setPending}
                   onConflict={() =>
                     queryClient.invalidateQueries({
-                      queryKey: ['eagle', ownerId, 'PHOTO', 'people'],
+                      queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeople,
                     })
                   }
                   onMerged={(result, privacy) => {
@@ -348,7 +357,7 @@ function PersonEditor({
 }) {
   const { ownerId } = useLibraryWorkspace();
   const faces = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces', includePrivate, person.id],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPersonFaceList(includePrivate, person.id),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPersonFaces(person.id, pageParam, signal),
     getNextPageParam: (page) => page.nextCursor ?? undefined,

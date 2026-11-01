@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { listPhotoPeople } from '../../lib/photo-management-api';
 
@@ -9,15 +10,7 @@ export function usePhotoPeople(
   view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
 ) {
   const query = useInfiniteQuery({
-    queryKey: [
-      'eagle',
-      ownerId,
-      'PHOTO',
-      'people',
-      includePrivate,
-      view,
-      view === 'ALL' ? 'cards-ranked-v2' : 'cards',
-    ],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleDirectory(includePrivate, view),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPeople(pageParam, signal, view),
     getNextPageParam: (page) => page.nextCursor ?? undefined,

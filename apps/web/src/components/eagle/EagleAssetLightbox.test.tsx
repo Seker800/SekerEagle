@@ -49,6 +49,7 @@ const imageAsset: EagleAssetListItem = {
   renditions: [
     {
       id: 'preview-1',
+      variant: 'default',
       kind: 'PREVIEW',
       revision: 1,
       mimeType: 'image/webp',
@@ -142,6 +143,7 @@ it('plays the current transcoded camera video instead of decoding the camera ori
         renditions: [
           {
             id: 'playback',
+            variant: 'default',
             kind: 'PREVIEW',
             revision: 1,
             mimeType: 'video/mp4',

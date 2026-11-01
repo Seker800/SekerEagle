@@ -31,6 +31,7 @@ const videoAsset: EagleAssetListItem = {
   renditions: [
     {
       id: 'poster-1',
+      variant: 'default',
       kind: 'POSTER',
       revision: 1,
       mimeType: 'image/jpeg',

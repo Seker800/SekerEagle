@@ -1,7 +1,5 @@
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
-import { fetchWithBrowserSession } from './api-client';
-
-import { errorFromResponse } from './api-error';
+import { request as requestJson } from './api-client';
 
 export type EagleProcessingLane = 'INTERACTIVE' | 'BACKGROUND' | 'MAINTENANCE';
 
@@ -66,19 +64,12 @@ export interface EagleProcessingJob {
 }
 export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERIAL') {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetchWithBrowserSession(
+    return requestJson<T>(
       libraryApiPath(`/api/admin/eagle-processing/${path}`, libraryMode),
-      {
-        ...init,
-        headers: init?.body
-          ? { 'content-type': 'application/json', ...init.headers }
-          : init?.headers,
-      },
+      init,
+      undefined,
+      '读取处理状态失败（{{value1}}）',
     );
-    if (!response.ok) {
-      throw await errorFromResponse(response, '读取处理状态失败（{{value1}}）');
-    }
-    return response.json() as Promise<T>;
   }
 
   function fetchEagleProcessingSummary(_token: string) {

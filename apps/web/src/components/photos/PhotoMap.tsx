@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconFocusCentered, IconMapPin } from '@tabler/icons-react';
 import * as L from 'leaflet';
@@ -61,7 +62,7 @@ export function PhotoMap({
   });
   const [selected, setSelected] = useState<PhotoMapCluster | null>(null);
   const locations = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'map', includePrivate, viewport],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoMap(includePrivate, viewport),
     queryFn: ({ signal }) => getPhotoMap(viewport, signal),
     staleTime: 30000,
     refetchInterval: (query) =>

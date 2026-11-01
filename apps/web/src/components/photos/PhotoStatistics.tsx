@@ -1,3 +1,4 @@
+import { createEagleQueryKeys, photoQueryVisibility } from '../eagle/eagle-query-keys';
 import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronDown, IconRefresh, IconX } from '@tabler/icons-react';
@@ -36,11 +37,11 @@ export function PhotoStatistics({
   const [search, setSearch] = useState('');
   const [rangeError, setRangeError] = useState(false);
   const result = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'statistics', includePrivate, input],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoStatistics(includePrivate, input),
     queryFn: ({ signal }) => getPhotoStatistics(input, signal),
     staleTime: 30000,
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === ownerId && previousQuery.queryKey[4] === includePrivate
+      previousQuery && photoQueryVisibility(previousQuery.queryKey, ownerId) === includePrivate
         ? previous
         : undefined,
   });

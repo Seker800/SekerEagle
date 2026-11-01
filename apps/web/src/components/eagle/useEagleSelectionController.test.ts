@@ -20,9 +20,14 @@ describe('workspace selection ownership', () => {
   });
 
   it('resets filtered selection while preserving the explicit selection tool', () => {
-    const { result } = renderHook(() => useEagleSelectionController({
-      selectedAssetIds: ['a'], selectedAssetId: 'a', selectionMode: true, isBatchSelection: true,
-    }));
+    const { result } = renderHook(() =>
+      useEagleSelectionController({
+        selectedAssetIds: ['a'],
+        selectedAssetId: 'a',
+        selectionMode: true,
+        isBatchSelection: true,
+      }),
+    );
     act(() => result.current.clear({ preserveMode: true }));
     expect(result.current.selectionMode).toBe(true);
     expect(result.current.selectedAssetIds).toEqual([]);
@@ -30,7 +35,9 @@ describe('workspace selection ownership', () => {
   });
 
   it('prunes removed members without losing selection on page growth', () => {
-    const { result } = renderHook(() => useEagleSelectionController({ selectedAssetIds: ['a', 'b'], selectedAssetId: 'b' }));
+    const { result } = renderHook(() =>
+      useEagleSelectionController({ selectedAssetIds: ['a', 'b'], selectedAssetId: 'b' }),
+    );
     act(() => result.current.reconcile(new Set(['a', 'b', 'c'])));
     expect(result.current.selectedAssetIds).toEqual(['a', 'b']);
     act(() => result.current.reconcile(new Set(['a', 'c'])));

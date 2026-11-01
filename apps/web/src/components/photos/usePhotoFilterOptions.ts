@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getPhotoFacets, listPhotoPeopleOptions } from '../../lib/photo-management-api';
@@ -5,13 +6,13 @@ import { t } from '../../i18n';
 export function usePhotoFilterOptions(includePrivate: boolean, enabled = true) {
   const { ownerId, libraryMode } = useLibraryWorkspace();
   const facets = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'photography-facets', includePrivate],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoFacets(includePrivate),
     queryFn: getPhotoFacets,
     enabled: enabled && libraryMode === 'PHOTO',
     staleTime: 30000,
   });
   const people = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', 'options', includePrivate],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleOptions(includePrivate),
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPeopleOptions(pageParam, signal),
     getNextPageParam: (page) => page.nextCursor ?? undefined,

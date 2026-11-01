@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
@@ -41,7 +42,11 @@ export function PhotoMapPhotos({
     [scheduler, loadService],
   );
   const page = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'map-photos', includePrivate, cluster.id, cursors.at(-1)],
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoMapPhotos(
+      includePrivate,
+      cluster.id,
+      cursors.at(-1),
+    ),
     queryFn: ({ signal }) => getPhotoMapPhotos(cluster.id, cursors.at(-1), signal),
     staleTime: 30000,
   });
