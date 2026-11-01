@@ -43,7 +43,12 @@ assertSafeRuntimeTarget({
 const envArgs = Object.entries(env).flatMap(([key, value]) => ['--env', `${key}=${value}`]);
 function run(args, timeout = 120000) {
   const result = spawnSync('docker', args, { encoding: 'utf8', timeout });
-  if (result.status !== 0) throw new Error(`API image smoke: docker ${args[0]} failed`);
+  if (result.status !== 0) {
+    let diagnostic = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+    for (const value of [password, accessKey, secretKey, tokenKey, readerToken])
+      diagnostic = diagnostic.replaceAll(value, '[test value]');
+    throw new Error(`API image smoke: docker ${args[0]} failed: ${diagnostic.slice(-12000)}`);
+  }
   return result.stdout.trim();
 }
 async function waitFor(check, name, attempts = 120) {
