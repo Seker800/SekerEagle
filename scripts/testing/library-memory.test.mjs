@@ -10,6 +10,8 @@ import { createLibraryReaderServer } from '../../apps/api/dist/eagle/eagle-memor
 import { findSearchAssets } from '../../apps/api/dist/eagle/eagle-asset-search.js';
 import { libraryReadMetrics } from '../../apps/api/dist/eagle/eagle-memory-client.js';
 import { once } from 'node:events';
+import { performance } from 'node:perf_hooks';
+import { log } from 'node:console';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -174,4 +176,76 @@ test('shared list reads use the reader and preserve authoritative page filtering
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test('sixty thousand resources publish one batch event and keep complete resident results', async () => {
+  const prefix = `${ownerId}-scale-`;
+  await db.$executeRaw(Prisma.sql`
+    INSERT INTO "EagleAsset" (id,"ownerId","libraryMode","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize",width,height,"originalObjectKey","updatedAt")
+    SELECT ${prefix}||lpad(n::text,7,'0'),${ownerId},'PHOTO',n::text||'.jpg',n::text,n::text,
+      'image/jpeg','jpg',20000000,6000,4000,'synthetic/'||${prefix}||n::text,now() FROM generate_series(1,60000) n`);
+  const fresh = new LibraryReadStore(db);
+  const started = performance.now();
+  const index = await fresh.synchronize(scope);
+  const buildMs = performance.now() - started;
+  assert.equal(index.count({ id: { startsWith: prefix } }), 60000);
+  const timings = [];
+  for (let i = 0; i < 2; i++) {
+    await db.eagleLibraryReadState.update({
+      where: { ownerId_libraryMode: scope },
+      data: { enabled: false },
+    });
+    const baselineStart = performance.now();
+    await db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
+      await tx.eagleAsset.updateMany({ where: { ...scope, id: { startsWith: prefix } }, data: { rating: 2 } });
+    }, { timeout: 20000 });
+    const baselineMs = performance.now() - baselineStart;
+    await db.eagleLibraryReadState.update({
+      where: { ownerId_libraryMode: scope },
+      data: { enabled: true },
+    });
+    const revision = (
+      await db.eagleLibraryReadState.findUniqueOrThrow({ where: { ownerId_libraryMode: scope } })
+    ).revision;
+    const enabledStart = performance.now();
+    await db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
+      await tx.eagleAsset.updateMany({ where: { ...scope, id: { startsWith: prefix } }, data: { rating: 3 } });
+    }, { timeout: 20000 });
+    const enabledMs = performance.now() - enabledStart;
+    const changes = await db.eagleLibraryReadChange.findMany({
+      where: { ...scope, revision: { gt: revision } },
+    });
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].assetIds.length, 60000);
+    timings.push({ baselineMs: Math.round(baselineMs), enabledMs: Math.round(enabledMs) });
+  }
+  const refreshed = await fresh.synchronize(scope);
+  assert.equal(refreshed.count({ id: { startsWith: prefix }, rating: 3 }), 60000);
+  const samples = [];
+  for (let i = 0; i < 110; i++) {
+    const start = performance.now();
+    assert.equal(
+      refreshed.page(
+        { photoMetadata: { is: { cameraModel: 'nonexistent' } } },
+        'chronologicalAt',
+        'desc',
+        41,
+        0,
+      ).length,
+      0,
+    );
+    if (i >= 10) samples.push(performance.now() - start);
+  }
+  samples.sort((a, b) => a - b);
+  log(
+    JSON.stringify({
+      fixture: '60000 read-side batch',
+      buildMs: Math.round(buildMs),
+      writes: timings,
+      scanP95Ms: samples[95],
+      rssMiB: Math.round(process.memoryUsage().rss / 1048576),
+    }),
+  );
 });
