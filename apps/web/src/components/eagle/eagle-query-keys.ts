@@ -83,12 +83,18 @@ export function isPhotoPeopleProjection(key: readonly unknown[], ownerId: string
 export function isEagleOperationKey(key: readonly unknown[], ownerId: string, mode: string) {
   return isEagleQuery(key, ownerId, mode) && key[3] === 'operations';
 }
-export function isEagleAssetListKey(key: readonly unknown[], ownerId: string, mode: string) {
+export function isEagleAssetListKey(
+  key: readonly unknown[],
+  ownerId: string,
+  mode: string,
+  view?: 'ACTIVE' | 'PRIVATE' | 'TRASH',
+) {
   return (
     isEagleQuery(key, ownerId, mode) &&
     key.length === 6 &&
     key[3] === 'assets' &&
     ['ACTIVE', 'PRIVATE', 'TRASH'].includes(key[4] as string) &&
+    (view === undefined || key[4] === view) &&
     key[5] !== null &&
     typeof key[5] === 'object' &&
     !Array.isArray(key[5])

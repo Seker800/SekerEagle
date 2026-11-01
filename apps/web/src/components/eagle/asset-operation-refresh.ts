@@ -160,9 +160,7 @@ export class AssetOperationRefresher {
         // including items that arrived after the cutoff, while retaining loaded pages.
         await this.client.invalidateQueries(
           {
-            predicate: (query) =>
-              isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
-              query.queryKey[4] === 'TRASH',
+            predicate: (query) => isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
             refetchType: 'active',
           },
           { cancelRefetch: false },

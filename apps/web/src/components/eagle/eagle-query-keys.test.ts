@@ -80,5 +80,7 @@ it('selects a list view through the key protocol without leaking its tuple posit
   for (const view of ['ACTIVE', 'PRIVATE'])
     expect(isEagleAssetListKey(keys.assetList(view, {}), 'owner', 'PHOTO', 'TRASH')).toBe(false);
   expect(isEagleAssetListKey(keys.assetList('TRASH', {}), 'other', 'PHOTO', 'TRASH')).toBe(false);
-  expect(isEagleAssetListKey(keys.assetList('TRASH', {}), 'owner', 'MATERIAL', 'TRASH')).toBe(false);
+  expect(isEagleAssetListKey(keys.assetList('TRASH', {}), 'owner', 'MATERIAL', 'TRASH')).toBe(
+    false,
+  );
 });
