@@ -4,14 +4,11 @@ import { z } from 'zod';
 import type { LibraryReadStore } from './eagle-memory-store';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import type { LibraryMemoryIndex } from './eagle-memory-index';
-import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
 import type { ImageSearchPosition } from './eagle-image-search.service';
 import { semanticFolderIds } from './eagle-memory-semantic';
 import type { MemorySearchContext } from './eagle-memory-predicate';
-import { memorySemanticOptions } from './eagle-memory-protocol';
-import type { PhotoReadFacets } from '../photos/photo-facets-memory';
-import type { Summary } from '../photos/photo-statistics.service';
+import { memorySemanticOptions, memoryStatisticsQuery, memoryStatisticsSummary, memoryPhotoFacets } from './eagle-memory-protocol';
 
 const querySchema = z
   .object({
@@ -22,24 +19,7 @@ const querySchema = z
     action: z.enum(['page', 'count', 'statistics', 'peopleCounts', 'smartFolderPage', 'facets']),
     semantic: memorySemanticOptions.optional(),
     includePrivate: z.boolean().default(false),
-    statistics: z
-      .object({
-        grain: z.enum(['day', 'week', 'month', 'year']).optional(),
-        groupBy: z.enum(['total', 'camera', 'lens']).optional(),
-        start: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/)
-          .optional(),
-        end: z
-          .string()
-          .regex(/^\d{4}-\d{2}-\d{2}$/)
-          .optional(),
-        cameras: z.array(z.string()).optional(),
-        lenses: z.array(z.string()).optional(),
-        lensKeys: z.array(z.string()).optional(),
-      })
-      .strict()
-      .optional(),
+    statistics: memoryStatisticsQuery.optional(),
     date: z.enum(['libraryAddedAt', 'chronologicalAt']).default('libraryAddedAt'),
     direction: z.enum(['asc', 'desc']).default('desc'),
     take: z.number().int().nonnegative().safe().default(0),
@@ -64,14 +44,14 @@ async function body(request: IncomingMessage, maxBytes: number) {
 }
 
 export interface LibraryReadHandlers {
-  facets?: (index: LibraryMemoryIndex, includePrivate: boolean) => Promise<PhotoReadFacets>;
+  facets?: (index: LibraryMemoryIndex, includePrivate: boolean) => Promise<z.infer<typeof memoryPhotoFacets>>;
   semanticQuery?: <T>(index: LibraryMemoryIndex, folderIds: string[], read: (context: MemorySearchContext) => T) => Promise<T>;
   smartFolderPage?: (index: LibraryMemoryIndex, options: ResidentSmartFolderOptions) => Promise<ImageSearchPosition[]>;
   statistics?: (
     index: LibraryMemoryIndex,
     includePrivate: boolean,
-    query: PhotoStatisticsQueryDto,
-  ) => Promise<Summary>;
+    query: z.infer<typeof memoryStatisticsQuery>,
+  ) => Promise<z.infer<typeof memoryStatisticsSummary>>;
   peopleCounts?: (
     index: LibraryMemoryIndex,
     includePrivate: boolean,

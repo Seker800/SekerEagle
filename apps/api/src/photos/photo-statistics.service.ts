@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { photoStatisticsSql } from './photo-statistics-query';
-import { readMemoryStatistics } from '../eagle/eagle-memory-client';
+import { readMemoryStatistics } from './photo-memory-client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PhotoStatisticsQueryDto } from './photo-statistics.dto';
 
@@ -70,10 +70,10 @@ export class PhotoStatisticsService {
         await this.prisma.$queryRaw<Summary[]>(photoStatisticsSql(ownerId, includePrivate, query))
       )[0]!;
     return {
-      ...summary!,
+      ...summary,
       grain,
       groupBy,
-      periods: statisticsPeriods(query.start ?? summary!.first, query.end ?? summary!.last, grain),
+      periods: statisticsPeriods(query.start ?? summary.first, query.end ?? summary.last, grain),
     };
   }
 }

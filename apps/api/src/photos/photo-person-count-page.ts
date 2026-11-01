@@ -1,6 +1,7 @@
+import { libraryReadMetrics } from '../eagle/eagle-memory-client';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { readMemoryPeopleCounts, libraryReadMetrics } from '../eagle/eagle-memory-client';
+import { readMemoryPeopleCounts } from './photo-memory-client';
 export async function readPeopleCountPage(
   tx: Prisma.TransactionClient,
   ownerId: string,

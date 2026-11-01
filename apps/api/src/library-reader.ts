@@ -1,3 +1,4 @@
+import { photoStatisticsFactFieldsSql } from './photos/photo-statistics-query';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLibraryReaderServer } from './eagle/eagle-memory-server';
@@ -20,7 +21,7 @@ export async function startLibraryReader(env = process.env) {
   const url = new URL(env.DATABASE_URL);
   if (!url.searchParams.has('connection_limit')) url.searchParams.set('connection_limit', '2');
   const db = createLibraryReadPool(url.toString());
-  const store = new LibraryReadStore(db);
+  const store = new LibraryReadStore(db, photoStatisticsFactFieldsSql());
   const server = createLibraryReaderServer(
     store,
     env.EAGLE_READER_TOKEN,

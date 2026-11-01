@@ -1,4 +1,4 @@
-import { readMemoryPhotoFacets } from '../eagle/eagle-memory-client';
+import { readMemoryPhotoFacets } from './photo-memory-client';
 import { readPeopleCountPage } from './photo-person-count-page';
 import { representativePhotoFace } from '@sekereagle/library-core';
 import {

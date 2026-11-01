@@ -47,3 +47,21 @@ export const decodeMemoryQuery = (text: string): unknown =>
       ? BigInt(record.$bigint)
       : item;
   });
+
+export const memoryStatisticsQuery = z
+      .object({
+        grain: z.enum(['day', 'week', 'month', 'year']).optional(),
+        groupBy: z.enum(['total', 'camera', 'lens']).optional(),
+        start: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        end: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        cameras: z.array(z.string()).optional(),
+        lenses: z.array(z.string()).optional(),
+        lensKeys: z.array(z.string()).optional(),
+      })
+      .strict();

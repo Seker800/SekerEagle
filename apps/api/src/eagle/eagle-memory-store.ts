@@ -3,7 +3,6 @@ import { Pool, type PoolClient } from 'pg';
 import { LibraryMemoryIndex } from './eagle-memory-index';
 import type { MemoryAsset } from './eagle-memory-predicate';
 import type { LibraryIdentity } from './library-mode';
-import { photoStatisticsFactFieldsSql } from '../photos/photo-statistics-query';
 
 async function execute<T extends MemoryAsset>(
   connection: Pick<PoolClient, 'query'>,
@@ -26,6 +25,7 @@ export async function readMemoryAssets(
   tx: Pick<PoolClient, 'query'>,
   scope: LibraryIdentity,
   ids?: string[],
+  metadataFactFields?: Prisma.Sql,
 ): Promise<MemoryAsset[]> {
   if (ids?.length === 0) return [];
   const selected = ids
@@ -76,7 +76,7 @@ export async function readMemoryAssets(
   );
   await attach(
     Prisma.sql`SELECT m."assetId",m."cameraModel",m."lensModel",m."capturedAt" AT TIME ZONE 'UTC' "capturedAt",m.latitude,m.longitude,
-      CASE WHEN m."assetRevision"=a."mediaRevision" THEN (SELECT row_to_json(fact) FROM (SELECT ${photoStatisticsFactFieldsSql()}) fact) ELSE NULL END AS "statisticsFact"
+      ${metadataFactFields ? Prisma.sql`CASE WHEN m."assetRevision"=a."mediaRevision" THEN (SELECT row_to_json(fact) FROM (SELECT ${metadataFactFields}) fact) ELSE NULL END` : Prisma.sql`NULL`} AS "statisticsFact"
       FROM "EaglePhotoMetadata" m JOIN "EagleAsset" a ON a.id=m."assetId" WHERE ${scoped}`,
     'photoMetadata',
     false,
@@ -126,7 +126,7 @@ export async function readMemoryAssets(
 export class LibraryReadStore {
   private readonly indexes = new Map<string, LibraryMemoryIndex>();
   private readonly loading = new Map<string, Promise<LibraryMemoryIndex>>();
-  constructor(private readonly db: Pool) {}
+  constructor(private readonly db: Pool, private readonly metadataFactFields?: Prisma.Sql) {}
   async synchronize(scope: LibraryIdentity): Promise<LibraryMemoryIndex> {
     const key = JSON.stringify([scope.ownerId, scope.libraryMode]);
     const running = this.loading.get(key);
@@ -188,7 +188,7 @@ export class LibraryReadStore {
         );
       const rebuild = !complete || changes.some((change) => change.rebuild);
       const ids = rebuild ? undefined : [...new Set(changes.flatMap((change) => change.assetIds))];
-      next = { revision, ids, rows: await readMemoryAssets(connection, scope, ids) };
+      next = { revision, ids, rows: await readMemoryAssets(connection, scope, ids, this.metadataFactFields) };
       await connection.query('COMMIT');
     } catch (error) {
       await connection.query('ROLLBACK');

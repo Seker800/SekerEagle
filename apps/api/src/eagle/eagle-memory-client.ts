@@ -1,12 +1,8 @@
 import type { Prisma } from '@prisma/client';
 import {
   encodeMemoryQuery,
-  memoryStatisticsSummary,
-  memoryPersonCounts,
   memorySearchPositions,
-  memoryPhotoFacets,
 } from './eagle-memory-protocol';
-import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 
@@ -28,7 +24,7 @@ function scopeOf(where: AssetSearchWhere) {
   return ['PHOTO', 'MATERIAL'].includes(libraryMode) ? { ownerId, libraryMode } : null;
 }
 
-async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
+export async function requestLibraryRead(where: AssetSearchWhere, page: Record<string, unknown>) {
   const endpoint = process.env.EAGLE_READER_URL,
     token = process.env.EAGLE_READER_TOKEN;
   if (!endpoint || !token) return null;
@@ -84,7 +80,7 @@ export async function readMemoryPage(
     !['asc', 'desc'].includes(orders[0]![1] as string)
   )
     return null;
-  const result = await request(args.where, {
+  const result = await requestLibraryRead(args.where, {
     action: 'page',
     date: orders[0]![0],
     direction: orders[0]![1],
@@ -103,39 +99,10 @@ export async function readMemoryPage(
   return result.ids as string[];
 }
 export async function readMemoryCount(where: AssetSearchWhere): Promise<number | null> {
-  const result = await request(where, { action: 'count' });
+  const result = await requestLibraryRead(where, { action: 'count' });
   if (!result || !Number.isSafeInteger(result.count) || (result.count as number) < 0) return null;
   libraryReadMetrics.hits++;
   return result.count as number;
-}
-
-export async function readMemoryStatistics(
-  ownerId: string,
-  includePrivate: boolean,
-  statistics: PhotoStatisticsQueryDto,
-) {
-  const result = await request(
-    { ownerId, libraryMode: 'PHOTO' },
-    { action: 'statistics', includePrivate, statistics },
-  );
-  if (!result) return null;
-  const parsed = memoryStatisticsSummary.safeParse(result.summary);
-  if (!parsed.success) return null;
-  libraryReadMetrics.hits++;
-  return parsed.data;
-}
-
-export async function readMemoryPeopleCounts(ownerId: string, includePrivate: boolean) {
-  const result = await request(
-    { ownerId, libraryMode: 'PHOTO' },
-    { action: 'peopleCounts', includePrivate },
-  );
-  if (!result || typeof result.revision !== 'string' || !/^\d+$/.test(result.revision)) return null;
-  const parsed = memoryPersonCounts.safeParse(result.counts);
-  if (!parsed.success || new Set(parsed.data.map((row) => row.id)).size !== parsed.data.length)
-    return null;
-  libraryReadMetrics.hits++;
-  return { revision: result.revision, counts: parsed.data };
 }
 
 export async function readMemorySmartFolderPage(
@@ -143,7 +110,7 @@ export async function readMemorySmartFolderPage(
   options: ResidentSmartFolderOptions,
 ) {
   const { where, ...semantic } = options;
-  const result = await request({ AND: [scope, where] }, { action: 'smartFolderPage', semantic });
+  const result = await requestLibraryRead({ AND: [scope, where] }, { action: 'smartFolderPage', semantic });
   if (!result) return null;
   const parsed = memorySearchPositions.safeParse(result.positions);
   if (!parsed.success || parsed.data.length > options.limit + 1 ||
@@ -152,11 +119,3 @@ export async function readMemorySmartFolderPage(
   return parsed.data;
 }
 
-export async function readMemoryPhotoFacets(ownerId: string, includePrivate: boolean) {
-  const result = await request({ ownerId, libraryMode: 'PHOTO' }, { action: 'facets', includePrivate });
-  if (!result) return null;
-  const parsed = memoryPhotoFacets.safeParse(result.facets);
-  if (!parsed.success) return null;
-  libraryReadMetrics.hits++;
-  return parsed.data;
-}
