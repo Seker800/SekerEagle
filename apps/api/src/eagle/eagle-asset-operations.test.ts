@@ -594,3 +594,53 @@ for (const timeout of [false, true])
       timeout ? 'P2028' : undefined,
     );
   });
+
+test('a metadata publication timeout reduces the batch without failing healthy items', async () => {
+  const batches: number[] = [];
+  const failed: unknown[] = [];
+  const tx = {
+    $queryRaw: async () => [],
+    user: { findUnique: async () => ({ authVersion: 0, disabledAt: null }) },
+    eagleAssetOperationItem: {
+      updateMany: async (input: { where: { OR: unknown[] }; data: { status?: string } }) => {
+        if (input.data.status === 'FAILED') failed.push(input);
+        return { count: input.where.OR.length };
+      },
+    },
+  };
+  const operation = {
+    id: 'operation',
+    ownerId: 'owner',
+    kind: 'DUPLICATE_CLEANUP',
+    authVersion: 0,
+    isPrivate: false,
+  };
+  const items = [1, 2].map((i) => ({
+    id: `item-${i}`,
+    operationId: operation.id,
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    leaseVersion: 1,
+    operation,
+  }));
+  const service = new EagleAssetOperationService(
+    { ...tx, $transaction: async (run: (client: typeof tx) => unknown) => run(tx) } as never,
+    {} as never,
+    {} as never,
+    'PHOTO',
+    {
+      applyCleanupBatch: async (_tx: unknown, batch: unknown[]) => {
+        batches.push(batch.length);
+        if (batch.length > 1)
+          throw new Prisma.PrismaClientKnownRequestError('publication budget', {
+            code: 'P2028',
+            clientVersion: '6.19.3',
+          });
+      },
+    } as never,
+  );
+  Reflect.set(service, 'logger', { error: () => {} });
+  await (service as unknown as { execute(items: unknown[]): Promise<void> }).execute(items);
+  assert.deepEqual(batches, [2, 1, 1]);
+  assert.deepEqual(failed, []);
+});
