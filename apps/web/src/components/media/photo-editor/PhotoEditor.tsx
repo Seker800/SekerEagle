@@ -398,6 +398,7 @@ export function PhotoEditor({
         })
         .catch(() => {
           if (!cancelled) {
+            setErrorRetry('load');
             setError(t('照片处理失败，请重试。'));
             setRendering(false);
           }

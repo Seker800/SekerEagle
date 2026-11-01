@@ -1,3 +1,4 @@
+import { verifyUploadPublication } from './upload-publication-probe.mjs';
 import { verifyServerEdits } from './server-edits-acceptance.mjs';
 import { URLSearchParams } from 'node:url';
 import { serveMapArchive } from '../maps/serve-map-archive.mjs';
@@ -598,6 +599,16 @@ try {
           headers: { cookie: `sekereagle_access=${accessToken}` },
         });
         assert.deepEqual(Buffer.from(await original.arrayBuffer()), sharpPhoto);
+        if (process.env.PHOTO_WORKBENCH_UPLOAD_PUBLICATION === '1')
+          await verifyUploadPublication({
+            db,
+            ownerId: owner.id,
+            origin,
+            cookie: `sekereagle_access=${accessToken}`,
+            mode,
+            source: detail,
+            bytes: editedBytes,
+          });
         const other = mode === 'photos' ? 'eagle' : 'photos';
         const denied = await fetch(`${origin}/api/${other}/uploads`, {
           method: 'POST',
