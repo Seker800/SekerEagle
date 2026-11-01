@@ -1,4 +1,4 @@
-import { runTransferWork } from './eagle-transfer-work';
+import { runTransferWork, transferCopyBudget } from './eagle-transfer-work';
 import { ConflictException } from '@nestjs/common';
 import type { EagleImagePyramid } from '@prisma/client';
 import type { ObjectStorageService } from '../storage/object-storage.service';
@@ -94,17 +94,19 @@ export async function copyTransferPyramid(
   assertOwnedObjectKey(ownerId, p.targetPrefix);
   const tiles = transferPyramidTiles(p);
   let total = 0n;
-  await runTransferWork(tiles, async (relative) => {
-    const sourceKey = `${pyramidStoragePrefix(p.storagePrefix)}/${relative}`,
-      targetKey = p.targetPrefix + relative;
-    const before = await storage.headObject(sourceKey);
-    const size = BigInt(before.ContentLength ?? -1);
-    if (size < 0n) throw new ConflictException('切片读取校验失败。');
-    await storage.copyObject(sourceKey, targetKey);
-    const after = await storage.headObject(targetKey);
-    if (BigInt(after.ContentLength ?? -1) !== size)
-      throw new ConflictException('切片复制校验失败。');
-    total += size;
-  });
+  await runTransferWork(tiles, async (relative) =>
+    transferCopyBudget.run(async () => {
+      const sourceKey = `${pyramidStoragePrefix(p.storagePrefix)}/${relative}`,
+        targetKey = p.targetPrefix + relative;
+      const before = await storage.headObject(sourceKey);
+      const size = BigInt(before.ContentLength ?? -1);
+      if (size < 0n) throw new ConflictException('切片读取校验失败。');
+      await storage.copyObject(sourceKey, targetKey);
+      const after = await storage.headObject(targetKey);
+      if (BigInt(after.ContentLength ?? -1) !== size)
+        throw new ConflictException('切片复制校验失败。');
+      total += size;
+    }),
+  );
   if (total !== BigInt(p.size)) throw new ConflictException('切片总大小校验失败。');
 }

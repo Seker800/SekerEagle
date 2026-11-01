@@ -20,3 +20,20 @@ export async function runTransferWork<T>(
   );
   if (failure) throw failure.error;
 }
+
+/** Process-shared NAS pressure, acquired only around a leaf COPY plus verification. */
+export const transferCopyBudget: { run<T>(work: () => Promise<T>): Promise<T> } = new (class {
+  private active = 0;
+  private readonly waiting: Array<() => void> = [];
+  async run<T>(work: () => Promise<T>): Promise<T> {
+    if (this.active >= 4) await new Promise<void>((resolve) => this.waiting.push(resolve));
+    else this.active++;
+    try {
+      return await work();
+    } finally {
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.active--;
+    }
+  }
+})();

@@ -1,4 +1,4 @@
-import { runTransferWork } from './eagle-transfer-work';
+import { runTransferWork, transferCopyBudget } from './eagle-transfer-work';
 import { readMediaProcessingFacts } from './media-processing-facts';
 import {
   planTransferPyramid,
@@ -7,7 +7,12 @@ import {
   type TransferPyramid,
 } from './eagle-transfer-pyramid';
 import { isCameraRawMime } from '@sekereagle/library-core';
-import { copyTransferFacts, transferFactIncludes } from './eagle-transfer-facts';
+import {
+  copyTransferFacts,
+  transferFactIncludes,
+  resolveTransferTagMappings,
+  type TransferTagMappings,
+} from './eagle-transfer-facts';
 import {
   planTransferRenditions,
   transferredBrowsingReady,
@@ -61,7 +66,7 @@ export interface TransferRequest {
 }
 type PublishTransfer = (
   tx: Prisma.TransactionClient,
-  context: { privacyLocked: boolean },
+  context: { privacyLocked: boolean; tagMappings?: TransferTagMappings },
 ) => Promise<LibraryTransferResult>;
 
 @Injectable()
@@ -390,12 +395,14 @@ export class EagleLibraryTransferService {
           where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
         });
         this.checkOperation(active, ownerId, ids);
-        await runTransferWork(objects, async (object) => {
-          await this.storage.copyObject(object.sourceKey, object.targetKey);
-          const copied = await this.storage.headObject(object.targetKey);
-          if (BigInt(copied.ContentLength ?? -1) !== BigInt(object.size))
-            throw new ConflictException('文件复制校验失败，请重试。');
-        });
+        await runTransferWork(objects, async (object) =>
+          transferCopyBudget.run(async () => {
+            await this.storage.copyObject(object.sourceKey, object.targetKey);
+            const copied = await this.storage.headObject(object.targetKey);
+            if (BigInt(copied.ContentLength ?? -1) !== BigInt(object.size))
+              throw new ConflictException('文件复制校验失败，请重试。');
+          }),
+        );
         if (item.pyramid) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
       }
     }
@@ -449,6 +456,12 @@ export class EagleLibraryTransferService {
           };
         });
       }
+      context.tagMappings = await resolveTransferTagMappings(
+        tx,
+        { ownerId, targetMode },
+        sources,
+        context.tagMappings,
+      );
       const processingFacts = new Map(
         (await readMediaProcessingFacts(tx, ownerId, this.sourceMode, sourceIds)).map((fact) => [
           fact.assetId,
@@ -619,6 +632,7 @@ export class EagleLibraryTransferService {
           item.targetId,
           source,
           Boolean(processingFacts.get(source.id)?.detailsReady),
+          context.tagMappings,
         );
         if (source.isPrivate && !facts.hasPrivateTag) {
           const tagId = await this.targetPrivacyTag(tx, ownerId, targetMode);

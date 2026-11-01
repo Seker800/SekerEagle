@@ -62,70 +62,98 @@ const json = (value: unknown): Prisma.InputJsonValue =>
 type Metadata = Pick<EaglePhotoMetadata, (typeof metadataKeys)[number]>;
 type Location = Pick<EaglePhotoLocation, (typeof locationKeys)[number]>;
 
-async function copyTags(
+export interface TransferTagMappings {
+  readonly tx: Prisma.TransactionClient;
+  readonly ownerId: string;
+  readonly targetMode: LibraryMode;
+  readonly tags: Map<string, EagleManualTag>;
+  readonly groups: Map<string, string>;
+}
+
+/** The caller owns this mapping for exactly one publication transaction. */
+export async function resolveTransferTagMappings(
   tx: Prisma.TransactionClient,
-  ownerId: string,
-  targetMode: LibraryMode,
-  targetId: string,
-  source: Source,
-) {
-  const tagIds = new Map<string, string>();
-  let hasPrivateTag = false;
-  for (const link of source.manualTagLinks ?? []) {
-    const tag = link.tag;
-    let target: EagleManualTag | undefined;
-    for (let attempt = 0; attempt < 100; attempt++) {
+  scope: { ownerId: string; targetMode: LibraryMode },
+  sources: readonly Source[],
+  previous?: TransferTagMappings,
+): Promise<TransferTagMappings> {
+  const { ownerId, targetMode } = scope;
+  const mappings = previous ?? { tx, ownerId, targetMode, tags: new Map(), groups: new Map() };
+  if (mappings.tx !== tx || mappings.ownerId !== ownerId || mappings.targetMode !== targetMode)
+    throw new Error('Transfer mapping scope mismatch');
+  const pending = new Map(
+    sources.flatMap((source) =>
+      (source.manualTagLinks ?? [])
+        .filter(({ tag }) => !mappings.tags.has(tag.id))
+        .map(({ tag }) => [tag.id, { tag, mode: source.libraryMode }] as const),
+    ),
+  );
+  if (!pending.size) return mappings;
+  for (let attempt = 0; pending.size && attempt < 100; attempt++) {
+    const candidates = [...pending.values()].map(({ tag, mode }) => {
       const name =
         attempt === 0
           ? tag.name
-          : `${tag.name.slice(0, 180)} · ${source.libraryMode.toLowerCase()} ${tag.id.slice(0, 8)}${attempt === 1 ? '' : ` ${attempt}`}`;
-      const normalizedName =
-        attempt === 0 ? tag.normalizedName : name.normalize('NFKC').trim().toLowerCase();
-      const existing = await tx.eagleManualTag.findUnique({
-        where: {
-          ownerId_libraryMode_normalizedName: { ownerId, libraryMode: targetMode, normalizedName },
-        },
+          : `${tag.name.slice(0, 180)} · ${mode.toLowerCase()} ${tag.id.slice(0, 8)}${attempt === 1 ? '' : ` ${attempt}`}`;
+      return {
+        tag,
+        name,
+        normalizedName:
+          attempt === 0 ? tag.normalizedName : name.normalize('NFKC').trim().toLowerCase(),
+      };
+    });
+    const names = [...new Set(candidates.map((candidate) => candidate.normalizedName))];
+    const existing = new Map(
+      (
+        await tx.eagleManualTag.findMany({
+          where: { ownerId, libraryMode: targetMode, normalizedName: { in: names } },
+        })
+      ).map((tag) => [tag.normalizedName, tag]),
+    );
+    // First source for a name owns creation, just as in sequential publication.
+    const missing = [
+      ...new Map(
+        candidates
+          .filter((candidate) => !existing.has(candidate.normalizedName))
+          .map((candidate) => [candidate.normalizedName, candidate] as const)
+          .reverse(),
+      ).values(),
+    ];
+    const groups = [
+      ...new Map(
+        missing
+          .flatMap(({ tag }) => [
+            ...(tag.group ? [tag.group] : []),
+            ...tag.groupMemberships.map((membership) => membership.group),
+          ])
+          .filter((group) => !mappings.groups.has(group.normalizedName))
+          .map((group) => [group.normalizedName, group] as const),
+      ).values(),
+    ];
+    if (groups.length) {
+      await tx.eagleManualTagGroup.createMany({
+        data: groups.map((group) => ({
+          ownerId,
+          libraryMode: targetMode,
+          name: group.name,
+          normalizedName: group.normalizedName,
+          color: group.color,
+          description: group.description,
+        })),
+        skipDuplicates: true,
       });
-      if (existing && existing.marksAssetsPrivate !== tag.marksAssetsPrivate) continue;
-      if (existing) {
-        target = existing;
-        break;
-      }
-      const groups = [
-        ...new Map(
-          [...(tag.group ? [tag.group] : []), ...tag.groupMemberships.map((m) => m.group)].map(
-            (g) => [g.id, g],
-          ),
-        ).values(),
-      ];
-      const mapped = new Map<string, string>();
-      for (const group of groups) {
-        const saved = await tx.eagleManualTagGroup.upsert({
-          where: {
-            ownerId_libraryMode_normalizedName: {
-              ownerId,
-              libraryMode: targetMode,
-              normalizedName: group.normalizedName,
-            },
-          },
-          update: {},
-          create: {
-            ownerId,
-            libraryMode: targetMode,
-            name: group.name,
-            normalizedName: group.normalizedName,
-            color: group.color,
-            description: group.description,
-          },
-        });
-        mapped.set(group.id, saved.id);
-      }
-      target = await tx.eagleManualTag.upsert({
+      for (const group of await tx.eagleManualTagGroup.findMany({
         where: {
-          ownerId_libraryMode_normalizedName: { ownerId, libraryMode: targetMode, normalizedName },
+          ownerId,
+          libraryMode: targetMode,
+          normalizedName: { in: groups.map((group) => group.normalizedName) },
         },
-        update: {},
-        create: {
+      }))
+        mappings.groups.set(group.normalizedName, group.id);
+    }
+    if (missing.length) {
+      await tx.eagleManualTag.createMany({
+        data: missing.map(({ tag, name, normalizedName }) => ({
           ownerId,
           libraryMode: targetMode,
           name,
@@ -133,40 +161,80 @@ async function copyTags(
           color: tag.color,
           isStarred: tag.isStarred,
           marksAssetsPrivate: tag.marksAssetsPrivate,
-          groupId: tag.groupId ? mapped.get(tag.groupId) : undefined,
-        },
+          groupId: tag.group ? mappings.groups.get(tag.group.normalizedName) : undefined,
+        })),
+        skipDuplicates: true,
       });
-      if (target.marksAssetsPrivate !== tag.marksAssetsPrivate) continue;
-      if (mapped.size)
-        await tx.eagleManualTagGroupMembership.createMany({
-          data: [...mapped.values()].map((groupId) => ({
-            ownerId,
-            libraryMode: targetMode,
-            tagId: target!.id,
-            groupId,
-          })),
-          skipDuplicates: true,
-        });
-      break;
-    }
-    if (!target || target.marksAssetsPrivate !== tag.marksAssetsPrivate)
-      throw new Error('无法映射目标库标签。');
-    tagIds.set(tag.id, target.id);
-    hasPrivateTag ||= target.marksAssetsPrivate;
-    await tx.eagleAssetManualTag.createMany({
-      data: [
-        {
+      for (const tag of await tx.eagleManualTag.findMany({
+        where: {
           ownerId,
           libraryMode: targetMode,
-          assetId: targetId,
-          tagId: target.id,
-          assignedByUser: link.assignedByUser,
-          assignmentProvenance: link.assignmentProvenance,
+          normalizedName: { in: missing.map((candidate) => candidate.normalizedName) },
         },
-      ],
-      skipDuplicates: true,
-    });
+      }))
+        existing.set(tag.normalizedName, tag);
+      const memberships = missing.flatMap(({ tag, normalizedName }) => {
+        const target = existing.get(normalizedName);
+        if (!target || target.marksAssetsPrivate !== tag.marksAssetsPrivate) return [];
+        return [
+          ...new Set(
+            [
+              ...(tag.group ? [tag.group] : []),
+              ...tag.groupMemberships.map((membership) => membership.group),
+            ]
+              .map((group) => mappings.groups.get(group.normalizedName))
+              .filter((id): id is string => Boolean(id)),
+          ),
+        ].map((groupId) => ({ ownerId, libraryMode: targetMode, tagId: target.id, groupId }));
+      });
+      if (memberships.length)
+        await tx.eagleManualTagGroupMembership.createMany({
+          data: memberships,
+          skipDuplicates: true,
+        });
+    }
+    for (const { tag, normalizedName } of candidates) {
+      const target = existing.get(normalizedName);
+      if (target && target.marksAssetsPrivate === tag.marksAssetsPrivate) {
+        mappings.tags.set(tag.id, target);
+        pending.delete(tag.id);
+      }
+    }
   }
+  if (pending.size) throw new Error('无法映射目标库标签。');
+  return mappings;
+}
+
+async function copyTags(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  targetMode: LibraryMode,
+  targetId: string,
+  source: Source,
+  mappings?: TransferTagMappings,
+) {
+  const resolved = await resolveTransferTagMappings(
+    tx,
+    { ownerId, targetMode },
+    [source],
+    mappings,
+  );
+  const tagIds = new Map<string, string>();
+  let hasPrivateTag = false;
+  const links = (source.manualTagLinks ?? []).map((link) => {
+    const target = resolved.tags.get(link.tag.id)!;
+    tagIds.set(link.tag.id, target.id);
+    hasPrivateTag ||= target.marksAssetsPrivate;
+    return {
+      ownerId,
+      libraryMode: targetMode,
+      assetId: targetId,
+      tagId: target.id,
+      assignedByUser: link.assignedByUser,
+      assignmentProvenance: link.assignmentProvenance,
+    };
+  });
+  if (links.length) await tx.eagleAssetManualTag.createMany({ data: links, skipDuplicates: true });
   // Retired AI tags are existing results, not new model executions or new approval decisions.
   const runs = new Map<string, string>();
   for (const link of source.aiTagLinks ?? []) {
@@ -237,8 +305,9 @@ export async function copyTransferFacts(
   targetId: string,
   source: Source,
   sourceDetailsReady: boolean,
+  mappings?: TransferTagMappings,
 ) {
-  const hasPrivateTag = await copyTags(tx, ownerId, targetMode, targetId, source);
+  const hasPrivateTag = await copyTags(tx, ownerId, targetMode, targetId, source, mappings);
   const archive =
     source.transferFacts?.assetRevision === source.mediaRevision &&
     source.transferFacts.schemaVersion === 1
