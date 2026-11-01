@@ -1,3 +1,5 @@
+import { memoryPaletteKey } from './eagle-memory-color-score';
+import type { SearchColorSwatch } from '@sekereagle/library-core';
 import { Prisma } from '@prisma/client';
 import { Pool, type PoolClient } from 'pg';
 import { LibraryMemoryIndex } from './eagle-memory-index';
@@ -119,6 +121,8 @@ export async function readMemoryAssets(
     }
     if (rank != null) (entry.swatches as MemoryAsset[]).push({ hex, weight });
   }
+  for (const analysis of analyses.values())
+    analysis.paletteKey = memoryPaletteKey(analysis.swatches as SearchColorSwatch[]);
   return assets;
 }
 
@@ -126,7 +130,10 @@ export async function readMemoryAssets(
 export class LibraryReadStore {
   private readonly indexes = new Map<string, LibraryMemoryIndex>();
   private readonly loading = new Map<string, Promise<LibraryMemoryIndex>>();
-  constructor(private readonly db: Pool, private readonly metadataFactFields?: Prisma.Sql) {}
+  constructor(
+    private readonly db: Pool,
+    private readonly metadataFactFields?: Prisma.Sql,
+  ) {}
   async synchronize(scope: LibraryIdentity): Promise<LibraryMemoryIndex> {
     const key = JSON.stringify([scope.ownerId, scope.libraryMode]);
     const running = this.loading.get(key);
@@ -188,7 +195,11 @@ export class LibraryReadStore {
         );
       const rebuild = !complete || changes.some((change) => change.rebuild);
       const ids = rebuild ? undefined : [...new Set(changes.flatMap((change) => change.assetIds))];
-      next = { revision, ids, rows: await readMemoryAssets(connection, scope, ids, this.metadataFactFields) };
+      next = {
+        revision,
+        ids,
+        rows: await readMemoryAssets(connection, scope, ids, this.metadataFactFields),
+      };
       await connection.query('COMMIT');
     } catch (error) {
       await connection.query('ROLLBACK');

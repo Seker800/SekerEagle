@@ -71,16 +71,28 @@ export async function readSmartFolderPage<
     .digest('hex');
   let after = decodeImageSearchCursor(query.cursor, searchKey, scope);
   const resident = await readMemorySmartFolderPage(scope, {
-    where, folderIds, limit: query.limit, ordinaryMembersPossible, includePrivate, trash, after,
+    where,
+    folderIds,
+    limit: query.limit,
+    ordinaryMembersPossible,
+    includePrivate,
+    trash,
+    after,
   });
   if (resident !== null) {
-    const rows = resident.length ? await readAssets({ id: { in: resident.map(position => position.assetId) } }) : [];
-    const byId = new Map(rows.map(row => [row.id, row]));
-    if (resident.every(position => byId.has(position.assetId))) {
+    const rows = resident.length
+      ? await readAssets({ id: { in: resident.map((position) => position.assetId) } })
+      : [];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    if (resident.every((position) => byId.has(position.assetId))) {
       const page = resident.slice(0, query.limit);
-      return { rows: page.map(position => byId.get(position.assetId)!), nextCursor:
-        resident.length > query.limit && page.length
-          ? encodeImageSearchCursor(searchKey, page.at(-1)!, scope) : null };
+      return {
+        rows: page.map((position) => byId.get(position.assetId)!),
+        nextCursor:
+          resident.length > query.limit && page.length
+            ? encodeImageSearchCursor(searchKey, page.at(-1)!, scope)
+            : null,
+      };
     }
   }
   const ranked: Array<{ row: T; position: ImageSearchPosition }> = [];

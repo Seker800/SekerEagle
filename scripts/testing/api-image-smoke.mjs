@@ -13,7 +13,12 @@ const password = randomBytes(24).toString('hex');
 const accessKey = randomBytes(16).toString('hex');
 const secretKey = randomBytes(32).toString('hex');
 const tokenKey = randomBytes(32).toString('hex');
+const readerCheck = process.argv.includes('--reader-check');
+const readerToken = randomBytes(32).toString('hex');
 const env = {
+  ...(readerCheck
+    ? { EAGLE_READER_URL: 'http://library-reader:3001', EAGLE_READER_TOKEN: readerToken }
+    : {}),
   DATABASE_URL: `postgresql://sekereagle_test:${password}@postgres:5432/sekereagle_test`,
   S3_ENDPOINT: 'http://minio:9000',
   S3_PUBLIC_ENDPOINT: 'http://localhost:8180',
@@ -143,6 +148,47 @@ try {
     '-e',
     `const {S3Client,CreateBucketCommand}=require('@aws-sdk/client-s3');const s=new S3Client({endpoint:process.env.S3_ENDPOINT,region:process.env.S3_REGION,forcePathStyle:true,credentials:{accessKeyId:process.env.S3_ACCESS_KEY_ID,secretAccessKey:process.env.S3_SECRET_ACCESS_KEY}});s.send(new CreateBucketCommand({Bucket:process.env.S3_BUCKET})).finally(()=>s.destroy());`,
   ]);
+  if (readerCheck) {
+    const reader = `${prefix}-reader`;
+    containers.push(reader);
+    run([
+      'run',
+      '--detach',
+      '--pull',
+      'never',
+      '--name',
+      reader,
+      '--network',
+      prefix,
+      '--network-alias',
+      'library-reader',
+      '--memory',
+      '1g',
+      '--env',
+      `DATABASE_URL=${env.DATABASE_URL}`,
+      '--env',
+      `EAGLE_READER_TOKEN=${readerToken}`,
+      '--env',
+      'EAGLE_READER_HOST=0.0.0.0',
+      '--env',
+      'NODE_OPTIONS=--max-old-space-size=640',
+      image,
+      'node',
+      'apps/api/dist/library-reader.js',
+    ]);
+    const probe = `const assert=require('node:assert/strict');(async()=>{
+      const url='http://127.0.0.1:3001';
+      assert.equal((await fetch(url+'/health')).status,401);
+      const response=await fetch(url+'/query',{method:'POST',headers:{authorization:'Bearer '+process.env.EAGLE_READER_TOKEN,'content-type':'application/json'},body:JSON.stringify({scope:{ownerId:'isolated-image-reader',libraryMode:'MATERIAL'},where:{},action:'count'})});
+      assert.equal(response.status,200);const result=await response.json();assert.equal(result.count,0);assert.match(result.revision,/^\\d+$/);
+    })().catch(()=>process.exit(1))`;
+    const ready = () =>
+      spawnSync('docker', ['exec', reader, 'node', '-e', probe], { stdio: 'ignore', timeout: 5000 })
+        .status === 0;
+    await waitFor(ready, 'independent reader without API or storage secrets');
+    run(['restart', '--time', '70', reader]);
+    await waitFor(ready, 'reader reconstructs after restart');
+  }
   const api = `${prefix}-api`;
   containers.push(api);
   run([
@@ -191,7 +237,7 @@ try {
       },
     });
     let output = `${fixture.stdout ?? ''}${fixture.stderr ?? ''}`;
-    for (const value of [password, accessKey, secretKey, tokenKey])
+    for (const value of [password, accessKey, secretKey, tokenKey, readerToken])
       output = output.replaceAll(value, '[test value]');
     process.stdout.write(output);
     assert.equal(fixture.status, 0, 'Request-frequency HTTP regression failed');
@@ -250,7 +296,7 @@ try {
       },
     });
     let output = `${fixture.stdout ?? ''}${fixture.stderr ?? ''}`;
-    for (const value of [password, accessKey, secretKey, tokenKey])
+    for (const value of [password, accessKey, secretKey, tokenKey, readerToken])
       output = output.replaceAll(value, '[test value]');
     process.stdout.write(output);
     assert.equal(fixture.status, 0, 'Real-storage fixture failed');
@@ -264,6 +310,9 @@ try {
       unauthenticatedPeople: 401,
       independentExecutorWithoutApiSecrets: true,
       executorGracefulExit: 0,
+      ...(readerCheck
+        ? { independentReaderWithoutApiOrStorageSecrets: true, readerRestart: true }
+        : {}),
     }) + '\n',
   );
 } catch (error) {
@@ -274,7 +323,7 @@ try {
       timeout: 5000,
     });
     let diagnostic = `${logs.stdout ?? ''}${logs.stderr ?? ''}`;
-    for (const value of [password, accessKey, secretKey, tokenKey])
+    for (const value of [password, accessKey, secretKey, tokenKey, readerToken])
       diagnostic = diagnostic.replaceAll(value, '[test value]');
     process.stderr.write(diagnostic);
   }

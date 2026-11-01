@@ -11,6 +11,10 @@ CREATE TABLE "EagleLibraryReadChange" (
   PRIMARY KEY ("ownerId","libraryMode",revision),
   FOREIGN KEY ("ownerId","libraryMode") REFERENCES "EagleLibraryReadState" ON DELETE CASCADE
 );
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EagleLibraryReadState"
+  FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EagleLibraryReadChange"
+  FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
 INSERT INTO "EagleLibraryReadState" ("ownerId","libraryMode")
   SELECT DISTINCT "ownerId","libraryMode" FROM "EagleAsset";
 
@@ -37,10 +41,14 @@ BEGIN
       SELECT array_agg(DISTINCT a."assetId") INTO affected FROM changed c
         JOIN "EagleAssetColorAnalysis" a ON a.id=c."analysisId" AND a."ownerId"=c."ownerId" AND a."libraryMode"=c."libraryMode"
         WHERE c."ownerId"=scope."ownerId" AND c."libraryMode"=scope."libraryMode";
+    ELSIF TG_ARGV[0]='directory' THEN
+      SELECT array_agg(DISTINCT link."assetId") INTO affected FROM changed c
+        JOIN "EagleAssetManualTag" link ON link."tagId"=c.id AND link."ownerId"=c."ownerId" AND link."libraryMode"=c."libraryMode"
+        WHERE c."ownerId"=scope."ownerId" AND c."libraryMode"=scope."libraryMode";
     ELSE affected := ARRAY[]::text[];
     END IF;
     INSERT INTO "EagleLibraryReadChange" ("ownerId","libraryMode",revision,"assetIds",rebuild)
-      VALUES (scope."ownerId",scope."libraryMode",next_revision,coalesce(affected,ARRAY[]::text[]),TG_ARGV[0]='directory');
+      VALUES (scope."ownerId",scope."libraryMode",next_revision,coalesce(affected,ARRAY[]::text[]),false);
     PERFORM pg_notify('sekereagle_library_read_change',scope."libraryMode"::text);
   END LOOP;
   RETURN NULL;

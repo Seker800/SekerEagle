@@ -665,45 +665,123 @@ test('photo facet HTTP results match original raw-value grouping and database co
 });
 
 test('color pages preserve SQL scores, mixed-engine cursors, reverse pages and OR membership', async () => {
-  const { hexColorLab, COLOR_PALETTE_VERSION } = await import('../../packages/library-core/dist/index.js');
+  const { hexColorLab, COLOR_PALETTE_VERSION } =
+    await import('../../packages/library-core/dist/index.js');
   const { readColorAssetPage } = await import('../../apps/api/dist/eagle/eagle-color-page.js');
   const ids = Array.from({ length: 20 }, (_, at) => `${ownerId}-${at}`);
   for (let at = 0; at < ids.length; at++) {
-    const analysis = await db.eagleAssetColorAnalysis.create({ data: { ...scope, assetId: ids[at], assetRevision: 0,
-      processorVersion: COLOR_PALETTE_VERSION, status: 'COMPLETED', isCurrent: true } });
-    const palette = [{ hex: ['#69696a', '#ffffff', '#fcfcfc', '#0000ff', '#202020'][at % 5], weight: 0.8 }, { hex: '#0404fc', weight: 0.2 }];
-    await db.eagleAssetColorSwatch.createMany({ data: palette.map((swatch, rank) => {
-      const [labL, labA, labB] = hexColorLab(swatch.hex);
-      return { ...scope, analysisId: analysis.id, rank, ...swatch, labL, labA, labB };
-    }) });
+    const analysis = await db.eagleAssetColorAnalysis.create({
+      data: {
+        ...scope,
+        assetId: ids[at],
+        assetRevision: 0,
+        processorVersion: COLOR_PALETTE_VERSION,
+        status: 'COMPLETED',
+        isCurrent: true,
+      },
+    });
+    const palette = [
+      { hex: ['#69696a', '#ffffff', '#fcfcfc', '#0000ff', '#202020'][at % 5], weight: 0.8 },
+      { hex: '#0404fc', weight: 0.2 },
+    ];
+    await db.eagleAssetColorSwatch.createMany({
+      data: palette.map((swatch, rank) => {
+        const [labL, labA, labB] = hexColorLab(swatch.hex);
+        return { ...scope, analysisId: analysis.id, rank, ...swatch, labL, labA, labB };
+      }),
+    });
   }
   const server = createLibraryReaderServer(store, 'color-reader');
-  server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const oldUrl = process.env.EAGLE_READER_URL,
+    oldToken = process.env.EAGLE_READER_TOKEN;
   try {
     process.env.EAGLE_READER_URL = `http://127.0.0.1:${server.address().port}`;
     process.env.EAGLE_READER_TOKEN = 'color-reader';
     for (const color of ['#777777', '#ffffff', '#0000ff']) {
-      const where = { AND: [{ ...scope, id: { in: ids }, deletedAt: null, isPrivate: false }, { OR: [{ colorMatch: color }, { rating: 4 }] }] };
+      const where = {
+        AND: [
+          { ...scope, id: { in: ids }, deletedAt: null, isPrivate: false },
+          { OR: [{ colorMatch: color }, { rating: 4 }] },
+        ],
+      };
       let cursor;
       do {
         const query = { limit: 3, ...(cursor ? { cursor } : {}) };
-        const expected = await readColorAssetPage(db, scope, query, where, color, false, false, false);
+        const expected = await readColorAssetPage(
+          db,
+          scope,
+          query,
+          where,
+          color,
+          false,
+          false,
+          false,
+        );
         const hits = libraryReadMetrics.hits;
         const actual = await readColorAssetPage(db, scope, query, where, color, false, false);
         assert.deepEqual(actual, expected);
         assert.equal(libraryReadMetrics.hits, hits + 1);
         if (actual.previousCursor) {
           const backwards = { limit: 3, cursor: actual.previousCursor };
-          assert.deepEqual(await readColorAssetPage(db, scope, backwards, where, color, false, false),
-            await readColorAssetPage(db, scope, backwards, where, color, false, false, false));
+          assert.deepEqual(
+            await readColorAssetPage(db, scope, backwards, where, color, false, false),
+            await readColorAssetPage(db, scope, backwards, where, color, false, false, false),
+          );
         }
         cursor = expected.nextCursor;
       } while (cursor);
     }
   } finally {
-    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
-    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = oldToken;
-    server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
+    else process.env.EAGLE_READER_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
+    else process.env.EAGLE_READER_TOKEN = oldToken;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('tag renames refresh only their linked resources and tag deletion clears those memberships', async () => {
+  const tag = await db.eagleManualTag.create({
+    data: { ...scope, name: 'before', normalizedName: 'before' },
+  });
+  try {
+    const assetIds = [1, 2].map((at) => `${ownerId}-${at}`);
+    await db.eagleAssetManualTag.createMany({
+      data: assetIds.map((assetId) => ({ ...scope, assetId, tagId: tag.id })),
+    });
+    const index = await store.synchronize(scope);
+    const revision = BigInt(index.revision);
+    assert.equal(
+      index.count({ manualTagLinks: { some: { tag: { normalizedName: 'before' } } } }),
+      2,
+    );
+    await db.eagleManualTag.update({
+      where: { id: tag.id },
+      data: { name: 'after', normalizedName: 'after' },
+    });
+    const events = await db.eagleLibraryReadChange.findMany({
+      where: { ...scope, revision: { gt: revision } },
+    });
+    assert.ok(events.length);
+    assert.ok(events.every((event) => !event.rebuild));
+    assert.deepEqual(
+      [...new Set(events.flatMap((event) => event.assetIds))].sort(),
+      [...assetIds].sort(),
+    );
+    const updated = await store.synchronize(scope);
+    assert.equal(
+      updated.count({ manualTagLinks: { some: { tag: { normalizedName: 'after' } } } }),
+      2,
+    );
+    await db.eagleManualTag.delete({ where: { id: tag.id } });
+    assert.equal(
+      (await store.synchronize(scope)).count({ manualTagLinks: { some: { tagId: tag.id } } }),
+      0,
+    );
+  } finally {
+    await db.eagleManualTag.deleteMany({ where: { id: tag.id } });
   }
 });

@@ -215,5 +215,21 @@ test('partial relation projections reject queries for history before scanning', 
     { photoFaces: { every: { personId: 'person', isCurrent: true } } },
     { aiTagLinks: { none: { aiTagId: 'blue' } } },
     { colorAnalyses: { some: { isCurrent: false } } },
-  ]) assert.throws(() => compileMemorySearchPredicate(where as AssetSearchWhere), /Unsupported/);
+  ])
+    assert.throws(() => compileMemorySearchPredicate(where as AssetSearchWhere), /Unsupported/);
+});
+
+// This case was already green; it adds regression coverage without changing matching.
+test('SQL LIKE end anchors do not accept an extra final newline', () => {
+  const row = { ...asset, normalizedDisplayName: 'sea\n' };
+  assert.equal(
+    compileMemorySearchPredicate({ normalizedDisplayName: { equals: 'SEA', mode: 'insensitive' } })(
+      row,
+    ),
+    false,
+  );
+  assert.equal(
+    compileMemorySearchPredicate({ normalizedDisplayName: { endsWith: 'sea' } })(row),
+    false,
+  );
 });

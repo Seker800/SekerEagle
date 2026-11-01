@@ -1,4 +1,8 @@
-import { compileMemorySearchPredicate, type MemoryAsset, type MemorySearchContext } from './eagle-memory-predicate';
+import {
+  compileMemorySearchPredicate,
+  type MemoryAsset,
+  type MemorySearchContext,
+} from './eagle-memory-predicate';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { isDeepStrictEqual } from 'node:util';
 
@@ -84,12 +88,15 @@ export class LibraryMemoryIndex {
     if (reorder) this.ordered.clear();
   }
   private predicate(where: AssetSearchWhere, context?: MemorySearchContext) {
-    return compileMemorySearchPredicate({
-      AND: [
-        { ownerId: this.ownerId, libraryMode: this.libraryMode as 'PHOTO' | 'MATERIAL' },
-        where,
-      ],
-    }, context);
+    return compileMemorySearchPredicate(
+      {
+        AND: [
+          { ownerId: this.ownerId, libraryMode: this.libraryMode as 'PHOTO' | 'MATERIAL' },
+          where,
+        ],
+      },
+      context,
+    );
   }
   page(
     where: AssetSearchWhere,
@@ -128,7 +135,11 @@ export class LibraryMemoryIndex {
     for (const row of this.rows.values()) if (match(row)) result++;
     return result;
   }
-  forEach(where: AssetSearchWhere, visit: (row: MemoryAsset) => void, context?: MemorySearchContext) {
+  forEach(
+    where: AssetSearchWhere,
+    visit: (row: MemoryAsset) => void,
+    context?: MemorySearchContext,
+  ) {
     const match = this.predicate(where, context);
     for (const row of this.rows.values()) if (match(row)) visit(row);
   }

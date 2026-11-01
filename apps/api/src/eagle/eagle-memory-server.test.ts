@@ -64,7 +64,14 @@ test('internal reader authenticates before reading and validates scope, page and
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { revision: '1', ids: [] });
     assert.equal(reads, 1);
-    const color = await post({ ...query, action: 'colorPage', colorPage: { color: '#ffffff', date: 'chronologicalAt', limit: 40, offset: 0 } }, `Bearer ${token}`);
+    const color = await post(
+      {
+        ...query,
+        action: 'colorPage',
+        colorPage: { color: '#ffffff', date: 'chronologicalAt', limit: 40, offset: 0 },
+      },
+      `Bearer ${token}`,
+    );
     assert.equal(color.status, 200);
     assert.deepEqual(await color.json(), { revision: '1', positions: [] });
   } finally {

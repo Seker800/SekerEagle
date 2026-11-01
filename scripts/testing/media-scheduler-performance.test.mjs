@@ -619,22 +619,96 @@ test('restricting upload freshness preserves recent/history ordering, replacemen
 
 test('queue wake discovery skips unrelated job history when pending work has no dependency', async () => {
   const { buildMediaWakeQuery } = await import('../../apps/worker/dist/job-wakeup-query.js');
-  const pending = await fixture(12000), history = await fixture(36000);
+  const pending = await fixture(12000),
+    history = await fixture(36000);
   try {
-    await db.eagleAssetProcessingJob.updateMany({ where: { ownerId: history.owner }, data: { status: 'COMPLETED' } });
-    const plan = await withIsolatedMediaQueue([pending.owner, history.owner], async tx => {
-      const rows = await tx.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${buildMediaWakeQuery()}`);
+    await db.eagleAssetProcessingJob.updateMany({
+      where: { ownerId: history.owner },
+      data: { status: 'COMPLETED' },
+    });
+    const plan = await withIsolatedMediaQueue([pending.owner, history.owner], async (tx) => {
+      const rows = await tx.$queryRaw(
+        Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${buildMediaWakeQuery()}`,
+      );
       return rows[0]['QUERY PLAN'][0];
     });
-    const flat = node => [node, ...(node.Plans ?? []).flatMap(flat)];
-    const visited = flat(plan.Plan).filter(node => node['Relation Name'] === 'EagleMediaJob')
-      .reduce((sum, node) => sum + ((node['Actual Rows'] ?? 0) + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops'], 0);
-    console.log(JSON.stringify({ wakeDiscovery: true, jobs: 48000, visited, ms: plan['Execution Time'] }));
-    assert.ok(visited < 26000, `independent pending work must not read retired dependency history; visited ${visited}`);
+    const flat = (node) => [node, ...(node.Plans ?? []).flatMap(flat)];
+    const visited = flat(plan.Plan)
+      .filter((node) => node['Relation Name'] === 'EagleMediaJob')
+      .reduce(
+        (sum, node) =>
+          sum +
+          ((node['Actual Rows'] ?? 0) + (node['Rows Removed by Filter'] ?? 0)) *
+            node['Actual Loops'],
+        0,
+      );
+    console.log(
+      JSON.stringify({ wakeDiscovery: true, jobs: 48000, visited, ms: plan['Execution Time'] }),
+    );
+    assert.ok(
+      visited < 26000,
+      `independent pending work must not read retired dependency history; visited ${visited}`,
+    );
   } finally {
     for (const item of [pending, history]) {
       await db.eagleAsset.deleteMany({ where: { ownerId: item.owner } });
       await db.user.delete({ where: { id: item.owner } });
     }
+  }
+});
+
+test('wake discovery retains dependency, lease, media-version, trash, kind and pause guards', async () => {
+  const { buildMediaWakeQuery } = await import('../../apps/worker/dist/job-wakeup-query.js');
+  const f = await fixture(7);
+  const ids = Array.from({ length: 7 }, (_, n) => `job-${f.prefix}-${n + 1}`);
+  const read = async (kinds) =>
+    (await db.$queryRaw(buildMediaWakeQuery(kinds))).filter((row) => row.ownerId === f.owner);
+  try {
+    await db.eagleAssetProcessingJob.updateMany({
+      where: { ownerId: f.owner },
+      data: { availableAt: new Date('2099-01-01') },
+    });
+    await db.eagleAssetProcessingJob.update({
+      where: { id: ids[0] },
+      data: { status: 'COMPLETED' },
+    });
+    await db.eagleAssetProcessingJob.update({
+      where: { id: ids[1] },
+      data: { dependsOnJobId: ids[0], availableAt: new Date('2001-01-01') },
+    });
+    await db.eagleAssetProcessingJob.update({
+      where: { id: ids[2] },
+      data: { dependsOnJobId: ids[3], availableAt: new Date('1990-01-01') },
+    });
+    await db.eagleAssetProcessingJob.update({
+      where: { id: ids[4] },
+      data: { status: 'PROCESSING', lockedAt: new Date('2002-01-01') },
+    });
+    await db.eagleAssetProcessingJob.update({
+      where: { id: ids[5] },
+      data: { assetRevision: 0, availableAt: new Date('1980-01-01') },
+    });
+    await db.eagleAsset.update({ where: { id: `${f.prefix}-7` }, data: { deletedAt: new Date() } });
+    await db.eagleAssetProcessingJob.update({
+      where: { id: ids[6] },
+      data: { status: 'PENDING', availableAt: new Date('1970-01-01') },
+    });
+    assert.equal((await read())[0].availableAt.toISOString(), '2001-01-01T00:00:00.000Z');
+    assert.deepEqual(await read([]), []);
+    assert.deepEqual(await read(['GENERATE_PREVIEW']), []);
+    await db.eagleTaskPolicy.create({
+      data: { ownerId: f.owner, libraryMode: 'PHOTO', family: 'EMBEDDING', paused: true },
+    });
+    assert.deepEqual(await read(), []);
+    await db.eagleTaskPolicy.update({
+      where: {
+        ownerId_libraryMode_family: { ownerId: f.owner, libraryMode: 'PHOTO', family: 'EMBEDDING' },
+      },
+      data: { paused: false },
+    });
+    assert.equal((await read())[0].availableAt.toISOString(), '2001-01-01T00:00:00.000Z');
+  } finally {
+    await db.eagleAsset.deleteMany({ where: { ownerId: f.owner } });
+    await db.user.delete({ where: { id: f.owner } });
   }
 });
