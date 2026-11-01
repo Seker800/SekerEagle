@@ -414,6 +414,7 @@ export class EagleService {
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
+    if (!groups.length) return [];
     const eligibleColorIds = hasColorSearch(queryWhere)
       ? new Set(
           (

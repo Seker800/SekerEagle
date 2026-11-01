@@ -96,3 +96,13 @@ test('palette input and alpha boundaries preserve basic processing safety', asyn
   assert.equal(extractSearchColors(Uint8Array.from([255, 255, 255, 170]), 4, 1)[0]?.hex, '#fcfcfc');
   assert.throws(() => paletteColorScore('white', [{ hex: '#ffffff', weight: 1 }]), /Invalid hex/);
 });
+
+test('matches portable golden scores captured from Eagle Build 23 without requiring Eagle in CI', async () => {
+  const golden = await import('./fixtures/eagle-basic-color.json');
+  assert.equal(golden.reference.build, 23);
+  for (const row of golden.cases) {
+    const score = paletteColorScore(row.target, row.palette);
+    if (row.score === null) assert.equal(score, null);
+    else assert.ok(score !== null && Math.abs(score - row.score) < 1e-9);
+  }
+});

@@ -253,6 +253,8 @@ export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<I
     (!('paletteVersion' in value.result) || value.result.paletteVersion !== COLOR_PALETTE_VERSION)
   )
     throw new Error('COLOR_PROCESSOR_VERSION_MISMATCH');
+  if (work.kind === 'EXTRACT_COLOR_PALETTE' && !Array.isArray(value.result.palette))
+    throw new Error('INVALID_IMAGE_RESULT');
   if (value.result.palette) {
     if (!Array.isArray(value.result.palette) || value.result.palette.length > 12)
       throw new Error('INVALID_IMAGE_RESULT');

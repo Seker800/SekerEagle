@@ -59,7 +59,11 @@ test('unsupported fields and operators fail closed instead of falling back to an
 });
 
 test('color predicates are exact scoped SQL expressions rather than Lab component boxes', () => {
-  const sql = compileSearchPredicate({ ownerId: 'owner', libraryMode: 'PHOTO', colorMatch: '#ffffff' } as never);
+  const sql = compileSearchPredicate({
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    colorMatch: '#ffffff',
+  } as never);
   assert.match(sql.sql, /"mediaRevision"/);
   assert.match(sql.sql, /"EagleAssetColorSwatch"/);
   assert.match(sql.sql, /IS NOT NULL/);

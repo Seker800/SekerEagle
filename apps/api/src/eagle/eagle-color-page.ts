@@ -100,12 +100,13 @@ export async function readColorAssetPage(
     ? Prisma.sql`AND (score ${Prisma.raw(newer ? '<' : '>')} ${cursor.score}
     OR (score=${cursor.score} AND (time,id) ${Prisma.raw(newer ? '>' : '<')} (${new Date(cursor.time)},${cursor.id})))`
     : Prisma.empty;
+  // Eagle ranks through `colorDistancesMap[id] || 100`, including the zero-distance fallback.
   const plan = colorSearchPlan(where, color);
   const candidates = await prisma.$queryRaw<
     Array<{ id: string; score: number; time: Date; mediaRevision: number }>
   >(Prisma.sql`
     ${plan.with}, ranked AS MATERIALIZED (
-      SELECT asset.id,asset."mediaRevision",${date} time,coalesce(${plan.score},100) score
+      SELECT asset.id,asset."mediaRevision",${date} time,coalesce(nullif(${plan.score},0),100) score
       FROM ${plan.from} WHERE ${plan.where}
     ) SELECT id,score,time,"mediaRevision" FROM ranked WHERE TRUE ${boundary}
       ORDER BY score ${Prisma.raw(newer ? 'DESC' : 'ASC')},time ${Prisma.raw(newer ? 'ASC' : 'DESC')},id ${Prisma.raw(newer ? 'ASC' : 'DESC')}

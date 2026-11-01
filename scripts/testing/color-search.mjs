@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
@@ -20,7 +21,7 @@ const name = `sekereagle-color-test-${randomUUID()}`;
 function run(cmd, args, options = {}) {
   const result = spawnSync(cmd, args, { encoding: 'utf8', ...options });
   if (result.status !== 0) throw Error(`${cmd}: ${result.stderr}\n${result.stdout}`);
-  return result.stdout.trim();
+  return (result.stdout ?? '').trim();
 }
 let started = false,
   db,
@@ -294,8 +295,13 @@ try {
     /颜色筛选游标/,
   );
   // Eagle's score lookup uses `score || 100`: distinct hex colors with rounded Lab distance zero sort last.
-  const roundedZero=await service.listAssets(owner,{limit:100,color:'#fdfdfd'});
-  assert.equal(roundedZero.items[0].id,fixtures.find(row=>row.name==='gray-background').id);
+  const roundedZero = await service.listAssets(owner, { limit: 100, color: '#fdfdfd' });
+  assert.equal(roundedZero.items[0].id, fixtures.find((row) => row.name === 'gray-background').id);
+  run(
+    process.execPath,
+    ['--test', fileURLToPath(new URL('./search-query.test.mjs', import.meta.url))],
+    { env, stdio: 'inherit' },
+  );
   // Upgrade jobs are idempotent, current-version and thumbnail-scoped, without touching user settings.
   for (const row of fixtures.filter((row) => row.old || row.stale || row.deleted || row.private)) {
     await db.eagleAssetRendition.create({

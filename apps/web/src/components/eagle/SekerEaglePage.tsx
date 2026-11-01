@@ -889,16 +889,28 @@ export function SekerEaglePage({
       ),
     [selectedManualTagSummaries],
   );
+  const colorCoverage = assetsQuery.data?.pages[0]?.colorCoverage ?? null;
   const timelineSectionKeys = useMemo(
     () =>
       isPhotoTimeline &&
       !deferredSearch &&
+      !deferredQuickFilters.color &&
+      !colorCoverage &&
       !(activeSmartFolderId && smartFolderOrder === 'RELEVANCE')
         ? compact
           ? createPhotoTimelineDayKeys(assets)
           : createPhotoTimelineSectionKeys(assets)
         : undefined,
-    [assets, isPhotoTimeline, deferredSearch, compact, activeSmartFolderId, smartFolderOrder],
+    [
+      assets,
+      isPhotoTimeline,
+      deferredSearch,
+      deferredQuickFilters.color,
+      colorCoverage,
+      compact,
+      activeSmartFolderId,
+      smartFolderOrder,
+    ],
   );
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
     targetCardWidth: thumbnailSize,
@@ -981,7 +993,6 @@ export function SekerEaglePage({
     assetStore,
     updatesQueryKey: queryKeys.assetUpdates,
   });
-  const colorCoverage = assetsQuery.data?.pages[0]?.colorCoverage ?? null;
   const manualTagGroups = manualTagGroupsQuery.data ?? [];
   const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];

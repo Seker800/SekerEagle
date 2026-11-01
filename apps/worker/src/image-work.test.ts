@@ -140,7 +140,7 @@ test('remote color results must prove the current palette processor version befo
   assert.equal(decoded.result.palette?.[0]?.hex, '#fcfcfc');
   const malformed = structuredClone(result);
   malformed.result.palette = null;
-  await assert.rejects(decodeImageWork(encodeImageWork(malformed),work),/INVALID_IMAGE_RESULT/);
+  await assert.rejects(decodeImageWork(encodeImageWork(malformed), work), /INVALID_IMAGE_RESULT/);
   const old = structuredClone(result);
   delete (old.result as { paletteVersion?: string }).paletteVersion;
   await assert.rejects(

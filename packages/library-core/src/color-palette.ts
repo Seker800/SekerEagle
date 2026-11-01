@@ -8,10 +8,6 @@ export interface RepresentativeColor {
   labA: number;
   labB: number;
 }
-interface QuantizedPalette {
-  cmap: { palette(): Array<{ color: number[]; count: number }> };
-  pixelCount: number;
-}
 /** Eagle's basic MMCQ settings: 12 colors, alpha >=170, 5-bit bins and 0.25% floor. */
 export function extractSearchColors(
   pixels: Uint8Array,
@@ -40,7 +36,7 @@ export function extractSearchColors(
           : rgba.length < 1e8
             ? 1000
             : 10000;
-  const result = quantize(rgba, rgba.length, skip, 170, 12) as QuantizedPalette | false;
+  const result = quantize(rgba, rgba.length, skip, 170, 12);
   if (!result) return [];
   return result.cmap
     .palette()
