@@ -96,6 +96,8 @@ export function App() {
           cause instanceof ApiError &&
           (cause.status === 401 || (cause.status === 403 && cause.code !== 'ORIGIN_REJECTED'))
         ) {
+          void queryClient.cancelQueries();
+          queryClient.clear();
           setUser(null);
           setConnectionUnavailable(false);
         } else {
@@ -110,7 +112,7 @@ export function App() {
         setCheckingConnection(false);
       }
     }
-  }, []);
+  }, [queryClient]);
   useEffect(() => {
     mounted.current = true;
     void checkSession();
@@ -231,7 +233,7 @@ export function App() {
       </main>
     );
   }
-  if (connectionUnavailable) {
+  if (connectionUnavailable && !user) {
     return (
       <main className="auth-shell auth-offline-shell">
         {connectionButton}
@@ -309,6 +311,15 @@ export function App() {
   }
   return (
     <>
+      {connectionUnavailable && (
+        <aside role="status" className="workspace-connection-status">
+          <strong>{t('无法连接素材库')}</strong>
+          <span>{t('正在自动重试，网络恢复后会继续打开图库。')}</span>
+          <button type="button" disabled={checkingConnection} onClick={() => void checkSession()}>
+            {checkingConnection ? t('正在重试…') : t('立即重试')}
+          </button>
+        </aside>
+      )}
       <WorkspaceRefresh ownerId={user.id} includePrivate={privacyVisibility.enabled} />
       <LibraryWorkspaceProvider
         key={`${user.id}:${libraryMode}`}

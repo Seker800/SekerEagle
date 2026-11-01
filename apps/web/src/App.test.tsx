@@ -16,14 +16,19 @@ vi.mock('./components/eagle/SekerEaglePage', () => ({
     accountView: React.ReactNode;
     modeSwitcher: React.ReactNode;
   }) => {
-    const [draft,setDraft] = useState('');
+    const [draft, setDraft] = useState('');
     return (
-    <div>
-      素材图库{modeSwitcher}
-      <input aria-label="工作区草稿" value={draft} onChange={(event)=>setDraft(event.target.value)} />
-      {accountView}
-    </div>
-  );},
+      <div>
+        素材图库{modeSwitcher}
+        <input
+          aria-label="工作区草稿"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+        {accountView}
+      </div>
+    );
+  },
 }));
 vi.mock('./components/account/AccountHome', () => ({
   AccountHome: ({ onLogout }: { onLogout: () => void }) => {
@@ -118,8 +123,11 @@ describe('startup session recovery', () => {
   });
 
   it('keeps the mounted workspace and unsaved draft through a transient disconnection', async () => {
-    requestMock.mockImplementation((path) => Promise.resolve(path === '/api/auth/me'
-      ? userResponse() : {enabled:false,expiresAt:null}));
+    requestMock.mockImplementation((path) =>
+      Promise.resolve(
+        path === '/api/auth/me' ? userResponse() : { enabled: false, expiresAt: null },
+      ),
+    );
 
     render(
       <QueryClientProvider
@@ -129,30 +137,40 @@ describe('startup session recovery', () => {
       </QueryClientProvider>,
     );
     expect(await screen.findByText('素材图库')).toBeVisible();
-    fireEvent.change(screen.getByRole('textbox',{name:'工作区草稿'}),{target:{value:'保留现场'}});
+    fireEvent.change(screen.getByRole('textbox', { name: '工作区草稿' }), {
+      target: { value: '保留现场' },
+    });
     fireEvent(window, new Event('offline'));
     expect(screen.getByText('素材图库')).toBeVisible();
-    expect(screen.getByRole('textbox',{name:'工作区草稿'})).toHaveValue('保留现场');
+    expect(screen.getByRole('textbox', { name: '工作区草稿' })).toHaveValue('保留现场');
     expect(await screen.findByText('无法连接素材库')).toBeVisible();
     fireEvent(window, new Event('online'));
-    await waitFor(()=>expect(screen.queryByText('无法连接素材库')).not.toBeInTheDocument());
-    expect(screen.getByRole('textbox',{name:'工作区草稿'})).toHaveValue('保留现场');
+    await waitFor(() => expect(screen.queryByText('无法连接素材库')).not.toBeInTheDocument());
+    expect(screen.getByRole('textbox', { name: '工作区草稿' })).toHaveValue('保留现场');
     expect(screen.queryByRole('heading', { name: '登录素材库' })).not.toBeInTheDocument();
   });
 
   it('still removes workspace data when an authenticated session is revoked', async () => {
     let revoked = false;
-    requestMock.mockImplementation((path) => path === '/api/auth/me'
-      ? revoked ? Promise.reject(new ApiError('revoked',401,null)) : Promise.resolve(userResponse())
-      : Promise.resolve({enabled:false,expiresAt:null}));
-    const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
-    const key=['eagle','owner-1','PHOTO','assets','ACTIVE',true];
-    client.setQueryData(key,{private:'cached-private-result'});
-    render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+    requestMock.mockImplementation((path) =>
+      path === '/api/auth/me'
+        ? revoked
+          ? Promise.reject(new ApiError('revoked', 401, null))
+          : Promise.resolve(userResponse())
+        : Promise.resolve({ enabled: false, expiresAt: null }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const key = ['task-center', 'owner-1', 'PHOTO', true, 'ACTIVE'];
+    client.setQueryData(key, { private: 'cached-private-result' });
+    render(
+      <QueryClientProvider client={client}>
+        <App />
+      </QueryClientProvider>,
+    );
     await screen.findByText('素材图库');
-    revoked=true;
-    fireEvent(window,new Event('online'));
-    await screen.findByRole('heading',{name:'登录素材库'});
+    revoked = true;
+    fireEvent(window, new Event('online'));
+    await screen.findByRole('heading', { name: '登录素材库' });
     expect(client.getQueryData(key)).toBeUndefined();
   });
 });
