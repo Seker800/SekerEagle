@@ -1094,7 +1094,11 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     } catch (error) {
       if (
         items.length > 1 &&
-        (error instanceof NotFoundException || error instanceof ConflictException)
+        (error instanceof NotFoundException ||
+          error instanceof ConflictException ||
+          (['TRASH', 'RESTORE', 'DUPLICATE_CLEANUP'].includes(operation.kind) &&
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2028'))
       ) {
         // The fast path was rolled back. Keep unaffected resources actionable,
         // while preserving the exact per-item conflict and retry semantics.
