@@ -49,7 +49,6 @@ BEGIN
     END IF;
     INSERT INTO "EagleLibraryReadChange" ("ownerId","libraryMode",revision,"assetIds",rebuild)
       VALUES (scope."ownerId",scope."libraryMode",next_revision,coalesce(affected,ARRAY[]::text[]),false);
-    PERFORM pg_notify('sekereagle_library_read_change',scope."libraryMode"::text);
   END LOOP;
   RETURN NULL;
 END $$;

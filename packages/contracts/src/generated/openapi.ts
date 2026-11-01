@@ -1636,6 +1636,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/vector/review-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleVectorController_reviewSummary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/vector/tags': {
     parameters: {
       query?: never;
@@ -3356,6 +3372,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations['PhotoVectorsController_summary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/vector/review-summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoVectorsController_reviewSummary'];
     put?: never;
     post?: never;
     delete?: never;
@@ -7140,6 +7172,23 @@ export interface operations {
       };
     };
   };
+  EagleVectorController_reviewSummary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleVectorController_tags: {
     parameters: {
       query?: never;
@@ -9871,6 +9920,23 @@ export interface operations {
     };
   };
   PhotoVectorsController_summary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoVectorsController_reviewSummary: {
     parameters: {
       query?: never;
       header?: never;
