@@ -1181,6 +1181,20 @@ export class EagleService {
           WHERE job."ownerId"=EXCLUDED."ownerId" AND job."libraryMode"=EXCLUDED."libraryMode"
             AND job.status IN ('PENDING','FAILED','COMPLETED')
           RETURNING id
+        ), requeued_legacy AS (
+          -- Previous clear-trash commands also requeued older media/processor
+          -- identities. Keep that contract without updating the current upsert
+          -- identity twice in the same statement or taking a PROCESSING lease.
+          UPDATE "EagleMediaJob" AS job
+          SET status='PENDING',attempts=0,"recoveryCount"=0,"leaseVersion"=job."leaseVersion"+1,
+            "availableAt"=${purgeAfter},"lockedAt"=NULL,"startedAt"=NULL,
+            "completedAt"=NULL,"lastError"=NULL,"updatedAt"=CURRENT_TIMESTAMP
+          FROM marked
+          WHERE job."assetId"=marked.id AND job."ownerId"=${ownerId}
+            AND job."libraryMode"=${this.libraryMode}::"LibraryMode" AND job.kind='PURGE_ASSET'
+            AND job.status IN ('PENDING','FAILED','COMPLETED')
+            AND (job."assetRevision"<>marked."mediaRevision" OR job."processorVersion"<>'v1')
+          RETURNING job.id
         ) SELECT count(*)::int AS "affectedAssetCount" FROM marked
       `);
       return result!.affectedAssetCount;

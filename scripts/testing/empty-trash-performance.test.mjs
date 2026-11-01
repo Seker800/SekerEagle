@@ -307,50 +307,144 @@ test('media job transition batches amortize triggers and preserve scoped evidenc
 
 test('empty trash requeues current and legacy purge identities once while preserving processing and scope guards', async () => {
   for (const mode of ['MATERIAL', 'PHOTO']) {
-    const ownerId = randomUUID(), otherOwner = randomUUID();
-    await db.user.createMany({ data: [ownerId, otherOwner].map((id) => ({ id, email: `${id}@example.invalid`, passwordHash: 'synthetic-only' })) });
+    const ownerId = randomUUID(),
+      otherOwner = randomUUID();
+    await db.user.createMany({
+      data: [ownerId, otherOwner].map((id) => ({
+        id,
+        email: `${id}@example.invalid`,
+        passwordHash: 'synthetic-only',
+      })),
+    });
     const cutoff = new Date(Date.now() - 1000);
-    const asset = (patch = {}) => db.eagleAsset.create({ data: {
-      id: randomUUID(), ownerId, libraryMode: mode, originalName: 'legacy.jpg', displayName: 'Legacy', normalizedDisplayName: 'legacy', mimeType: 'image/jpeg', format: 'jpeg', byteSize: 1, originalObjectKey: `users/${ownerId}/${randomUUID()}`, deletedAt: new Date(cutoff.getTime()-1), mediaRevision: 3, ...patch,
-    } });
-    const job = (source, patch = {}) => db.eagleAssetProcessingJob.create({ data: {
-      id: randomUUID(), ownerId: source.ownerId, libraryMode: source.libraryMode, assetId: source.id, kind: 'PURGE_ASSET', lane: 'MAINTENANCE', assetRevision: source.mediaRevision, processorVersion: 'v1', status: 'FAILED', attempts: 12, recoveryCount: 3, leaseVersion: 7, lastError: 'synthetic-old-error', lockedAt: new Date(1), startedAt: new Date(1), completedAt: new Date(2), ...patch,
-    } });
+    const asset = (patch = {}) =>
+      db.eagleAsset.create({
+        data: {
+          id: randomUUID(),
+          ownerId,
+          libraryMode: mode,
+          originalName: 'legacy.jpg',
+          displayName: 'Legacy',
+          normalizedDisplayName: 'legacy',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          originalObjectKey: `users/${ownerId}/${randomUUID()}`,
+          deletedAt: new Date(cutoff.getTime() - 1),
+          mediaRevision: 3,
+          ...patch,
+        },
+      });
+    const job = (source, patch = {}) =>
+      db.eagleAssetProcessingJob.create({
+        data: {
+          id: randomUUID(),
+          ownerId: source.ownerId,
+          libraryMode: source.libraryMode,
+          assetId: source.id,
+          kind: 'PURGE_ASSET',
+          lane: 'MAINTENANCE',
+          assetRevision: source.mediaRevision,
+          processorVersion: 'v1',
+          status: 'FAILED',
+          attempts: 12,
+          recoveryCount: 3,
+          leaseVersion: 7,
+          lastError: 'synthetic-old-error',
+          lockedAt: new Date(1),
+          startedAt: new Date(1),
+          completedAt: new Date(2),
+          ...patch,
+        },
+      });
     try {
-      const first = await asset(), second = await asset();
+      const first = await asset(),
+        second = await asset(),
+        third = await asset();
       const current = await job(first);
+      const legacyWithoutCurrent = await job(third, {
+        assetRevision: 1,
+        processorVersion: 'legacy-only',
+      });
       const legacyRevision = await job(first, { assetRevision: 2, status: 'COMPLETED' });
-      const legacyProcessor = await job(first, { processorVersion: 'legacy-purge', status: 'PENDING' });
+      const legacyProcessor = await job(first, {
+        processorVersion: 'legacy-purge',
+        status: 'PENDING',
+      });
       const currentProcessing = await job(second, { status: 'PROCESSING' });
-      const legacyProcessing = await job(second, { assetRevision: 1, processorVersion: 'legacy-purge', status: 'PROCESSING' });
+      const legacyProcessing = await job(second, {
+        assetRevision: 1,
+        processorVersion: 'legacy-purge',
+        status: 'PROCESSING',
+      });
       const excluded = [
-        currentProcessing, legacyProcessing,
+        currentProcessing,
+        legacyProcessing,
         await job(await asset({ ownerId: otherOwner })),
         await job(await asset({ libraryMode: mode === 'MATERIAL' ? 'PHOTO' : 'MATERIAL' })),
         await job(await asset({ isPrivate: true })),
         await job(await asset({ deletedAt: null })),
-        await job(await asset({ deletedAt: new Date(cutoff.getTime()+1) })),
+        await job(await asset({ deletedAt: new Date(cutoff.getTime() + 1) })),
       ];
-      const latest = await db.eagleMediaJobEvent.findFirstOrThrow({ where: { ownerId }, orderBy: { id: 'desc' } });
+      const latest = await db.eagleMediaJobEvent.findFirstOrThrow({
+        where: { ownerId },
+        orderBy: { id: 'desc' },
+      });
       const result = await new EagleService(db, undefined, mode).emptyTrash(ownerId, false, cutoff);
-      assert.equal(result.affectedAssetCount, 2);
-      for (const before of [current, legacyRevision, legacyProcessor]) {
-        const actual = await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: before.id } });
+      assert.equal(result.affectedAssetCount, 3);
+      for (const before of [current, legacyRevision, legacyProcessor, legacyWithoutCurrent]) {
+        const actual = await db.eagleAssetProcessingJob.findUniqueOrThrow({
+          where: { id: before.id },
+        });
         assert.equal(actual.status, 'PENDING');
         assert.equal(actual.attempts, 0);
         assert.equal(actual.recoveryCount, 0);
-        assert.equal(actual.leaseVersion, before.leaseVersion + 1, 'current and legacy rows are requeued exactly once');
-        for (const field of ['lockedAt', 'startedAt', 'completedAt', 'lastError']) assert.equal(actual[field], null);
+        assert.equal(
+          actual.leaseVersion,
+          before.leaseVersion + 1,
+          'current and legacy rows are requeued exactly once',
+        );
+        for (const field of ['lockedAt', 'startedAt', 'completedAt', 'lastError'])
+          assert.equal(actual[field], null);
       }
-      for (const before of excluded) assert.deepEqual(await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: before.id } }), before, 'processing and out-of-scope rows retain every field');
-      const transitions = await db.eagleMediaJobEvent.findMany({ where: { ownerId, id: { gt: latest.id } } });
-      assert.equal(transitions.length, 3, 'no duplicate event for the current identity and no missed legacy event');
-      assert.deepEqual(new Set(transitions.map((event) => event.jobId)), new Set([current.id, legacyRevision.id, legacyProcessor.id]));
+      for (const before of excluded)
+        assert.deepEqual(
+          await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: before.id } }),
+          before,
+          'processing and out-of-scope rows retain every field',
+        );
+      const transitions = await db.eagleMediaJobEvent.findMany({
+        where: { ownerId, id: { gt: latest.id } },
+      });
+      const created = await db.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: {
+          assetId_kind_assetRevision_processorVersion: {
+            assetId: third.id,
+            kind: 'PURGE_ASSET',
+            assetRevision: 3,
+            processorVersion: 'v1',
+          },
+        },
+      });
+      assert.equal(
+        created.leaseVersion,
+        1,
+        'newly created current identity is never updated a second time',
+      );
+      assert.equal(created.status, 'PENDING');
+      assert.equal(created.attempts, 0);
+      assert.equal(created.recoveryCount, 0);
+      assert.equal(transitions.length, 5, 'current/new/legacy identities each append one event');
+      const requeued = [current, legacyRevision, legacyProcessor, legacyWithoutCurrent];
+      assert.deepEqual(
+        new Set(transitions.map((event) => event.jobId)),
+        new Set([...requeued.map((entry) => entry.id), created.id]),
+      );
       for (const event of transitions) {
-        const before = [current, legacyRevision, legacyProcessor].find((entry) => entry.id === event.jobId);
-        assert.equal(event.fromStatus, before.status);
+        const before = requeued.find((entry) => entry.id === event.jobId);
+        assert.equal(event.fromStatus, before ? before.status : null);
         assert.equal(event.toStatus, 'PENDING');
-        assert.equal(event.leaseVersion, 8);
+        assert.equal(event.leaseVersion, before ? 8 : 1);
         assert.equal(event.attempts, 0);
         assert.equal(event.recoveryCount, 0);
       }
