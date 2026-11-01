@@ -987,6 +987,18 @@ describe('EagleVectorWorkspace', () => {
     expect(api.rebuildEagleVectorTag).toHaveBeenCalledWith('tag-car');
   });
 
+  it('does not poll saved recommendations or model health while the reviewer is idle', async () => {
+    const interval = vi.spyOn(window, 'setInterval');
+    try {
+      render(<EagleVectorWorkspace view="REVIEW" />);
+      await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(1));
+      expect(api.fetchEagleVectorSummary).not.toHaveBeenCalled();
+      expect(interval.mock.calls.filter(([, delay]) => delay === 10_000)).toEqual([]);
+    } finally {
+      interval.mockRestore();
+    }
+  });
+
   it('renders one focused workflow without nesting the three peer entries again', async () => {
     render(
       <EagleVectorWorkspace
