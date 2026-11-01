@@ -6,6 +6,7 @@ import {
   type WorkspaceChangeEvent,
 } from '@sekereagle/library-core';
 type Revisions = Partial<Record<WorkspaceChangeKind, string>>;
+export type WorkspaceVisibility = boolean | Record<'MATERIAL' | 'PHOTO', boolean>;
 
 /** Post-commit invalidation hints only. Reconnect changes the epoch instead of replaying facts. */
 export class WorkspaceChangeState {
@@ -33,14 +34,18 @@ export class WorkspaceChangeState {
       if (event.public) revisions.public[kind] = String(BigInt(revisions.public[kind] ?? '0') + 1n);
     }
   }
-  snapshot(ownerId: string, includePrivate: boolean) {
+  snapshot(ownerId: string, includePrivate: WorkspaceVisibility) {
     if (!this.ready) throw new Error('WORKSPACE_CHANGE_LISTENER_UNAVAILABLE');
     const scope = (mode: 'MATERIAL' | 'PHOTO') => {
       const values = this.owners.get(JSON.stringify([ownerId, mode]));
       return Object.fromEntries(
         WORKSPACE_CHANGE_KINDS.map((kind) => [
           kind,
-          values?.[includePrivate ? 'all' : 'public'][kind] ?? '0',
+          values?.[
+            (typeof includePrivate === 'boolean' ? includePrivate : includePrivate[mode])
+              ? 'all'
+              : 'public'
+          ][kind] ?? '0',
         ]),
       ) as Record<WorkspaceChangeKind, string>;
     };

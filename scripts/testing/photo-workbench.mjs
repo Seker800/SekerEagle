@@ -8,10 +8,11 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises';
 import { createServer, request as proxyRequest } from 'node:http';
 import { extname, resolve, join } from 'node:path';
 import { Buffer } from 'node:buffer';
+import { performance } from 'node:perf_hooks';
 import { PrismaClient } from '@prisma/client';
 import {
   S3Client,
@@ -126,6 +127,22 @@ try {
   let browserCookies = [];
   let browserLogin;
   gateway = createServer(async (req, res) => {
+    if (process.env.PHOTO_WORKBENCH_REQUEST_LOG) {
+      const started = performance.now();
+      res.once('finish', () => {
+        void appendFile(
+          process.env.PHOTO_WORKBENCH_REQUEST_LOG,
+          JSON.stringify({
+            at: new Date().toISOString(),
+            method: req.method,
+            path: req.url.split('?')[0],
+            status: res.statusCode,
+            ms: performance.now() - started,
+            surface: req.headers['user-agent']?.includes('Electron') ? 'desktop' : 'web',
+          }) + '\n',
+        );
+      });
+    }
     if (req.url === '/__test/login') {
       if (!browserLogin) {
         res.writeHead(503);

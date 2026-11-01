@@ -260,6 +260,7 @@ try {
   // while every fixture owns and cleans only its synthetic owner resources.
   for (const file of [
     'scripts/testing/read-path-performance.test.mjs',
+    'scripts/testing/workspace-change-performance.test.mjs',
     'scripts/testing/empty-trash-performance.test.mjs',
     'scripts/testing/empty-trash-budget.test.mjs',
     'scripts/testing/embedding-publication-performance.test.mjs',

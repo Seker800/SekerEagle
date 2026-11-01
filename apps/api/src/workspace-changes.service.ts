@@ -13,7 +13,7 @@ import {
   taskModelReadiness,
   type WorkspaceChanges,
 } from '@sekereagle/library-core';
-import { WorkspaceChangeState } from './workspace-change-state';
+import { WorkspaceChangeState, type WorkspaceVisibility } from './workspace-change-state';
 
 export const WORKSPACE_CHANGE_CLIENT_FACTORY = Symbol('WORKSPACE_CHANGE_CLIENT_FACTORY');
 @Injectable()
@@ -38,7 +38,7 @@ export class WorkspaceChangesService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     return this.connect();
   }
-  async snapshot(ownerId: string, includePrivate: boolean): Promise<WorkspaceChanges> {
+  async snapshot(ownerId: string, includePrivate: WorkspaceVisibility): Promise<WorkspaceChanges> {
     this.state.snapshot(ownerId, includePrivate);
     const client = this.client;
     if (!client) throw new Error('WORKSPACE_CHANGE_LISTENER_UNAVAILABLE');

@@ -128,12 +128,10 @@ test('rejects a forked top-level workspace even if the existing page is retained
   rejectsMutation(
     'apps/web/src/App.tsx',
     (s) =>
-      s
-        .replace('<SekerEaglePage', "{libraryMode === 'MATERIAL' && <SekerEaglePage")
-        .replace(
-          '          />\n        </AsyncViewBoundary>',
-          '          />}\n        </AsyncViewBoundary>',
-        ),
+      s.replace(
+        /<SekerEaglePage\b([\s\S]*?)\/>/,
+        "{libraryMode === 'MATERIAL' && <SekerEaglePage$1/>}",
+      ),
     'shared-composition',
   );
 });
