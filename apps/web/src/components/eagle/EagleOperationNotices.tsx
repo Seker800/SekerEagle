@@ -56,7 +56,7 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
               : 'status'
           }
         >
-          <strong>{t(operationKindPresentation(row.kind, libraryMode).title)}</strong>
+          <strong>{operationKindPresentation(row.kind, libraryMode).title}</strong>
           <span>
             {!operationKindPresentation(row.kind, libraryMode).executable
               ? t('不支持的操作类型，无法执行。')

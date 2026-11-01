@@ -23,7 +23,7 @@ export function AssetOperationsPanel({
   );
   const history = operations.filter((operation) => !active.includes(operation));
   const titles = (operation: AssetOperationSummary) =>
-    t(operationKindPresentation(operation.kind, operation.libraryMode).title);
+    operationKindPresentation(operation.kind, operation.libraryMode).title;
   const state = (operation: AssetOperationSummary) =>
     !operationKindPresentation(operation.kind, operation.libraryMode).executable
       ? t('不支持的操作类型，无法执行。')

@@ -26,13 +26,16 @@ it('unknown persisted kinds display explicit unsupported state and never borrow 
   }
 });
 
-
 it('resolves presentation titles through the active locale at the display boundary', async () => {
   const previous = i18next.language;
   try {
     await i18next.changeLanguage('en-US');
-    expect(operationKindPresentation('TRASH', 'PHOTO').title).toBe(tForLocale('en-US', '移入回收站'));
-    expect(operationKindPresentation('FUTURE_KIND', 'PHOTO').title).toBe(tForLocale('en-US', '不支持的操作类型'));
+    expect(operationKindPresentation('TRASH', 'PHOTO').title).toBe(
+      tForLocale('en-US', '移入回收站'),
+    );
+    expect(operationKindPresentation('FUTURE_KIND', 'PHOTO').title).toBe(
+      tForLocale('en-US', '不支持的操作类型'),
+    );
   } finally {
     await i18next.changeLanguage(previous);
   }

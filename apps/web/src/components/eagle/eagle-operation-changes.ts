@@ -1,4 +1,4 @@
-import { operationKindPresentation } from './asset-operation-kind';
+import { assetOperationProtocol } from '@sekereagle/library-core';
 import type { DuplicateCleanupInput } from '../../lib/eagle-duplicates-api';
 import type {
   AssetOperationKind,
@@ -60,7 +60,9 @@ export class EagleOperationChanges {
     }
   }
   private index(entry: EagleOperationChange, delta: number) {
-    const membership = operationKindPresentation(entry.kind, 'MATERIAL').optimisticMembership;
+    const effect = assetOperationProtocol(entry.kind)?.membership;
+    const membership =
+      effect === 'ACTIVE' ? 'HIDE_TRASH' : effect === 'TRASH' ? 'HIDE_ACTIVE' : 'NONE';
     const index =
       membership === 'HIDE_TRASH'
         ? this.hiddenTrash
