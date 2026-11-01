@@ -18,11 +18,11 @@ const summary = (kind: AssetOperationSummary['kind'] = 'TRASH'): AssetOperationS
   state: 'STOPPED',
   errors: [{ code: 'ASSET_CHANGED', count: 1 }],
 });
-function fixture() {
+function fixture(view = 'ACTIVE') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  const key = ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', {}];
+  const key = ['eagle', 'owner', 'PHOTO', 'assets', view, {}];
   const data = {
     pages: Array.from({ length: 12 }, (_, i) => ({
       assetIds: [`a-${i}`, `b-${i}`],
@@ -55,6 +55,22 @@ function fixture() {
     },
   };
 }
+it('reconciles a whole-trash command against every loaded trash page without clearing a later arrival', async () => {
+  const f = fixture('TRASH');
+  const completed = { ...summary('EMPTY_TRASH'), completed: 1, failed: 0, errors: [], state: 'COMPLETED' as const };
+  f.queryFn.mockImplementation(async () => ({ assetIds: ['arrived-after-cutoff'], nextCursor: 'next' }));
+  mocks.results.mockResolvedValue({ operation: completed, revision: 'v1', membership: [], receipts: [], nextCursor: null });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(f.queryFn).toHaveBeenCalledTimes(12);
+    const updated = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(updated.pages).toHaveLength(12);
+    expect(updated.pages[0].assetIds).toEqual(['arrived-after-cutoff']);
+    expect(updated.pageParams).toHaveLength(12);
+  } finally {
+    f.close();
+  }
+});
 it('applies partial deletion receipts without a single list GET, retaining all twelve pages and cursors', async () => {
   const f = fixture();
   f.cache.operations.begin('op', 'TRASH', ['a-0', 'b-0']);

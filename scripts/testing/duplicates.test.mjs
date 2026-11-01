@@ -236,7 +236,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal(state.find((row) => row.status === 'PENDING')?._count, 8);
     assert.equal(measured.transactions, 2, 'one claim and one atomic publication per batch');
     assert.ok(
-      measured.queries <= 512,
+      measured.queries <= 128,
       `32 groups must stay within the measured SQL budget, observed ${measured.queries}`,
     );
     assert.equal((await f.drain(admitted.operationId)).completed, 40);
