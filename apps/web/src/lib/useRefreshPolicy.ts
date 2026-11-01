@@ -23,16 +23,21 @@ export function useProgressQueryInterval<T>(
 ) {
   const visible = usePageVisible();
   const schedule = useMemo(createProgressRefreshSchedule, []);
-  return (query: { state: { data?: T; error: Error | null; errorUpdateCount: number } }) =>
-    schedule({
+  const errors = useRef({ revision: 0, consecutive: 0 });
+  return (query: { state: { data?: T; error: Error | null; errorUpdateCount: number } }) => {
+    if (!query.state.error) errors.current.consecutive = 0;
+    else if (errors.current.revision !== query.state.errorUpdateCount) errors.current.consecutive++;
+    errors.current.revision = query.state.errorUpdateCount;
+    return schedule({
       visible,
       active: query.state.data !== undefined && active(query.state.data),
       signature: JSON.stringify(
         query.state.data === undefined ? null : signature(query.state.data),
       ),
-      failures: query.state.error ? query.state.errorUpdateCount : 0,
+      failures: query.state.error ? errors.current.consecutive : 0,
       status: query.state.error instanceof ApiError ? query.state.error.status : undefined,
     });
+  };
 }
 
 /** For existing local-state views; query-backed views are invalidated centrally. */
