@@ -5,6 +5,9 @@ import type { LibraryReadStore } from './eagle-memory-store';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import type { LibraryMemoryIndex } from './eagle-memory-index';
 import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
+import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
+import type { ImageSearchPosition } from './eagle-image-search.service';
+import { memorySemanticOptions } from './eagle-memory-protocol';
 import type { Summary } from '../photos/photo-statistics.service';
 
 const querySchema = z
@@ -13,7 +16,8 @@ const querySchema = z
       .object({ ownerId: z.string().min(1), libraryMode: z.enum(['MATERIAL', 'PHOTO']) })
       .strict(),
     where: z.record(z.string(), z.unknown()),
-    action: z.enum(['page', 'count', 'statistics', 'peopleCounts']),
+    action: z.enum(['page', 'count', 'statistics', 'peopleCounts', 'smartFolderPage']),
+    semantic: memorySemanticOptions.optional(),
     includePrivate: z.boolean().default(false),
     statistics: z
       .object({
@@ -57,6 +61,7 @@ async function body(request: IncomingMessage, maxBytes: number) {
 }
 
 export interface LibraryReadHandlers {
+  smartFolderPage?: (index: LibraryMemoryIndex, options: ResidentSmartFolderOptions) => Promise<ImageSearchPosition[]>;
   statistics?: (
     index: LibraryMemoryIndex,
     includePrivate: boolean,
@@ -114,6 +119,11 @@ export function createLibraryReaderServer(
       const index = await store.synchronize(query.scope);
       const revision = index.revision;
       const where = query.where as AssetSearchWhere;
+      if (query.action === 'smartFolderPage') {
+        if (!handlers.smartFolderPage || !query.semantic) { send(503, { error: 'Reader capability unavailable' }); return; }
+        send(200, { revision, positions: await handlers.smartFolderPage(index, { ...query.semantic, where }) });
+        return;
+      }
       if (query.action === 'statistics') {
         if (!handlers.statistics || !query.statistics || query.scope.libraryMode !== 'PHOTO') {
           send(503, { error: 'Reader capability unavailable' });

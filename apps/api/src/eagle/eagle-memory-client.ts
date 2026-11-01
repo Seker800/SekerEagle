@@ -3,6 +3,7 @@ import {
   encodeMemoryQuery,
   memoryStatisticsSummary,
   memoryPersonCounts,
+  memorySearchPositions,
 } from './eagle-memory-protocol';
 import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { AssetSearchWhere } from './eagle-search-predicate';
@@ -53,6 +54,7 @@ async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
       revision?: unknown;
       summary?: unknown;
       counts?: unknown;
+      positions?: unknown;
     };
   } catch {
     libraryReadMetrics.fallbacks++;
@@ -129,4 +131,18 @@ export async function readMemoryPeopleCounts(ownerId: string, includePrivate: bo
     return null;
   libraryReadMetrics.hits++;
   return { revision: result.revision, counts: parsed.data };
+}
+
+export async function readMemorySmartFolderPage(
+  scope: { ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' },
+  options: import('./eagle-memory-semantic').ResidentSmartFolderOptions,
+) {
+  const { where, ...semantic } = options;
+  const result = await request({ AND: [scope, where] }, { action: 'smartFolderPage', semantic });
+  if (!result) return null;
+  const parsed = memorySearchPositions.safeParse(result.positions);
+  if (!parsed.success || parsed.data.length > options.limit + 1 ||
+    new Set(parsed.data.map(row => row.assetId)).size !== parsed.data.length) return null;
+  libraryReadMetrics.hits++;
+  return parsed.data;
 }

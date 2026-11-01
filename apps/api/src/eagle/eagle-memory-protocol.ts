@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+export const memorySearchPositions = z.array(z.object({
+  assetId: z.string().min(1), tier: z.union([z.literal(0), z.literal(1)]),
+  similarity: z.number().finite(), libraryAddedAt: z.string().datetime(),
+}).strict());
+export const memorySemanticOptions = z.object({
+  folderIds: z.array(z.string().min(1)).min(1), limit: z.number().int().positive().safe(),
+  ordinaryMembersPossible: z.boolean(), includePrivate: z.boolean(), trash: z.boolean(),
+  after: memorySearchPositions.element.optional(),
+}).strict();
 const usage = z.object({ key: z.string(), count: z.number().int().nonnegative() });
 export const memoryPersonCounts = z.array(
   z.object({ id: z.string(), photos: z.number().int().nonnegative() }).strict(),

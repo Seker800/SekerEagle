@@ -6,6 +6,7 @@ import {
   residentStatisticsDaily,
 } from './photos/photo-statistics-memory';
 import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
+import { readResidentSmartFolderPage } from './eagle/eagle-memory-semantic-store';
 import { residentPersonCounts } from './photos/photo-people-memory';
 
 /** Explicit standalone entry. Importing shared HTTP providers never starts it. */
@@ -24,6 +25,7 @@ export async function startLibraryReader(env = process.env) {
       statistics: (index, includePrivate, query) =>
         readResidentPhotoStatistics(db, index, includePrivate, query),
       peopleCounts: residentPersonCounts,
+      smartFolderPage: (index, options) => readResidentSmartFolderPage(db, index, options),
     },
   );
   let stopping = false;

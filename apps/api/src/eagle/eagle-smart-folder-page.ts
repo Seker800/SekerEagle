@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { smartFolderMatchWhere } from '@sekereagle/library-persistence';
 import { assetDateField } from './eagle-asset-order';
 import { decodeImageSearchCursor, encodeImageSearchCursor } from './eagle-search-cursor';
+import { readMemorySmartFolderPage } from './eagle-memory-client';
 import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
 import type { ImageSearchPosition } from './eagle-image-search.service';
 import type { LibraryIdentity } from './library-mode';
@@ -69,6 +70,19 @@ export async function readSmartFolderPage<
     )
     .digest('hex');
   let after = decodeImageSearchCursor(query.cursor, searchKey, scope);
+  const resident = await readMemorySmartFolderPage(scope, {
+    where, folderIds, limit: query.limit, ordinaryMembersPossible, includePrivate, trash, after,
+  });
+  if (resident !== null) {
+    const rows = resident.length ? await readAssets({ id: { in: resident.map(position => position.assetId) } }) : [];
+    const byId = new Map(rows.map(row => [row.id, row]));
+    if (resident.every(position => byId.has(position.assetId))) {
+      const page = resident.slice(0, query.limit);
+      return { rows: page.map(position => byId.get(position.assetId)!), nextCursor:
+        resident.length > query.limit && page.length
+          ? encodeImageSearchCursor(searchKey, page.at(-1)!, scope) : null };
+    }
+  }
   const ranked: Array<{ row: T; position: ImageSearchPosition }> = [];
   // Eligibility is evaluated in the ranking SQL. Retry only if hydration loses a
   // concurrently changed candidate, rather than scanning batches of rejected cards.
