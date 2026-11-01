@@ -707,3 +707,25 @@ test('color pages preserve SQL scores, mixed-engine cursors, reverse pages and O
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
   }
 });
+
+test('tag renames refresh only their linked resources and tag deletion clears those memberships', async () => {
+  const tag = await db.eagleManualTag.create({ data: { ...scope, name: 'before', normalizedName: 'before' } });
+  try {
+    const assetIds = [1, 2].map(at => `${ownerId}-${at}`);
+    await db.eagleAssetManualTag.createMany({ data: assetIds.map(assetId => ({ ...scope, assetId, tagId: tag.id })) });
+    const index = await store.synchronize(scope);
+    const revision = BigInt(index.revision);
+    assert.equal(index.count({ manualTagLinks: { some: { tag: { normalizedName: 'before' } } } }), 2);
+    await db.eagleManualTag.update({ where: { id: tag.id }, data: { name: 'after', normalizedName: 'after' } });
+    const events = await db.eagleLibraryReadChange.findMany({ where: { ...scope, revision: { gt: revision } } });
+    assert.ok(events.length);
+    assert.ok(events.every(event => !event.rebuild));
+    assert.deepEqual([...new Set(events.flatMap(event => event.assetIds))].sort(), [...assetIds].sort());
+    const updated = await store.synchronize(scope);
+    assert.equal(updated.count({ manualTagLinks: { some: { tag: { normalizedName: 'after' } } } }), 2);
+    await db.eagleManualTag.delete({ where: { id: tag.id } });
+    assert.equal((await store.synchronize(scope)).count({ manualTagLinks: { some: { tagId: tag.id } } }), 0);
+  } finally {
+    await db.eagleManualTag.deleteMany({ where: { id: tag.id } });
+  }
+});
