@@ -1,4 +1,4 @@
-import { paletteColorScore, COLOR_PALETTE_VERSION } from '@sekereagle/library-core';
+import { createMemoryColorScorer } from './eagle-memory-color-score';
 import { searchPredicateModels, type AssetSearchWhere } from './eagle-search-predicate';
 
 export type MemoryAsset = Record<string, unknown>;
@@ -138,8 +138,10 @@ export function compileMemorySearchPredicate(
   where: AssetSearchWhere,
   context?: MemorySearchContext,
 ): (row: MemoryAsset) => boolean {
+  const colorScore = createMemoryColorScorer();
   const visit = (name: string, input: unknown, preserveNull = false): Check => {
-    if (!context && ['embedding', 'owner', 'snapshot', 'match', 'folder'].includes(name)) throw unsupported();
+    if (!context && ['embedding', 'owner', 'snapshot', 'match', 'folder'].includes(name))
+      throw unsupported();
     if (['analysis', 'swatch'].includes(name)) throw unsupported();
     const definition = searchPredicateModels[name];
     if (!definition) throw unsupported();
@@ -157,20 +159,7 @@ export function compileMemorySearchPredicate(
         );
       } else if (key === 'colorMatch' && name === 'asset') {
         if (typeof value !== 'string') throw unsupported();
-        checks.push((row) => {
-          const analyses = (row.colorAnalyses ?? []) as MemoryAsset[];
-          return analyses.some(
-            (analysis) =>
-              analysis.isCurrent &&
-              analysis.status === 'COMPLETED' &&
-              analysis.processorVersion === COLOR_PALETTE_VERSION &&
-              analysis.assetRevision === row.mediaRevision &&
-              paletteColorScore(
-                value,
-                analysis.swatches as Parameters<typeof paletteColorScore>[1],
-              ) !== null,
-          );
-        });
+        checks.push(row => colorScore(row, value) !== null);
       } else if (definition.fields.has(key)) {
         const check = scalar(key, value);
         checks.push((row) => {
@@ -182,16 +171,24 @@ export function compileMemorySearchPredicate(
         if (!link) throw unsupported();
         if (key === 'photoFaces' || key === 'aiTagLinks') {
           const relation = object(value);
-          if (!Object.keys(relation).length || Object.keys(relation).some(op => !['some', 'none'].includes(op))) throw unsupported();
+          if (
+            !Object.keys(relation).length ||
+            Object.keys(relation).some((op) => !['some', 'none'].includes(op))
+          )
+            throw unsupported();
           for (const operand of Object.values(relation)) {
             const predicate = object(operand);
-            if (key === 'photoFaces' ? predicate.isCurrent !== true : predicate.status !== 'ACTIVE') throw unsupported();
+            if (key === 'photoFaces' ? predicate.isCurrent !== true : predicate.status !== 'ACTIVE')
+              throw unsupported();
           }
         }
         const rows = (row: MemoryAsset): MemoryAsset[] => {
-          const data = name === 'asset' && context && key === 'owner' ? context.owner
-            : name === 'asset' && context && key === 'embeddings' ? context.embeddings.get(String(row.id))
-            : row[key];
+          const data =
+            name === 'asset' && context && key === 'owner'
+              ? context.owner
+              : name === 'asset' && context && key === 'embeddings'
+                ? context.embeddings.get(String(row.id))
+                : row[key];
           return data == null ? [] : Array.isArray(data) ? (data as MemoryAsset[]) : [object(data)];
         };
         if (value === null) {
