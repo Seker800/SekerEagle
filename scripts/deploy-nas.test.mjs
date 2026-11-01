@@ -194,6 +194,20 @@ test('NAS operation executor uses the application image and isolated database wi
   );
 });
 
+test('recovery host preserves the upload publication budget and explicit recovery switch', async () => {
+  for (const services of [base.services, (await render()).services]) {
+    assert.equal(
+      services.operations.environment.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS,
+      services.api.environment.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS,
+      'moving recovery must not replace a configured upload publication budget with a process default',
+    );
+    assert.equal(
+      services.operations.environment.EAGLE_UPLOAD_RECOVERY_ENABLED,
+      '${EAGLE_UPLOAD_RECOVERY_ENABLED:-true}',
+    );
+  }
+});
+
 test('large operation admission has its own adjustable gateway deadline', async () => {
   const { createNasGateway } = await import('./deploy-nas.mjs');
   const source = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
