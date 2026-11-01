@@ -408,3 +408,29 @@ it('prevents an older in-flight infinite response from overwriting the destinati
     f.close();
   }
 });
+
+
+it('retains a second destination intent arriving while the first window is in flight', async () => {
+  const f = fixture('TRASH');
+  let release!: (value: { assetIds: string[]; nextCursor: string }) => void;
+  f.queryFn.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  f.queryFn.mockResolvedValue({ assetIds: ['second', 'new'], nextCursor: 'next' });
+  mocks.results.mockReset().mockImplementation(async (id: string) => ({
+    operation: { ...summary(), id }, revision: 'v1', membership: [], receipts: [], nextCursor: null,
+  }));
+  try {
+    const first = f.refresher.reconcile('PHOTO', summary());
+    await vi.waitFor(() => expect(f.queryFn).toHaveBeenCalledTimes(1));
+    const second = f.refresher.reconcile('PHOTO', { ...summary(), id: 'second-op' });
+    await vi.waitFor(() => expect(mocks.results).toHaveBeenCalledTimes(2));
+    release({ assetIds: ['new'], nextCursor: 'next' });
+    await Promise.all([first, second]);
+    expect(f.queryFn).toHaveBeenCalledTimes(2);
+    const current = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(current.pages[0].assetIds).toEqual(['second', 'new', 'a-0', 'b-0']);
+    expect(current.pages).toHaveLength(12);
+    expect(current.pageParams).toEqual(f.data.pageParams);
+  } finally {
+    f.close();
+  }
+});
