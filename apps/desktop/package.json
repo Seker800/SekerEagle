@@ -17,7 +17,7 @@
     "package:win": "npm run build && electron-builder --win portable --x64"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
     "electron": "43.8.1",
     "electron-builder": "26.15.3",

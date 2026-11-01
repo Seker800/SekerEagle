@@ -102,7 +102,7 @@
   "devDependencies": {
     "typescript": "^5.9.3",
     "ts-node": "^10.9.2",
-    "@types/node": "^22.10.2"
+    "@types/node": "^26.6.5"
   },
   "typesVersions": {
     "*": {
