@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import console from 'node:console';
 import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
@@ -223,6 +224,7 @@ test('sparse smart-folder filters do not repeatedly hydrate rejected candidate b
     INSERT INTO "EagleSmartFolderSemanticMatch" ("ownerId","libraryMode","snapshotId","embeddingId",similarity)
     SELECT ${ownerId},'PHOTO',${snapshot.id},${prefix}||'embedding-'||lpad(n::text,5,'0'),1-(n-59000)::float8/10000 FROM generate_series(59000,59999) n`;
   const service = new EagleService(db, undefined, 'PHOTO');
+  await setImmediate();
   queries = [];
   const page = await service.listAssets(ownerId, {
     smartFolderId: folder.id,
@@ -230,6 +232,7 @@ test('sparse smart-folder filters do not repeatedly hydrate rejected candidate b
     rating: 5,
     limit: 10,
   });
+  await setImmediate();
   const rankings = queries.filter((q) => q.includes('max(m.similarity)'));
   assert.deepEqual(
     page.items.map((r) => r.id),
