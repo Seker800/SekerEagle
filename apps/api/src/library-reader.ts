@@ -8,7 +8,10 @@ import {
   residentStatisticsDaily,
 } from './photos/photo-statistics-memory';
 import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
-import { readResidentSmartFolderPage, withResidentSemanticGraph } from './eagle/eagle-memory-semantic-store';
+import {
+  readResidentSmartFolderPage,
+  withResidentSemanticGraph,
+} from './eagle/eagle-memory-semantic-store';
 import { readResidentPhotoFacets, residentPhotoFacets } from './photos/photo-facets-memory';
 import { residentPersonCounts } from './photos/photo-people-memory';
 
@@ -16,8 +19,11 @@ import { residentPersonCounts } from './photos/photo-people-memory';
 export async function startLibraryReader(env = process.env) {
   if (!env.DATABASE_URL || !env.EAGLE_READER_TOKEN)
     throw new Error('Reader database and service identity are required');
-  assertSafeRuntimeTarget({ databaseUrl: env.DATABASE_URL,
-    s3Endpoint: env.S3_ENDPOINT ?? 'http://minio:9000', s3Bucket: env.S3_BUCKET ?? 'sekereagle-reader-unused' });
+  assertSafeRuntimeTarget({
+    databaseUrl: env.DATABASE_URL,
+    s3Endpoint: env.S3_ENDPOINT ?? 'http://minio:9000',
+    s3Bucket: env.S3_BUCKET ?? 'sekereagle-reader-unused',
+  });
   const url = new URL(env.DATABASE_URL);
   if (!url.searchParams.has('connection_limit')) url.searchParams.set('connection_limit', '2');
   const db = createLibraryReadPool(url.toString());
@@ -31,8 +37,17 @@ export async function startLibraryReader(env = process.env) {
         readResidentPhotoStatistics(db, index, includePrivate, query),
       peopleCounts: residentPersonCounts,
       facets: (index, privateVisible) => readResidentPhotoFacets(db, index, privateVisible),
-      semanticQuery: (index, ids, read) => withResidentSemanticGraph(db, index, ids, graph => read(graph.context)),
-      smartFolderPage: (index, options) => readResidentSmartFolderPage(db, index, options),
+      semanticQuery: (index, ids, read, signal) =>
+        withResidentSemanticGraph(
+          db,
+          index,
+          ids,
+          (graph) => read(graph.context),
+          undefined,
+          signal,
+        ),
+      smartFolderPage: (index, options, signal) =>
+        readResidentSmartFolderPage(db, index, options, undefined, signal),
     },
   );
   let stopping = false;
@@ -44,21 +59,21 @@ export async function startLibraryReader(env = process.env) {
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
   try {
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(
-      Number(env.EAGLE_READER_PORT ?? 3001),
-      env.EAGLE_READER_HOST ?? '127.0.0.1',
-      resolve,
-    );
-  });
-  // Warm known scopes once, then inspect only the tiny enabled state table. No
-  // periodic asset discovery, image access, inference or business queue execution.
-  const scopes = (
-    await db.query<{ ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }>(
-      'SELECT "ownerId","libraryMode" FROM "EagleLibraryReadState"',
-    )
-  ).rows;
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(
+        Number(env.EAGLE_READER_PORT ?? 3001),
+        env.EAGLE_READER_HOST ?? '127.0.0.1',
+        resolve,
+      );
+    });
+    // Warm known scopes once, then inspect only the tiny enabled state table. No
+    // periodic asset discovery, image access, inference or business queue execution.
+    const scopes = (
+      await db.query<{ ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }>(
+        'SELECT "ownerId","libraryMode" FROM "EagleLibraryReadState"',
+      )
+    ).rows;
     for (const scope of scopes) {
       if (stopping) break;
       prime(await store.synchronize(scope));

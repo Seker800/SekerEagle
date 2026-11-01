@@ -1,3 +1,4 @@
+import type { memoryStatisticsSummary, memoryPhotoFacets } from './eagle-memory-protocol';
 import { residentColorPage } from './eagle-memory-color';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
@@ -12,8 +13,6 @@ import type { MemorySearchContext } from './eagle-memory-predicate';
 import {
   memorySemanticOptions,
   memoryStatisticsQuery,
-  memoryStatisticsSummary,
-  memoryPhotoFacets,
   memoryColorOptions,
 } from './eagle-memory-protocol';
 
@@ -23,7 +22,15 @@ const querySchema = z
       .object({ ownerId: z.string().min(1), libraryMode: z.enum(['MATERIAL', 'PHOTO']) })
       .strict(),
     where: z.record(z.string(), z.unknown()),
-    action: z.enum(['page', 'count', 'statistics', 'peopleCounts', 'smartFolderPage', 'facets', 'colorPage']),
+    action: z.enum([
+      'page',
+      'count',
+      'statistics',
+      'peopleCounts',
+      'smartFolderPage',
+      'facets',
+      'colorPage',
+    ]),
     semantic: memorySemanticOptions.optional(),
     colorPage: memoryColorOptions.optional(),
     includePrivate: z.boolean().default(false),
@@ -60,10 +67,12 @@ export interface LibraryReadHandlers {
     index: LibraryMemoryIndex,
     folderIds: string[],
     read: (context: MemorySearchContext) => T,
+    signal?: AbortSignal,
   ) => Promise<T>;
   smartFolderPage?: (
     index: LibraryMemoryIndex,
     options: ResidentSmartFolderOptions,
+    signal?: AbortSignal,
   ) => Promise<ImageSearchPosition[]>;
   statistics?: (
     index: LibraryMemoryIndex,
@@ -87,6 +96,10 @@ export function createLibraryReaderServer(
     throw new Error('Invalid reader body byte budget');
   const expected = Buffer.from(`Bearer ${token}`);
   const handle = async (request: IncomingMessage, response: ServerResponse) => {
+    const cancellation = new AbortController();
+    response.once('close', () => {
+      if (!response.writableEnded) cancellation.abort();
+    });
     const send = (status: number, value: unknown) => {
       response.writeHead(status, {
         'content-type': 'application/json',
@@ -120,15 +133,25 @@ export function createLibraryReaderServer(
       }
       const query = parsed.data;
       const index = await store.synchronize(query.scope);
+      cancellation.signal.throwIfAborted();
       const revision = index.revision;
       const where = query.where as AssetSearchWhere;
       if (query.action === 'colorPage') {
-        if (!query.colorPage) { send(400, { error: 'Invalid color page' }); return; }
+        if (!query.colorPage) {
+          send(400, { error: 'Invalid color page' });
+          return;
+        }
         const options = { ...query.colorPage, where };
         const read = (context?: MemorySearchContext) => residentColorPage(index, options, context);
         const folders = semanticFolderIds(where);
-        if (folders.length && !handlers.semanticQuery) throw new Error('Semantic capability unavailable');
-        send(200, { revision, positions: folders.length ? await handlers.semanticQuery!(index, folders, read) : read() });
+        if (folders.length && !handlers.semanticQuery)
+          throw new Error('Semantic capability unavailable');
+        send(200, {
+          revision,
+          positions: folders.length
+            ? await handlers.semanticQuery!(index, folders, read, cancellation.signal)
+            : read(),
+        });
         return;
       }
       if (query.action === 'smartFolderPage') {
@@ -138,7 +161,11 @@ export function createLibraryReaderServer(
         }
         send(200, {
           revision,
-          positions: await handlers.smartFolderPage(index, { ...query.semantic, where }),
+          positions: await handlers.smartFolderPage(
+            index,
+            { ...query.semantic, where },
+            cancellation.signal,
+          ),
         });
         return;
       }
@@ -179,9 +206,14 @@ export function createLibraryReaderServer(
       const folders = semanticFolderIds(where);
       if (folders.length && !handlers.semanticQuery)
         throw new Error('Semantic capability unavailable');
-      send(200, folders.length ? await handlers.semanticQuery!(index, folders, read) : read());
+      send(
+        200,
+        folders.length
+          ? await handlers.semanticQuery!(index, folders, read, cancellation.signal)
+          : read(),
+      );
     } catch (error) {
-      if (!response.headersSent)
+      if (!response.headersSent && !response.destroyed)
         send(error instanceof SyntaxError ? 400 : 503, {
           error: 'Reader unavailable or predicate unsupported',
         });
