@@ -3,14 +3,26 @@ import { test } from 'node:test';
 import { LibraryMemoryIndex } from './eagle-memory-index';
 
 const row = (id: string, date = '2026-11-01T00:00:00Z') => ({
-  id, ownerId: 'owner', libraryMode: 'PHOTO', normalizedDisplayName: id,
-  libraryAddedAt: date, chronologicalAt: date, deletedAt: null, isPrivate: false,
-  manualTagLinks: [], aiTagLinks: [], photoFaces: [], colorAnalyses: [],
+  id,
+  ownerId: 'owner',
+  libraryMode: 'PHOTO',
+  normalizedDisplayName: id,
+  libraryAddedAt: date,
+  chronologicalAt: date,
+  deletedAt: null,
+  isPrivate: false,
+  manualTagLinks: [],
+  aiTagLinks: [],
+  photoFaces: [],
+  colorAnalyses: [],
 });
 test('index scopes all queries and returns only a bounded page in existing date/id order', () => {
   const index = new LibraryMemoryIndex('owner', 'PHOTO');
   index.replace('1', [row('a'), row('b'), row('c', '2026-10-01T00:00:00Z')]);
-  assert.deepEqual(index.page({ ownerId: 'owner', libraryMode: 'PHOTO' }, 'chronologicalAt', 'desc', 2, 0), ['b', 'a']);
+  assert.deepEqual(
+    index.page({ ownerId: 'owner', libraryMode: 'PHOTO' }, 'chronologicalAt', 'desc', 2, 0),
+    ['b', 'a'],
+  );
   assert.deepEqual(index.page({ ownerId: 'other' }, 'chronologicalAt', 'desc', 2, 0), []);
   assert.equal(index.count({ isPrivate: false }), 3);
 });
@@ -25,7 +37,10 @@ test('incremental replacement and deletion are published as one revision', () =>
 test('an invalid batch cannot partially publish or cross owner/mode boundaries', () => {
   const index = new LibraryMemoryIndex('owner', 'PHOTO');
   index.replace('1', [row('a')]);
-  assert.throws(() => index.update('2', ['a'], [row('b'), { ...row('other'), libraryMode: 'MATERIAL' }]), /scope/i);
+  assert.throws(
+    () => index.update('2', ['a'], [row('b'), { ...row('other'), libraryMode: 'MATERIAL' }]),
+    /scope/i,
+  );
   assert.equal(index.revision, '1');
   assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['a']);
 });
