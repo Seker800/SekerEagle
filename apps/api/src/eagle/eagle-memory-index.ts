@@ -1,5 +1,6 @@
 import { compileMemorySearchPredicate, type MemoryAsset } from './eagle-memory-predicate';
 import type { AssetSearchWhere } from './eagle-search-predicate';
+import { isDeepStrictEqual } from 'node:util';
 
 export type MemoryDateField = 'libraryAddedAt' | 'chronologicalAt';
 /** One library's derived information. Like Eagle, sort once and filter the resident array.
@@ -9,6 +10,7 @@ export class LibraryMemoryIndex {
   revision = '0';
   private rows = new Map<string, MemoryAsset>();
   private ordered = new Map<MemoryDateField, MemoryAsset[]>();
+  private derived = new Map<string, { dependencies: readonly string[]; value: unknown }>();
   constructor(
     readonly ownerId: string,
     readonly libraryMode: string,
@@ -34,13 +36,46 @@ export class LibraryMemoryIndex {
     this.rows = new Map(rows.map((row) => [row.id as string, row]));
     this.revision = revision;
     this.ordered.clear();
+    this.derived.clear();
   }
   update(revision: string, ids: string[], rows: MemoryAsset[]) {
     this.validate(revision, rows);
-    for (const id of ids) this.rows.delete(id);
-    for (const row of rows) this.rows.set(row.id as string, row);
+    const incoming = new Set(rows.map((row) => row.id as string));
+    for (const [key, entry] of this.derived) {
+      if (
+        ids.some((id) => !incoming.has(id)) ||
+        rows.some((row) => {
+          const old = this.rows.get(row.id as string);
+          return (
+            !old || entry.dependencies.some((field) => !isDeepStrictEqual(old[field], row[field]))
+          );
+        })
+      )
+        this.derived.delete(key);
+    }
+    let reorder = false;
+    for (const id of ids) {
+      if (!incoming.has(id)) {
+        this.rows.delete(id);
+        reorder = true;
+      }
+    }
+    for (const row of rows) {
+      const previous = this.rows.get(row.id as string);
+      if (previous) {
+        if (
+          String(previous.libraryAddedAt) !== String(row.libraryAddedAt) ||
+          String(previous.chronologicalAt) !== String(row.chronologicalAt)
+        )
+          reorder = true;
+        Object.assign(previous, row);
+      } else {
+        this.rows.set(row.id as string, row);
+        reorder = true;
+      }
+    }
     this.revision = revision;
-    this.ordered.clear();
+    if (reorder) this.ordered.clear();
   }
   private predicate(where: AssetSearchWhere) {
     return compileMemorySearchPredicate({
@@ -85,5 +120,17 @@ export class LibraryMemoryIndex {
     let result = 0;
     for (const row of this.rows.values()) if (match(row)) result++;
     return result;
+  }
+  forEach(where: AssetSearchWhere, visit: (row: MemoryAsset) => void) {
+    const match = this.predicate(where);
+    for (const row of this.rows.values()) if (match(row)) visit(row);
+  }
+  /** Callers own a finite set of projection keys; user query strings are not cache keys. */
+  derive<T>(key: string, dependencies: readonly string[], build: () => T): T {
+    const cached = this.derived.get(key);
+    if (cached) return cached.value as T;
+    const value = build();
+    this.derived.set(key, { dependencies, value });
+    return value;
   }
 }

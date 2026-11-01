@@ -11,6 +11,7 @@ const row = (id: string, date = '2026-11-01T00:00:00Z') => ({
   chronologicalAt: date,
   deletedAt: null,
   isPrivate: false,
+  rating: null,
   manualTagLinks: [],
   aiTagLinks: [],
   photoFaces: [],
@@ -43,4 +44,14 @@ test('an invalid batch cannot partially publish or cross owner/mode boundaries',
   );
   assert.equal(index.revision, '1');
   assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['a']);
+});
+
+test('metadata changes update already sorted rows while date changes reorder them', () => {
+  const index = new LibraryMemoryIndex('owner', 'PHOTO');
+  index.replace('1', [row('a'), row('b')]);
+  assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['b', 'a']);
+  index.update('2', ['a'], [{ ...row('a'), rating: 5 }]);
+  assert.deepEqual(index.page({ rating: 5 }, 'chronologicalAt', 'desc', 10, 0), ['a']);
+  index.update('3', ['a'], [row('a', '2026-12-01T00:00:00Z')]);
+  assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['a', 'b']);
 });
