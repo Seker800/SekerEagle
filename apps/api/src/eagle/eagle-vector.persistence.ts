@@ -39,9 +39,10 @@ export async function refreshUnclassifiedSuggestions(
          AND embedding."assetRevision" = asset."mediaRevision"
          AND embedding."libraryMode" = asset."libraryMode"
          AND embedding."isCurrent" = true AND embedding.status = 'READY'
+        JOIN "EagleEmbeddingSpace" space ON space.id=embedding."spaceId" AND space."isCurrent"
         CROSS JOIN owner_lock
         WHERE asset."ownerId" = ${input.ownerId} AND asset."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
-          AND asset."deletedAt" IS NULL
+          AND asset."deletedAt" IS NULL AND NOT asset."storageTransferredOut"
           AND asset."mimeType" LIKE 'image/%'
           ${privateScope}
           ${assetScope}
