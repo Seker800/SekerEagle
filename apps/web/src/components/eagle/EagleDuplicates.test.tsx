@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { ApiError } from '../../lib/api-error';
 import { useAssetOperationProgress } from './useAssetOperations';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderInWorkspace } from '../../test/render-in-workspace';
 import { EagleDuplicates } from './EagleDuplicates';
@@ -91,7 +91,10 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await screen.findByRole('button', { name: '正在提交…' });
-    fireEvent(screen.getByRole('dialog', { name: '查重清理' }), new Event('cancel', { bubbles: true, cancelable: true }));
+    fireEvent(
+      screen.getByRole('dialog', { name: '查重清理' }),
+      new Event('cancel', { bubbles: true, cancelable: true }),
+    );
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
@@ -254,7 +257,7 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^文件完全相同/ }));
     fireEvent.click(await screen.findByRole('checkbox', { name: '保留 two' }));
     fireEvent.click(screen.getByRole('button', { name: '按保留标记清理全部筛选结果' }));
-    expect(screen.getByText('保留 2 项，清理 1 项')).toBeInTheDocument();
+    expect(within(screen.getByRole('alertdialog')).getByText('保留 2 项，清理 1 项')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await waitFor(() =>
       expect(mocks.cleanup).toHaveBeenCalledWith(
