@@ -1,3 +1,4 @@
+import { PhotoRevisionObserver } from './photos/photo-revision.observer';
 import { AssetOperationWakeup } from './asset-operation-wakeup';
 import { EagleDuplicateService } from './eagle/eagle-duplicates.service';
 import 'reflect-metadata';
@@ -50,7 +51,14 @@ export function createAssetOperationBackground(
     (mode) =>
       new EagleUploadRecoveryService(
         prisma,
-        new EagleUploadService(prisma, storage, capabilities, inspection, mode),
+        new EagleUploadService(
+          prisma,
+          storage,
+          capabilities,
+          inspection,
+          mode,
+          mode === 'PHOTO' ? new PhotoRevisionObserver() : undefined,
+        ),
         imports,
         storage,
         mode,
