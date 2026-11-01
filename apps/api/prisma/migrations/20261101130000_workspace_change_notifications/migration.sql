@@ -1,3 +1,5 @@
+BEGIN;
+
 -- Invalidation hints only. PostgreSQL delivers/coalesces NOTIFY after COMMIT;
 -- listener reconnection changes the API epoch, so no event cursor or write counter is needed.
 CREATE FUNCTION notify_sekereagle_workspace_changes() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -119,3 +121,5 @@ BEGIN
     EXECUTE format('CREATE TRIGGER workspace_change_delete AFTER DELETE ON %I REFERENCING OLD TABLE AS changed FOR EACH STATEMENT EXECUTE FUNCTION notify_sekereagle_workspace_changes(%L,%L,%L)',spec.table_name,spec.kinds,fields,spec.visibility);
   END LOOP;
 END $$;
+
+COMMIT;
