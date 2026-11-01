@@ -22,8 +22,6 @@ export function AssetOperationsPanel({
     (operation) => operation.running || operation.queued || operation.failed,
   );
   const history = operations.filter((operation) => !active.includes(operation));
-  const titles = (operation: AssetOperationSummary) =>
-    operationKindPresentation(operation.kind, operation.libraryMode).title;
   const state = (operation: AssetOperationSummary) =>
     !operationKindPresentation(operation.kind, operation.libraryMode).executable
       ? t('不支持的操作类型，无法执行。')
@@ -57,11 +55,12 @@ export function AssetOperationsPanel({
                   ? t('数据库事务等待超时，未提交的项目可以重试。')
                   : t('操作失败，请重试。');
   function card(operation: AssetOperationSummary) {
+    const presentation = operationKindPresentation(operation.kind, operation.libraryMode);
     return (
       <article key={operation.id} className={styles.card} data-state={operation.state}>
         <header>
           <div className={styles.identity}>
-            <h3>{titles(operation)}</h3>
+            <h3>{presentation.title}</h3>
             <span className={styles.badge}>
               {operation.libraryMode === 'PHOTO' ? t('照片') : t('素材')}
             </span>
@@ -88,8 +87,7 @@ export function AssetOperationsPanel({
             )}
           </div>
           <div className={styles.actions}>
-            {operationKindPresentation(operation.kind, operation.libraryMode).compensation ===
-              'RESTORE' &&
+            {presentation.compensation === 'RESTORE' &&
               !operations.some((row) => row.undoOf === operation.id) &&
               (operation.completed > (operation.skipped ?? 0) ||
                 operation.queued > 0 ||
@@ -102,26 +100,24 @@ export function AssetOperationsPanel({
                   {operation.kind === 'TRASH' ? t('撤销删除') : t('恢复清理项（保留已合并信息）')}
                 </button>
               )}
-            {operation.failed > 0 &&
-              operationKindPresentation(operation.kind, operation.libraryMode).executable && (
-                <button
-                  type="button"
-                  disabled={action.isPending}
-                  onClick={() => action.mutate({ operation, action: 'retry' })}
-                >
-                  {t('重试失败任务')}
-                </button>
-              )}
-            {operation.queued > 0 &&
-              operationKindPresentation(operation.kind, operation.libraryMode).executable && (
-                <button
-                  type="button"
-                  disabled={action.isPending}
-                  onClick={() => action.mutate({ operation, action: 'cancel' })}
-                >
-                  {t('停止排队')}
-                </button>
-              )}
+            {operation.failed > 0 && presentation.executable && (
+              <button
+                type="button"
+                disabled={action.isPending}
+                onClick={() => action.mutate({ operation, action: 'retry' })}
+              >
+                {t('重试失败任务')}
+              </button>
+            )}
+            {operation.queued > 0 && presentation.executable && (
+              <button
+                type="button"
+                disabled={action.isPending}
+                onClick={() => action.mutate({ operation, action: 'cancel' })}
+              >
+                {t('停止排队')}
+              </button>
+            )}
           </div>
         </div>
         {operation.errors.length > 0 && (

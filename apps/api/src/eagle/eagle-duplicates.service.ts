@@ -193,11 +193,10 @@ export class EagleDuplicateService {
           libraryMode: this.libraryMode,
           signature: dismissalSignature(ownerId, this.libraryMode, group, state.byId),
         }));
-        for (const { rows: batchRows } of databaseBatches(
+        for (const { rows: part } of databaseBatches(
           keys,
           DATABASE_STATEMENTS.duplicateIgnoreLookup,
         )) {
-          const part = batchRows;
           if (input.ignored)
             await tx.eagleDuplicateDismissal.createMany({ data: part, skipDuplicates: true });
           else
@@ -667,11 +666,10 @@ export class EagleDuplicateService {
       });
       await syncAssetPrivacy(tx, item.ownerId, [target], this.libraryMode);
     }
-    for (const { rows: batchRows } of databaseBatches(
+    for (const { rows: part } of databaseBatches(
       item.assetIds,
       DATABASE_STATEMENTS.duplicateTrashTargets,
     )) {
-      const part = batchRows;
       // Earlier chunks may change ambiguous live pairing; never expand beyond the reviewed snapshot.
       const current = await resolveEagleTrashTargets(
         tx,
