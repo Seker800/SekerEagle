@@ -3,7 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
-import { LibraryReadStore } from '../../apps/api/dist/eagle/eagle-memory-store.js';
+import {
+  createLibraryReadPool,
+  LibraryReadStore,
+} from '../../apps/api/dist/eagle/eagle-memory-store.js';
 import { compileSearchPredicate } from '../../apps/api/dist/eagle/eagle-search-predicate.js';
 import { buildEagleFilterWhere } from '../../apps/api/dist/eagle/eagle-filter-query.js';
 import { createLibraryReaderServer } from '../../apps/api/dist/eagle/eagle-memory-server.js';
@@ -22,7 +25,8 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient();
 const ownerId = randomUUID(),
   other = randomUUID();
-const store = new LibraryReadStore(db);
+const pool = createLibraryReadPool(process.env.DATABASE_URL);
+const store = new LibraryReadStore(pool);
 const scope = { ownerId, libraryMode: 'PHOTO' };
 before(async () => {
   await db.user.createMany({
@@ -67,6 +71,7 @@ after(async () => {
   await db.eagleAsset.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
   await db.eagleLibraryReadState.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
   await db.user.deleteMany({ where: { id: { in: [ownerId, other] } } });
+  await pool.end();
   await db.$disconnect();
 });
 test('resident predicates match the real SQL adapter across nulls, NOT, relations and pages', async () => {
@@ -81,6 +86,7 @@ test('resident predicates match the real SQL adapter across nulls, NOT, relation
     { photoMetadata: { is: { cameraModel: 'Camera' } } },
     { NOT: { photoMetadata: { is: { cameraModel: 'Camera' } } } },
     { photoMetadata: { isNot: { cameraModel: 'Camera' } } },
+    { photoMetadata: { is: { cameraModel: { not: 'camera', mode: 'insensitive' } } } },
     ...['EMPTY', 'NOT_EMPTY'].map((operator) =>
       buildEagleFilterWhere(
         {
@@ -103,6 +109,7 @@ test('resident predicates match the real SQL adapter across nulls, NOT, relation
     const expected = await db.$queryRaw(
       Prisma.sql`SELECT asset.id FROM "EagleAsset" asset WHERE ${compileSearchPredicate(where)} ORDER BY asset."chronologicalAt" DESC,asset.id DESC`,
     );
+    assert.deepEqual(expected, await db.eagleAsset.findMany({ where, select: { id: true }, orderBy: [{ chronologicalAt: 'desc' }, { id: 'desc' }] }));
     assert.deepEqual(
       index.page(where, 'chronologicalAt', 'desc', 100, 0),
       expected.map((row) => row.id),
@@ -139,7 +146,7 @@ test('committed updates are visible, rollback is invisible, and removed relation
 });
 test('a fresh reader reconstructs the same result after acknowledged logs are pruned', async () => {
   const current = await store.synchronize(scope);
-  const restarted = await new LibraryReadStore(db).synchronize(scope);
+  const restarted = await new LibraryReadStore(pool).synchronize(scope);
   assert.equal(restarted.revision, current.revision);
   assert.deepEqual(
     restarted.page({}, 'chronologicalAt', 'desc', 100, 0),
@@ -184,7 +191,7 @@ test('sixty thousand resources publish one batch event and keep complete residen
     INSERT INTO "EagleAsset" (id,"ownerId","libraryMode","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize",width,height,"originalObjectKey","updatedAt")
     SELECT ${prefix}||lpad(n::text,7,'0'),${ownerId},'PHOTO',n::text||'.jpg',n::text,n::text,
       'image/jpeg','jpg',20000000,6000,4000,'synthetic/'||${prefix}||n::text,now() FROM generate_series(1,60000) n`);
-  const fresh = new LibraryReadStore(db);
+  const fresh = new LibraryReadStore(pool);
   const started = performance.now();
   const index = await fresh.synchronize(scope);
   const buildMs = performance.now() - started;
@@ -196,10 +203,16 @@ test('sixty thousand resources publish one batch event and keep complete residen
       data: { enabled: false },
     });
     const baselineStart = performance.now();
-    await db.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
-      await tx.eagleAsset.updateMany({ where: { ...scope, id: { startsWith: prefix } }, data: { rating: 2 } });
-    }, { timeout: 20000 });
+    await db.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
+        await tx.eagleAsset.updateMany({
+          where: { ...scope, id: { startsWith: prefix } },
+          data: { rating: 2 },
+        });
+      },
+      { timeout: 20000 },
+    );
     const baselineMs = performance.now() - baselineStart;
     await db.eagleLibraryReadState.update({
       where: { ownerId_libraryMode: scope },
@@ -209,10 +222,16 @@ test('sixty thousand resources publish one batch event and keep complete residen
       await db.eagleLibraryReadState.findUniqueOrThrow({ where: { ownerId_libraryMode: scope } })
     ).revision;
     const enabledStart = performance.now();
-    await db.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
-      await tx.eagleAsset.updateMany({ where: { ...scope, id: { startsWith: prefix } }, data: { rating: 3 } });
-    }, { timeout: 20000 });
+    await db.$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe("SET LOCAL statement_timeout='15000ms'");
+        await tx.eagleAsset.updateMany({
+          where: { ...scope, id: { startsWith: prefix } },
+          data: { rating: 3 },
+        });
+      },
+      { timeout: 20000 },
+    );
     const enabledMs = performance.now() - enabledStart;
     const changes = await db.eagleLibraryReadChange.findMany({
       where: { ...scope, revision: { gt: revision } },

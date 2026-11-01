@@ -196,3 +196,7 @@ test('unverified Unicode case folding and missing projected fields retain SQL fa
   assert.throws(() => insensitive({ ...asset, normalizedDisplayName: 'İmage' }), /Unsupported/);
   assert.throws(() => compileMemorySearchPredicate({ width: { gt: 1 } })({ id: 'incomplete' }), /Unsupported/);
 });
+
+test('case-insensitive string negation keeps its mode on the primitive operand', () => {
+  assert.equal(compileMemorySearchPredicate({ format: { not: 'JPG', mode: 'insensitive' } })(asset), false);
+});
