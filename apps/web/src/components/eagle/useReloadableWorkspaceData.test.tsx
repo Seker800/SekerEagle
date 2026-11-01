@@ -24,6 +24,7 @@ describe('useReloadableWorkspaceData', () => {
     const shared = result.current();
     expect(result.current()).toBe(shared);
     const fresh = result.current(true);
+    await act(async () => { await Promise.resolve(); });
     expect(load).toHaveBeenCalledTimes(1);
     await act(async () => { older.resolve(1); await shared; });
     expect(load).toHaveBeenCalledTimes(2);
