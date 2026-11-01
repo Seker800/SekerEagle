@@ -1,3 +1,5 @@
+import { applyOrdinaryDuplicateCleanupBatch } from './eagle-duplicate-cleanup';
+import { DATABASE_STATEMENTS, databaseBatches } from './eagle-database-batches';
 import { filterDuplicateReview } from './eagle-duplicate-filters';
 import { readMissingDuplicateFingerprints } from './eagle-duplicate-candidates';
 import { readDuplicateReview } from './eagle-duplicate-read';
@@ -191,8 +193,11 @@ export class EagleDuplicateService {
           libraryMode: this.libraryMode,
           signature: dismissalSignature(ownerId, this.libraryMode, group, state.byId),
         }));
-        for (let offset = 0; offset < keys.length; offset += 500) {
-          const part = keys.slice(offset, offset + 500);
+        for (const { rows: batchRows } of databaseBatches(
+          keys,
+          DATABASE_STATEMENTS.duplicateIgnoreLookup,
+        )) {
+          const part = batchRows;
           if (input.ignored)
             await tx.eagleDuplicateDismissal.createMany({ data: part, skipDuplicates: true });
           else
@@ -279,9 +284,12 @@ export class EagleDuplicateService {
         throw new NotFoundException('操作不存在。');
       throw error;
     }
-    for (let offset = 0; offset < items.length; offset += 500)
+    for (const { offset, rows: batchRows } of databaseBatches(
+      items,
+      DATABASE_STATEMENTS.duplicateOperationItems,
+    ))
       await tx.eagleAssetOperationItem.createMany({
-        data: items.slice(offset, offset + 500).map((item, index) => ({
+        data: batchRows.map((item, index) => ({
           ...item,
           snapshots: item.snapshots,
           id: randomUUID(),
@@ -477,11 +485,14 @@ export class EagleDuplicateService {
           throw new ConflictException('所选查重组存在重叠，请刷新后重新检查。');
         const resources = new Map<string, Snapshot>();
         // One bulk resolution per database chunk, rather than two domain reads for every duplicate group.
-        for (let offset = 0; offset < selectedIds.length; offset += 500)
+        for (const { rows: batchRows } of databaseBatches(
+          selectedIds,
+          DATABASE_STATEMENTS.duplicateTrashTargets,
+        ))
           for (const row of await resolveEagleTrashTargets(
             tx,
             { ownerId: principal.sub, libraryMode: this.libraryMode },
-            selectedIds.slice(offset, offset + 500),
+            batchRows,
             false,
             principal.canViewPrivate,
           ))
@@ -493,11 +504,14 @@ export class EagleDuplicateService {
         const componentIds = [...resources.keys()];
         const liveById = new Map<string, string | null>(),
           motions = new Map<string, Snapshot[]>();
-        for (let offset = 0; offset < componentIds.length; offset += 500) {
+        for (const { rows: batchRows } of databaseBatches(
+          componentIds,
+          DATABASE_STATEMENTS.duplicateAssetLookup,
+        )) {
           const rows = await tx.eagleAsset.findMany({
             where: {
               ...this.inLibrary(principal.sub, principal.canViewPrivate),
-              id: { in: componentIds.slice(offset, offset + 500) },
+              id: { in: batchRows },
             },
             select: { id: true, livePhotoIdentifier: true, livePhotoRole: true },
           });
@@ -553,6 +567,15 @@ export class EagleDuplicateService {
   }
   /** Business rules only; the operation executor owns the transaction, actor, lease and receipts. */
   async applyCleanupBatch(tx: Prisma.TransactionClient, items: Item[]) {
+    if (
+      items.length > 1 &&
+      (await applyOrdinaryDuplicateCleanupBatch(
+        tx,
+        { ownerId: items[0]!.ownerId, libraryMode: this.libraryMode },
+        items,
+      ))
+    )
+      return;
     for (const item of items) await this.executeCleanupItem(tx, item);
   }
   private async executeCleanupItem(tx: Prisma.TransactionClient, item: Item) {
@@ -561,12 +584,15 @@ export class EagleDuplicateService {
       ids = expected.map((r) => r.id).sort();
     await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${item.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
     const rows: Array<Snapshot & { rating: number | null }> = [];
-    for (let offset = 0; offset < ids.length; offset += 500)
+    for (const { rows: batchRows } of databaseBatches(
+      ids,
+      DATABASE_STATEMENTS.duplicateAssetLookup,
+    ))
       rows.push(
         ...(await tx.eagleAsset.findMany({
           where: {
             ...this.inLibrary(item.ownerId, item.operation.isPrivate),
-            id: { in: ids.slice(offset, offset + 500) },
+            id: { in: batchRows },
           },
           select: { id: true, rowVersion: true, mediaRevision: true, rating: true },
         })),
@@ -585,11 +611,14 @@ export class EagleDuplicateService {
     )
       throw new ConflictException('保留项或清理项已变化，请重新检查。');
     const currentIds = new Set<string>();
-    for (let offset = 0; offset < item.assetIds.length; offset += 500)
+    for (const { rows: batchRows } of databaseBatches(
+      item.assetIds,
+      DATABASE_STATEMENTS.duplicateTrashTargets,
+    ))
       for (const row of await resolveEagleTrashTargets(
         tx,
         { ownerId: item.ownerId, libraryMode: this.libraryMode },
-        item.assetIds.slice(offset, offset + 500),
+        batchRows,
         false,
         item.operation.isPrivate,
       ))
@@ -600,20 +629,26 @@ export class EagleDuplicateService {
     if (snapshot.exact) {
       const target = snapshot.targetId;
       const tagIds = new Set<string>();
-      for (let offset = 0; offset < item.assetIds.length; offset += 500)
+      for (const { rows: batchRows } of databaseBatches(
+        item.assetIds,
+        DATABASE_STATEMENTS.duplicateTagLookup,
+      ))
         for (const row of await tx.eagleAssetManualTag.findMany({
           where: {
             ownerId: item.ownerId,
             libraryMode: this.libraryMode,
-            assetId: { in: item.assetIds.slice(offset, offset + 500) },
+            assetId: { in: batchRows },
           },
           select: { tagId: true },
         }))
           tagIds.add(row.tagId);
       const tags = [...tagIds];
-      for (let offset = 0; offset < tags.length; offset += 500)
+      for (const { rows: batchRows } of databaseBatches(
+        tags,
+        DATABASE_STATEMENTS.duplicateTagInsert,
+      ))
         await tx.eagleAssetManualTag.createMany({
-          data: tags.slice(offset, offset + 500).map((tagId) => ({
+          data: batchRows.map((tagId) => ({
             ownerId: item.ownerId,
             libraryMode: this.libraryMode,
             assetId: target,
@@ -632,8 +667,11 @@ export class EagleDuplicateService {
       });
       await syncAssetPrivacy(tx, item.ownerId, [target], this.libraryMode);
     }
-    for (let offset = 0; offset < item.assetIds.length; offset += 500) {
-      const part = item.assetIds.slice(offset, offset + 500);
+    for (const { rows: batchRows } of databaseBatches(
+      item.assetIds,
+      DATABASE_STATEMENTS.duplicateTrashTargets,
+    )) {
+      const part = batchRows;
       // Earlier chunks may change ambiguous live pairing; never expand beyond the reviewed snapshot.
       const current = await resolveEagleTrashTargets(
         tx,

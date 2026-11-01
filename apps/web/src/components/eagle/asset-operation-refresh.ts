@@ -155,6 +155,19 @@ export class AssetOperationRefresher {
         readRevision,
       );
       done.set(actual.id, `${epoch}:${intentVersion}:${JSON.stringify(actual)}`);
+      if (actual.kind === 'EMPTY_TRASH') {
+        // A cutoff command has no member receipts. Reconcile the scoped trash facts,
+        // including items that arrived after the cutoff, while retaining loaded pages.
+        await this.client.invalidateQueries(
+          {
+            predicate: (query) =>
+              isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
+              query.queryKey[4] === 'TRASH',
+            refetchType: 'active',
+          },
+          { cancelRefetch: false },
+        );
+      }
       this.dirtyMetadata.add(mode);
       if (actual.kind === 'RESTORE') this.restoreModes.add(mode);
       if (actual.kind === 'SEND') {

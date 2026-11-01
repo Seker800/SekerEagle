@@ -1156,41 +1156,35 @@ export class EagleService {
     const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
       if (beforeWrite) await beforeWrite(transaction);
       const purgeAfter = new Date();
-      const assets = await transaction.$queryRaw<Array<{ id: string; mediaRevision: number }>>(
-        Prisma.sql`
+      // Keep the complete purge selection in PostgreSQL: no selection-sized ID/parameter list.
+      const [result] = await transaction.$queryRaw<
+        Array<{ affectedAssetCount: number }>
+      >(Prisma.sql`
+        WITH marked AS (
           UPDATE "EagleAsset"
-          SET "purgeAfter" = ${purgeAfter}, "rowVersion" = "rowVersion" + 1,
-              "updatedAt" = CURRENT_TIMESTAMP
-          WHERE "ownerId" = ${ownerId} AND "libraryMode" = ${this.libraryMode}::"LibraryMode" AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
-            ${cutoff ? Prisma.sql`AND "deletedAt" <= ${cutoff}` : Prisma.empty}
-            AND (${includePrivate} OR "isPrivate" = false)
-          RETURNING "id", "mediaRevision"
-        `,
-      );
-      if (!assets.length) return 0;
-      await transaction.eagleAssetProcessingJob.createMany({
-        data: assets
-          .map((asset) => ({
-            ownerId,
-            assetId: asset.id,
-            kind: 'PURGE_ASSET' as const,
-            lane: 'MAINTENANCE' as const,
-            assetRevision: asset.mediaRevision,
-          }))
-          .map((row) => inLibrary(this.libraryMode, row)),
-        skipDuplicates: true,
-      });
-      await transaction.eagleAssetProcessingJob.updateMany({
-        where: {
-          ownerId,
-          libraryMode: this.libraryMode,
-          assetId: { in: assets.map((asset) => asset.id) },
-          kind: 'PURGE_ASSET',
-          status: { in: ['PENDING', 'FAILED', 'COMPLETED'] },
-        },
-        data: mediaRequeueData(purgeAfter),
-      });
-      return assets.length;
+          SET "purgeAfter"=${purgeAfter}, "rowVersion"="rowVersion"+1, "updatedAt"=CURRENT_TIMESTAMP
+          WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode"
+            AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
+            ${cutoff ? Prisma.sql`AND "deletedAt"<=${cutoff}` : Prisma.empty}
+            AND (${includePrivate} OR NOT "isPrivate")
+          RETURNING id,"mediaRevision"
+        ), scheduled AS (
+          INSERT INTO "EagleMediaJob" AS job
+            (id,"ownerId","libraryMode","assetId",kind,lane,"assetRevision","processorVersion",
+             status,attempts,"recoveryCount","leaseVersion","availableAt","updatedAt")
+          SELECT gen_random_uuid()::text,${ownerId},${this.libraryMode}::"LibraryMode",id,
+            'PURGE_ASSET'::"EagleMediaJobKind",'MAINTENANCE'::"EagleProcessingLane","mediaRevision",'v1',
+            'PENDING'::"EagleMediaJobStatus",0,0,1,${purgeAfter},CURRENT_TIMESTAMP FROM marked
+          ON CONFLICT ("assetId",kind,"assetRevision","processorVersion") DO UPDATE
+          SET status='PENDING',attempts=0,"recoveryCount"=0,"leaseVersion"=job."leaseVersion"+1,
+            "availableAt"=EXCLUDED."availableAt","lockedAt"=NULL,"startedAt"=NULL,
+            "completedAt"=NULL,"lastError"=NULL,"updatedAt"=CURRENT_TIMESTAMP
+          WHERE job."ownerId"=EXCLUDED."ownerId" AND job."libraryMode"=EXCLUDED."libraryMode"
+            AND job.status IN ('PENDING','FAILED','COMPLETED')
+          RETURNING id
+        ) SELECT count(*)::int AS "affectedAssetCount" FROM marked
+      `);
+      return result!.affectedAssetCount;
     });
     return { affectedAssetCount };
   }

@@ -57,9 +57,24 @@ function fixture(view = 'ACTIVE') {
 }
 it('reconciles a whole-trash command against every loaded trash page without clearing a later arrival', async () => {
   const f = fixture('TRASH');
-  const completed = { ...summary('EMPTY_TRASH'), completed: 1, failed: 0, errors: [], state: 'COMPLETED' as const };
-  f.queryFn.mockImplementation(async () => ({ assetIds: ['arrived-after-cutoff'], nextCursor: 'next' }));
-  mocks.results.mockResolvedValue({ operation: completed, revision: 'v1', membership: [], receipts: [], nextCursor: null });
+  const completed = {
+    ...summary('EMPTY_TRASH'),
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  f.queryFn.mockImplementation(async () => ({
+    assetIds: ['arrived-after-cutoff'],
+    nextCursor: 'next',
+  }));
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
   try {
     await f.refresher.reconcile('PHOTO', completed);
     expect(f.queryFn).toHaveBeenCalledTimes(12);
