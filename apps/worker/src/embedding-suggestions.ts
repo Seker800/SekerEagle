@@ -1,3 +1,4 @@
+import { unreviewedSuggestionEvidenceSql } from '@sekereagle/library-persistence';
 import { Prisma, type LibraryMode } from '@prisma/client';
 
 export async function createTopEmbeddingSuggestion(
@@ -39,7 +40,7 @@ export async function createTopEmbeddingSuggestion(
         LIMIT 1
       ) candidate
       WHERE 1 - candidate.distance >= ${minimumScore}
-        AND ${unreviewedSuggestionEvidenceSql({ ownerId, libraryMode }, Prisma.sql`${embeddingId}`, Prisma.sql`candidate."tagId"`)}
+        AND ${unreviewedSuggestionEvidenceSql({ ownerId, libraryMode }, Prisma.sql`${embeddingId}`, Prisma.sql`candidate."tagId"`, Prisma.sql`candidate."snapshotId"`)}
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAssetManualTag" manual
           WHERE manual."ownerId" = ${ownerId} AND manual."libraryMode" = ${libraryMode}::"LibraryMode" AND manual."assetId" = ${assetId}
@@ -51,20 +52,6 @@ export async function createTopEmbeddingSuggestion(
         )
     `,
   );
-}
-
-/** Retrying current evidence must respect the owner's reviewed decision, across prototype rebuilds. */
-export function unreviewedSuggestionEvidenceSql(
-  scope: { ownerId: string; libraryMode: LibraryMode },
-  embeddingId: Prisma.Sql,
-  tagId: Prisma.Sql,
-): Prisma.Sql {
-  return Prisma.sql`NOT EXISTS (
-    SELECT 1 FROM "EagleVectorTagSuggestion" reviewed
-    WHERE reviewed."ownerId"=${scope.ownerId} AND reviewed."libraryMode"=${scope.libraryMode}::"LibraryMode"
-      AND reviewed."embeddingId"=${embeddingId} AND reviewed."suggestedTagId"=${tagId}
-      AND (reviewed."reviewedAt" IS NOT NULL OR reviewed.status IN ('ACCEPTED', 'REJECTED'))
-  )`;
 }
 
 /** Staging can outlive review or media replacement; activate only evidence still applicable now. */
@@ -91,7 +78,7 @@ export async function activateEmbeddingSuggestionGeneration(
       AND asset."deletedAt" IS NULL AND NOT asset."storageTransferredOut"
       AND snapshot.id=suggestion."snapshotId" AND snapshot."isCurrent" AND snapshot.status='ACTIVE'
       AND config."recommendationEnabled" AND snapshot."tagId"=suggestion."suggestedTagId"
-      AND ${unreviewedSuggestionEvidenceSql(scope, Prisma.sql`embedding.id`, Prisma.sql`suggestion."suggestedTagId"`)}
+      AND ${unreviewedSuggestionEvidenceSql(scope, Prisma.sql`embedding.id`, Prisma.sql`suggestion."suggestedTagId"`, Prisma.sql`suggestion."snapshotId"`)}
       AND NOT EXISTS (SELECT 1 FROM "EagleAssetManualTag" manual
         WHERE manual."ownerId"=suggestion."ownerId" AND manual."libraryMode"=suggestion."libraryMode"
           AND manual."assetId"=suggestion."assetId")

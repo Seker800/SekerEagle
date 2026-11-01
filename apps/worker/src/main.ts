@@ -24,7 +24,6 @@ import { EmbeddingProcessor } from './embedding-job';
 import {
   createTopEmbeddingSuggestion,
   activateEmbeddingSuggestionGeneration,
-  unreviewedSuggestionEvidenceSql,
 } from './embedding-suggestions';
 import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
@@ -33,7 +32,11 @@ import {
   videoTranscodingEnabled,
 } from './video-processing-policy';
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
-import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacy,
+  unreviewedSuggestionEvidenceSql,
+} from '@sekereagle/library-persistence';
 import { catalogImageDimensions, canReuseImageBrowsing } from './image-renditions';
 import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
@@ -943,7 +946,7 @@ async function recomputeSuggestionGeneration(
         AND embedding.status = 'READY' AND embedding."assetRevision" = asset."mediaRevision"
         AND embedding."spaceId" = ${embeddingSpaceId} AND asset."deletedAt" IS NULL
         AND 1 - nearest.distance >= ${minimumScore}
-        AND ${unreviewedSuggestionEvidenceSql(build, Prisma.sql`embedding.id`, Prisma.sql`nearest."tagId"`)}
+        AND ${unreviewedSuggestionEvidenceSql(build, Prisma.sql`embedding.id`, Prisma.sql`nearest."tagId"`, Prisma.sql`nearest."snapshotId"`)}
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAssetManualTag" manual
           WHERE manual."ownerId" = embedding."ownerId" AND manual."libraryMode" = embedding."libraryMode" AND manual."assetId" = embedding."assetId"

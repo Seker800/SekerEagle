@@ -143,3 +143,5 @@ export {
   unscannedPhotoFacesSql,
   queuePhotoFaceScan,
 } from './photo-face-scan';
+
+export { unreviewedSuggestionEvidenceSql } from './vector-suggestion-evidence';

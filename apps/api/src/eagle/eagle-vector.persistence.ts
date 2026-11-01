@@ -1,3 +1,4 @@
+import { unreviewedSuggestionEvidenceSql } from '@sekereagle/library-persistence';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type LibraryMode } from '@prisma/client';
 
@@ -90,6 +91,7 @@ export async function refreshUnclassifiedSuggestions(
                'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
         FROM candidates candidate
         WHERE 1 - candidate.distance >= ${minimumScore}
+          AND ${unreviewedSuggestionEvidenceSql({ ownerId: input.ownerId, libraryMode: input.libraryMode ?? 'MATERIAL' }, Prisma.sql`candidate."embeddingId"`, Prisma.sql`candidate."tagId"`, Prisma.sql`candidate."snapshotId"`)}
         RETURNING id
       )
       SELECT (SELECT COUNT(*)::integer FROM eligible) AS scanned,
