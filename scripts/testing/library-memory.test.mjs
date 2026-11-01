@@ -17,6 +17,8 @@ import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
+import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-memory.js';
+import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -27,6 +29,7 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient();
 const ownerId = randomUUID(),
   other = randomUUID();
+const personId = randomUUID(), unnamedPersonId = randomUUID(), privatePersonId = randomUUID();
 const pool = createLibraryReadPool(process.env.DATABASE_URL);
 const store = new LibraryReadStore(pool);
 const scope = { ownerId, libraryMode: 'PHOTO' };
@@ -72,9 +75,19 @@ before(async () => {
       capturedLocal: i % 7 ? `2026-11-${String(i + 1).padStart(2, '0')}T08:00:00` : null,
     })),
   });
+  await db.eaglePhotoPerson.createMany({ data: [
+    { id: personId, name: 'Alpha', marksAssetsPrivate: false },
+    { id: unnamedPersonId, name: null, marksAssetsPrivate: false },
+    { id: privatePersonId, name: 'Private', marksAssetsPrivate: true },
+  ].map((person) => ({ ...person, ...scope, prototype: [1, ...Array(127).fill(0)], modelVersion: 'fixture' })) });
+  await db.eaglePhotoFace.createMany({ data: [
+    [personId, 1, 0], [personId, 1, 0], [personId, 0, 0],
+    [unnamedPersonId, 2, 0], [unnamedPersonId, 3, 0], [unnamedPersonId, 4, 1],
+  ].map(([personId, at, assetRevision]) => ({ ...scope, id: randomUUID(), personId, assetId: `${ownerId}-${at}`, assetRevision, modelVersion: 'fixture', box: [0, 0, 10, 10], embedding: [1, ...Array(127).fill(0)], confidence: 0.9 })) });
 });
 after(async () => {
   await db.eagleAsset.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
+  await db.eaglePhotoPerson.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
   await db.eagleLibraryReadState.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
   await db.user.deleteMany({ where: { id: { in: [ownerId, other] } } });
   await pool.end();
@@ -258,6 +271,28 @@ test('statistics reuse resident daily facts and preserve the original chart SQL 
     else process.env.EAGLE_READER_TOKEN = oldToken;
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('people counts reuse resident memberships while original SQL retains names, privacy and ranking', async () => {
+  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+  const server = createLibraryReaderServer(store, 'people-reader', 2097152, { peopleCounts: (index, includePrivate) => residentPersonCounts(index, includePrivate) });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    for (const includePrivate of [false, true]) for (const view of ['ALL', 'UNNAMED']) {
+      delete process.env.EAGLE_READER_URL;
+      const expected = await db.$transaction((tx) => readPeopleCountPage(tx, ownerId, includePrivate, undefined, view), { isolationLevel: 'RepeatableRead' });
+      process.env.EAGLE_READER_URL=url; process.env.EAGLE_READER_TOKEN='people-reader';
+      const hits = libraryReadMetrics.hits;
+      const actual = await db.$transaction((tx) => readPeopleCountPage(tx, ownerId, includePrivate, undefined, view), { isolationLevel: 'RepeatableRead' });
+      assert.deepEqual(actual, expected);
+      assert.equal(libraryReadMetrics.hits, hits+1);
+    }
+  } finally {
+    if (oldUrl===undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL=oldUrl;
+    if (oldToken===undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN=oldToken;
+    server.closeAllConnections(); await new Promise((resolve)=>server.close(resolve));
   }
 });
 
