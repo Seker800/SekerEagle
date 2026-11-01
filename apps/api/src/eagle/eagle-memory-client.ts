@@ -4,6 +4,7 @@ import {
   memoryStatisticsSummary,
   memoryPersonCounts,
   memorySearchPositions,
+  memoryPhotoFacets,
 } from './eagle-memory-protocol';
 import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
@@ -58,6 +59,7 @@ async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
       summary?: unknown;
       counts?: unknown;
       positions?: unknown;
+      facets?: unknown;
     };
   } catch {
     libraryReadMetrics.fallbacks++;
@@ -146,6 +148,15 @@ export async function readMemorySmartFolderPage(
   const parsed = memorySearchPositions.safeParse(result.positions);
   if (!parsed.success || parsed.data.length > options.limit + 1 ||
     new Set(parsed.data.map(row => row.assetId)).size !== parsed.data.length) return null;
+  libraryReadMetrics.hits++;
+  return parsed.data;
+}
+
+export async function readMemoryPhotoFacets(ownerId: string, includePrivate: boolean) {
+  const result = await request({ ownerId, libraryMode: 'PHOTO' }, { action: 'facets', includePrivate });
+  if (!result) return null;
+  const parsed = memoryPhotoFacets.safeParse(result.facets);
+  if (!parsed.success) return null;
   libraryReadMetrics.hits++;
   return parsed.data;
 }

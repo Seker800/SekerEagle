@@ -9,6 +9,7 @@ export const memorySemanticOptions = z.object({
   ordinaryMembersPossible: z.boolean(), includePrivate: z.boolean(), trash: z.boolean(),
   after: memorySearchPositions.element.optional(),
 }).strict();
+export const memoryPhotoFacets = z.object({ cameras: z.array(z.string()), lenses: z.array(z.string()) }).strict();
 const usage = z.object({ key: z.string(), count: z.number().int().nonnegative() });
 export const memoryPersonCounts = z.array(
   z.object({ id: z.string(), photos: z.number().int().nonnegative() }).strict(),

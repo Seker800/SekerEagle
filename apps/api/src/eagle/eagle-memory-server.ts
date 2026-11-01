@@ -10,6 +10,7 @@ import type { ImageSearchPosition } from './eagle-image-search.service';
 import { semanticFolderIds } from './eagle-memory-semantic';
 import type { MemorySearchContext } from './eagle-memory-predicate';
 import { memorySemanticOptions } from './eagle-memory-protocol';
+import type { PhotoReadFacets } from '../photos/photo-facets-memory';
 import type { Summary } from '../photos/photo-statistics.service';
 
 const querySchema = z
@@ -18,7 +19,7 @@ const querySchema = z
       .object({ ownerId: z.string().min(1), libraryMode: z.enum(['MATERIAL', 'PHOTO']) })
       .strict(),
     where: z.record(z.string(), z.unknown()),
-    action: z.enum(['page', 'count', 'statistics', 'peopleCounts', 'smartFolderPage']),
+    action: z.enum(['page', 'count', 'statistics', 'peopleCounts', 'smartFolderPage', 'facets']),
     semantic: memorySemanticOptions.optional(),
     includePrivate: z.boolean().default(false),
     statistics: z
@@ -63,6 +64,7 @@ async function body(request: IncomingMessage, maxBytes: number) {
 }
 
 export interface LibraryReadHandlers {
+  facets?: (index: LibraryMemoryIndex, includePrivate: boolean) => Promise<PhotoReadFacets>;
   semanticQuery?: <T>(index: LibraryMemoryIndex, folderIds: string[], read: (context: MemorySearchContext) => T) => Promise<T>;
   smartFolderPage?: (index: LibraryMemoryIndex, options: ResidentSmartFolderOptions) => Promise<ImageSearchPosition[]>;
   statistics?: (
@@ -125,6 +127,11 @@ export function createLibraryReaderServer(
       if (query.action === 'smartFolderPage') {
         if (!handlers.smartFolderPage || !query.semantic) { send(503, { error: 'Reader capability unavailable' }); return; }
         send(200, { revision, positions: await handlers.smartFolderPage(index, { ...query.semantic, where }) });
+        return;
+      }
+      if (query.action === 'facets') {
+        if (!handlers.facets || query.scope.libraryMode !== 'PHOTO') { send(503, { error: 'Reader capability unavailable' }); return; }
+        send(200, { revision, facets: await handlers.facets(index, query.includePrivate) });
         return;
       }
       if (query.action === 'statistics') {

@@ -15,6 +15,8 @@ import { libraryReadMetrics } from '../../apps/api/dist/eagle/eagle-memory-clien
 import { once } from 'node:events';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
+import { PhotoManagementService } from '../../apps/api/dist/photos/photo-management.service.js';
+import { readResidentPhotoFacets } from '../../apps/api/dist/photos/photo-facets-memory.js';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-memory.js';
@@ -511,5 +513,31 @@ test('semantic resident page preserves real SQL scores, additional filters and v
     await db.eagleSmartFolder.deleteMany({ where: { id: folderId } });
     await db.eagleAssetEmbedding.deleteMany({ where: { spaceId } });
     await db.eagleEmbeddingSpace.deleteMany({ where: { id: spaceId } });
+  }
+});
+
+test('photo facet HTTP results match original raw-value grouping and database collation', async () => {
+  const server = createLibraryReaderServer(store, 'facets-reader', 2097152, {
+    facets: (index, includePrivate) => readResidentPhotoFacets(pool, index, includePrivate),
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
+  try {
+    await db.eaglePhotoMetadata.update({ where: { assetId: `${ownerId}-7` }, data: { cameraModel: '  ' } });
+    const service = new PhotoManagementService(db);
+    for (const includePrivate of [false, true]) {
+      delete process.env.EAGLE_READER_URL;
+      const expected = await service.facets(ownerId, includePrivate);
+      process.env.EAGLE_READER_URL = `http://127.0.0.1:${server.address().port}`;
+      process.env.EAGLE_READER_TOKEN = 'facets-reader';
+      const hits = libraryReadMetrics.hits;
+      assert.deepEqual(await service.facets(ownerId, includePrivate), expected);
+      assert.equal(libraryReadMetrics.hits, hits + 1);
+      assert.ok(expected.cameras.includes('  '));
+    }
+  } finally {
+    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN = oldToken;
+    server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
   }
 });

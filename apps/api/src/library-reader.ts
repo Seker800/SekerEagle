@@ -8,6 +8,7 @@ import {
 } from './photos/photo-statistics-memory';
 import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
 import { readResidentSmartFolderPage, withResidentSemanticGraph } from './eagle/eagle-memory-semantic-store';
+import { readResidentPhotoFacets, residentPhotoFacets } from './photos/photo-facets-memory';
 import { residentPersonCounts } from './photos/photo-people-memory';
 
 /** Explicit standalone entry. Importing shared HTTP providers never starts it. */
@@ -28,6 +29,7 @@ export async function startLibraryReader(env = process.env) {
       statistics: (index, includePrivate, query) =>
         readResidentPhotoStatistics(db, index, includePrivate, query),
       peopleCounts: residentPersonCounts,
+      facets: (index, privateVisible) => readResidentPhotoFacets(db, index, privateVisible),
       semanticQuery: (index, ids, read) => withResidentSemanticGraph(db, index, ids, graph => read(graph.context)),
       smartFolderPage: (index, options) => readResidentSmartFolderPage(db, index, options),
     },
@@ -89,6 +91,7 @@ function prime(index: LibraryMemoryIndex) {
     for (const includePrivate of [false, true]) {
       residentStatisticsDaily(index, includePrivate);
       residentPersonCounts(index, includePrivate);
+      residentPhotoFacets(index, includePrivate);
     }
 }
 if (require.main === module)

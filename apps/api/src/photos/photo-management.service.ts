@@ -1,3 +1,4 @@
+import { readMemoryPhotoFacets } from '../eagle/eagle-memory-client';
 import { readPeopleCountPage } from './photo-person-count-page';
 import { representativePhotoFace } from '@sekereagle/library-core';
 import {
@@ -54,6 +55,8 @@ export class PhotoManagementService {
     };
   }
   async facets(ownerId: string, includePrivate: boolean) {
+    const resident = await readMemoryPhotoFacets(ownerId, includePrivate);
+    if (resident) return resident;
     const where = {
       ownerId,
       libraryMode: 'PHOTO' as const,
