@@ -10,7 +10,7 @@ export function operationSetting(name: string, fallback: number, maximum?: numbe
 export const OPERATION_DB_BATCH_SIZE = operationSetting(
   'EAGLE_OPERATION_DB_BATCH_SIZE',
   512,
-  Math.floor(32767 / 12),
+
 );
 export const OPERATION_SEND_CONCURRENCY = operationSetting('EAGLE_OPERATION_SEND_CONCURRENCY', 4);
 export const OPERATION_POLL_MS = operationSetting('EAGLE_OPERATION_POLL_MS', 1000);
