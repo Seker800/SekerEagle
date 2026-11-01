@@ -21,7 +21,7 @@ const summary = (kind: AssetOperationSummary['kind'] = 'TRASH'): AssetOperationS
 });
 function fixture(view = 'ACTIVE') {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    defaultOptions: { queries: { retry: false, retryDelay: 0, staleTime: Infinity } },
   });
   const key = ['eagle', 'owner', 'PHOTO', 'assets', view, {}];
   const data = {
@@ -341,6 +341,57 @@ it('adds newly trashed members through only the active trash first window while 
     expect(current.pages).toHaveLength(12);
     expect(current.pageParams).toEqual(f.data.pageParams);
     expect(current.pages[0].assetIds).toEqual(['new', 'a-0', 'b-0']);
+  } finally {
+    f.close();
+  }
+});
+
+
+it('retains a failed destination for the next terminal reconciliation without rereading receipts', async () => {
+  const f = fixture('TRASH');
+  mocks.results.mockReset().mockResolvedValue({
+    operation: summary(), revision: 'v1', membership: [], receipts: [], nextCursor: null,
+  });
+  f.queryFn.mockRejectedValue(new Error('offline'));
+  try {
+    await f.refresher.reconcile('PHOTO', summary());
+    expect(f.queryFn).toHaveBeenCalledTimes(3);
+    expect(f.client.getQueryState(f.key)?.isInvalidated).toBe(true);
+    expect(f.client.getQueryData(f.key)).toEqual(f.data);
+    f.queryFn.mockResolvedValue({ assetIds: ['new'], nextCursor: 'next' });
+    await f.refresher.reconcile('PHOTO', summary());
+    expect(f.queryFn).toHaveBeenCalledTimes(4);
+    expect(mocks.results).toHaveBeenCalledTimes(1);
+    const current = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(current.pages).toHaveLength(12);
+    expect(current.pageParams).toEqual(f.data.pageParams);
+    expect(current.pages[0].assetIds).toEqual(['new', 'a-0', 'b-0']);
+    f.refresher.schedule('PHOTO', false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(f.queryFn).toHaveBeenCalledTimes(4);
+  } finally {
+    f.close();
+  }
+});
+
+it('prevents an older in-flight infinite response from overwriting the destination merge', async () => {
+  const f = fixture('TRASH');
+  let release!: (value: { assetIds: string[]; nextCursor: string }) => void;
+  f.queryFn.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  mocks.results.mockResolvedValue({
+    operation: summary(), revision: 'v1', membership: [], receipts: [], nextCursor: null,
+  });
+  try {
+    const oldFetch = f.client.refetchQueries({ queryKey: f.key, exact: true });
+    await vi.waitFor(() => expect(f.queryFn).toHaveBeenCalledTimes(1));
+    await f.refresher.reconcile('PHOTO', summary());
+    release({ assetIds: [], nextCursor: '' });
+    await oldFetch;
+    const current = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(current.pages).toHaveLength(12);
+    expect(current.pageParams).toEqual(f.data.pageParams);
+    expect(current.pages[0].assetIds).toEqual(['new', 'a-0', 'b-0']);
+    expect(f.queryFn).toHaveBeenCalledTimes(2);
   } finally {
     f.close();
   }
