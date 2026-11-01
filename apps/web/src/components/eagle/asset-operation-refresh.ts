@@ -71,6 +71,8 @@ export class AssetOperationRefresher {
             cache.operations.confirmCounts();
           const views = this.destinationViews.get(mode);
           if (views) {
+            // Detach this attempt so a newer terminal can enqueue the same view.
+            this.destinationViews.delete(mode);
             const destinations = [...views];
             const predicate = (query: { queryKey: readonly unknown[] }) =>
               destinations.some((view) =>
@@ -81,8 +83,7 @@ export class AssetOperationRefresher {
             await this.client.cancelQueries({ predicate });
             await this.client.invalidateQueries({ predicate, refetchType: 'none' });
             const failed = await this.refreshFirstPages(mode, destinations);
-            for (const view of destinations) if (!failed.has(view)) views.delete(view);
-            if (!views.size) this.destinationViews.delete(mode);
+            if (failed.size) this.addDestination(mode, [...failed]);
           }
         }
       }

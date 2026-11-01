@@ -409,14 +409,22 @@ it('prevents an older in-flight infinite response from overwriting the destinati
   }
 });
 
-
 it('retains a second destination intent arriving while the first window is in flight', async () => {
   const f = fixture('TRASH');
   let release!: (value: { assetIds: string[]; nextCursor: string }) => void;
-  f.queryFn.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+  f.queryFn.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
   f.queryFn.mockResolvedValue({ assetIds: ['second', 'new'], nextCursor: 'next' });
   mocks.results.mockReset().mockImplementation(async (id: string) => ({
-    operation: { ...summary(), id }, revision: 'v1', membership: [], receipts: [], nextCursor: null,
+    operation: { ...summary(), id },
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
   }));
   try {
     const first = f.refresher.reconcile('PHOTO', summary());
