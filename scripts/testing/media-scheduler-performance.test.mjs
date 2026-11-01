@@ -13,6 +13,7 @@ import {
 } from '../../apps/worker/dist/scheduled-media-candidates.js';
 import { PostgresWakeListener } from '../../apps/worker/dist/job-wakeup.js';
 import { EagleTaskCenterService } from '../../apps/api/dist/eagle/eagle-task-center.service.js';
+import { propagateFailedDependencies } from '../../apps/worker/dist/job-recovery.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
   s3Endpoint: process.env.S3_ENDPOINT,
@@ -82,6 +83,70 @@ async function fixture(size = 1) {
   await db.$executeRaw`INSERT INTO "EagleMediaJob" (id,"ownerId","libraryMode","assetId","assetRevision",kind,lane,"processorVersion","updatedAt") SELECT 'job-'||id,"ownerId","libraryMode",id,1,'GENERATE_EMBEDDING','BACKGROUND','synthetic-perf-v1',now() FROM "EagleAsset" WHERE "ownerId"=${owner}`;
   return { owner, prefix };
 }
+test('failure propagation does not scan independent pending work or retired history on every wake', async () => {
+  const pending = await fixture(12000),
+    failed = await fixture(12000);
+  try {
+    await db.eagleAssetProcessingJob.updateMany({
+      where: { ownerId: failed.owner },
+      data: { status: 'FAILED', lastError: 'FEATURE_RETIRED' },
+    });
+    await db.$executeRaw`ANALYZE "EagleMediaJob"`;
+    let query;
+    await propagateFailedDependencies({
+      $executeRaw: async (value) => {
+        query = value;
+        return 0;
+      },
+    });
+    const rows = await db.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${query}`);
+    const plan = rows[0]['QUERY PLAN'][0];
+    const buffers = (plan.Plan['Shared Hit Blocks'] ?? 0) + (plan.Plan['Shared Read Blocks'] ?? 0);
+    console.log(
+      JSON.stringify({
+        dependencyPropagation: true,
+        jobs: 24000,
+        ms: plan['Execution Time'],
+        buffers,
+      }),
+    );
+    assert.ok(
+      buffers < 64,
+      `no pending dependency edges must require only an empty index probe, observed ${buffers} buffers`,
+    );
+  } finally {
+    for (const f of [pending, failed]) {
+      await db.eagleAsset.deleteMany({ where: { ownerId: f.owner } });
+      await db.user.delete({ where: { id: f.owner } });
+    }
+  }
+});
+test('indexed failure propagation still follows multiple levels and leaves independent work alone', async () => {
+  const f = await fixture(4);
+  try {
+    const ids = [1, 2, 3, 4].map((i) => `job-${f.prefix}-${i}`);
+    await db.eagleAssetProcessingJob.update({ where: { id: ids[0] }, data: { status: 'FAILED' } });
+    for (let i = 1; i < 3; i++)
+      await db.eagleAssetProcessingJob.update({
+        where: { id: ids[i] },
+        data: { dependsOnJobId: ids[i - 1] },
+      });
+    assert.equal(await propagateFailedDependencies(db), 2);
+    for (const id of ids.slice(0, 3))
+      assert.equal(
+        (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id } })).status,
+        'FAILED',
+      );
+    assert.equal(
+      (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: ids[3] } })).status,
+      'PENDING',
+    );
+    assert.equal(await propagateFailedDependencies(db), 0);
+  } finally {
+    await db.eagleAsset.deleteMany({ where: { ownerId: f.owner } });
+    await db.user.delete({ where: { id: f.owner } });
+  }
+});
 async function explain(options = {}) {
   let sql;
   await selectScheduledMediaCandidates(
