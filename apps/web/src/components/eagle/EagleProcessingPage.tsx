@@ -1,6 +1,12 @@
+import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
+import {
+  useActivityRefresh,
+  usePageVisible,
+  useRefreshOnWorkspaceChanges,
+} from '../../lib/useRefreshPolicy';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import {
   type EagleProcessingJob,
   type EagleProcessingLane,
@@ -96,49 +102,73 @@ export function EagleProcessingPage({
   const [isActing, setIsActing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const reload = useCallback(async () => {
-    if (!canManageProcessing) {
-      setIsLoading(false);
-      return;
+  const visible = usePageVisible();
+  const dirtySettings = useRef(false);
+  const [readFailure, setReadFailure] = useState<{ count: number; error: unknown }>({
+    count: 0,
+    error: null,
+  });
+  const enabled =
+    canManageProcessing && visible && activePage !== 'VECTOR' && activePage !== 'BROWSE';
+  const load = useCallback(
+    async () => ({
+      summary: activePage === 'HISTORY' ? null : await fetchEagleProcessingSummary(accessToken),
+      jobs:
+        activePage === 'HISTORY'
+          ? await listEagleProcessingJobs(accessToken, {
+              status: status || undefined,
+              lane: lane || undefined,
+              kind: kind || undefined,
+            })
+          : null,
+    }),
+    [
+      accessToken,
+      activePage,
+      fetchEagleProcessingSummary,
+      listEagleProcessingJobs,
+      kind,
+      lane,
+      status,
+    ],
+  );
+  const apply = useCallback((next: Awaited<ReturnType<typeof load>>) => {
+    if (next.summary) {
+      setSummary(next.summary);
+      if (!dirtySettings.current) {
+        setMode(next.summary.settings.mode);
+        setNightStart(next.summary.settings.nightStart);
+        setNightEnd(next.summary.settings.nightEnd);
+      }
     }
+    if (next.jobs) setJobs(next.jobs.items);
     setError('');
-    try {
-      const [nextSummary, nextJobs] = await Promise.all([
-        fetchEagleProcessingSummary(accessToken),
-        listEagleProcessingJobs(accessToken, {
-          status: status || undefined,
-          lane: lane || undefined,
-          kind: kind || undefined,
-        }),
-      ]);
-      setSummary(nextSummary);
-      setJobs(nextJobs.items);
-      setMode(nextSummary.settings.mode);
-      setNightStart(nextSummary.settings.nightStart);
-      setNightEnd(nextSummary.settings.nightEnd);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('读取素材处理状态失败'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [accessToken, canManageProcessing, kind, lane, status]);
-  useEffect(() => {
-    setIsLoading(true);
-    void reload();
-  }, [reload]);
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void reload();
-    }, 10000);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void reload();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [reload]);
+    setIsLoading(false);
+    setReadFailure({ count: 0, error: null });
+  }, []);
+  const report = useCallback((cause: unknown) => {
+    setError(cause instanceof Error ? cause.message : t('读取素材处理状态失败'));
+    setIsLoading(false);
+    setReadFailure((value) => ({ count: value.count + 1, error: cause }));
+  }, []);
+  const reload = useReloadableWorkspaceData(load, apply, report, enabled);
+  useRefreshOnWorkspaceChanges(reload, ['TASKS', 'SETTINGS'], enabled);
+  const running =
+    activePage !== 'HISTORY' &&
+    Boolean(
+      summary &&
+      (summary.counts.running > 0 ||
+        (summary.worker.status === 'ONLINE' &&
+          (summary.queues.some((q) => q.lane === 'INTERACTIVE' && q.queued > 0) ||
+            (summary.settings.mode === 'ALWAYS' && summary.counts.queued > 0)))),
+    );
+  useActivityRefresh(
+    reload,
+    running,
+    summary && [summary.counts, summary.colorCoverage],
+    enabled,
+    readFailure,
+  );
   const runAction = async (action: () => Promise<unknown>, success: string) => {
     setIsActing(true);
     setNotice('');
@@ -146,7 +176,7 @@ export function EagleProcessingPage({
     try {
       await action();
       setNotice(success);
-      await reload();
+      await reload(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('操作失败'));
     } finally {
@@ -277,7 +307,7 @@ export function EagleProcessingPage({
         tabIndex={0}
         hidden={activePage !== 'VECTOR'}
       >
-        <EagleVectorProcessingPanel compact />
+        <EagleVectorProcessingPanel compact active={activePage === 'VECTOR'} />
       </div>
 
       <section
@@ -430,7 +460,10 @@ export function EagleProcessingPage({
                 <select
                   value={mode}
                   disabled={isActing}
-                  onChange={(event) => setMode(event.target.value as EagleProcessingMode)}
+                  onChange={(event) => {
+                    dirtySettings.current = true;
+                    setMode(event.target.value as EagleProcessingMode);
+                  }}
                 >
                   <option value="ALWAYS">{t('全天')}</option>
                   <option value="NIGHT">{t('夜间')}</option>
@@ -444,7 +477,10 @@ export function EagleProcessingPage({
                     <input
                       type="time"
                       value={nightStart}
-                      onChange={(event) => setNightStart(event.target.value)}
+                      onChange={(event) => {
+                        dirtySettings.current = true;
+                        setNightStart(event.target.value);
+                      }}
                     />
                   </label>
                   <label>
@@ -452,7 +488,10 @@ export function EagleProcessingPage({
                     <input
                       type="time"
                       value={nightEnd}
-                      onChange={(event) => setNightEnd(event.target.value)}
+                      onChange={(event) => {
+                        dirtySettings.current = true;
+                        setNightEnd(event.target.value);
+                      }}
                     />
                   </label>
                 </>
@@ -464,7 +503,14 @@ export function EagleProcessingPage({
                 onClick={() =>
                   void runAction(
                     () =>
-                      updateEagleProcessingSettings(accessToken, { mode, nightStart, nightEnd }),
+                      updateEagleProcessingSettings(accessToken, {
+                        mode,
+                        nightStart,
+                        nightEnd,
+                      }).then((result) => {
+                        dirtySettings.current = false;
+                        return result;
+                      }),
                     t('处理时段已保存'),
                   )
                 }

@@ -1,3 +1,4 @@
+import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ export function getEagleProcessingPollInterval(
   successfulSyncs: number,
 ): number | false {
   if (visibility === 'hidden') return false;
-  return successfulSyncs < 3 ? 10_000 : 30_000;
+  return successfulSyncs < 3 ? 5_000 : 10_000;
 }
 
 /** Folded collections can contain unfinished items outside the rendered cover or loaded page. */
@@ -52,12 +53,17 @@ export function useEagleProcessingUpdates(input: {
     () => getEagleProcessingAssetIds(input.assets, input.additionalProcessingAssetIds),
     [input.assets, input.additionalProcessingAssetIds],
   );
+  const interval = useProgressQueryInterval<Awaited<ReturnType<typeof listEagleAssetUpdates>>>(
+    (rows) => rows.some((row) => row.lifecycleStatus === 'PROCESSING'),
+    (rows) => rows.map((row) => [row.id, row.lifecycleStatus, row.rowVersion, row.mediaRevision]),
+  );
   const updatesQuery = useQuery({
     queryKey: input.updatesQueryKey(processingAssetIds),
     queryFn: ({ signal }) => listEagleAssetUpdates(input.accessToken, processingAssetIds, signal),
     enabled: input.enabled && visibility === 'visible' && processingAssetIds.length > 0,
-    refetchInterval: (query) =>
-      getEagleProcessingPollInterval(visibility, query.state.dataUpdateCount),
+    refetchInterval: interval,
+    refetchOnWindowFocus: false,
+    retry: false,
     refetchIntervalInBackground: false,
   });
 

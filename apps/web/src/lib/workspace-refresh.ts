@@ -1,4 +1,5 @@
-import { QueryClient, type Query } from '@tanstack/react-query';
+import { t } from '../i18n';
+import type { QueryClient, Query } from '@tanstack/react-query';
 import {
   WORKSPACE_CHANGE_KINDS,
   type WorkspaceChanges,
@@ -75,7 +76,7 @@ export function acquireWorkspaceRefresh(
     return () => {
       if (--existing.refs === 0) {
         existing.stop();
-        registry!.delete(identity);
+        registry.delete(identity);
       }
     };
   }
@@ -106,28 +107,28 @@ export function acquireWorkspaceRefresh(
     work.running = true;
     void (async () => {
       do {
-        work!.again = false;
+        work.again = false;
         // A read started before the change may return an old snapshot. Finish it,
         // then fetch once more rather than cancelling or overlapping it.
         if (query.state.fetchStatus === 'fetching') await query.promise?.catch(() => undefined);
         if (stopped) return;
         if (!visible()) {
-          work!.again = true;
+          work.again = true;
           break;
         }
         await client.invalidateQueries(
           { queryKey: query.queryKey, exact: true },
           { cancelRefetch: false },
         );
-      } while (work!.again && !stopped);
+      } while (work.again && !stopped);
     })().finally(() => {
-      work!.running = false;
-      if (!work!.again) queued.delete(query.queryHash);
+      work.running = false;
+      if (!work.again) queued.delete(query.queryHash);
     });
   };
   const schedule = (delay: number) => {
     if (timer) clearTimeout(timer);
-    if (!stopped && visible())
+    if (!stopped && !revoked && visible())
       timer = setTimeout(() => {
         timer = undefined;
         void run();
@@ -160,7 +161,7 @@ export function acquireWorkspaceRefresh(
       if (stopped || !visible()) return;
       client.setQueryData<WorkspaceRefreshObservation>(key, (value) => ({
         ...value,
-        error: error instanceof Error ? error.message : '自动更新暂时不可用，现有结果已保留。',
+        error: error instanceof Error ? error.message : t('自动更新暂时不可用，现有结果已保留。'),
       }));
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         revoked = true;
@@ -169,7 +170,7 @@ export function acquireWorkspaceRefresh(
       delay = retryRefreshDelay(++failures);
     } finally {
       inFlight = false;
-      if (!stopped && visible()) schedule(delay);
+      if (!stopped && !revoked && visible()) schedule(delay);
     }
   };
   const wake = () => {
@@ -196,7 +197,7 @@ export function acquireWorkspaceRefresh(
   return () => {
     if (--entry.refs === 0) {
       entry.stop();
-      registry!.delete(identity);
+      registry.delete(identity);
     }
   };
 }

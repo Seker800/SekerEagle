@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import { renderInWorkspace as render } from '../../test/render-in-workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackupPanel } from './BackupPanel';
 

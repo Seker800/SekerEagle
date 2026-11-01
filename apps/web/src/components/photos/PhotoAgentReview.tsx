@@ -1,3 +1,4 @@
+import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useRef, useState } from 'react';
 import { EagleAssetActionMenu } from '../eagle/EagleAssetActionMenu';
@@ -56,13 +57,19 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
     queryFn: ({ pageParam, signal }) => listPhotoAgentTasks(pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next ?? undefined,
-    refetchInterval: taskId ? 10000 : 60000,
+    refetchOnWindowFocus: false,
   });
+  const progressInterval = useProgressQueryInterval<PhotoAgentTask>(
+    (value) => value.suggestions.some((suggestion) => suggestion.status === 'APPLYING'),
+    (value) => value.suggestions.map((suggestion) => [suggestion.id, suggestion.status]),
+  );
   const detail = useQuery({
     queryKey: [...key, 'task', taskId],
     queryFn: ({ signal }) => getPhotoAgentTask(taskId, signal),
     enabled: Boolean(taskId),
-    refetchInterval: 10000,
+    refetchInterval: progressInterval,
+    refetchOnWindowFocus: false,
+    retry: false,
   });
   const rows =
     tasks.data?.pages.flatMap((page) => page.items).filter((row) => row.assetCount > 0) ?? [];
@@ -602,7 +609,7 @@ function RequestHistory({
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next ?? undefined,
     enabled: historyOpen,
-    refetchInterval: historyOpen ? 10000 : false,
+    refetchOnWindowFocus: false,
   });
   const labels = {
     MANUAL_STARTED: t('开始人工处理'),

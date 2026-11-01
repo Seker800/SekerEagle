@@ -329,7 +329,7 @@ it('never automatically retries manual sends and retains the operation identifie
   expect(mocks.manual.mock.calls[0][1].operationId).toBe(mocks.manual.mock.calls[1][1].operationId);
 });
 
-it('polls the unopened approval inbox once per minute rather than every ten seconds', async () => {
+it('keeps the stable approval inbox quiet until a change or action', async () => {
   vi.useFakeTimers();
   const view = mount();
   try {
@@ -344,7 +344,7 @@ it('polls the unopened approval inbox once per minute rather than every ten seco
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
-    expect(mocks.list).toHaveBeenCalledTimes(2);
+    expect(mocks.list).toHaveBeenCalledOnce();
   } finally {
     view.unmount();
     vi.useRealTimers();

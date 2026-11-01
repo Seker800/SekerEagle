@@ -38,8 +38,8 @@ export function createOperationPollSchedule() {
       signature = next;
       changedAt = now;
     }
-    if (!pending && !rows?.some((row) => row.running || row.queued)) return 60000;
+    if (!pending && !rows?.some((row) => row.running || row.queued)) return false;
     const unchangedFor = now - changedAt;
-    return unchangedFor >= 30000 ? 10000 : unchangedFor >= 10000 ? 5000 : 2000;
+    return unchangedFor >= 30000 ? 10000 : 5000;
   };
 }

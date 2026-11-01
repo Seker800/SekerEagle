@@ -1,3 +1,4 @@
+import { useRefreshOnWorkspaceChanges, usePageVisible } from '../../lib/useRefreshPolicy';
 import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
@@ -61,6 +62,7 @@ export function EagleVectorWorkspace({
     },
   } = useLibraryWorkspace();
 
+  const visible = usePageVisible();
   const [tags, setTags] = useState<EagleVectorTag[]>([]);
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
   const [unclassified, setUnclassified] = useState<EagleUnclassifiedAsset[]>([]);
@@ -124,7 +126,7 @@ export function EagleVectorWorkspace({
     if (next) setTags(next);
     setTagLoadError('');
   }, []);
-  const reloadTags = useReloadableWorkspaceData(loadTags, applyTags, reportTagLoadError);
+  const reloadTags = useReloadableWorkspaceData(loadTags, applyTags, reportTagLoadError, visible);
   const loadItems = useCallback(
     async () => ({
       suggestions:
@@ -141,7 +143,12 @@ export function EagleVectorWorkspace({
     }
     setItemLoadError('');
   }, []);
-  const reloadItems = useReloadableWorkspaceData(loadItems, applyItems, reportItemLoadError);
+  const reloadItems = useReloadableWorkspaceData(
+    loadItems,
+    applyItems,
+    reportItemLoadError,
+    visible,
+  );
   const reload = useCallback(
     async (fresh = false) => {
       // Tag statistics must not gate the current page or its next review action.
@@ -150,6 +157,7 @@ export function EagleVectorWorkspace({
     },
     [reloadItems, reloadTags],
   );
+  useRefreshOnWorkspaceChanges(reload, ['RECOMMENDATIONS', 'LABELS', 'ASSETS']);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -160,15 +168,6 @@ export function EagleVectorWorkspace({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection, imagePreview.previewImage]);
-  useEffect(() => {
-    const onVisibilityChange = () => {
-      if (!busy && document.visibilityState === 'visible') void reload();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, [busy, reload]);
   useEffect(() => {
     if ((view !== 'TAGS' && view !== 'DISTANCE') || providedManualTags) return;
     let cancelled = false;

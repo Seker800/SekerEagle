@@ -20,21 +20,24 @@ function createWorkspaceApi(mode: LibraryMode) {
 interface LibraryWorkspace {
   libraryMode: LibraryMode;
   ownerId: string;
+  includePrivate: boolean;
   api: ReturnType<typeof createWorkspaceApi>;
 }
 const LibraryWorkspaceContext = createContext<LibraryWorkspace | null>(null);
 export function LibraryWorkspaceProvider({
   libraryMode,
   ownerId,
+  includePrivate = false,
   children,
 }: {
   libraryMode: LibraryMode;
   ownerId: string;
+  includePrivate?: boolean;
   children: ReactNode;
 }) {
   const value = useMemo(
-    () => ({ libraryMode, ownerId, api: createWorkspaceApi(libraryMode) }),
-    [libraryMode, ownerId],
+    () => ({ libraryMode, ownerId, includePrivate, api: createWorkspaceApi(libraryMode) }),
+    [libraryMode, ownerId, includePrivate],
   );
   return (
     <LibraryWorkspaceContext.Provider value={value}>{children}</LibraryWorkspaceContext.Provider>

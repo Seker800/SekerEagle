@@ -40,6 +40,11 @@ export class EagleVectorController {
     return this.vectors.reviewSummary(principal.sub, principal.canViewPrivate);
   }
 
+  @Get('host')
+  host() {
+    return this.vectors.diagnoseEmbeddingHost();
+  }
+
   @Get('tags')
   tags(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListVectorTagsDto) {
     return this.vectors.listTagSemantics(principal.sub, query.query, principal.canViewPrivate);

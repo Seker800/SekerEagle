@@ -6,7 +6,7 @@ export function usePhotoPeople(
   ownerId: string | null,
   includePrivate: boolean,
   enabled = true,
-  poll = false,
+  _poll = false,
   view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
 ) {
   const query = useInfiniteQuery({
@@ -16,7 +16,7 @@ export function usePhotoPeople(
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled,
     staleTime: 30000,
-    refetchInterval: (query) => (poll && query.state.data?.pages.length === 1 ? 30000 : false),
+    refetchOnWindowFocus: false,
   });
   return {
     ...query,

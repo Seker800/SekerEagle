@@ -533,7 +533,7 @@ it('automatically replaces the preparing state with available locations without 
   expect(markerButtons()).toHaveLength(1);
 }, 9000);
 
-it('slows polling from five to thirty seconds after the generation completes', async () => {
+it('stops full map reads after the generation completes', async () => {
   vi.useFakeTimers();
   let view: ReturnType<typeof mount> | undefined;
   try {
@@ -561,7 +561,7 @@ it('slows polling from five to thirty seconds after the generation completes', a
     await act(async () => {
       await vi.advanceTimersByTimeAsync(25001);
     });
-    expect(mocks.getMap).toHaveBeenCalledTimes(3);
+    expect(mocks.getMap).toHaveBeenCalledTimes(2);
   } finally {
     view?.unmount();
     view?.client.clear();

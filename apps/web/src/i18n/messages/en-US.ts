@@ -1,4 +1,7 @@
 export const enUS = {
+  最近观测: 'Last observed',
+  检查模型连接: 'Check model connection',
+
   '自动更新暂时不可用，现有结果已保留。': 'Automatic updates are temporarily unavailable. Existing results have been kept.',
   不支持的操作类型: 'Unsupported operation type',
   '不支持的操作类型，无法执行。': 'This operation type is unsupported and cannot run.',
