@@ -302,7 +302,7 @@ try {
     env,
   );
   db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
-  const testPassword = randomBytes(24).toString('hex');
+  const testPassword = process.env.PHOTO_WORKBENCH_TEST_PASSWORD || randomBytes(24).toString('hex');
   const owner = await db.user.create({
     data: {
       email: 'photo-test@example.invalid',
