@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError } from './lib/api-error';
+import { useState } from 'react';
 
 const requestMock = vi.hoisted(() => vi.fn());
 const accountFailure = vi.hoisted(() => ({ enabled: false }));
@@ -14,12 +15,15 @@ vi.mock('./components/eagle/SekerEaglePage', () => ({
   }: {
     accountView: React.ReactNode;
     modeSwitcher: React.ReactNode;
-  }) => (
+  }) => {
+    const [draft,setDraft] = useState('');
+    return (
     <div>
       素材图库{modeSwitcher}
+      <input aria-label="工作区草稿" value={draft} onChange={(event)=>setDraft(event.target.value)} />
       {accountView}
     </div>
-  ),
+  );},
 }));
 vi.mock('./components/account/AccountHome', () => ({
   AccountHome: ({ onLogout }: { onLogout: () => void }) => {
@@ -113,12 +117,9 @@ describe('startup session recovery', () => {
     expect(await screen.findByRole('heading', { name: '无法连接素材库' })).toBeVisible();
   });
 
-  it('keeps the account through a running-app disconnection', async () => {
-    requestMock.mockResolvedValueOnce(userResponse());
-    requestMock.mockResolvedValueOnce({ enabled: false, expiresAt: null });
-    requestMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
-    requestMock.mockResolvedValueOnce(userResponse());
-    requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
+  it('keeps the mounted workspace and unsaved draft through a transient disconnection', async () => {
+    requestMock.mockImplementation((path) => Promise.resolve(path === '/api/auth/me'
+      ? userResponse() : {enabled:false,expiresAt:null}));
 
     render(
       <QueryClientProvider
@@ -128,13 +129,31 @@ describe('startup session recovery', () => {
       </QueryClientProvider>,
     );
     expect(await screen.findByText('素材图库')).toBeVisible();
+    fireEvent.change(screen.getByRole('textbox',{name:'工作区草稿'}),{target:{value:'保留现场'}});
     fireEvent(window, new Event('offline'));
-    expect(await screen.findByRole('heading', { name: '无法连接素材库' })).toBeVisible();
+    expect(screen.getByText('素材图库')).toBeVisible();
+    expect(screen.getByRole('textbox',{name:'工作区草稿'})).toHaveValue('保留现场');
+    expect(await screen.findByText('无法连接素材库')).toBeVisible();
     fireEvent(window, new Event('online'));
-    await screen.findByRole('heading', { name: '无法连接素材库' });
-    fireEvent.click(screen.getByRole('button', { name: '立即重试' }));
-    expect(await screen.findByText('素材图库')).toBeVisible();
+    await waitFor(()=>expect(screen.queryByText('无法连接素材库')).not.toBeInTheDocument());
+    expect(screen.getByRole('textbox',{name:'工作区草稿'})).toHaveValue('保留现场');
     expect(screen.queryByRole('heading', { name: '登录素材库' })).not.toBeInTheDocument();
+  });
+
+  it('still removes workspace data when an authenticated session is revoked', async () => {
+    let revoked = false;
+    requestMock.mockImplementation((path) => path === '/api/auth/me'
+      ? revoked ? Promise.reject(new ApiError('revoked',401,null)) : Promise.resolve(userResponse())
+      : Promise.resolve({enabled:false,expiresAt:null}));
+    const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
+    const key=['eagle','owner-1','PHOTO','assets','ACTIVE',true];
+    client.setQueryData(key,{private:'cached-private-result'});
+    render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+    await screen.findByText('素材图库');
+    revoked=true;
+    fireEvent(window,new Event('online'));
+    await screen.findByRole('heading',{name:'登录素材库'});
+    expect(client.getQueryData(key)).toBeUndefined();
   });
 });
 
