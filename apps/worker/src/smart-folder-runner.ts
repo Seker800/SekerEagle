@@ -13,7 +13,7 @@ export class SmartFolderBuildRunner {
       await acquire(async (allowModelRequest) => {
         continueImmediately = (await step(allowModelRequest)) === true;
       });
-      this.scheduler.scheduleAt(new Date(Date.now() + (continueImmediately ? 100 : 5000)));
+      this.scheduler.scheduleAt(continueImmediately ? new Date(Date.now() + 100) : null);
     }, reportError);
   }
   wake() {

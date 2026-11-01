@@ -7,7 +7,12 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { Client, type Notification } from 'pg';
-import { WORKSPACE_CHANGE_CHANNEL, parseWorkspaceChange } from '@sekereagle/library-core';
+import {
+  WORKSPACE_CHANGE_CHANNEL,
+  parseWorkspaceChange,
+  taskModelReadiness,
+  type WorkspaceChanges,
+} from '@sekereagle/library-core';
 import { WorkspaceChangeState } from './workspace-change-state';
 
 export const WORKSPACE_CHANGE_CLIENT_FACTORY = Symbol('WORKSPACE_CHANGE_CLIENT_FACTORY');
@@ -33,8 +38,28 @@ export class WorkspaceChangesService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     return this.connect();
   }
-  snapshot(ownerId: string, includePrivate: boolean) {
-    return this.state.snapshot(ownerId, includePrivate);
+  async snapshot(ownerId: string, includePrivate: boolean): Promise<WorkspaceChanges> {
+    this.state.snapshot(ownerId, includePrivate);
+    const client = this.client;
+    if (!client) throw new Error('WORKSPACE_CHANGE_LISTENER_UNAVAILABLE');
+    // One bounded indexed observation, shared by both modes. Heartbeats remain
+    // canonical; idle health never requires a new write counter or model probe.
+    const worker = await client.query<{ capabilities: unknown }>(`
+      SELECT capabilities FROM "EagleProcessingWorkerHeartbeat"
+      WHERE "heartbeatAt" BETWEEN now()-interval '45 seconds' AND now()
+      ORDER BY "heartbeatAt" DESC LIMIT 1
+    `);
+    return {
+      ...this.state.snapshot(ownerId, includePrivate),
+      health: {
+        worker: worker.rows.length ? ('ONLINE' as const) : ('OFFLINE' as const),
+        embedding: taskModelReadiness(
+          worker.rows.map((row) => row.capabilities),
+          'EMBEDDING',
+          'GENERATE_EMBEDDING',
+        ),
+      },
+    };
   }
   private async connect() {
     if (this.closing) return;

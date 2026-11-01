@@ -20,6 +20,7 @@ export type WorkspaceChangeEvent = {
   public: boolean;
 };
 export interface WorkspaceChanges {
+  health?: { worker: 'ONLINE' | 'OFFLINE'; embedding: 'READY' | 'UNKNOWN' | 'OFFLINE' | 'DRIFTED' };
   epoch: string;
   scopes: Record<'MATERIAL' | 'PHOTO', Record<WorkspaceChangeKind, string>>;
 }
