@@ -147,6 +147,61 @@ async function fixture(mode) {
   };
 }
 for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode}: cleanup batch rejects mixed scope and rolls back on final authorization failure`, async () => {
+    const f = await fixture(mode);
+    for (let i = 0; i < 2; i++) {
+      await f.add({ sha256: hash(`guard-${i}`), rating: 5 });
+      await f.add({ sha256: hash(`guard-${i}`), rating: 1 });
+    }
+    const page = await f.duplicate.list(f.ownerId, false, {});
+    const admitted = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      revision: page.exactRevision,
+      allExact: true,
+    });
+    await db.eagleAssetOperationItem.updateMany({
+      where: { operationId: admitted.operationId },
+      data: { status: 'RUNNING', leaseUntil: new Date(Date.now() + 120000), leaseVersion: 1 },
+    });
+    const items = await db.eagleAssetOperationItem.findMany({
+      where: { operationId: admitted.operationId },
+      include: { operation: true },
+      orderBy: { ordinal: 'asc' },
+    });
+    for (const patch of [
+      { ownerId: randomUUID() },
+      { libraryMode: mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO' },
+      { operationId: randomUUID() },
+    ]) {
+      await assert.rejects(
+        f.duplicate.executeCleanupBatch([items[0], { ...items[1], ...patch }], async () => {}),
+        /作用域/,
+      );
+    }
+    let guards = 0;
+    await assert.rejects(
+      f.duplicate.executeCleanupBatch(items, async () => {
+        if (++guards === 2) throw new Error('AUTH_REQUIRED');
+      }),
+      /AUTH_REQUIRED/,
+    );
+    assert.equal(guards, 2, 'authorization is checked before writes and before publication');
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      0,
+    );
+    assert.equal(
+      await db.eagleAssetOperationItem.count({
+        where: { operationId: admitted.operationId, status: 'COMPLETED' },
+      }),
+      0,
+    );
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, rowVersion: { not: 1 } } }),
+      0,
+      'keeper metadata and removed resources must roll back together',
+    );
+  });
   test(`${mode}: duplicate cleanup amortizes claims and commits across groups`, async () => {
     const f = await fixture(mode);
     for (let i = 0; i < 40; i++) {
@@ -155,7 +210,9 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     }
     const page = await f.duplicate.list(f.ownerId, false, {});
     const admitted = await f.duplicate.cleanup(f.principal, {
-      operationId: randomUUID(), revision: page.exactRevision, allExact: true,
+      operationId: randomUUID(),
+      revision: page.exactRevision,
+      allExact: true,
     });
     await flushQueryEvents();
     queries = 0;
@@ -165,10 +222,15 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     await flushQueryEvents();
     const measured = { transactions, queries, elapsedMs: performance.now() - started };
     const state = await db.eagleAssetOperationItem.groupBy({
-      by: ['status'], where: { operationId: admitted.operationId }, _count: true,
+      by: ['status'],
+      where: { operationId: admitted.operationId },
+      _count: true,
     });
-    assert.equal(state.find((row) => row.status === 'COMPLETED')?._count, 32,
-      'one execution turn must process the existing metadata batch, rather than one group');
+    assert.equal(
+      state.find((row) => row.status === 'COMPLETED')?._count,
+      32,
+      'one execution turn must process the existing metadata batch, rather than one group',
+    );
     assert.equal(state.find((row) => row.status === 'PENDING')?._count, 8);
     assert.equal(measured.transactions, 2, 'one claim and one atomic publication per batch');
     assert.equal((await f.drain(admitted.operationId)).completed, 40);
@@ -176,25 +238,38 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     console.log(JSON.stringify({ mode, cleanupGroups: 32, ...measured, objectReads: f.reads() }));
   });
   test(`${mode}: one stale duplicate keeper does not fail other groups in its batch`, async () => {
-    const f = await fixture(mode), keepers = [], removed = [];
+    const f = await fixture(mode),
+      keepers = [],
+      removed = [];
     for (let i = 0; i < 4; i++) {
       keepers.push(await f.add({ sha256: hash(`isolated-${i}`), rating: 5 }));
       removed.push(await f.add({ sha256: hash(`isolated-${i}`), rating: 1 }));
     }
     const page = await f.duplicate.list(f.ownerId, false, {});
     const admitted = await f.duplicate.cleanup(f.principal, {
-      operationId: randomUUID(), revision: page.exactRevision, allExact: true,
+      operationId: randomUUID(),
+      revision: page.exactRevision,
+      allExact: true,
     });
-    await db.eagleAsset.update({ where: { id: keepers[1].id }, data: { rowVersion: { increment: 1 } } });
+    await db.eagleAsset.update({
+      where: { id: keepers[1].id },
+      data: { rowVersion: { increment: 1 } },
+    });
     const state = await f.drain(admitted.operationId);
     assert.equal(state.completed, 3);
     assert.equal(state.failed, 1);
     for (let i = 0; i < 4; i++) {
       const row = await db.eagleAsset.findUniqueOrThrow({ where: { id: removed[i].id } });
       assert.equal(!!row.deletedAt, i !== 1);
-      assert.equal(row.rowVersion, removed[i].rowVersion + (i === 1 ? 0 : 1),
-        'rolled back batch writes must not be applied twice during conflict isolation');
-      assert.equal((await db.eagleAsset.findUniqueOrThrow({ where: { id: keepers[i].id } })).deletedAt, null);
+      assert.equal(
+        row.rowVersion,
+        removed[i].rowVersion + (i === 1 ? 0 : 1),
+        'rolled back batch writes must not be applied twice during conflict isolation',
+      );
+      assert.equal(
+        (await db.eagleAsset.findUniqueOrThrow({ where: { id: keepers[i].id } })).deletedAt,
+        null,
+      );
     }
     assert.equal(f.reads(), 0);
   });

@@ -778,9 +778,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       if (!first) return [];
       // Only one command is batched: owner, authorization, kind and frozen selection
       // stay together. Persisted per-resource receipts and retry identities are unchanged.
-      const candidates = ['EMPTY_TRASH', 'DUPLICATE_SCAN', 'DUPLICATE_CLEANUP'].includes(
-        first.operation.kind,
-      )
+      const candidates = ['EMPTY_TRASH', 'DUPLICATE_SCAN'].includes(first.operation.kind)
         ? [first]
         : await tx.eagleAssetOperationItem.findMany({
             where: {
@@ -954,10 +952,16 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         await this.expandUndo(item);
         return;
       }
-      if (operation.kind === 'DUPLICATE_SCAN' || operation.kind === 'DUPLICATE_CLEANUP') {
+      if (operation.kind === 'DUPLICATE_CLEANUP') {
         if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
-        if (operation.kind === 'DUPLICATE_SCAN')
-          await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
+        await this.duplicates.executeCleanupBatch(items, (tx) =>
+          this.assertActor(tx, operation, items),
+        );
+        return;
+      }
+      if (operation.kind === 'DUPLICATE_SCAN') {
+        if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
+        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
         for (const entry of items)
           await this.duplicates.execute(entry, (tx) => this.assertActor(tx, operation, [entry]));
         return;

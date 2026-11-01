@@ -2,7 +2,6 @@ import { filterDuplicateReview } from './eagle-duplicate-filters';
 import { readMissingDuplicateFingerprints } from './eagle-duplicate-candidates';
 import { readDuplicateReview } from './eagle-duplicate-read';
 import { executeDuplicateIndex } from './eagle-duplicate-index';
-import { completeDuplicateItem } from './eagle-duplicate-item';
 import {
   digest,
   dismissalSignature,
@@ -552,110 +551,142 @@ export class EagleDuplicateService {
   async execute(item: Item, assertActor: (tx: Prisma.TransactionClient) => Promise<void>) {
     if (item.operation.kind === 'DUPLICATE_SCAN')
       return executeDuplicateIndex(this.prisma, this.storage, this.libraryMode, item, assertActor);
-    const snapshot = item.snapshots as unknown as CleanupSnapshot;
+    return this.executeCleanupBatch([item], assertActor);
+  }
+  async executeCleanupBatch(
+    items: Item[],
+    assertActor: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
+    if (!items.length) return;
+    const first = items[0]!;
+    if (
+      items.some(
+        (item) =>
+          item.ownerId !== first.ownerId ||
+          item.libraryMode !== this.libraryMode ||
+          item.operationId !== first.operationId ||
+          item.operation.kind !== 'DUPLICATE_CLEANUP',
+      )
+    )
+      throw new ConflictException('清理批次作用域不一致。');
     await this.prisma.$transaction(
       async (tx) => {
-        await lockOwnerPrivacyProjection(tx, item.ownerId, this.libraryMode);
+        await lockOwnerPrivacyProjection(tx, first.ownerId, this.libraryMode);
         await assertActor(tx);
-        const expected = [...snapshot.resources, ...snapshot.keepers],
-          ids = expected.map((r) => r.id).sort();
-        await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${item.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-        const rows: Array<Snapshot & { rating: number | null }> = [];
-        for (let offset = 0; offset < ids.length; offset += 500)
-          rows.push(
-            ...(await tx.eagleAsset.findMany({
-              where: {
-                ...this.inLibrary(item.ownerId, item.operation.isPrivate),
-                id: { in: ids.slice(offset, offset + 500) },
-              },
-              select: { id: true, rowVersion: true, mediaRevision: true, rating: true },
-            })),
-          );
-        const byId = new Map(rows.map((row) => [row.id, row]));
-        if (
-          rows.length !== expected.length ||
-          expected.some((row) => {
-            const current = byId.get(row.id);
-            return (
-              !current ||
-              current.rowVersion !== row.rowVersion ||
-              current.mediaRevision !== row.mediaRevision
-            );
-          })
-        )
-          throw new ConflictException('保留项或清理项已变化，请重新检查。');
-        const currentIds = new Set<string>();
-        for (let offset = 0; offset < item.assetIds.length; offset += 500)
-          for (const row of await resolveEagleTrashTargets(
-            tx,
-            { ownerId: item.ownerId, libraryMode: this.libraryMode },
-            item.assetIds.slice(offset, offset + 500),
-            false,
-            item.operation.isPrivate,
-          ))
-            currentIds.add(row.id);
-        const frozenIds = new Set(snapshot.resources.map((row) => row.id));
-        if (currentIds.size !== frozenIds.size || [...currentIds].some((id) => !frozenIds.has(id)))
-          throw new ConflictException('实况照片组件已变化。');
-        if (snapshot.exact) {
-          const target = snapshot.targetId;
-          const tagIds = new Set<string>();
-          for (let offset = 0; offset < item.assetIds.length; offset += 500)
-            for (const row of await tx.eagleAssetManualTag.findMany({
-              where: {
-                ownerId: item.ownerId,
-                libraryMode: this.libraryMode,
-                assetId: { in: item.assetIds.slice(offset, offset + 500) },
-              },
-              select: { tagId: true },
-            }))
-              tagIds.add(row.tagId);
-          const tags = [...tagIds];
-          for (let offset = 0; offset < tags.length; offset += 500)
-            await tx.eagleAssetManualTag.createMany({
-              data: tags.slice(offset, offset + 500).map((tagId) => ({
-                ownerId: item.ownerId,
-                libraryMode: this.libraryMode,
-                assetId: target,
-                tagId,
-                assignedByUser: true,
-                assignmentProvenance: 'USER_ASSIGNED',
-              })),
-              skipDuplicates: true,
-            });
-          await tx.eagleAsset.update({
-            where: { id: target, ownerId: item.ownerId, libraryMode: this.libraryMode },
-            data: {
-              rating: rows.reduce((maximum, row) => Math.max(maximum, row.rating ?? 0), 0) || null,
-              rowVersion: { increment: 1 },
-            },
-          });
-          await syncAssetPrivacy(tx, item.ownerId, [target], this.libraryMode);
-        }
-        for (let offset = 0; offset < item.assetIds.length; offset += 500) {
-          const part = item.assetIds.slice(offset, offset + 500);
-          // Earlier chunks may change ambiguous live pairing; never expand beyond the reviewed snapshot.
-          const current = await resolveEagleTrashTargets(
-            tx,
-            { ownerId: item.ownerId, libraryMode: this.libraryMode },
-            part,
-            false,
-            item.operation.isPrivate,
-          );
-          if (current.some((row) => !frozenIds.has(row.id)))
-            throw new ConflictException('实况照片组件已变化。');
-          await setEagleTrash(
-            tx,
-            { ownerId: item.ownerId, libraryMode: this.libraryMode },
-            part,
-            false,
-            item.operation.isPrivate,
-          );
-        }
+        for (const item of items) await this.executeCleanupItem(tx, item);
         await assertActor(tx);
-        await completeDuplicateItem(tx, item, this.libraryMode);
+        const completed = await tx.eagleAssetOperationItem.updateMany({
+          where: {
+            ownerId: first.ownerId,
+            libraryMode: this.libraryMode,
+            operationId: first.operationId,
+            status: 'RUNNING',
+            leaseUntil: { gt: new Date() },
+            OR: items.map(({ id, leaseVersion }) => ({ id, leaseVersion })),
+          },
+          data: { status: 'COMPLETED', leaseUntil: null },
+        });
+        if (completed.count !== items.length) throw new ConflictException('操作租约已变化。');
       },
       { timeout: 45_000 },
     );
+  }
+  private async executeCleanupItem(tx: Prisma.TransactionClient, item: Item) {
+    const snapshot = item.snapshots as unknown as CleanupSnapshot;
+    const expected = [...snapshot.resources, ...snapshot.keepers],
+      ids = expected.map((r) => r.id).sort();
+    await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${item.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
+    const rows: Array<Snapshot & { rating: number | null }> = [];
+    for (let offset = 0; offset < ids.length; offset += 500)
+      rows.push(
+        ...(await tx.eagleAsset.findMany({
+          where: {
+            ...this.inLibrary(item.ownerId, item.operation.isPrivate),
+            id: { in: ids.slice(offset, offset + 500) },
+          },
+          select: { id: true, rowVersion: true, mediaRevision: true, rating: true },
+        })),
+      );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    if (
+      rows.length !== expected.length ||
+      expected.some((row) => {
+        const current = byId.get(row.id);
+        return (
+          !current ||
+          current.rowVersion !== row.rowVersion ||
+          current.mediaRevision !== row.mediaRevision
+        );
+      })
+    )
+      throw new ConflictException('保留项或清理项已变化，请重新检查。');
+    const currentIds = new Set<string>();
+    for (let offset = 0; offset < item.assetIds.length; offset += 500)
+      for (const row of await resolveEagleTrashTargets(
+        tx,
+        { ownerId: item.ownerId, libraryMode: this.libraryMode },
+        item.assetIds.slice(offset, offset + 500),
+        false,
+        item.operation.isPrivate,
+      ))
+        currentIds.add(row.id);
+    const frozenIds = new Set(snapshot.resources.map((row) => row.id));
+    if (currentIds.size !== frozenIds.size || [...currentIds].some((id) => !frozenIds.has(id)))
+      throw new ConflictException('实况照片组件已变化。');
+    if (snapshot.exact) {
+      const target = snapshot.targetId;
+      const tagIds = new Set<string>();
+      for (let offset = 0; offset < item.assetIds.length; offset += 500)
+        for (const row of await tx.eagleAssetManualTag.findMany({
+          where: {
+            ownerId: item.ownerId,
+            libraryMode: this.libraryMode,
+            assetId: { in: item.assetIds.slice(offset, offset + 500) },
+          },
+          select: { tagId: true },
+        }))
+          tagIds.add(row.tagId);
+      const tags = [...tagIds];
+      for (let offset = 0; offset < tags.length; offset += 500)
+        await tx.eagleAssetManualTag.createMany({
+          data: tags.slice(offset, offset + 500).map((tagId) => ({
+            ownerId: item.ownerId,
+            libraryMode: this.libraryMode,
+            assetId: target,
+            tagId,
+            assignedByUser: true,
+            assignmentProvenance: 'USER_ASSIGNED',
+          })),
+          skipDuplicates: true,
+        });
+      await tx.eagleAsset.update({
+        where: { id: target, ownerId: item.ownerId, libraryMode: this.libraryMode },
+        data: {
+          rating: rows.reduce((maximum, row) => Math.max(maximum, row.rating ?? 0), 0) || null,
+          rowVersion: { increment: 1 },
+        },
+      });
+      await syncAssetPrivacy(tx, item.ownerId, [target], this.libraryMode);
+    }
+    for (let offset = 0; offset < item.assetIds.length; offset += 500) {
+      const part = item.assetIds.slice(offset, offset + 500);
+      // Earlier chunks may change ambiguous live pairing; never expand beyond the reviewed snapshot.
+      const current = await resolveEagleTrashTargets(
+        tx,
+        { ownerId: item.ownerId, libraryMode: this.libraryMode },
+        part,
+        false,
+        item.operation.isPrivate,
+      );
+      if (current.some((row) => !frozenIds.has(row.id)))
+        throw new ConflictException('实况照片组件已变化。');
+      await setEagleTrash(
+        tx,
+        { ownerId: item.ownerId, libraryMode: this.libraryMode },
+        part,
+        false,
+        item.operation.isPrivate,
+      );
+    }
   }
 }
