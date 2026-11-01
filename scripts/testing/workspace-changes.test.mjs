@@ -42,7 +42,7 @@ test('committed changes are discovered without scanning resources and private wr
       await db.user.create({
         data: { id, email: `${id}@example.invalid`, passwordHash: 'synthetic' },
       });
-    const initial = service.snapshot(ownerId, false);
+    const initial = await service.snapshot(ownerId, false);
     const asset = await db.eagleAsset.create({
       data: {
         ownerId,
@@ -58,21 +58,24 @@ test('committed changes are discovered without scanning resources and private wr
       },
     });
     await barrier();
-    assert.deepEqual(service.snapshot(ownerId, false), initial);
+    assert.deepEqual(await service.snapshot(ownerId, false), initial);
     assert.notDeepEqual(
-      service.snapshot(ownerId, true),
+      await service.snapshot(ownerId, true),
       initial,
       'private owner must discover its own committed changes',
     );
-    assert.deepEqual(service.snapshot(other, true).scopes, initial.scopes);
+    assert.deepEqual((await service.snapshot(other, true)).scopes, initial.scopes);
     await db.eagleAsset.update({ where: { id: asset.id }, data: { isPrivate: false } });
     await barrier();
     assert.notEqual(
-      service.snapshot(ownerId, false).scopes.PHOTO.ASSETS,
+      (await service.snapshot(ownerId, false)).scopes.PHOTO.ASSETS,
       initial.scopes.PHOTO.ASSETS,
     );
-    assert.deepEqual(service.snapshot(ownerId, false).scopes.MATERIAL, initial.scopes.MATERIAL);
-    const beforeRollback = service.snapshot(ownerId, false);
+    assert.deepEqual(
+      (await service.snapshot(ownerId, false)).scopes.MATERIAL,
+      initial.scopes.MATERIAL,
+    );
+    const beforeRollback = await service.snapshot(ownerId, false);
     await assert.rejects(
       db.$transaction(async (tx) => {
         await tx.eagleAsset.update({
@@ -80,13 +83,19 @@ test('committed changes are discovered without scanning resources and private wr
           data: { displayName: 'uncommitted' },
         });
         await barrier();
-        assert.deepEqual(service.snapshot(ownerId, false), beforeRollback);
+        assert.deepEqual(await service.snapshot(ownerId, false), beforeRollback);
         throw new Error('intentional rollback');
       }),
       /intentional rollback/,
     );
     await barrier();
-    assert.deepEqual(service.snapshot(ownerId, false), beforeRollback);
+    assert.deepEqual(await service.snapshot(ownerId, false), beforeRollback);
+    const queuedJob = await db.eagleAssetProcessingJob.create({data:{ownerId,libraryMode:'PHOTO',assetId:asset.id,assetRevision:0,kind:'PROBE_MEDIA',status:'PENDING'}});
+    await barrier();
+    const beforeClaim = await service.snapshot(ownerId,false);
+    await db.eagleAssetProcessingJob.update({where:{id:queuedJob.id},data:{status:'PROCESSING',lockedAt:new Date(),leaseVersion:{increment:1},attempts:{increment:1}}});
+    await barrier();
+    assert.deepEqual(await service.snapshot(ownerId,false),beforeClaim,'forward claims must keep the existing NOTIFY contention exemption');
     // Lease-only changes cannot wake a display observer forever.
     const job = await db.eagleAssetProcessingJob.create({
       data: {
@@ -99,13 +108,13 @@ test('committed changes are discovered without scanning resources and private wr
       },
     });
     await barrier();
-    const beforeLease = service.snapshot(ownerId, false);
+    const beforeLease = await service.snapshot(ownerId, false);
     await db.eagleAssetProcessingJob.update({
       where: { id: job.id },
       data: { lockedAt: new Date(), leaseVersion: { increment: 1 } },
     });
     await barrier();
-    assert.deepEqual(service.snapshot(ownerId, false), beforeLease);
+    assert.deepEqual(await service.snapshot(ownerId, false), beforeLease);
   } finally {
     await service.onModuleDestroy();
     await db.$disconnect();
