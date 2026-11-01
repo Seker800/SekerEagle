@@ -57,7 +57,7 @@ const group = {
   removableBytes: 1024,
   previews: [],
 };
-function render() {
+function render(onClose = () => {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -68,7 +68,7 @@ function render() {
   const show = (open = true) => (
     <QueryClientProvider client={client}>
       <Progress />
-      {open && <EagleDuplicates includePrivate={false} onClose={() => {}} />}
+      {open && <EagleDuplicates includePrivate={false} onClose={onClose} />}
     </QueryClientProvider>
   );
   const view = renderInWorkspace(show());
@@ -84,6 +84,30 @@ function render() {
   };
 }
 describe('duplicate cleanup review', () => {
+  it('keeps the review open when Escape is pressed while confirmation is submitting', async () => {
+    mocks.cleanup.mockImplementation(() => new Promise(() => {}));
+    const onClose = vi.fn();
+    render(onClose);
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await screen.findByRole('button', { name: '正在提交…' });
+    fireEvent(screen.getByRole('dialog', { name: '查重清理' }), new Event('cancel', { bubbles: true, cancelable: true }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  });
+
+  it('opens confirmation as a native modal with its own description and restores the initiating action', async () => {
+    render();
+    const action = await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
+    action.focus();
+    fireEvent.click(action);
+    const confirmation = screen.getByRole('alertdialog');
+    expect(confirmation.tagName).toBe('DIALOG');
+    expect(confirmation).toHaveAttribute('aria-describedby');
+    fireEvent.click(screen.getByRole('button', { name: '返回检查' }));
+    expect(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' })).toHaveFocus();
+  });
+
   it('shows direct comparison cards and binds all-results cleanup to the checked filters', async () => {
     const page = await mocks.list();
     mocks.list.mockResolvedValue({
