@@ -18,6 +18,9 @@ import { log } from 'node:console';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-memory.js';
+import { readResidentSmartFolderPage } from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
+import { rankSmartFolderMatches } from '../../apps/api/dist/eagle/eagle-smart-folder-ranking.js';
+import { smartFolderMatchWhere } from '../../packages/library-persistence/dist/index.js';
 import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';
 
 assertSafeRuntimeTarget({
@@ -59,8 +62,8 @@ before(async () => {
       rating: i % 6 || null,
       isPrivate: i % 5 === 0,
       originalObjectKey: `users/${ownerId}/assets/${i}/original`,
-      libraryAddedAt: new Date(1760000000000 + i * 1000),
-      chronologicalAt: new Date(1760000000000 + i * 1000),
+      libraryAddedAt: new Date(1760000000000 + i * 17),
+      chronologicalAt: new Date(1760000000000 + i * 17),
     })),
   });
   await db.eaglePhotoMetadata.createMany({
@@ -446,4 +449,38 @@ test('sixty thousand resources publish one batch event and keep complete residen
       rssMiB: Math.round(process.memoryUsage().rss / 1048576),
     }),
   );
+});
+
+test('semantic resident page preserves real SQL scores, additional filters and version guards', async () => {
+  const spaceId = randomUUID(), folderId = randomUUID(), snapshotId = randomUUID();
+  try {
+    await db.eagleEmbeddingSpace.create({ data: { id: spaceId, model: 'fixture', revision: spaceId,
+      dimensions: 1024, instructionVersion: 'fixture', preprocessingVersion: 'fixture', normalized: true } });
+    await db.eagleSmartFolder.create({ data: { id: folderId, ...scope, name: 'fixture', query: { version: 2, conditions: [] } } });
+    await db.eagleSmartFolderSemanticSnapshot.create({ data: { id: snapshotId, ...scope, folderId,
+      intentKey: 'fixture', text: 'fixture', breadth: 'BALANCED', threshold: 0, spaceId, isActive: true, status: 'READY' } });
+    for (let n = 0; n < 30; n++) {
+      const embedding = await db.eagleAssetEmbedding.create({ data: { ...scope, assetId: `${ownerId}-${n}`, assetRevision: 0,
+        spaceId, status: 'COMPLETED', isCurrent: true } });
+      await db.eagleSmartFolderSemanticMatch.create({ data: { ...scope, snapshotId, embeddingId: embedding.id, similarity: Math.floor(n / 3) / 10 } });
+    }
+    const index = await store.synchronize(scope);
+    for (const includePrivate of [false, true]) {
+      const where = { AND: [{ ...scope }, smartFolderMatchWhere(scope, folderId), { photoMetadata: { is: { cameraModel: 'Camera' } } }] };
+      const options = { where, folderIds: [folderId], limit: 3, ordinaryMembersPossible: false, includePrivate, trash: false };
+      let after;
+      do {
+        const expected = await rankSmartFolderMatches(db, scope, [folderId], after, 4, includePrivate, false, undefined, where);
+        const actual = await readResidentSmartFolderPage(pool, index, { ...options, after });
+        assert.deepEqual(actual, expected);
+        if (expected.length <= 3) break;
+        after = expected[2];
+      } while (true);
+      await assert.rejects(readResidentSmartFolderPage(pool, index, options, 1), /workspace/);
+    }
+  } finally {
+    await db.eagleSmartFolder.deleteMany({ where: { id: folderId } });
+    await db.eagleAssetEmbedding.deleteMany({ where: { spaceId } });
+    await db.eagleEmbeddingSpace.deleteMany({ where: { id: spaceId } });
+  }
 });
