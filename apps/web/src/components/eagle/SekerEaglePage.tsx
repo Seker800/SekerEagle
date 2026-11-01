@@ -629,8 +629,6 @@ export function SekerEaglePage({
     queryFn: fetchEagleReviewSummary,
     staleTime: 60_000,
     enabled: true,
-    refetchInterval:
-      workspaceSection === 'PENDING' ? 10_000 : workspaceSection === 'SETTINGS' ? 30_000 : false,
   });
   const vectorSummary = vectorSummaryQuery.data;
   const unavailableSuggestionCount = Math.max(

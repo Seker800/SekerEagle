@@ -351,25 +351,35 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
     $executeRaw: async () => 1,
     $queryRaw: async () => [],
     eagleVectorTagSuggestion: {
-      findFirst: async () => ({
-        id: 'suggestion-1',
-        assetId: 'asset-1',
-        suggestedTagId: 'tag-1',
-        status: 'PENDING',
-        invalidatedAt: null,
-        embedding: { isCurrent: true, status: 'READY' },
-        snapshot: { isCurrent: true, status: 'ACTIVE' },
-        suggestedTag: { semanticConfig: { recommendationEnabled: true } },
-      }),
+      findMany: async () => [
+        {
+          id: 'suggestion-1',
+          assetId: 'asset-1',
+          suggestedTagId: 'tag-1',
+          status: 'PENDING',
+          isActive: true,
+          snapshotId: 'snapshot-1',
+          distance: 0.1,
+          prototypeRank: 0,
+          asset: { mediaRevision: 1, _count: { manualTagLinks: 0 } },
+          invalidatedAt: null,
+          embedding: { isCurrent: true, status: 'READY', assetRevision: 1 },
+          snapshot: { isCurrent: true, status: 'ACTIVE' },
+          suggestedTag: {
+            semanticConfig: { recommendationEnabled: true, currentSnapshotId: 'snapshot-1' },
+          },
+        },
+      ],
       updateMany: async () => ({ count: 1 }),
     },
     eagleAssetManualTag: {
       count: async () => 0,
-      upsert: async (input: unknown) => {
+      createMany: async (input: unknown) => {
         creates.push(input);
         return {};
       },
     },
+    eagleTagMemberDistance: { createMany: async () => ({ count: 1 }) },
     eagleManualTag: {
       updateMany: async (input: unknown) => {
         recentTagWrites.push(input);
@@ -400,24 +410,17 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
     privacyChanged: true,
   });
   assert.deepEqual(creates[0], {
-    where: {
-      libraryMode: 'MATERIAL',
-      ownerId_assetId_tagId: { ownerId: 'owner-1', assetId: 'asset-1', tagId: 'tag-1' },
-    },
-    create: {
-      libraryMode: 'MATERIAL',
-      ownerId: 'owner-1',
-      assetId: 'asset-1',
-      tagId: 'tag-1',
-      assignedByUser: true,
-      assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
-      acceptedSuggestionId: 'suggestion-1',
-    },
-    update: {
-      assignedByUser: true,
-      assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
-      acceptedSuggestionId: 'suggestion-1',
-    },
+    data: [
+      {
+        libraryMode: 'MATERIAL',
+        ownerId: 'owner-1',
+        assetId: 'asset-1',
+        tagId: 'tag-1',
+        assignedByUser: true,
+        assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
+        acceptedSuggestionId: 'suggestion-1',
+      },
+    ],
   });
   assert.equal(recentTagWrites.length, 1);
   assert.equal(privacyWrites.length, 2);
@@ -425,7 +428,7 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
   assert.deepEqual((recentTagWrites[0] as { where: unknown }).where, {
     libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
-    id: 'tag-1',
+    id: { in: ['tag-1'] },
   });
   assert.ok(
     (recentTagWrites[0] as { data: { lastUsedAt: unknown } }).data.lastUsedAt instanceof Date,
@@ -436,7 +439,7 @@ test('cross-owner suggestion review returns 404 without writes', async () => {
   let wrote = false;
   const transaction = {
     $queryRaw: async () => [],
-    eagleVectorTagSuggestion: { findFirst: async () => null },
+    eagleVectorTagSuggestion: { findMany: async () => [] },
     eagleAssetManualTag: { upsert: async () => (wrote = true) },
   };
   const service = new EagleVectorService(
