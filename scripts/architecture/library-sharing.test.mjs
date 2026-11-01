@@ -366,3 +366,29 @@ test('rejects removing a persisted model from its registered capability', () => 
     'capability-ownership',
   );
 });
+
+test('database batching forbids raw work targets in the covered persistence paths', () => {
+  for (const file of [
+    'eagle-asset-operations.service.ts',
+    'eagle-duplicates.service.ts',
+    'eagle-duplicate-cleanup.ts',
+    'eagle-duplicate-index.ts',
+    'eagle-duplicate-verification.ts',
+  ]) {
+    for (const source of [
+      '\nfunction bypass(rows: unknown[]) { for (let offset = 0; offset < rows.length; offset += 500) {} }',
+      '\nfunction bypass(rows: unknown[], offset: number) { return rows.slice(offset, offset + 512); }',
+      '\nfunction bypass(rows: unknown[], offset: number) { const BATCH = 500; return rows.slice(offset, offset + BATCH); }',
+    ]) rejectsMutation(`apps/api/src/eagle/${file}`, (before) => before + source, 'database-batch-budget');
+  }
+});
+test('database batching gate permits preview decoder slots and unrelated protocol chunk sizes', () => {
+  for (const [file, source] of [
+    ['apps/api/src/eagle/eagle-duplicate-index.ts', '\nfunction preview(rows: unknown[]) { for (let offset=0; offset<rows.length; offset+=2) { rows.slice(offset, offset+2); } }'],
+    ['apps/api/src/eagle/eagle-transfer-pyramid.ts', '\nfunction objectProtocol(rows: unknown[]) { return rows.slice(0, 500); }'],
+  ]) {
+    const sources = new Map(baseline);
+    sources.set(file, sources.get(file) + source);
+    assert.ok(!checkLibrarySharing(sources).some((error) => error.rule === 'database-batch-budget'));
+  }
+});
