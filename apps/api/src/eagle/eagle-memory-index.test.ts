@@ -55,3 +55,13 @@ test('metadata changes update already sorted rows while date changes reorder the
   index.update('3', ['a'], [row('a', '2026-12-01T00:00:00Z')]);
   assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['a', 'b']);
 });
+
+test('database Date objects retain milliseconds for order and update invalidation', () => {
+  const index = new LibraryMemoryIndex('owner', 'PHOTO');
+  const a = { ...row('a'), libraryAddedAt: new Date('2026-11-01T00:00:00.001Z'), chronologicalAt: new Date('2026-11-01T00:00:00.001Z') };
+  const z = { ...row('z'), libraryAddedAt: new Date('2026-11-01T00:00:00.000Z'), chronologicalAt: new Date('2026-11-01T00:00:00.000Z') };
+  index.replace('1', [a, z]);
+  assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['a', 'z']);
+  index.update('2', ['z'], [{ ...z, chronologicalAt: new Date('2026-11-01T00:00:00.002Z') }]);
+  assert.deepEqual(index.page({}, 'chronologicalAt', 'desc', 10, 0), ['z', 'a']);
+});
