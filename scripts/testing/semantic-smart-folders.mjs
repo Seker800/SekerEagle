@@ -719,6 +719,12 @@ try {
     'reconciliation discovers nested scene rules',
   );
   await service.deleteSmartFolder(ruleOwner, ruleFolder.id);
+  // The earlier space-switch case retired spaceId. This race exercises snapshot
+  // replacement within one active space, so restore that precondition explicitly.
+  await client.$transaction(async (tx) => {
+    await tx.eagleEmbeddingSpace.updateMany({ data: { isCurrent: false } });
+    await tx.eagleEmbeddingSpace.update({ where: { id: spaceId }, data: { isCurrent: true } });
+  });
   const raceOwner = randomUUID();
   await client.user.create({
     data: { id: raceOwner, email: `${raceOwner}@example.invalid`, passwordHash: 'test-only' },
@@ -735,6 +741,15 @@ try {
   while (await runSmartFolderBuildStep(client, spaceId, async () => ({ embedding: vector() }))) {
     /* drain bounded synthetic batches */
   }
+  assert.equal(
+    (
+      await client.eagleSmartFolderSemanticSnapshot.findFirstOrThrow({
+        where: { folderId: raceFolder.id },
+      })
+    ).isActive,
+    true,
+    'the replacement race requires a completed, active old snapshot',
+  );
   let switched = false;
   const racingClient = new Proxy(client, {
     get(target, key) {

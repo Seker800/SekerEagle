@@ -117,6 +117,67 @@ test('people pagination chooses representatives only after selecting the page', 
     }),
   );
 });
+test('people representatives never bypass privacy, revision or distinct-photo counting', async () => {
+  const personId = `${prefix}person-0000`;
+  const duplicateId = `${prefix}duplicate-face`;
+  const face = await db.eaglePhotoFace.findUniqueOrThrow({ where: { id: `${prefix}face-09000` } });
+  await db.eaglePhotoFace.create({ data: { ...face, id: duplicateId, confidence: 1 } });
+  const read = (privateAccess = false) =>
+    readPeopleCountPage(db, ownerId, privateAccess, undefined, 'ALL');
+  try {
+    assert.equal((await read()).rows[0].photos, 10n);
+    assert.equal((await read()).rows[0].faceId, duplicateId);
+    await db.eagleAsset.update({ where: { id: assetId(9000) }, data: { isPrivate: true } });
+    await db.eaglePhotoFace.update({
+      where: { id: `${prefix}face-08000` },
+      data: { assetRevision: 0 },
+    });
+    await db.eagleAsset.update({ where: { id: assetId(7000) }, data: { deletedAt: new Date() } });
+    const visible = (await read()).rows[0];
+    assert.equal(visible.photos, 7n);
+    assert.equal(visible.faceId, `${prefix}face-06000`);
+    assert.equal((await read(true)).rows[0].photos, 8n);
+    assert.equal((await read(true)).rows[0].faceId, duplicateId);
+    await db.eaglePhotoPerson.update({
+      where: { id: personId },
+      data: { marksAssetsPrivate: true },
+    });
+    assert.ok((await read()).rows.every((r) => r.id !== personId));
+    await db.eaglePhotoFace.updateMany({
+      where: { ownerId, personId },
+      data: { isCurrent: false },
+    });
+    const emptyPrivate = (await read(true)).rows[0];
+    assert.equal(emptyPrivate.photos, 0n);
+    assert.equal(emptyPrivate.faceId, null);
+    assert.deepEqual(
+      (await readPeopleCountPage(db, randomUUID(), true, undefined, 'ALL')).rows,
+      [],
+    );
+    const page = await read();
+    await assert.rejects(
+      readPeopleCountPage(db, ownerId, true, page.nextCursor, 'ALL'),
+      /游标无效/,
+    );
+    await assert.rejects(readPeopleCountPage(db, ownerId, false, 'invalid', 'ALL'), /游标无效/);
+    const unnamed = await readPeopleCountPage(db, ownerId, false, undefined, 'UNNAMED');
+    assert.ok(unnamed.rows.every((r) => !r.named));
+  } finally {
+    await db.eaglePhotoFace.delete({ where: { id: duplicateId } });
+    await db.eaglePhotoFace.updateMany({
+      where: { ownerId, personId },
+      data: { isCurrent: true, assetRevision: 1 },
+    });
+    await db.eaglePhotoPerson.update({
+      where: { id: personId },
+      data: { marksAssetsPrivate: false },
+    });
+    await db.eagleAsset.updateMany({
+      where: { id: { in: [assetId(9000), assetId(7000)] } },
+      data: { isPrivate: false, deletedAt: null },
+    });
+  }
+});
 test('sparse smart-folder filters do not repeatedly hydrate rejected candidate batches', async () => {
   const space =
     (await db.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } })) ??
@@ -179,5 +240,38 @@ test('sparse smart-folder filters do not repeatedly hydrate rejected candidate b
     rankings.length,
     1,
     'a selective filter must be applied before relevance pagination, not after each 250-row batch',
+  );
+  const all = [...page.items.map((r) => r.id)];
+  let cursor = page.nextCursor;
+  while (cursor) {
+    const next = await service.listAssets(ownerId, {
+      smartFolderId: folder.id,
+      smartFolderOrder: 'RELEVANCE',
+      rating: 5,
+      limit: 40,
+      cursor,
+    });
+    all.push(...next.items.map((r) => r.id));
+    cursor = next.nextCursor;
+  }
+  assert.deepEqual(
+    all,
+    Array.from({ length: 200 }, (_, i) => assetId(59800 + i)),
+  );
+  await assert.rejects(
+    new EagleService(db, undefined, 'MATERIAL').listAssets(ownerId, {
+      smartFolderId: folder.id,
+      smartFolderOrder: 'RELEVANCE',
+      limit: 10,
+    }),
+    /不存在/,
+  );
+  await assert.rejects(
+    service.listAssets(randomUUID(), {
+      smartFolderId: folder.id,
+      smartFolderOrder: 'RELEVANCE',
+      limit: 10,
+    }),
+    /不存在/,
   );
 });

@@ -653,7 +653,7 @@ export class EagleService {
     const scope = { ownerId, libraryMode: this.libraryMode };
     const page = await readSmartFolderPage(
       this.prisma,
-      { scope, query, folderIds, folderDefinitionKey, includePrivate, trash },
+      { scope, query, folderIds, folderDefinitionKey, includePrivate, trash, where },
       (extraWhere, options) =>
         findSearchAssets(this.prisma, {
           where: inLibrary(this.libraryMode, { AND: [where, extraWhere] }),

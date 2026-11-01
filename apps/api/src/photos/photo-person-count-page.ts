@@ -31,18 +31,38 @@ export async function readPeopleCountPage(
       throw new BadRequestException('人物分页游标无效。');
     }
   }
+  // Counts own global ordering; representative selection only touches the selected page.
   const rows = await tx.$queryRaw<
     Array<{ id: string; photos: bigint; faceId: string | null; named: boolean }>
   >`WITH counts AS (
- SELECT p.id,(p.name IS NOT NULL) AS named,count(DISTINCT a.id) AS photos,(array_agg(f.id ORDER BY f.confidence DESC,f.id) FILTER(WHERE a.id IS NOT NULL))[1] AS "faceId" FROM "EaglePhotoPerson" p
- LEFT JOIN "EaglePhotoFace" f ON f."personId"=p.id AND f."ownerId"=p."ownerId" AND f."libraryMode"=p."libraryMode" AND f."isCurrent"
- LEFT JOIN "EagleAsset" a ON a.id=f."assetId" AND a."ownerId"=f."ownerId" AND a."libraryMode"=f."libraryMode" AND a."mediaRevision"=f."assetRevision" AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
- WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO' AND (${view === 'ALL'} OR p.name IS NULL) AND (${includePrivate} OR NOT p."marksAssetsPrivate")
- GROUP BY p.id HAVING count(DISTINCT a.id)>0 OR (${includePrivate} AND p."marksAssetsPrivate")
- ) SELECT id,named,photos,"faceId" FROM counts
- WHERE ${!cursor} OR named<${cursor?.named ?? false}
-   OR (named=${cursor?.named ?? false} AND (photos<${cursor?.photos ?? 0} OR (photos=${cursor?.photos ?? 0} AND id>${cursor?.id ?? ''})))
- ORDER BY named DESC,photos DESC,id LIMIT 25`;
+    SELECT p.id, (p.name IS NOT NULL) AS named, count(DISTINCT a.id) AS photos
+    FROM "EaglePhotoPerson" p
+    LEFT JOIN "EaglePhotoFace" f ON f."personId"=p.id AND f."ownerId"=p."ownerId"
+      AND f."libraryMode"=p."libraryMode" AND f."isCurrent"
+    LEFT JOIN "EagleAsset" a ON a.id=f."assetId" AND a."ownerId"=f."ownerId"
+      AND a."libraryMode"=f."libraryMode" AND a."mediaRevision"=f."assetRevision"
+      AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
+    WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO'
+      AND (${view === 'ALL'} OR p.name IS NULL) AND (${includePrivate} OR NOT p."marksAssetsPrivate")
+    GROUP BY p.id
+    HAVING count(DISTINCT a.id)>0 OR (${includePrivate} AND p."marksAssetsPrivate")
+  ), page AS MATERIALIZED (
+    SELECT id,named,photos FROM counts
+    WHERE ${!cursor} OR named<${cursor?.named ?? false}
+      OR (named=${cursor?.named ?? false} AND (photos<${cursor?.photos ?? 0}
+        OR (photos=${cursor?.photos ?? 0} AND id>${cursor?.id ?? ''})))
+    ORDER BY named DESC,photos DESC,id LIMIT 25
+  )
+  SELECT page.*, representative."faceId" FROM page
+  LEFT JOIN LATERAL (
+    SELECT f.id AS "faceId" FROM "EaglePhotoFace" f
+    JOIN "EagleAsset" a ON a.id=f."assetId" AND a."ownerId"=f."ownerId"
+      AND a."libraryMode"=f."libraryMode" AND a."mediaRevision"=f."assetRevision"
+      AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
+    WHERE f."ownerId"=${ownerId} AND f."libraryMode"='PHOTO' AND f."isCurrent" AND f."personId"=page.id
+    ORDER BY f.confidence DESC,f.id LIMIT 1
+  ) representative ON true
+  ORDER BY page.named DESC,page.photos DESC,page.id`;
   const page = rows.slice(0, 24);
   const last = page.at(-1);
   return {

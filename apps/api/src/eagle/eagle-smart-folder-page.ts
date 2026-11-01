@@ -8,6 +8,7 @@ import type { ImageSearchPosition } from './eagle-image-search.service';
 import type { LibraryIdentity } from './library-mode';
 import type { ListEagleAssetsDto } from './eagle.dto';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { AssetSearchWhere } from './eagle-search-predicate';
 
 interface Options {
   scope: LibraryIdentity;
@@ -16,6 +17,7 @@ interface Options {
   folderDefinitionKey: string;
   includePrivate: boolean;
   trash: boolean;
+  where: AssetSearchWhere;
 }
 
 /** Cached ranking owns pagination; the caller owns shared visibility/filtering and projection. */
@@ -23,7 +25,7 @@ export async function readSmartFolderPage<
   T extends { id: string; chronologicalAt: Date; libraryAddedAt: Date },
 >(
   prisma: PrismaService,
-  { scope, query, folderIds, folderDefinitionKey, includePrivate, trash }: Options,
+  { scope, query, folderIds, folderDefinitionKey, includePrivate, trash, where }: Options,
   readAssets: (
     where: Prisma.EagleAssetWhereInput,
     options?: {
@@ -58,15 +60,20 @@ export async function readSmartFolderPage<
     .digest('hex');
   let after = decodeImageSearchCursor(query.cursor, searchKey, scope);
   const ranked: Array<{ row: T; position: ImageSearchPosition }> = [];
+  // Eligibility is evaluated in the ranking SQL. Retry only if hydration loses a
+  // concurrently changed candidate, rather than scanning batches of rejected cards.
   while (after?.tier !== 0 && ranked.length <= query.limit) {
+    const take = query.limit + 1 - ranked.length;
     const candidates = await rankSmartFolderMatches(
       prisma,
       scope,
       folderIds,
       after,
-      250,
+      take,
       includePrivate,
       trash,
+      undefined,
+      where,
     );
     if (!candidates.length) break;
     const rows = await readAssets({ id: { in: candidates.map((candidate) => candidate.assetId) } });
@@ -77,7 +84,7 @@ export async function readSmartFolderPage<
       if (ranked.length > query.limit) break;
     }
     after = candidates.at(-1);
-    if (candidates.length < 250) break;
+    if (candidates.length < take) break;
   }
   if (ranked.length <= query.limit) {
     // A parent can union semantic and ordinary-only children. Keep ordinary members too,

@@ -111,7 +111,7 @@ export function colorSearchPlan(where: AssetSearchWhere, rankColor?: string) {
   }
   return {
     with: ctes.length ? Prisma.sql`WITH ${Prisma.join(ctes)}` : Prisma.empty,
-    from: Prisma.sql`"EagleAsset" asset ${Prisma.join(joins, ' ')}`,
+    from: Prisma.sql`"EagleAsset" asset ${joins.length ? Prisma.join(joins, ' ') : Prisma.empty}`,
     where: compileSearchPredicate(where, scores),
     score: rankColor ? scores.get(normalizeHexColor(rankColor))! : Prisma.empty,
   };

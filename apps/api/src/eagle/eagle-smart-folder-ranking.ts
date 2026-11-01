@@ -1,6 +1,8 @@
 import { Prisma, type LibraryMode } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ImageSearchPosition } from './eagle-image-search.service';
+import type { AssetSearchWhere } from './eagle-search-predicate';
+import { colorSearchPlan } from './eagle-color-query';
 
 export async function rankSmartFolderMatches(
   prisma: PrismaService,
@@ -11,8 +13,10 @@ export async function rankSmartFolderMatches(
   includePrivate: boolean,
   trash: boolean,
   allowedIds?: string[],
+  where?: AssetSearchWhere,
 ): Promise<ImageSearchPosition[]> {
   if (allowedIds?.length === 0) return [];
+  const filter = where ? colorSearchPlan(where) : null;
   const rows = await prisma.$queryRaw<
     Array<{ assetId: string; similarity: number; libraryAddedAt: Date }>
   >(Prisma.sql`
@@ -27,6 +31,7 @@ export async function rankSmartFolderMatches(
         ${includePrivate ? Prisma.empty : Prisma.sql`AND NOT a."isPrivate"`}
         ${trash ? Prisma.sql`AND a."deletedAt" IS NOT NULL AND a."purgeAfter" IS NULL` : Prisma.sql`AND a."deletedAt" IS NULL`}
         ${allowedIds ? Prisma.sql`AND a.id=ANY(${allowedIds}::text[])` : Prisma.empty}
+        ${filter ? Prisma.sql`AND a.id IN (${filter.with} SELECT asset.id FROM ${filter.from} WHERE ${filter.where})` : Prisma.empty}
       GROUP BY a.id
     ) SELECT * FROM ranked
     ${after ? Prisma.sql`WHERE (similarity,"assetId")<(${after.similarity},${after.assetId})` : Prisma.empty}
