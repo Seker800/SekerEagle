@@ -35,6 +35,11 @@ export class EagleVectorController {
     return this.vectors.summary(principal.sub, principal.canViewPrivate);
   }
 
+  @Get('review-summary')
+  reviewSummary(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.vectors.reviewSummary(principal.sub, principal.canViewPrivate);
+  }
+
   @Get('tags')
   tags(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListVectorTagsDto) {
     return this.vectors.listTagSemantics(principal.sub, query.query, principal.canViewPrivate);

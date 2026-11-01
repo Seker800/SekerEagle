@@ -64,6 +64,7 @@ const operations = {
   restore: (mode: LibraryMode) => createEagleApi(mode).batchRestoreEagleAssets('', ['asset']),
   filters: (mode: LibraryMode) =>
     createEagleApi(mode).countEagleAssets('', { version: 2, conditions: [] }),
+  reviewCounts: (mode: LibraryMode) => createEagleVectorApi(mode).fetchEagleReviewSummary(),
   vectors: (mode: LibraryMode) => createEagleVectorApi(mode).fetchEagleVectorSummary(),
   processing: (mode: LibraryMode) =>
     createEagleProcessingAdminApi(mode).fetchEagleProcessingSummary(''),

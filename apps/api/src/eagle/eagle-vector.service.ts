@@ -16,12 +16,9 @@ import type {
   ListVectorSuggestionsDto,
 } from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
-import {
-  refreshUnclassifiedSuggestions,
-  upsertAcceptedSuggestionMemberDistance,
-} from './eagle-vector.persistence';
+import { refreshUnclassifiedSuggestions } from './eagle-vector.persistence';
 import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './media-job-plan';
-import { lockOwnerPrivacyProjection, syncAssetPrivacy } from './eagle-privacy.service';
+import { reviewSavedSuggestions } from './eagle-vector-review';
 
 const vectorReviewRenditions = () => ({
   where: {
@@ -54,6 +51,31 @@ export class EagleVectorService {
     private readonly prisma: PrismaService,
     @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
+
+  async reviewSummary(ownerId: string, includePrivate = false) {
+    const [unclassified, pending] = await Promise.all([
+      this.prisma.eagleAsset.count({
+        where: {
+          ownerId,
+          libraryMode: this.libraryMode,
+          deletedAt: null,
+          manualTagLinks: { none: {} },
+          ...(includePrivate ? {} : { isPrivate: false }),
+        },
+      }),
+      this.prisma.eagleVectorTagSuggestion.count({
+        where: {
+          ownerId,
+          libraryMode: this.libraryMode,
+          status: 'PENDING',
+          isActive: true,
+          invalidatedAt: null,
+          asset: reviewableSuggestionAssetWhere(includePrivate),
+        },
+      }),
+    ]);
+    return { suggestions: { unclassified, pending } };
+  }
 
   async summary(ownerId: string, includePrivate = false) {
     const visibleAsset = includePrivate ? {} : { isPrivate: false };
@@ -605,138 +627,8 @@ export class EagleVectorService {
     action: 'ACCEPT' | 'REJECT',
     includePrivate = false,
   ) {
-    const outcome = await this.prisma.$transaction(async (transaction) => {
-      const suggestion = await transaction.eagleVectorTagSuggestion.findFirst({
-        where: {
-          ownerId,
-          id: suggestionId,
-          status: 'PENDING',
-          isActive: true,
-          invalidatedAt: null,
-          asset: includePrivate ? {} : { isPrivate: false },
-          libraryMode: this.libraryMode,
-        },
-        include: {
-          embedding: { select: { isCurrent: true, status: true } },
-          snapshot: { select: { isCurrent: true, status: true } },
-          suggestedTag: {
-            select: { semanticConfig: { select: { recommendationEnabled: true } } },
-          },
-        },
-      });
-      if (!suggestion) throw new NotFoundException('待审核建议不存在。');
-      if (action === 'REJECT') {
-        const updated = await transaction.eagleVectorTagSuggestion.updateMany({
-          where: {
-            ownerId,
-            id: suggestionId,
-            status: 'PENDING',
-            isActive: true,
-            invalidatedAt: null,
-            libraryMode: this.libraryMode,
-          },
-          data: { status: 'REJECTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
-        });
-        if (updated.count !== 1) throw new ConflictException('建议已被处理。');
-        return {
-          id: suggestion.id,
-          status: 'REJECTED' as const,
-          assetId: suggestion.assetId,
-          privacyChanged: false,
-        };
-      }
-      await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
-      const manualTagCount = await transaction.eagleAssetManualTag.count({
-        where: { ownerId, assetId: suggestion.assetId, libraryMode: this.libraryMode },
-      });
-      const remainsValid =
-        manualTagCount === 0 &&
-        suggestion.embedding.isCurrent &&
-        suggestion.embedding.status === 'READY' &&
-        suggestion.snapshot.isCurrent &&
-        suggestion.snapshot.status === 'ACTIVE' &&
-        suggestion.suggestedTag.semanticConfig?.recommendationEnabled === true;
-      if (!remainsValid) {
-        await transaction.eagleVectorTagSuggestion.updateMany({
-          where: {
-            ownerId,
-            id: suggestionId,
-            status: 'PENDING',
-            isActive: true,
-            invalidatedAt: null,
-            libraryMode: this.libraryMode,
-          },
-          data: {
-            isActive: false,
-            invalidatedAt: new Date(),
-            invalidReason: 'SUGGESTION_NO_LONGER_APPLICABLE',
-          },
-        });
-        return { invalid: true as const };
-      }
-      await transaction.eagleAssetManualTag.upsert({
-        where: {
-          ownerId_assetId_tagId: {
-            ownerId,
-            assetId: suggestion.assetId,
-            tagId: suggestion.suggestedTagId,
-          },
-          libraryMode: this.libraryMode,
-        },
-        create: {
-          ownerId,
-          assetId: suggestion.assetId,
-          tagId: suggestion.suggestedTagId,
-          assignedByUser: true,
-          assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
-          acceptedSuggestionId: suggestion.id,
-          libraryMode: this.libraryMode,
-        },
-        update: {
-          assignedByUser: true,
-          assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
-          acceptedSuggestionId: suggestion.id,
-        },
-      });
-      await transaction.eagleManualTag.updateMany({
-        where: { ownerId, id: suggestion.suggestedTagId, libraryMode: this.libraryMode },
-        data: { lastUsedAt: new Date() },
-      });
-      await upsertAcceptedSuggestionMemberDistance(transaction, {
-        libraryMode: this.libraryMode,
-        ownerId,
-        tagId: suggestion.suggestedTagId,
-        assetId: suggestion.assetId,
-        snapshotId: suggestion.snapshotId,
-        embeddingId: suggestion.embeddingId,
-      });
-      const privacyChangedAssetCount = await syncAssetPrivacy(
-        transaction,
-        ownerId,
-        [suggestion.assetId],
-        this.libraryMode,
-      );
-      const updated = await transaction.eagleVectorTagSuggestion.updateMany({
-        where: {
-          ownerId,
-          id: suggestionId,
-          status: 'PENDING',
-          isActive: true,
-          invalidatedAt: null,
-          libraryMode: this.libraryMode,
-        },
-        data: { status: 'ACCEPTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
-      });
-      if (updated.count !== 1) throw new ConflictException('建议已被处理。');
-      return {
-        id: suggestion.id,
-        status: 'ACCEPTED' as const,
-        assetId: suggestion.assetId,
-        privacyChanged: privacyChangedAssetCount > 0,
-      };
-    });
-    if ('invalid' in outcome) throw new ConflictException('图片或标签状态已变化，请刷新。');
-    return outcome;
+    const result = await this.reviewSuggestions(ownerId, [suggestionId], action, includePrivate);
+    return result.items[0]!;
   }
 
   async reviewSuggestions(
@@ -745,11 +637,16 @@ export class EagleVectorService {
     action: 'ACCEPT' | 'REJECT',
     includePrivate = false,
   ) {
-    const results = [];
-    for (const suggestionId of suggestionIds) {
-      results.push(await this.reviewSuggestion(ownerId, suggestionId, action, includePrivate));
-    }
-    return { items: results };
+    return this.prisma.$transaction((transaction) =>
+      reviewSavedSuggestions(
+        transaction,
+        ownerId,
+        this.libraryMode,
+        suggestionIds,
+        action,
+        includePrivate,
+      ),
+    );
   }
 
   async listTagDistanceAssets(

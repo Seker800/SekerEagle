@@ -307,7 +307,7 @@ export function SekerEaglePage({
       getEaglePyramidDescriptor,
       listEagleAssets,
       listEagleTrash,
-      fetchEagleVectorSummary,
+      fetchEagleReviewSummary,
     },
   } = useLibraryWorkspace();
 
@@ -626,7 +626,7 @@ export function SekerEaglePage({
   useAssetOperationProgress(privateVisible, true);
   const vectorSummaryQuery = useQuery({
     queryKey: queryKeys.vectorSummary,
-    queryFn: fetchEagleVectorSummary,
+    queryFn: fetchEagleReviewSummary,
     staleTime: 60_000,
     enabled: true,
     refetchInterval:
