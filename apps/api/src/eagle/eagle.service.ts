@@ -35,6 +35,7 @@ import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
   BadRequestException,
+  ServiceUnavailableException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -1152,13 +1153,20 @@ export class EagleService {
     cutoff?: Date,
     beforeWrite?: (tx: Prisma.TransactionClient) => Promise<void>,
   ) {
-    const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
-      if (beforeWrite) await beforeWrite(transaction);
-      const purgeAfter = new Date();
-      // Keep the complete purge selection in PostgreSQL: no selection-sized ID/parameter list.
-      const [result] = await transaction.$queryRaw<
-        Array<{ affectedAssetCount: number }>
-      >(Prisma.sql`
+    // Below the existing 15-second gateway deadline; never a global Prisma override.
+    const timeout = Number(process.env.EAGLE_EMPTY_TRASH_TIMEOUT_MS ?? 12_000);
+    if (!Number.isSafeInteger(timeout) || timeout < 1_000 || timeout > 12_000)
+      throw new Error('EAGLE_EMPTY_TRASH_TIMEOUT_MS must be an integer between 1000 and 12000');
+    const affectedAssetCount = await this.prisma
+      .$transaction(
+        async (transaction) => {
+          await transaction.$executeRaw`SELECT set_config('statement_timeout', ${`${timeout - 250}ms`}, true)`;
+          if (beforeWrite) await beforeWrite(transaction);
+          const purgeAfter = new Date();
+          // Keep the complete purge selection in PostgreSQL: no selection-sized ID/parameter list.
+          const [result] = await transaction.$queryRaw<
+            Array<{ affectedAssetCount: number }>
+          >(Prisma.sql`
         WITH marked AS (
           UPDATE "EagleAsset"
           SET "purgeAfter"=${purgeAfter}, "rowVersion"="rowVersion"+1, "updatedAt"=CURRENT_TIMESTAMP
@@ -1197,8 +1205,23 @@ export class EagleService {
           RETURNING job.id
         ) SELECT count(*)::int AS "affectedAssetCount" FROM marked
       `);
-      return result!.affectedAssetCount;
-    });
+          if (beforeWrite) await beforeWrite(transaction);
+          return result!.affectedAssetCount;
+        },
+        { timeout },
+      )
+      .catch((error: unknown) => {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (['P2028', 'P2024', 'P2034'].includes(error.code) ||
+            (error.code === 'P2010' && error.meta?.code === '57014'))
+        )
+          throw new ServiceUnavailableException({
+            code: 'EMPTY_TRASH_BUSY',
+            message: '清空回收站暂时繁忙，本次操作已回滚，请重试。',
+          });
+        throw error;
+      });
     return { affectedAssetCount };
   }
 
