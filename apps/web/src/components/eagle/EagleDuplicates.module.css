@@ -313,17 +313,18 @@
 .empty h3 {
   color: var(--ui-text);
 }
-.confirm {
+.dialog .confirm {
   padding: 30px;
   overflow: auto;
-  max-width: 720px;
+  width: min(720px, calc(100vw - 80px));
+  max-height: calc(100dvh - 80px);
   margin: auto;
   line-height: 1.8;
 }
 .confirm h2 {
   font-size: 22px;
 }
-.confirm .actions {
+.confirm footer {
   margin-top: 28px;
   justify-content: flex-end;
 }

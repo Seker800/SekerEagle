@@ -257,7 +257,9 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^文件完全相同/ }));
     fireEvent.click(await screen.findByRole('checkbox', { name: '保留 two' }));
     fireEvent.click(screen.getByRole('button', { name: '按保留标记清理全部筛选结果' }));
-    expect(within(screen.getByRole('alertdialog')).getByText('保留 2 项，清理 1 项')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('alertdialog')).getByText('保留 2 项，清理 1 项'),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await waitFor(() =>
       expect(mocks.cleanup).toHaveBeenCalledWith(

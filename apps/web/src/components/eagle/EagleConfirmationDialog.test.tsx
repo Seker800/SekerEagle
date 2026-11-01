@@ -71,7 +71,14 @@ it('keeps irreversible empty-trash wording and delegates the decision without ad
 });
 
 it('keeps focus inside the confirmation when submission disables the focused action', () => {
-  const show = (pending: boolean) => <EagleConfirmationDialog title="Confirm" description="Operation details" onCancel={() => {}} actions={<button disabled={pending}>Submit</button>} />;
+  const show = (pending: boolean) => (
+    <EagleConfirmationDialog
+      title="Confirm"
+      description="Operation details"
+      onCancel={() => {}}
+      actions={<button disabled={pending}>Submit</button>}
+    />
+  );
   const view = render(show(false));
   expect(screen.getByRole('button', { name: 'Submit' })).toHaveFocus();
   view.rerender(show(true));

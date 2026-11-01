@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
-import styles from './EagleTrashConfirmation.module.css';
+import styles from './EagleConfirmationDialog.module.css';
 
 /** Native modal focus/escape protocol; callers own the decision, copy and async state. */
 export function EagleConfirmationDialog({
@@ -31,6 +31,11 @@ export function EagleConfirmationDialog({
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active instanceof HTMLButtonElement && active.disabled && dialog.current?.contains(active))
+      dialog.current.focus();
+  });
   return (
     <dialog
       ref={dialog}
