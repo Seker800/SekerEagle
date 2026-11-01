@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 const usage = z.object({ key: z.string(), count: z.number().int().nonnegative() });
+export const memoryPersonCounts = z.array(
+  z.object({ id: z.string(), photos: z.number().int().nonnegative() }).strict(),
+);
 export const memoryStatisticsSummary = z
   .object({
     total: z.number().int().nonnegative(),

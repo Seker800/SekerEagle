@@ -13,7 +13,7 @@ const querySchema = z
       .object({ ownerId: z.string().min(1), libraryMode: z.enum(['MATERIAL', 'PHOTO']) })
       .strict(),
     where: z.record(z.string(), z.unknown()),
-    action: z.enum(['page', 'count', 'statistics']),
+    action: z.enum(['page', 'count', 'statistics', 'peopleCounts']),
     includePrivate: z.boolean().default(false),
     statistics: z
       .object({
@@ -56,16 +56,23 @@ async function body(request: IncomingMessage, maxBytes: number) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+export interface LibraryReadHandlers {
+  statistics?: (
+    index: LibraryMemoryIndex,
+    includePrivate: boolean,
+    query: PhotoStatisticsQueryDto,
+  ) => Promise<Summary>;
+  peopleCounts?: (
+    index: LibraryMemoryIndex,
+    includePrivate: boolean,
+  ) => Array<{ id: string; photos: number }>;
+}
 /** Internal service only; public owner/mode and authentication remain the API's responsibility. */
 export function createLibraryReaderServer(
   store: Pick<LibraryReadStore, 'synchronize'>,
   token: string,
   maxBytes = 2 * 1024 * 1024,
-  statisticsHandler?: (
-    index: LibraryMemoryIndex,
-    includePrivate: boolean,
-    query: PhotoStatisticsQueryDto,
-  ) => Promise<Summary>,
+  handlers: LibraryReadHandlers = {},
 ) {
   if (!token) throw new Error('Library reader service identity is required');
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)
@@ -108,14 +115,22 @@ export function createLibraryReaderServer(
       const revision = index.revision;
       const where = query.where as AssetSearchWhere;
       if (query.action === 'statistics') {
-        if (!statisticsHandler || !query.statistics || query.scope.libraryMode !== 'PHOTO') {
+        if (!handlers.statistics || !query.statistics || query.scope.libraryMode !== 'PHOTO') {
           send(503, { error: 'Reader capability unavailable' });
           return;
         }
         send(200, {
           revision,
-          summary: await statisticsHandler(index, query.includePrivate, query.statistics),
+          summary: await handlers.statistics(index, query.includePrivate, query.statistics),
         });
+        return;
+      }
+      if (query.action === 'peopleCounts') {
+        if (!handlers.peopleCounts || query.scope.libraryMode !== 'PHOTO') {
+          send(503, { error: 'Reader capability unavailable' });
+          return;
+        }
+        send(200, { revision, counts: handlers.peopleCounts(index, query.includePrivate) });
         return;
       }
       send(

@@ -29,7 +29,9 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient();
 const ownerId = randomUUID(),
   other = randomUUID();
-const personId = randomUUID(), unnamedPersonId = randomUUID(), privatePersonId = randomUUID();
+const personId = randomUUID(),
+  unnamedPersonId = randomUUID(),
+  privatePersonId = randomUUID();
 const pool = createLibraryReadPool(process.env.DATABASE_URL);
 const store = new LibraryReadStore(pool);
 const scope = { ownerId, libraryMode: 'PHOTO' };
@@ -75,15 +77,38 @@ before(async () => {
       capturedLocal: i % 7 ? `2026-11-${String(i + 1).padStart(2, '0')}T08:00:00` : null,
     })),
   });
-  await db.eaglePhotoPerson.createMany({ data: [
-    { id: personId, name: 'Alpha', marksAssetsPrivate: false },
-    { id: unnamedPersonId, name: null, marksAssetsPrivate: false },
-    { id: privatePersonId, name: 'Private', marksAssetsPrivate: true },
-  ].map((person) => ({ ...person, ...scope, prototype: [1, ...Array(127).fill(0)], modelVersion: 'fixture' })) });
-  await db.eaglePhotoFace.createMany({ data: [
-    [personId, 1, 0], [personId, 1, 0], [personId, 0, 0],
-    [unnamedPersonId, 2, 0], [unnamedPersonId, 3, 0], [unnamedPersonId, 4, 1],
-  ].map(([personId, at, assetRevision]) => ({ ...scope, id: randomUUID(), personId, assetId: `${ownerId}-${at}`, assetRevision, modelVersion: 'fixture', box: [0, 0, 10, 10], embedding: [1, ...Array(127).fill(0)], confidence: 0.9 })) });
+  await db.eaglePhotoPerson.createMany({
+    data: [
+      { id: personId, name: 'Alpha', marksAssetsPrivate: false },
+      { id: unnamedPersonId, name: null, marksAssetsPrivate: false },
+      { id: privatePersonId, name: 'Private', marksAssetsPrivate: true },
+    ].map((person) => ({
+      ...person,
+      ...scope,
+      prototype: [1, ...Array(127).fill(0)],
+      modelVersion: 'fixture',
+    })),
+  });
+  await db.eaglePhotoFace.createMany({
+    data: [
+      [personId, 1, 0],
+      [personId, 1, 0],
+      [personId, 0, 0],
+      [unnamedPersonId, 2, 0],
+      [unnamedPersonId, 3, 0],
+      [unnamedPersonId, 4, 1],
+    ].map(([personId, at, assetRevision]) => ({
+      ...scope,
+      id: randomUUID(),
+      personId,
+      assetId: `${ownerId}-${at}`,
+      assetRevision,
+      modelVersion: 'fixture',
+      box: [0, 0, 10, 10],
+      embedding: [1, ...Array(127).fill(0)],
+      confidence: 0.9,
+    })),
+  });
 });
 after(async () => {
   await db.eagleAsset.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
@@ -183,25 +208,56 @@ test('a fresh reader reconstructs the same result after acknowledged logs are pr
 test('activation waits for a pre-existing uncommitted writer instead of losing its update', async () => {
   const id = `${other}-activation`;
   const otherScope = { ownerId: other, libraryMode: 'PHOTO' };
-  await db.eagleAsset.create({ data: { id, ...otherScope, originalName: 'activation.jpg', displayName: 'activation', normalizedDisplayName: 'activation', mimeType: 'image/jpeg', format: 'jpg', byteSize: 1n, rating: 1, originalObjectKey: `synthetic/${id}` } });
+  await db.eagleAsset.create({
+    data: {
+      id,
+      ...otherScope,
+      originalName: 'activation.jpg',
+      displayName: 'activation',
+      normalizedDisplayName: 'activation',
+      mimeType: 'image/jpeg',
+      format: 'jpg',
+      byteSize: 1n,
+      rating: 1,
+      originalObjectKey: `synthetic/${id}`,
+    },
+  });
   let release, written;
-  const commit = new Promise((resolve) => { release = resolve; });
-  const ready = new Promise((resolve) => { written = resolve; });
-  const writer = db.$transaction(async (tx) => {
-    await tx.eagleAsset.update({ where: { id }, data: { rating: 5 } });
-    written(); await commit;
-  }, { timeout: 10000 });
+  const commit = new Promise((resolve) => {
+    release = resolve;
+  });
+  const ready = new Promise((resolve) => {
+    written = resolve;
+  });
+  const writer = db.$transaction(
+    async (tx) => {
+      await tx.eagleAsset.update({ where: { id }, data: { rating: 5 } });
+      written();
+      await commit;
+    },
+    { timeout: 10000 },
+  );
   await ready;
   let completed = false;
-  const loading = new LibraryReadStore(pool).synchronize(otherScope).then((index) => { completed = true; return index; });
+  const loading = new LibraryReadStore(pool).synchronize(otherScope).then((index) => {
+    completed = true;
+    return index;
+  });
   let blocked = false;
   try {
-    for (let i=0;i<100 && !completed;i++) {
-      const [state] = await db.$queryRaw`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='sekereagle-library-reader' AND wait_event_type='Lock') blocked`;
-      if (state.blocked) { blocked=true; break; }
+    for (let i = 0; i < 100 && !completed; i++) {
+      const [state] =
+        await db.$queryRaw`SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE application_name='sekereagle-library-reader' AND wait_event_type='Lock') blocked`;
+      if (state.blocked) {
+        blocked = true;
+        break;
+      }
     }
     assert.equal(blocked, true, 'activation must join the transaction commit ordering');
-  } finally { release(); await writer; }
+  } finally {
+    release();
+    await writer;
+  }
   const index = await loading;
   assert.equal(index.count({ id, rating: 5 }), 1);
 });
@@ -240,13 +296,10 @@ test('shared list reads use the reader and preserve authoritative page filtering
 test('statistics reuse resident daily facts and preserve the original chart SQL for every grain', async () => {
   const oldUrl = process.env.EAGLE_READER_URL,
     oldToken = process.env.EAGLE_READER_TOKEN;
-  const server = createLibraryReaderServer(
-    store,
-    'statistics-reader',
-    2097152,
-    (index, includePrivate, query) =>
+  const server = createLibraryReaderServer(store, 'statistics-reader', 2097152, {
+    statistics: (index, includePrivate, query) =>
       readResidentPhotoStatistics(pool, index, includePrivate, query),
-  );
+  });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const url = `http://127.0.0.1:${server.address().port}`;
@@ -275,24 +328,39 @@ test('statistics reuse resident daily facts and preserve the original chart SQL 
 });
 
 test('people counts reuse resident memberships while original SQL retains names, privacy and ranking', async () => {
-  const oldUrl = process.env.EAGLE_READER_URL, oldToken = process.env.EAGLE_READER_TOKEN;
-  const server = createLibraryReaderServer(store, 'people-reader', 2097152, { peopleCounts: (index, includePrivate) => residentPersonCounts(index, includePrivate) });
-  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const oldUrl = process.env.EAGLE_READER_URL,
+    oldToken = process.env.EAGLE_READER_TOKEN;
+  const server = createLibraryReaderServer(store, 'people-reader', 2097152, {
+    peopleCounts: (index, includePrivate) => residentPersonCounts(index, includePrivate),
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
   const url = `http://127.0.0.1:${server.address().port}`;
   try {
-    for (const includePrivate of [false, true]) for (const view of ['ALL', 'UNNAMED']) {
-      delete process.env.EAGLE_READER_URL;
-      const expected = await db.$transaction((tx) => readPeopleCountPage(tx, ownerId, includePrivate, undefined, view), { isolationLevel: 'RepeatableRead' });
-      process.env.EAGLE_READER_URL=url; process.env.EAGLE_READER_TOKEN='people-reader';
-      const hits = libraryReadMetrics.hits;
-      const actual = await db.$transaction((tx) => readPeopleCountPage(tx, ownerId, includePrivate, undefined, view), { isolationLevel: 'RepeatableRead' });
-      assert.deepEqual(actual, expected);
-      assert.equal(libraryReadMetrics.hits, hits+1);
-    }
+    for (const includePrivate of [false, true])
+      for (const view of ['ALL', 'UNNAMED']) {
+        delete process.env.EAGLE_READER_URL;
+        const expected = await db.$transaction(
+          (tx) => readPeopleCountPage(tx, ownerId, includePrivate, undefined, view),
+          { isolationLevel: 'RepeatableRead' },
+        );
+        process.env.EAGLE_READER_URL = url;
+        process.env.EAGLE_READER_TOKEN = 'people-reader';
+        const hits = libraryReadMetrics.hits;
+        const actual = await db.$transaction(
+          (tx) => readPeopleCountPage(tx, ownerId, includePrivate, undefined, view),
+          { isolationLevel: 'RepeatableRead' },
+        );
+        assert.deepEqual(actual, expected);
+        assert.equal(libraryReadMetrics.hits, hits + 1);
+      }
   } finally {
-    if (oldUrl===undefined) delete process.env.EAGLE_READER_URL; else process.env.EAGLE_READER_URL=oldUrl;
-    if (oldToken===undefined) delete process.env.EAGLE_READER_TOKEN; else process.env.EAGLE_READER_TOKEN=oldToken;
-    server.closeAllConnections(); await new Promise((resolve)=>server.close(resolve));
+    if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
+    else process.env.EAGLE_READER_URL = oldUrl;
+    if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
+    else process.env.EAGLE_READER_TOKEN = oldToken;
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 

@@ -6,6 +6,7 @@ import {
   residentStatisticsDaily,
 } from './photos/photo-statistics-memory';
 import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
+import { residentPersonCounts } from './photos/photo-people-memory';
 
 /** Explicit standalone entry. Importing shared HTTP providers never starts it. */
 export async function startLibraryReader(env = process.env) {
@@ -19,7 +20,11 @@ export async function startLibraryReader(env = process.env) {
     store,
     env.EAGLE_READER_TOKEN,
     Number(env.EAGLE_READER_REQUEST_MAX_BYTES ?? 2097152),
-    (index, includePrivate, query) => readResidentPhotoStatistics(db, index, includePrivate, query),
+    {
+      statistics: (index, includePrivate, query) =>
+        readResidentPhotoStatistics(db, index, includePrivate, query),
+      peopleCounts: residentPersonCounts,
+    },
   );
   let stopping = false;
   const stop = () => {
@@ -75,7 +80,10 @@ function prime(index: LibraryMemoryIndex) {
   for (const date of ['libraryAddedAt', 'chronologicalAt'] as const)
     index.page({}, date, 'desc', 0, 0);
   if (index.libraryMode === 'PHOTO')
-    for (const includePrivate of [false, true]) residentStatisticsDaily(index, includePrivate);
+    for (const includePrivate of [false, true]) {
+      residentStatisticsDaily(index, includePrivate);
+      residentPersonCounts(index, includePrivate);
+    }
 }
 if (require.main === module)
   startLibraryReader().catch(() => {

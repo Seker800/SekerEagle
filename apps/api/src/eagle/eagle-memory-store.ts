@@ -96,7 +96,7 @@ export async function readMemoryAssets(
     true,
   );
   await attach(
-    Prisma.sql`SELECT c."assetId",c."personId",c."isCurrent" FROM "EaglePhotoFace" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${scoped} AND c."isCurrent"`,
+    Prisma.sql`SELECT c."assetId",c."personId",c."isCurrent",c."assetRevision" FROM "EaglePhotoFace" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${scoped} AND c."isCurrent"`,
     'photoFaces',
     true,
   );

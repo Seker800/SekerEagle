@@ -1,5 +1,9 @@
 import type { Prisma } from '@prisma/client';
-import { encodeMemoryQuery, memoryStatisticsSummary } from './eagle-memory-protocol';
+import {
+  encodeMemoryQuery,
+  memoryStatisticsSummary,
+  memoryPersonCounts,
+} from './eagle-memory-protocol';
 import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 
@@ -48,6 +52,7 @@ async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
       count?: unknown;
       revision?: unknown;
       summary?: unknown;
+      counts?: unknown;
     };
   } catch {
     libraryReadMetrics.fallbacks++;
@@ -111,4 +116,17 @@ export async function readMemoryStatistics(
   if (!parsed.success) return null;
   libraryReadMetrics.hits++;
   return parsed.data;
+}
+
+export async function readMemoryPeopleCounts(ownerId: string, includePrivate: boolean) {
+  const result = await request(
+    { ownerId, libraryMode: 'PHOTO' },
+    { action: 'peopleCounts', includePrivate },
+  );
+  if (!result || typeof result.revision !== 'string' || !/^\d+$/.test(result.revision)) return null;
+  const parsed = memoryPersonCounts.safeParse(result.counts);
+  if (!parsed.success || new Set(parsed.data.map((row) => row.id)).size !== parsed.data.length)
+    return null;
+  libraryReadMetrics.hits++;
+  return { revision: result.revision, counts: parsed.data };
 }

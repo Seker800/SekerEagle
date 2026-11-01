@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { readMemoryPeopleCounts, libraryReadMetrics } from '../eagle/eagle-memory-client';
 export async function readPeopleCountPage(
   tx: Prisma.TransactionClient,
   ownerId: string,
@@ -31,10 +32,26 @@ export async function readPeopleCountPage(
       throw new BadRequestException('人物分页游标无效。');
     }
   }
-  // Counts own global ordering; representative selection only touches the selected page.
-  const rows = await tx.$queryRaw<
-    Array<{ id: string; photos: bigint; faceId: string | null; named: boolean }>
-  >`WITH counts AS (
+  const cached = await readMemoryPeopleCounts(ownerId, includePrivate);
+  let resident: Prisma.Sql | undefined;
+  if (cached) {
+    // This first API-transaction read fixes its repeatable-read snapshot. Only use
+    // resident counts if their canonical-data revision is identical to that snapshot.
+    const [state] = await tx.$queryRaw<
+      Array<{ revision: bigint }>
+    >`SELECT revision FROM "EagleLibraryReadState" WHERE "ownerId"=${ownerId} AND "libraryMode"='PHOTO'`;
+    if (state && String(state.revision) === cached.revision) {
+      resident = Prisma.sql`SELECT p.id,(p.name IS NOT NULL) AS named,COALESCE(c.photos,0::bigint) AS photos
+        FROM "EaglePhotoPerson" p
+        LEFT JOIN jsonb_to_recordset(${JSON.stringify(cached.counts)}::jsonb) AS c(id text,photos bigint) ON c.id=p.id
+        WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO'
+          AND (${view === 'ALL'} OR p.name IS NULL) AND (${includePrivate} OR NOT p."marksAssetsPrivate")
+          AND (COALESCE(c.photos,0)>0 OR (${includePrivate} AND p."marksAssetsPrivate"))`;
+    } else libraryReadMetrics.fallbacks++;
+  }
+  const counts =
+    resident ??
+    Prisma.sql`
     SELECT p.id, (p.name IS NOT NULL) AS named, count(DISTINCT a.id) AS photos
     FROM "EaglePhotoPerson" p
     LEFT JOIN "EaglePhotoFace" f ON f."personId"=p.id AND f."ownerId"=p."ownerId"
@@ -46,6 +63,12 @@ export async function readPeopleCountPage(
       AND (${view === 'ALL'} OR p.name IS NULL) AND (${includePrivate} OR NOT p."marksAssetsPrivate")
     GROUP BY p.id
     HAVING count(DISTINCT a.id)>0 OR (${includePrivate} AND p."marksAssetsPrivate")
+`;
+  // Counts own global ordering; representative selection only touches the selected page.
+  const rows = await tx.$queryRaw<
+    Array<{ id: string; photos: bigint; faceId: string | null; named: boolean }>
+  >`WITH counts AS (
+    ${counts}
   ), page AS MATERIALIZED (
     SELECT id,named,photos FROM counts
     WHERE ${!cursor} OR named<${cursor?.named ?? false}
