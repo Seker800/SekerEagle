@@ -66,14 +66,14 @@ export interface LibraryReadHandlers {
   semanticQuery?: <T>(
     index: LibraryMemoryIndex,
     folderIds: string[],
-    read: (context: MemorySearchContext) => T,
+    read: (context: MemorySearchContext, view: LibraryMemoryIndex) => T,
     signal?: AbortSignal,
   ) => Promise<T>;
   smartFolderPage?: (
     index: LibraryMemoryIndex,
     options: ResidentSmartFolderOptions,
     signal?: AbortSignal,
-  ) => Promise<ImageSearchPosition[]>;
+  ) => Promise<{ revision: string; positions: ImageSearchPosition[] }>;
   statistics?: (
     index: LibraryMemoryIndex,
     includePrivate: boolean,
@@ -142,16 +142,19 @@ export function createLibraryReaderServer(
           return;
         }
         const options = { ...query.colorPage, where };
-        const read = (context?: MemorySearchContext) => residentColorPage(index, options, context);
+        const read = (context?: MemorySearchContext, view = index) => ({
+          revision: view.revision,
+          positions: residentColorPage(view, options, context),
+        });
         const folders = semanticFolderIds(where);
         if (folders.length && !handlers.semanticQuery)
           throw new Error('Semantic capability unavailable');
-        send(200, {
-          revision,
-          positions: folders.length
+        send(
+          200,
+          folders.length
             ? await handlers.semanticQuery!(index, folders, read, cancellation.signal)
             : read(),
-        });
+        );
         return;
       }
       if (query.action === 'smartFolderPage') {
@@ -159,14 +162,10 @@ export function createLibraryReaderServer(
           send(503, { error: 'Reader capability unavailable' });
           return;
         }
-        send(200, {
-          revision,
-          positions: await handlers.smartFolderPage(
-            index,
-            { ...query.semantic, where },
-            cancellation.signal,
-          ),
-        });
+        send(
+          200,
+          await handlers.smartFolderPage(index, { ...query.semantic, where }, cancellation.signal),
+        );
         return;
       }
       if (query.action === 'facets') {
@@ -196,12 +195,12 @@ export function createLibraryReaderServer(
         send(200, { revision, counts: handlers.peopleCounts(index, query.includePrivate) });
         return;
       }
-      const read = (context?: MemorySearchContext) =>
+      const read = (context?: MemorySearchContext, view = index) =>
         query.action === 'count'
-          ? { revision: index.revision, count: index.count(where, context) }
+          ? { revision: view.revision, count: view.count(where, context) }
           : {
-              revision: index.revision,
-              ids: index.page(where, query.date, query.direction, query.take, query.skip, context),
+              revision: view.revision,
+              ids: view.page(where, query.date, query.direction, query.take, query.skip, context),
             };
       const folders = semanticFolderIds(where);
       if (folders.length && !handlers.semanticQuery)

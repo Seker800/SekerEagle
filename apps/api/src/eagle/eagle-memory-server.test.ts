@@ -100,7 +100,7 @@ test('semantic reader dispatches one complete page without exposing private serv
       smartFolderPage: async (_index, options) => {
         calls++;
         assert.deepEqual(options.folderIds, ['folder']);
-        return positions;
+        return { revision: index.revision, positions };
       },
     },
   );

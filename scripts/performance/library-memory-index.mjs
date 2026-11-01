@@ -84,6 +84,7 @@ const loadAndSortMs = performance.now() - started;
 globalThis.gc?.();
 const cases = {
   firstPage: { format: 'jpg' },
+  noCameraSnapshotMatch: { photoMetadata: { is: { cameraModel: 'nonexistent' } } },
   noCameraMatch: { photoMetadata: { is: { cameraModel: 'nonexistent' } } },
   noColorMatch: { colorMatch: '#ff0000' },
   noTagMatch: { manualTagLinks: { some: { tagId: 'nonexistent' } } },
@@ -94,7 +95,15 @@ for (const [name, where] of Object.entries(cases)) {
   const times = [];
   for (let i = 0; i < 110; i++) {
     const begin = performance.now();
-    const pages = indexes.map((index) => index.page(where, 'chronologicalAt', 'desc', 41, 0));
+    const pages = indexes.map((index) =>
+      (name === 'noCameraSnapshotMatch' ? index.snapshot() : index).page(
+        where,
+        'chronologicalAt',
+        'desc',
+        41,
+        0,
+      ),
+    );
     if (name.startsWith('no')) assert.ok(pages.every((page) => page.length === 0));
     if (i >= 10) times.push(performance.now() - begin);
   }

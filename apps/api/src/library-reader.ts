@@ -39,15 +39,15 @@ export async function startLibraryReader(env = process.env) {
       facets: (index, privateVisible) => readResidentPhotoFacets(db, index, privateVisible),
       semanticQuery: (index, ids, read, signal) =>
         withResidentSemanticGraph(
-          db,
+          store,
           index,
           ids,
-          (graph) => read(graph.context),
+          (graph, view) => read(graph.context, view),
           undefined,
           signal,
         ),
       smartFolderPage: (index, options, signal) =>
-        readResidentSmartFolderPage(db, index, options, undefined, signal),
+        readResidentSmartFolderPage(store, index, options, undefined, signal),
     },
   );
   let stopping = false;

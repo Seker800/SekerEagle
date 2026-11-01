@@ -560,15 +560,15 @@ test('semantic resident page preserves real SQL scores, additional filters and v
           undefined,
           where,
         );
-        const actual = await readResidentSmartFolderPage(pool, index, { ...options, after });
-        assert.deepEqual(actual, expected);
+        const actual = await readResidentSmartFolderPage(store, index, { ...options, after });
+        assert.deepEqual(actual.positions, expected);
         if (expected.length <= 3) break;
         after = expected[2];
       } while (after);
-      await assert.rejects(readResidentSmartFolderPage(pool, index, options, 1), /workspace/);
+      await assert.rejects(readResidentSmartFolderPage(store, index, options, 1), /workspace/);
       await db.eagleAsset.update({ where: { id: `${ownerId}-39` }, data: { rating: 2 } });
-      const laggedCacheRead = await readResidentSmartFolderPage(pool, index, options);
-      assert.ok(Array.isArray(laggedCacheRead));
+      const laggedCacheRead = await readResidentSmartFolderPage(store, index, options);
+      assert.ok(Array.isArray(laggedCacheRead.positions));
       const beforePublication = await rankSmartFolderMatches(
         db,
         scope,
@@ -582,6 +582,7 @@ test('semantic resident page preserves real SQL scores, additional filters and v
       );
       let published = false;
       const overlappingPool = {
+        query: (...args) => pool.query(...args),
         connect: async () => {
           const connection = await pool.connect();
           return {
@@ -591,7 +592,7 @@ test('semantic resident page preserves real SQL scores, additional filters and v
                 published = true;
                 await db.eagleAsset.update({
                   where: { id: `${ownerId}-39` },
-                  data: { rating: includePrivate ? 1 : 0 },
+                  data: { rating: includePrivate ? 1 : 3 },
                 });
                 await store.synchronize(scope);
               }
@@ -602,15 +603,21 @@ test('semantic resident page preserves real SQL scores, additional filters and v
         },
       };
       assert.deepEqual(
-        await readResidentSmartFolderPage(overlappingPool, index, options),
+        (
+          await readResidentSmartFolderPage(
+            new LibraryReadStore(overlappingPool, photoStatisticsFactFieldsSql()),
+            index,
+            options,
+          )
+        ).positions,
         beforePublication,
       );
       assert.ok(published);
 
       const server = createLibraryReaderServer(store, 'semantic-reader', 2097152, {
-        smartFolderPage: (index, options) => readResidentSmartFolderPage(pool, index, options),
+        smartFolderPage: (index, options) => readResidentSmartFolderPage(store, index, options),
         semanticQuery: (index, ids, read) =>
-          withResidentSemanticGraph(pool, index, ids, (graph, view) => read(graph.context, view)),
+          withResidentSemanticGraph(store, index, ids, (graph, view) => read(graph.context, view)),
       });
       server.listen(0, '127.0.0.1');
       await once(server, 'listening');

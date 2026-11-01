@@ -19,7 +19,7 @@ export const memoryDateTime = (value: unknown): number =>
 export class LibraryMemoryIndex {
   revision = '0';
   private rows = new Map<string, MemoryAsset>();
-  private ordered = new Map<MemoryDateField, MemoryAsset[]>();
+  private ordered = new Map<MemoryDateField, string[]>();
   private derived = new Map<string, { dependencies: readonly string[]; value: unknown }>();
   constructor(
     readonly ownerId: string,
@@ -78,7 +78,7 @@ export class LibraryMemoryIndex {
           memoryDateTime(previous.chronologicalAt) !== memoryDateTime(row.chronologicalAt)
         )
           reorder = true;
-        Object.assign(previous, row);
+        this.rows.set(row.id as string, row);
       } else {
         this.rows.set(row.id as string, row);
         reorder = true;
@@ -86,6 +86,18 @@ export class LibraryMemoryIndex {
     }
     this.revision = revision;
     if (reorder) this.ordered.clear();
+  }
+  get size() {
+    return this.rows.size;
+  }
+  /** Copy the reference table; published rows and date-order arrays are never mutated. */
+  snapshot(): LibraryMemoryIndex {
+    const view = new LibraryMemoryIndex(this.ownerId, this.libraryMode);
+    view.revision = this.revision;
+    view.rows = new Map(this.rows);
+    view.ordered = new Map(this.ordered);
+    view.derived = new Map(this.derived);
+    return view;
   }
   private predicate(where: AssetSearchWhere, context?: MemorySearchContext) {
     return compileMemorySearchPredicate(
@@ -111,15 +123,17 @@ export class LibraryMemoryIndex {
     const match = this.predicate(where, context);
     let rows = this.ordered.get(date);
     if (!rows) {
-      rows = [...this.rows.values()].sort((a, b) => {
-        const diff = memoryDateTime(b[date]) - memoryDateTime(a[date]);
-        return diff || (String(a.id) < String(b.id) ? 1 : String(a.id) > String(b.id) ? -1 : 0);
-      });
+      rows = [...this.rows.values()]
+        .sort((a, b) => {
+          const diff = memoryDateTime(b[date]) - memoryDateTime(a[date]);
+          return diff || (String(a.id) < String(b.id) ? 1 : String(a.id) > String(b.id) ? -1 : 0);
+        })
+        .map((row) => row.id as string);
       this.ordered.set(date, rows);
     }
     const result: string[] = [];
     for (let i = 0; i < rows.length && result.length < take; i++) {
-      const row = rows[direction === 'desc' ? i : rows.length - 1 - i]!;
+      const row = this.rows.get(rows[direction === 'desc' ? i : rows.length - 1 - i]!)!;
       if (!match(row)) continue;
       if (skip) {
         skip--;

@@ -13,12 +13,18 @@ async function execute<T extends MemoryAsset>(
   const result = await connection.query<T>(sql.text, sql.values);
   return result.rows;
 }
+function readerBudget(name: string, fallback: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw new Error(`Invalid reader resource budget: ${name}`);
+  return value;
+}
 export const createLibraryReadPool = (connectionString: string) =>
   new Pool({
     connectionString,
-    max: 2,
+    max: readerBudget('EAGLE_READER_DATABASE_CONNECTIONS', 2),
     options: '-c timezone=UTC',
-    connectionTimeoutMillis: 3000,
+    connectionTimeoutMillis: readerBudget('EAGLE_READER_CONNECT_TIMEOUT_MS', 3000),
     application_name: 'sekereagle-library-reader',
   });
 
@@ -126,6 +132,49 @@ export async function readMemoryAssets(
   return assets;
 }
 
+/** One database snapshot defines both resident facts and request-local semantic reads. */
+async function readMemorySnapshot(
+  connection: Pick<PoolClient, 'query'>,
+  scope: LibraryIdentity,
+  latest: () => LibraryMemoryIndex | undefined,
+  metadataFactFields?: Prisma.Sql,
+): Promise<LibraryMemoryIndex> {
+  const scoped = Prisma.sql`"ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"`;
+  const [state] = await execute<{ revision: string; enabled: boolean }>(
+    connection,
+    Prisma.sql`SELECT revision,enabled FROM "EagleLibraryReadState" WHERE ${scoped}`,
+  );
+  if (!state?.enabled) throw new Error('Library read state unavailable');
+  const revision = String(state.revision);
+  const cached = latest();
+  const current =
+    cached && BigInt(cached.revision) <= BigInt(revision) ? cached.snapshot() : undefined;
+  if (current?.revision === revision) return current;
+  const changes = current
+    ? await execute<{ revision: string; rebuild: boolean; assetIds: string[] }>(
+        connection,
+        Prisma.sql`SELECT revision,rebuild,"assetIds" FROM "EagleLibraryReadChange" WHERE ${scoped}
+      AND revision>${BigInt(current.revision)} AND revision<=${BigInt(revision)} ORDER BY revision`,
+      )
+    : [];
+  const complete =
+    current &&
+    changes.length > 0 &&
+    BigInt(changes[0]!.revision) === BigInt(current.revision) + 1n &&
+    BigInt(changes.at(-1)!.revision) === BigInt(revision) &&
+    changes.every(
+      (change, at) =>
+        at === 0 || BigInt(change.revision) === BigInt(changes[at - 1]!.revision) + 1n,
+    );
+  const rebuild = !complete || changes.some((change) => change.rebuild);
+  const ids = rebuild ? undefined : [...new Set(changes.flatMap((change) => change.assetIds))];
+  const rows = await readMemoryAssets(connection, scope, ids, metadataFactFields);
+  const view = rebuild ? new LibraryMemoryIndex(scope.ownerId, scope.libraryMode) : current;
+  if (ids) view.update(revision, ids, rows);
+  else view.replace(revision, rows);
+  return view;
+}
+
 /** One independent reader owns its resident scopes. No API lifecycle starts this store. */
 export class LibraryReadStore {
   private readonly indexes = new Map<string, LibraryMemoryIndex>();
@@ -168,54 +217,54 @@ export class LibraryReadStore {
       );
     }
     if (current && current.revision === String(state?.revision ?? 0)) return current;
+    const index = await this.readSnapshot(scope, (_connection, view) => view);
+    return this.indexes.get(key) ?? index;
+  }
+  /** A caller's database work and any necessary metadata catch-up share this transaction. */
+  async readSnapshot<T>(
+    scope: LibraryIdentity,
+    read: (connection: Pick<PoolClient, 'query'>, view: LibraryMemoryIndex) => T | Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    signal?.throwIfAborted();
+    const key = JSON.stringify([scope.ownerId, scope.libraryMode]);
     const connection = await this.db.connect();
-    let next: { revision: string; ids: string[] | undefined; rows: MemoryAsset[] };
+    let inTransaction = false;
+    let view: LibraryMemoryIndex;
+    let result: T;
     try {
+      signal?.throwIfAborted();
       await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      await connection.query("SET LOCAL statement_timeout='60000ms'");
-      const [snapshot] = await execute<{ revision: string }>(
+      inTransaction = true;
+      const timeoutMs = readerBudget('EAGLE_READER_DATABASE_TIMEOUT_MS', 60000);
+      await connection.query(`SET LOCAL statement_timeout='${timeoutMs}ms'`);
+      view = await readMemorySnapshot(
         connection,
-        Prisma.sql`SELECT revision FROM "EagleLibraryReadState" WHERE ${scoped}`,
+        scope,
+        () => this.indexes.get(key),
+        this.metadataFactFields,
       );
-      const revision = String(snapshot?.revision ?? 0);
-      const changes = current
-        ? await execute<{ revision: string; rebuild: boolean; assetIds: string[] }>(
-            connection,
-            Prisma.sql`SELECT revision,rebuild,"assetIds" FROM "EagleLibraryReadChange" WHERE ${scoped} AND revision>${BigInt(current.revision)} ORDER BY revision`,
-          )
-        : [];
-      const complete =
-        current &&
-        changes.length > 0 &&
-        BigInt(changes[0]!.revision) === BigInt(current.revision) + 1n &&
-        BigInt(changes.at(-1)!.revision) === BigInt(revision) &&
-        changes.every(
-          (change, i) =>
-            i === 0 || BigInt(change.revision) === BigInt(changes[i - 1]!.revision) + 1n,
-        );
-      const rebuild = !complete || changes.some((change) => change.rebuild);
-      const ids = rebuild ? undefined : [...new Set(changes.flatMap((change) => change.assetIds))];
-      next = {
-        revision,
-        ids,
-        rows: await readMemoryAssets(connection, scope, ids, this.metadataFactFields),
-      };
+      signal?.throwIfAborted();
+      result = await read(connection, view);
       await connection.query('COMMIT');
+      inTransaction = false;
     } catch (error) {
-      await connection.query('ROLLBACK');
+      if (inTransaction) await connection.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally {
       connection.release();
     }
-    const index = current ?? new LibraryMemoryIndex(scope.ownerId, scope.libraryMode);
-    if (next.ids) index.update(next.revision, next.ids, next.rows);
-    else index.replace(next.revision, next.rows);
-    this.indexes.set(key, index);
-    // Acknowledge only after publication. A restart or a missing journal reconstructs.
-    await execute(
-      this.db,
-      Prisma.sql`DELETE FROM "EagleLibraryReadChange" WHERE ${scoped} AND revision<=${BigInt(index.revision)}`,
-    );
-    return index;
+    const current = this.indexes.get(key);
+    if (!current || BigInt(current.revision) < BigInt(view.revision)) {
+      this.indexes.set(key, view);
+      // Publication is monotonic even if another foreground snapshot finishes first.
+      await execute(
+        this.db,
+        Prisma.sql`DELETE FROM "EagleLibraryReadChange"
+        WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"
+          AND revision<=${BigInt(view.revision)}`,
+      );
+    }
+    return result;
   }
 }
