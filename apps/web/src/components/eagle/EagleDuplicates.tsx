@@ -127,9 +127,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     !['sameVisual', 'sameName', 'sameCapturedAt', 'sameDimensions', 'sameFormat', 'sameBytes'].some(
       (key) => filters[key as keyof DuplicateFilters] === 'true',
     );
-  const narrowed = Object.entries(filters).some(
-    ([key, value]) => key !== 'protectEdits' && key !== 'sameVisual' && !!value,
-  );
+  const narrowed =
+    kind !== 'EXACT' &&
+    Object.entries(filters).some(
+      ([key, value]) => key !== 'protectEdits' && key !== 'sameVisual' && !!value,
+    );
   const data = results.data?.pages[0],
     allGroups = results.data?.pages.flatMap((p) => p.groups) ?? [];
   const groupBySignature = new Map(allGroups.map((group) => [group.signature, group]));
@@ -441,7 +443,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       {confirm && (
         <EagleConfirmationDialog
           className={styles.confirm}
-          title={t('清理 {{count}} 组重复副本', { count: confirm.count })}
+          title={
+            kind === 'EXACT'
+              ? t('清理 {{count}} 组重复副本', { count: confirm.count })
+              : t('清理 {{count}} 组匹配文件', { count: confirm.count })
+          }
           description={
             <>
               <p>
@@ -454,11 +460,13 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                 <p>{t('所选条件不保证内容完全一致，请确认已比较需要清理的文件。')}</p>
               )}
               <p>{t('按当前保留标记保留照片；未调整的组保留推荐项，其余移入回收站，可以恢复。')}</p>
-              <p>
-                {t(
-                  '完全重复项的独有标签和最高评分会合并到保留项。说明、来源和编辑关系仍保存在原项目中，请先检查需要保留的信息。',
-                )}
-              </p>
+              {kind === 'EXACT' && (
+                <p>
+                  {t(
+                    '完全重复项的独有标签和最高评分会合并到保留项。说明、来源和编辑关系仍保存在原项目中，请先检查需要保留的信息。',
+                  )}
+                </p>
+              )}
               <p>{t('现在不会释放磁盘空间，清空回收站后才会释放实际占用。')}</p>
             </>
           }
@@ -539,15 +547,17 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           {data && (
             <div className={styles.coverage}>
               <strong>{t('{{count}} 组待检查', { count: data.totalGroups })}</strong>
-              <span>
-                {t('视觉检查 {{done}} / {{total}} 张', {
-                  done: data.coverage.indexed.toLocaleString(),
-                  total: data.coverage.total.toLocaleString(),
-                })}
-                {data.coverage.waiting > 0
-                  ? ` · ${t('{{count}} 张等待预览', { count: data.coverage.waiting })}`
-                  : ''}
-              </span>
+              {needsVisual && (
+                <span>
+                  {t('视觉检查 {{done}} / {{total}} 张', {
+                    done: data.coverage.indexed.toLocaleString(),
+                    total: data.coverage.total.toLocaleString(),
+                  })}
+                  {data.coverage.waiting > 0
+                    ? ` · ${t('{{count}} 张等待预览', { count: data.coverage.waiting })}`
+                    : ''}
+                </span>
+              )}
               <details className={styles.help}>
                 <summary>{t('查重依据与空间说明')}</summary>
                 <p>
@@ -825,9 +835,10 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
             !active.some((op) => op.kind === 'DUPLICATE_CLEANUP') &&
             !pendingGlobal.length && (
               <div className={styles.empty}>
-                {!scanning &&
+                {!noConditions &&
+                  !scanning &&
                   !scan.isPending &&
-                  !data.outdatedGroups &&
+                  !(needsVisual && data.outdatedGroups) &&
                   !(
                     needsVisual &&
                     data.originalCheckAttempted &&
@@ -841,7 +852,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       ? t('正在检查查重结果…')
                       : narrowed
                         ? t('没有符合当前筛选的重复组')
-                        : data.outdatedGroups
+                        : needsVisual && data.outdatedGroups
                           ? t('查重规则尚未更新')
                           : showIgnored
                             ? t('没有已忽略的结果')
@@ -864,11 +875,12 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       ? t('后台检查完成后会自动显示结果，可以继续浏览。')
                       : narrowed
                         ? t('可以放宽筛选或还原默认条件，无需重新扫描。')
-                        : data.outdatedGroups
+                        : needsVisual && data.outdatedGroups
                           ? data.originalCheckAttempted
                             ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
                             : t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
-                          : data.originalCheckAttempted &&
+                          : needsVisual &&
+                              data.originalCheckAttempted &&
                               !data.originalCheckCompleted &&
                               kind !== 'EXACT'
                             ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
@@ -968,7 +980,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               >
                 {extraKeepCount() > 0
                   ? t('按保留标记清理全部筛选结果')
-                  : t('每组保留一份，清理全部重复副本')}
+                  : t('每组保留一份，清理其他项')}
               </button>
             )}
           </div>

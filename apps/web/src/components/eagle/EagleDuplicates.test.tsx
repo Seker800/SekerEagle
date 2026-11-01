@@ -88,7 +88,7 @@ describe('duplicate cleanup review', () => {
     mocks.cleanup.mockImplementation(() => new Promise(() => {}));
     const onClose = vi.fn();
     render(onClose);
-    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理其他项' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await screen.findByRole('button', { name: '正在提交…' });
     fireEvent(
@@ -101,14 +101,14 @@ describe('duplicate cleanup review', () => {
 
   it('opens confirmation as a native modal with its own description and restores the initiating action', async () => {
     render();
-    const action = await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
+    const action = await screen.findByRole('button', { name: '每组保留一份，清理其他项' });
     action.focus();
     fireEvent.click(action);
     const confirmation = screen.getByRole('alertdialog');
     expect(confirmation.tagName).toBe('DIALOG');
     expect(confirmation).toHaveAttribute('aria-describedby');
     fireEvent.click(screen.getByRole('button', { name: '返回检查' }));
-    expect(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: '每组保留一份，清理其他项' })).toHaveFocus();
   });
 
   it('shows direct comparison cards and binds all-results cleanup to the checked filters', async () => {
@@ -147,7 +147,7 @@ describe('duplicate cleanup review', () => {
       ),
     );
     fireEvent.click(await screen.findByRole('button', { name: '保留 two' }));
-    fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理其他项' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await waitFor(() =>
       expect(mocks.cleanup).toHaveBeenCalledWith(
@@ -389,7 +389,7 @@ describe('duplicate cleanup review', () => {
       groups: [{ ...group, kind: 'SIMILAR', count: 5 }],
     });
     render();
-    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理其他项' }));
     expect(screen.getByText('保留 1217 项，清理 2163 项')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await waitFor(() =>
@@ -548,15 +548,15 @@ describe('duplicate cleanup review', () => {
   });
   it('shows incomplete indexing honestly and starts a durable incremental scan', async () => {
     render();
-    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
+    await screen.findByRole('button', { name: '每组保留一份，清理其他项' });
     expect(screen.getByText(/100.*60,000/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
     await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
   });
   it('requires a concrete review before cleaning all exact duplicates and keeps the same retry identity', async () => {
     render();
-    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
-    fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    await screen.findByRole('button', { name: '每组保留一份，清理其他项' });
+    fireEvent.click(screen.getByRole('button', { name: '每组保留一份，清理其他项' }));
     expect(mocks.cleanup).not.toHaveBeenCalled();
     expect(screen.getAllByText(/回收站/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
@@ -572,7 +572,7 @@ describe('duplicate cleanup review', () => {
   });
   it('keeps a submitted all-exact cleanup hidden across closing and reopening the review', async () => {
     const view = render();
-    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理其他项' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -580,14 +580,14 @@ describe('duplicate cleanup review', () => {
     );
     view.hide();
     view.reopen();
-    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
+    await screen.findByRole('button', { name: '每组保留一份，清理其他项' });
     expect(screen.queryByRole('button', { name: /^文件完全相同/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '每组保留一份，清理全部重复副本' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '每组保留一份，清理其他项' })).toBeDisabled();
   });
   it('retains an uncertain all-exact intent and confirms the same operation after reopening', async () => {
     mocks.cleanup.mockRejectedValueOnce(new Error('连接中断'));
     const view = render();
-    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理其他项' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     await screen.findByRole('button', { name: '重试确认' });
     const intent = mocks.cleanup.mock.calls[0][0];
@@ -649,7 +649,7 @@ describe('duplicate cleanup review', () => {
   it('retries a failed scan with the same command identity', async () => {
     mocks.scan.mockRejectedValueOnce(new Error('检查连接失败'));
     render();
-    await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' });
+    await screen.findByRole('button', { name: '每组保留一份，清理其他项' });
     fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
     await screen.findByRole('alert');
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
@@ -659,7 +659,7 @@ describe('duplicate cleanup review', () => {
   it('a failed cleanup keeps the review and reuses its id on retry', async () => {
     mocks.cleanup.mockRejectedValueOnce(new Error('清理连接失败'));
     render();
-    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理全部重复副本' }));
+    fireEvent.click(await screen.findByRole('button', { name: '每组保留一份，清理其他项' }));
     fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('清理连接失败');
     fireEvent.click(screen.getByRole('button', { name: '重试确认' }));

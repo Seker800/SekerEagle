@@ -1,4 +1,8 @@
 export const enUS = {
+  '每组保留一份，清理其他项': 'Keep one per group and clean up the others',
+  '清理 {{count}} 组匹配文件': 'Clean up {{count}} matching groups',
+  改为保留这张: 'Keep this one instead',
+
   '所选条件不保证内容完全一致，请确认已比较需要清理的文件。':
     'Matching conditions do not prove identical content. Compare the selected files before cleanup.',
   按条件查找: 'Find by conditions',
