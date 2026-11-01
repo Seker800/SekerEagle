@@ -954,6 +954,7 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(screen.getByRole('button', { name: /^完全重复/ }));
     await waitFor(() => expect(mocks.list.mock.calls.at(-1)?.[0].kind).toBe('EXACT'));
     expect(screen.queryByRole('checkbox', { name: '尺寸相同' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '没有完全重复的文件' })).toBeVisible();
     expect(mocks.scan).not.toHaveBeenCalled();
   });
   it('rebuilds an outdated algorithm projection once on opening through the durable scan API', async () => {
