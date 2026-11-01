@@ -58,7 +58,7 @@ test('media job transition batches amortize triggers and preserve scoped evidenc
       assert.equal(transitionCalls, 1, 'one set event insert per job statement, rather than one SPI insert per row');
       await barrier();
       assert.equal(notifications.length - before, 1);
-      assert.equal(notifications.at(-1), 'EagleMediaJob');
+      assert.equal(notifications.at(-1), 'media-ready:NAS');
       const scope = { ownerId, libraryMode: mode };
       const jobs = await db.eagleAssetProcessingJob.findMany({ where: scope });
       const inserted = await db.eagleMediaJobEvent.findMany({ where: scope });
@@ -96,9 +96,19 @@ test('media job transition batches amortize triggers and preserve scoped evidenc
       await barrier();
       assert.equal(notifications.length, afterRecovery + 1, 'explicit status updates retain the existing wakeup contract even when unchanged');
       assert.equal(await db.eagleMediaJobEvent.count({ where: scope }), 96, 'same status and lease append no redundant event');
-      await db.eagleAssetProcessingJob.createMany({ data: [] });
+      await db.$executeRaw`INSERT INTO "EagleMediaJob" (id,"ownerId","libraryMode","assetId",kind,lane,"assetRevision","updatedAt")
+        SELECT gen_random_uuid()::text,${ownerId},${mode}::"LibraryMode",id,'PURGE_ASSET'::"EagleMediaJobKind",'MAINTENANCE'::"EagleProcessingLane",0,CURRENT_TIMESTAMP
+        FROM "EagleAsset" WHERE FALSE`;
+
       await barrier();
       assert.equal(notifications.length, afterRecovery + 1, 'empty inserts do not wake workers');
+      const mixedStart = notifications.length;
+      await db.eagleAssetProcessingJob.createMany({ data: ['GENERATE_EMBEDDING', 'GENERATE_THUMBNAIL'].map((kind) => ({
+        id: randomUUID(), ownerId, libraryMode: mode, assetId: jobs[0].assetId, kind, lane: 'BACKGROUND', assetRevision: 0,
+      })) });
+      await barrier();
+      assert.deepEqual(notifications.slice(mixedStart).sort(), ['media-ready:EMBEDDING', 'media-ready:NAS'], 'mixed inserts wake each resource once without a generic broadcast');
+
     }
   } finally {
     await db.eagleAsset.deleteMany({ where: { ownerId } });
