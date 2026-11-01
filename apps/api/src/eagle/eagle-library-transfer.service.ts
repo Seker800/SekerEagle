@@ -11,6 +11,7 @@ import {
   copyTransferFacts,
   transferFactIncludes,
   resolveTransferTagMappings,
+  flushTransferTagAssignments,
   type TransferTagMappings,
 } from './eagle-transfer-facts';
 import {
@@ -66,7 +67,11 @@ export interface TransferRequest {
 }
 type PublishTransfer = (
   tx: Prisma.TransactionClient,
-  context: { privacyLocked: boolean; tagMappings?: TransferTagMappings },
+  context: {
+    privacyLocked: boolean;
+    tagMappings?: TransferTagMappings;
+    afterPublish: Array<() => Promise<void>>;
+  },
 ) => Promise<LibraryTransferResult>;
 
 @Injectable()
@@ -164,7 +169,7 @@ export class EagleLibraryTransferService {
           .map((request) => request.input.operationId)
           .sort();
         await tx.$queryRaw`SELECT id FROM "EagleLibraryTransfer" WHERE "ownerId"=${ownerId} AND "sourceMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-        const context = { privacyLocked: false };
+        const context: Parameters<PublishTransfer>[1] = { privacyLocked: false, afterPublish: [] };
         const results: Array<PromiseSettledResult<LibraryTransferResult>> = [];
         for (const result of prepared)
           results.push(
@@ -178,6 +183,8 @@ export class EagleLibraryTransferService {
                       : result.value,
                 },
           );
+        if (context.tagMappings) await flushTransferTagAssignments(context.tagMappings);
+        for (const afterPublish of context.afterPublish) await afterPublish();
         return results;
       },
       { timeout: 30000 },
@@ -733,7 +740,7 @@ export class EagleLibraryTransferService {
           ...(handoff ? { plan: JSON.parse(JSON.stringify(items)) as Prisma.InputJsonValue } : {}),
         },
       });
-      await guard?.afterPublish?.(tx);
+      if (guard?.afterPublish) context.afterPublish.push(() => guard.afterPublish!(tx));
       return result;
     };
   }

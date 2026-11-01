@@ -69,6 +69,7 @@ export interface TransferTagMappings {
   readonly targetMode: LibraryMode;
   readonly tags: Map<string, EagleManualTag>;
   readonly groups: Map<string, string>;
+  readonly assetTags: Prisma.EagleAssetManualTagCreateManyInput[];
 }
 
 /** The caller owns this mapping for exactly one publication transaction. */
@@ -79,7 +80,14 @@ export async function resolveTransferTagMappings(
   previous?: TransferTagMappings,
 ): Promise<TransferTagMappings> {
   const { ownerId, targetMode } = scope;
-  const mappings = previous ?? { tx, ownerId, targetMode, tags: new Map(), groups: new Map() };
+  const mappings = previous ?? {
+    tx,
+    ownerId,
+    targetMode,
+    tags: new Map(),
+    groups: new Map(),
+    assetTags: [],
+  };
   if (mappings.tx !== tx || mappings.ownerId !== ownerId || mappings.targetMode !== targetMode)
     throw new Error('Transfer mapping scope mismatch');
   const pending = new Map(
@@ -212,6 +220,16 @@ export async function resolveTransferTagMappings(
   return mappings;
 }
 
+/** Flush after all target assets exist, before publication callbacks and commit. */
+export async function flushTransferTagAssignments(mappings: TransferTagMappings): Promise<void> {
+  for (const { rows } of databaseBatches(
+    mappings.assetTags,
+    DATABASE_STATEMENTS.transferAssetTagInsert,
+  ))
+    await mappings.tx.eagleAssetManualTag.createMany({ data: rows, skipDuplicates: true });
+  mappings.assetTags.length = 0;
+}
+
 async function copyTags(
   tx: Prisma.TransactionClient,
   ownerId: string,
@@ -241,7 +259,10 @@ async function copyTags(
       assignmentProvenance: link.assignmentProvenance,
     };
   });
-  if (links.length) await tx.eagleAssetManualTag.createMany({ data: links, skipDuplicates: true });
+  if (mappings) mappings.assetTags.push(...links);
+  else
+    for (const { rows } of databaseBatches(links, DATABASE_STATEMENTS.transferAssetTagInsert))
+      await tx.eagleAssetManualTag.createMany({ data: rows, skipDuplicates: true });
   // Retired AI tags are existing results, not new model executions or new approval decisions.
   const runs = new Map<string, string>();
   for (const link of source.aiTagLinks ?? []) {
