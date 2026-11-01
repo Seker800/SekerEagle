@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { runTransferWork } from './eagle-transfer-work';
+import { runTransferWork, transferCopyBudget } from './eagle-transfer-work';
 
 test('transfer work overlaps independent copies with a hard limit of four', async () => {
   let active = 0,
@@ -51,4 +51,18 @@ test('a failed copy stops new work and drains in-flight writes before rejecting'
   await runTransferWork([], async () => {
     assert.fail('empty batch ran work');
   });
+});
+
+
+test('nested preparation in both modes shares leaf COPY permits without holding parent permits', async () => {
+  let active = 0, peak = 0;
+  await Promise.all(['MATERIAL', 'PHOTO'].map(() => runTransferWork([0, 1, 2, 3], async () => {
+    await runTransferWork([0, 1, 2, 3, 4], async () => transferCopyBudget.run(async () => {
+      active++; peak = Math.max(peak, active);
+      await new Promise((resolve) => setImmediate(resolve));
+      active--;
+    }));
+  })));
+  assert.equal(peak, 4);
+  assert.equal(active, 0);
 });

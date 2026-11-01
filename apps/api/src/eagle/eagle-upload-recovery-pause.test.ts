@@ -27,7 +27,7 @@ test('NAS local copy can pause automatic HTTP upload recovery without starting i
     else process.env.EAGLE_UPLOAD_RECOVERY_ENABLED = before;
   }
 });
-test('automatic HTTP recovery retains its existing enabled default', () => {
+test('HTTP module lifecycle never starts background recovery', () => {
   const before = process.env.EAGLE_UPLOAD_RECOVERY_ENABLED;
   const service = new EagleUploadRecoveryService(
     {} as never,
@@ -45,7 +45,7 @@ test('automatic HTTP recovery retains its existing enabled default', () => {
   try {
     delete process.env.EAGLE_UPLOAD_RECOVERY_ENABLED;
     service.onModuleInit();
-    assert.equal(calls, 1);
+    assert.equal(calls, 0);
   } finally {
     service.onModuleDestroy();
     if (before === undefined) delete process.env.EAGLE_UPLOAD_RECOVERY_ENABLED;
