@@ -292,3 +292,14 @@ test('a switched model cannot be published by a still-running old worker', async
   );
   assert.deepEqual(f.calls, []);
 });
+
+test('stored identity mismatch is an unavailable cache fact and leaves inference fallback possible', async () => {
+  const calls: string[] = [];
+  const tx = {
+    $queryRaw: async () => [{ id: job.assetId, spaceId: null }],
+    eagleAssetProcessingJob: { updateMany: async () => { calls.push('complete'); return { count: 1 }; } },
+  };
+  assert.equal(await publishStoredEmbedding({ $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never,
+    job, identity, async () => { calls.push('suggest'); }), false);
+  assert.deepEqual(calls, []);
+});
