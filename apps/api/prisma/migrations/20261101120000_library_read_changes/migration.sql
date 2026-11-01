@@ -2,7 +2,7 @@
 -- Scope row locking serializes revisions with commits, unlike a sequence cursor.
 CREATE TABLE "EagleLibraryReadState" (
   "ownerId" text NOT NULL, "libraryMode" "LibraryMode" NOT NULL,
-  revision bigint NOT NULL DEFAULT 0,
+  revision bigint NOT NULL DEFAULT 0, enabled boolean NOT NULL DEFAULT false,
   PRIMARY KEY ("ownerId","libraryMode")
 );
 CREATE TABLE "EagleLibraryReadChange" (
@@ -29,8 +29,11 @@ BEGIN
         ELSE x->>'assetId' END "assetId" FROM (SELECT to_jsonb(c) x FROM changed c) j) r
     GROUP BY r."ownerId",r."libraryMode" ORDER BY r."ownerId",r."libraryMode"
   LOOP
-    INSERT INTO "EagleLibraryReadState" ("ownerId","libraryMode",revision)
-      VALUES (scope."ownerId",scope."libraryMode",1)
+    -- Installing the migration alone must not accumulate an unused journal.
+    IF NOT EXISTS (SELECT 1 FROM "EagleLibraryReadState" s WHERE s."ownerId"=scope."ownerId"
+      AND s."libraryMode"=scope."libraryMode" AND s.enabled) THEN CONTINUE; END IF;
+    INSERT INTO "EagleLibraryReadState" ("ownerId","libraryMode",revision,enabled)
+      VALUES (scope."ownerId",scope."libraryMode",1,true)
       ON CONFLICT ("ownerId","libraryMode") DO UPDATE
       SET revision="EagleLibraryReadState".revision+1 RETURNING revision INTO next_revision;
     INSERT INTO "EagleLibraryReadChange" ("ownerId","libraryMode",revision,"assetIds",rebuild)

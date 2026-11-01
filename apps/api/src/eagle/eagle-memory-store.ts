@@ -111,6 +111,12 @@ export class LibraryReadStore {
   }
   private async load(scope: LibraryIdentity, key: string) {
     const current = this.indexes.get(key);
+    if (!current)
+      await this.db.eagleLibraryReadState.upsert({
+        where: { ownerId_libraryMode: scope },
+        create: { ...scope, enabled: true },
+        update: { enabled: true },
+      });
     const state = await this.db.eagleLibraryReadState.findUnique({
       where: { ownerId_libraryMode: scope },
     });

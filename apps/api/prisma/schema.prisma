@@ -388,6 +388,7 @@ model EagleLibraryReadState {
   ownerId String
   libraryMode LibraryMode
   revision BigInt @default(0)
+  enabled Boolean @default(false)
   changes EagleLibraryReadChange[]
   @@id([ownerId, libraryMode])
 }
