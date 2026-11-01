@@ -47,7 +47,7 @@ const model = (
 // This adapter accepts only predicates produced by our shared filter engine. It is
 // deliberately not a general Prisma query compiler, nor an interpreter for client SQL.
 // New filter fields must pass the database parity contract before entering this surface.
-const models: Readonly<Record<string, Model>> = {
+export const searchPredicateModels: Readonly<Record<string, Model>> = {
   asset: model(
     'EagleAsset',
     'id ownerId libraryMode deletedAt purgeAfter isPrivate format rating width height byteSize durationMs aspectRatio libraryAddedAt chronologicalAt updatedAt normalizedDisplayName originalName mimeType mediaRevision',
@@ -193,7 +193,7 @@ export function compileSearchPredicate(
 ): Prisma.Sql {
   let sequence = 0;
   const visit = (name: string, alias: string, input: unknown, preserveNull = false): Prisma.Sql => {
-    const definition = models[name]!;
+    const definition = searchPredicateModels[name]!;
     const column = (key: string) => Prisma.raw(`${alias}."${key}"`);
     const parts: Prisma.Sql[] = [];
     for (const [key, value] of Object.entries(object(input))) {
@@ -220,7 +220,7 @@ export function compileSearchPredicate(
       } else {
         const link = definition.relations[key];
         if (!link) throw new Error('Unsupported search predicate field');
-        const target = models[link.model]!;
+        const target = searchPredicateModels[link.model]!;
         const next = `search_scope_${++sequence}`;
         const table = Prisma.raw(`"${target.table}" ${next}`);
         const join = Prisma.sql`${Prisma.raw(`${next}."${link.to}"`)}=${column(link.from)}
