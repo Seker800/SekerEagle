@@ -88,6 +88,10 @@ try {
       },
     }));
   assert.ok(space);
+  // The fake endpoint must advertise the same image preparation contract as the real worker.
+  // A fixture mismatch must fail here, never be repaired by per-image model-space rewrites.
+  assert.equal(space.instructionVersion, 'image-retrieval-v1');
+  assert.equal(space.preprocessingVersion, 'preview-webp-v1');
   await db.user.create({
     data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'synthetic-only' },
   });
