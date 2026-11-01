@@ -509,7 +509,8 @@ describe('photo editor interactions', () => {
     fireEvent.click(button);
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('上传分片失败（403）'));
     expect(button).toBeEnabled();
-    fireEvent.click(button);
+    expect(screen.queryByRole('button', { name: '重新加载' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '重试保存' }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1][0]).toBe(save.mock.calls[0][0]);
   });
