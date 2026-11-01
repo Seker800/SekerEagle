@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { once } from 'node:events';
-import { createServer } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readMemoryPage, libraryReadMetrics } from './eagle-memory-client';
 
 test('reader client requires a canonical scope and preserves page size and direction', async () => {
   const oldUrl = process.env.EAGLE_READER_URL,
     oldToken = process.env.EAGLE_READER_TOKEN;
   let calls = 0;
-  const server = createServer(async (request, response) => {
+  const handle = async (request: IncomingMessage, response: ServerResponse) => {
     calls++;
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -19,6 +19,9 @@ test('reader client requires a canonical scope and preserves page size and direc
     assert.equal(body.direction, 'desc');
     response.setHeader('content-type', 'application/json');
     response.end(JSON.stringify({ revision: '1', ids: ['a'] }));
+  };
+  const server = createServer((request, response) => {
+    void handle(request, response);
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');

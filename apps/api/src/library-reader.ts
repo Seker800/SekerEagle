@@ -1,7 +1,11 @@
-import { PrismaClient } from '@prisma/client';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createLibraryReaderServer } from './eagle/eagle-memory-server';
-import { LibraryReadStore } from './eagle/eagle-memory-store';
+import { createLibraryReadPool, LibraryReadStore } from './eagle/eagle-memory-store';
+import {
+  readResidentPhotoStatistics,
+  residentStatisticsDaily,
+} from './photos/photo-statistics-memory';
+import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
 
 /** Explicit standalone entry. Importing shared HTTP providers never starts it. */
 export async function startLibraryReader(env = process.env) {
@@ -9,12 +13,13 @@ export async function startLibraryReader(env = process.env) {
     throw new Error('Reader database and service identity are required');
   const url = new URL(env.DATABASE_URL);
   if (!url.searchParams.has('connection_limit')) url.searchParams.set('connection_limit', '2');
-  const db = new PrismaClient({ datasourceUrl: url.toString() });
+  const db = createLibraryReadPool(url.toString());
   const store = new LibraryReadStore(db);
   const server = createLibraryReaderServer(
     store,
     env.EAGLE_READER_TOKEN,
     Number(env.EAGLE_READER_REQUEST_MAX_BYTES ?? 2097152),
+    (index, includePrivate, query) => readResidentPhotoStatistics(db, index, includePrivate, query),
   );
   let stopping = false;
   const stop = () => {
@@ -34,22 +39,25 @@ export async function startLibraryReader(env = process.env) {
   });
   // Warm known scopes once, then inspect only the tiny enabled state table. No
   // periodic asset discovery, image access, inference or business queue execution.
-  const scopes = await db.eagleLibraryReadState.findMany({
-    select: { ownerId: true, libraryMode: true },
-  });
+  const scopes = (
+    await db.query<{ ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }>(
+      'SELECT "ownerId","libraryMode" FROM "EagleLibraryReadState"',
+    )
+  ).rows;
   try {
     for (const scope of scopes) {
       if (stopping) break;
-      await store.synchronize(scope);
+      prime(await store.synchronize(scope));
     }
     while (!stopping) {
-      for (const scope of await db.eagleLibraryReadState.findMany({
-        where: { enabled: true },
-        select: { ownerId: true, libraryMode: true },
-      })) {
+      for (const scope of (
+        await db.query<{ ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }>(
+          'SELECT "ownerId","libraryMode" FROM "EagleLibraryReadState" WHERE enabled',
+        )
+      ).rows) {
         if (stopping) break;
         try {
-          await store.synchronize(scope);
+          prime(await store.synchronize(scope));
         } catch {
           console.error('Library reader synchronization failed; API retains SQL fallback');
         }
@@ -58,10 +66,16 @@ export async function startLibraryReader(env = process.env) {
     }
   } finally {
     stop();
-    await db.$disconnect();
+    await db.end();
     process.off('SIGTERM', stop);
     process.off('SIGINT', stop);
   }
+}
+function prime(index: LibraryMemoryIndex) {
+  for (const date of ['libraryAddedAt', 'chronologicalAt'] as const)
+    index.page({}, date, 'desc', 0, 0);
+  if (index.libraryMode === 'PHOTO')
+    for (const includePrivate of [false, true]) residentStatisticsDaily(index, includePrivate);
 }
 if (require.main === module)
   startLibraryReader().catch(() => {

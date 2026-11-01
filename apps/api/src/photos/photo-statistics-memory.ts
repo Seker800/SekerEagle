@@ -1,4 +1,9 @@
 import type { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
+import { Prisma } from '@prisma/client';
+import type { Pool } from 'pg';
+import type { PhotoStatisticsQueryDto } from './photo-statistics.dto';
+import type { Summary } from './photo-statistics.service';
+import { photoStatisticsSql } from './photo-statistics-query';
 
 export interface StatisticsDailyFact {
   camera: string;
@@ -37,4 +42,18 @@ export function residentStatisticsDaily(
       return [...daily.values()];
     },
   );
+}
+
+/** Preserve the original grouping/ranking/collation SQL, with only a compact daily source. */
+export async function readResidentPhotoStatistics(
+  pool: Pool,
+  index: LibraryMemoryIndex,
+  includePrivate: boolean,
+  query: PhotoStatisticsQueryDto,
+): Promise<Summary> {
+  const facts = residentStatisticsDaily(index, includePrivate);
+  const source = Prisma.sql`SELECT * FROM jsonb_to_recordset(${JSON.stringify(facts)}::jsonb) AS facts(camera text,raw_lens text,lens_device text,day text,n int)`;
+  const sql = photoStatisticsSql(index.ownerId, includePrivate, query, source);
+  const result = await pool.query<Summary>(sql.text, sql.values);
+  return result.rows[0]!;
 }

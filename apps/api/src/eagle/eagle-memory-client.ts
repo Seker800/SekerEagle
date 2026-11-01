@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
-import { encodeMemoryQuery } from './eagle-memory-server';
+import { encodeMemoryQuery, memoryStatisticsSummary } from './eagle-memory-protocol';
+import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 
 /** Diagnostic counters only: never retain predicates, names, owner IDs or tokens. */
@@ -42,7 +43,12 @@ async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
       libraryReadMetrics.fallbacks++;
       return null;
     }
-    return (await response.json()) as { ids?: unknown; count?: unknown; revision?: unknown };
+    return (await response.json()) as {
+      ids?: unknown;
+      count?: unknown;
+      revision?: unknown;
+      summary?: unknown;
+    };
   } catch {
     libraryReadMetrics.fallbacks++;
     return null;
@@ -52,6 +58,7 @@ async function request(where: AssetSearchWhere, page: Record<string, unknown>) {
 export async function readMemoryPage(
   args: Prisma.EagleAssetFindManyArgs,
 ): Promise<string[] | null> {
+  if (args.select && args.select.id !== true) return null;
   if (!args.where || args.take === undefined || args.take < 0 || args.cursor || args.distinct)
     return null;
   const orders = (
@@ -88,4 +95,20 @@ export async function readMemoryCount(where: AssetSearchWhere): Promise<number |
   if (!result || !Number.isSafeInteger(result.count) || (result.count as number) < 0) return null;
   libraryReadMetrics.hits++;
   return result.count as number;
+}
+
+export async function readMemoryStatistics(
+  ownerId: string,
+  includePrivate: boolean,
+  statistics: PhotoStatisticsQueryDto,
+) {
+  const result = await request(
+    { ownerId, libraryMode: 'PHOTO' },
+    { action: 'statistics', includePrivate, statistics },
+  );
+  if (!result) return null;
+  const parsed = memoryStatisticsSummary.safeParse(result.summary);
+  if (!parsed.success) return null;
+  libraryReadMetrics.hits++;
+  return parsed.data;
 }

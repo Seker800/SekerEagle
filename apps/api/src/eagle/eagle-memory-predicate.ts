@@ -24,6 +24,7 @@ function combine(checks: Check[], any = false): Check {
 
 // LIKE is the existing PostgreSQL adapter's contract, including escaped wildcards.
 function like(pattern: string, insensitive: boolean): RegExp {
+  if (insensitive && uncertainCase(pattern)) throw unsupported();
   let source = '^';
   for (let i = 0; i < pattern.length; i++) {
     let char = pattern[i]!;
@@ -41,6 +42,10 @@ function like(pattern: string, insensitive: boolean): RegExp {
   }
   return new RegExp(source + '$', insensitive ? 'iu' : 'u');
 }
+function uncertainCase(value: string) {
+  const nonAscii = value.replace(/\p{ASCII}/gu, '');
+  return nonAscii.toLowerCase() !== nonAscii.toUpperCase();
+}
 function comparable(value: unknown, field: string): string | number | bigint | boolean {
   if (field === 'byteSize') return BigInt(String(value));
   if (value instanceof Date) return value.getTime();
@@ -51,6 +56,8 @@ function comparable(value: unknown, field: string): string | number | bigint | b
 }
 function scalar(field: string, value: unknown, inheritedInsensitive = false): Check {
   if (value === null) return (row) => row[field] == null;
+  if (typeof value === 'string' && inheritedInsensitive)
+    return scalar(field, { equals: value, mode: 'insensitive' });
   if (value instanceof Date || typeof value !== 'object') {
     const expected = comparable(value, field);
     return (row) => (row[field] == null ? null : comparable(row[field], field) === expected);
@@ -79,7 +86,13 @@ function scalar(field: string, value: unknown, inheritedInsensitive = false): Ch
           ? operand
           : `${op === 'startsWith' ? '' : '%'}${operand}${op === 'endsWith' ? '' : '%'}`;
       const regex = like(pattern, insensitive);
-      checks.push((row) => (row[field] == null ? null : regex.test(String(row[field]))));
+      checks.push((row) => {
+        const actual = row[field];
+        if (actual == null) return null;
+        if (typeof actual !== 'string') throw unsupported();
+        if (insensitive && uncertainCase(actual)) throw unsupported();
+        return regex.test(actual);
+      });
     } else if (op === 'in' || op === 'notIn') {
       if (!Array.isArray(operand)) throw unsupported();
       const set = new Set(operand.map((v) => comparable(v, field)));
@@ -152,8 +165,13 @@ export function compileMemorySearchPredicate(
               ) !== null,
           );
         });
-      } else if (definition.fields.has(key)) checks.push(scalar(key, value));
-      else {
+      } else if (definition.fields.has(key)) {
+        const check = scalar(key, value);
+        checks.push((row) => {
+          if (row[key] === undefined) throw unsupported();
+          return check(row);
+        });
+      } else {
         const link = definition.relations[key];
         if (!link) throw unsupported();
         const rows = (row: MemoryAsset): MemoryAsset[] => {

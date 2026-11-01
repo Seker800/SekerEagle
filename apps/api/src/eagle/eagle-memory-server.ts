@@ -1,8 +1,11 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { LibraryReadStore } from './eagle-memory-store';
 import type { AssetSearchWhere } from './eagle-search-predicate';
+import type { LibraryMemoryIndex } from './eagle-memory-index';
+import type { PhotoStatisticsQueryDto } from '../photos/photo-statistics.dto';
+import type { Summary } from '../photos/photo-statistics.service';
 
 const querySchema = z
   .object({
@@ -10,7 +13,26 @@ const querySchema = z
       .object({ ownerId: z.string().min(1), libraryMode: z.enum(['MATERIAL', 'PHOTO']) })
       .strict(),
     where: z.record(z.string(), z.unknown()),
-    action: z.enum(['page', 'count']),
+    action: z.enum(['page', 'count', 'statistics']),
+    includePrivate: z.boolean().default(false),
+    statistics: z
+      .object({
+        grain: z.enum(['day', 'week', 'month', 'year']).optional(),
+        groupBy: z.enum(['total', 'camera', 'lens']).optional(),
+        start: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        end: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        cameras: z.array(z.string()).optional(),
+        lenses: z.array(z.string()).optional(),
+        lensKeys: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
     date: z.enum(['libraryAddedAt', 'chronologicalAt']).default('libraryAddedAt'),
     direction: z.enum(['asc', 'desc']).default('desc'),
     take: z.number().int().nonnegative().safe().default(0),
@@ -18,23 +40,15 @@ const querySchema = z
   })
   .strict();
 
-export const encodeMemoryQuery = (value: unknown) =>
-  JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? { $bigint: String(item) } : item));
-export const decodeMemoryQuery = (text: string): unknown =>
-  JSON.parse(text, (_, item) =>
-    item &&
-    typeof item === 'object' &&
-    Object.keys(item).length === 1 &&
-    typeof item.$bigint === 'string'
-      ? BigInt(item.$bigint)
-      : item,
-  );
+import { decodeMemoryQuery } from './eagle-memory-protocol';
 
 async function body(request: IncomingMessage, maxBytes: number) {
   const chunks: Buffer[] = [];
   let bytes = 0;
-  for await (const chunk of request) {
-    const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+  for await (const chunk of request as AsyncIterable<unknown>) {
+    if (!(chunk instanceof Uint8Array) && typeof chunk !== 'string')
+      throw new TypeError('Invalid body chunk');
+    const data = typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk);
     bytes += data.length;
     if (bytes > maxBytes) return null;
     chunks.push(data);
@@ -47,57 +61,80 @@ export function createLibraryReaderServer(
   store: Pick<LibraryReadStore, 'synchronize'>,
   token: string,
   maxBytes = 2 * 1024 * 1024,
+  statisticsHandler?: (
+    index: LibraryMemoryIndex,
+    includePrivate: boolean,
+    query: PhotoStatisticsQueryDto,
+  ) => Promise<Summary>,
 ) {
   if (!token) throw new Error('Library reader service identity is required');
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0)
+    throw new Error('Invalid reader body byte budget');
   const expected = Buffer.from(`Bearer ${token}`);
-  return createServer(
-    { requestTimeout: 10000, headersTimeout: 10000 },
-    async (request, response) => {
-      const send = (status: number, value: unknown) => {
-        response.writeHead(status, {
-          'content-type': 'application/json',
-          'cache-control': 'no-store',
+  const handle = async (request: IncomingMessage, response: ServerResponse) => {
+    const send = (status: number, value: unknown) => {
+      response.writeHead(status, {
+        'content-type': 'application/json',
+        'cache-control': 'no-store',
+      });
+      response.end(JSON.stringify(value));
+    };
+    const supplied = Buffer.from(request.headers.authorization ?? '');
+    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+      send(401, { error: 'Unauthorized' });
+      return;
+    }
+    if (request.method === 'GET' && request.url === '/health') {
+      send(200, { status: 'alive' });
+      return;
+    }
+    if (request.method !== 'POST' || request.url !== '/query') {
+      send(404, { error: 'Not found' });
+      return;
+    }
+    try {
+      const text = await body(request, maxBytes);
+      if (text === null) {
+        send(413, { error: 'Reader request exceeds byte budget' });
+        return;
+      }
+      const parsed = querySchema.safeParse(decodeMemoryQuery(text));
+      if (!parsed.success) {
+        send(400, { error: 'Invalid reader query' });
+        return;
+      }
+      const query = parsed.data;
+      const index = await store.synchronize(query.scope);
+      const revision = index.revision;
+      const where = query.where as AssetSearchWhere;
+      if (query.action === 'statistics') {
+        if (!statisticsHandler || !query.statistics || query.scope.libraryMode !== 'PHOTO') {
+          send(503, { error: 'Reader capability unavailable' });
+          return;
+        }
+        send(200, {
+          revision,
+          summary: await statisticsHandler(index, query.includePrivate, query.statistics),
         });
-        response.end(JSON.stringify(value));
-      };
-      const supplied = Buffer.from(request.headers.authorization ?? '');
-      if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
-        send(401, { error: 'Unauthorized' });
         return;
       }
-      if (request.method !== 'POST' || request.url !== '/query') {
-        send(404, { error: 'Not found' });
-        return;
-      }
-      try {
-        const text = await body(request, maxBytes);
-        if (text === null) {
-          send(413, { error: 'Reader request exceeds byte budget' });
-          return;
-        }
-        const parsed = querySchema.safeParse(decodeMemoryQuery(text));
-        if (!parsed.success) {
-          send(400, { error: 'Invalid reader query' });
-          return;
-        }
-        const query = parsed.data;
-        const index = await store.synchronize(query.scope);
-        const where = query.where as AssetSearchWhere;
-        send(
-          200,
-          query.action === 'count'
-            ? { revision: index.revision, count: index.count(where) }
-            : {
-                revision: index.revision,
-                ids: index.page(where, query.date, query.direction, query.take, query.skip),
-              },
-        );
-      } catch (error) {
-        if (!response.headersSent)
-          send(error instanceof SyntaxError ? 400 : 503, {
-            error: 'Reader unavailable or predicate unsupported',
-          });
-      }
-    },
-  );
+      send(
+        200,
+        query.action === 'count'
+          ? { revision: index.revision, count: index.count(where) }
+          : {
+              revision: index.revision,
+              ids: index.page(where, query.date, query.direction, query.take, query.skip),
+            },
+      );
+    } catch (error) {
+      if (!response.headersSent)
+        send(error instanceof SyntaxError ? 400 : 503, {
+          error: 'Reader unavailable or predicate unsupported',
+        });
+    }
+  };
+  return createServer({ requestTimeout: 10000, headersTimeout: 10000 }, (request, response) => {
+    void handle(request, response);
+  });
 }
