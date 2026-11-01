@@ -207,3 +207,19 @@ test('import processing switches are forwarded by compose and documented with sa
     assert.match(sample, new RegExp(`^${key}=true$`, 'm'));
   }
 });
+
+test('upgrade drains operations together with old API writers before any migration or new host', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  const calls = [];
+  deployCompose(selectComposeFiles(''), (args) => {
+    calls.push(args);
+    if (args[0] === 'wait') return '0';
+    if (args.includes('-q')) return 'migration-container';
+    return '';
+  });
+  const stop = calls.findIndex((args) => args.includes('stop'));
+  assert.ok(stop >= 0);
+  for (const name of ['api', 'worker', 'operations'])
+    assert.ok(calls[stop].includes(name), `${name} must finish stopping before the next step`);
+  assert.ok(stop < calls.findIndex((args) => args.includes('up')));
+});

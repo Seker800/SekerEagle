@@ -448,3 +448,17 @@ test('operations host must explicitly assemble recovery in both modes and mainte
   ])
     rejectsMutation(file, mutate, 'operations-background-host');
 });
+
+test('database batching rejects the imported legacy target and its local alias', () => {
+  for (const code of [
+    'return rows.slice(0, LEGACY_DB_TARGET);',
+    'const width = LEGACY_DB_TARGET; return rows.slice(0, width);',
+  ])
+    rejectsMutation(
+      'apps/api/src/eagle/eagle-duplicate-index.ts',
+      (before) =>
+        before +
+        `\nimport { OPERATION_DB_BATCH_SIZE as LEGACY_DB_TARGET } from './eagle-operation-settings';\nfunction legacy(rows: unknown[]) { ${code} }`,
+      'database-batch-budget',
+    );
+});

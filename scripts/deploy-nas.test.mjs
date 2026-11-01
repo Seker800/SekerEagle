@@ -228,3 +228,16 @@ test('large operation admission has its own adjustable gateway deadline', async 
     /proxy_read_timeout 180s;/u,
   );
 });
+
+test('both API and independent operations receive the same bounded clear-trash budget', async () => {
+  for (const services of [base.services, (await render()).services]) {
+    assert.equal(
+      services.api.environment.EAGLE_EMPTY_TRASH_TIMEOUT_MS,
+      '${EAGLE_EMPTY_TRASH_TIMEOUT_MS:-12000}',
+    );
+    assert.equal(
+      services.operations.environment.EAGLE_EMPTY_TRASH_TIMEOUT_MS,
+      services.api.environment.EAGLE_EMPTY_TRASH_TIMEOUT_MS,
+    );
+  }
+});
