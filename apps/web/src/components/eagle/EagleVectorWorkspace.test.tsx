@@ -256,6 +256,30 @@ describe('EagleVectorWorkspace', () => {
     },
   );
 
+  it('keeps saved cards reviewable when tag statistics fail and refreshes counts after rejection', async () => {
+    vi.mocked(api.listEagleVectorTags).mockRejectedValue(new Error('读取计数失败'));
+    vi.mocked(api.reviewEagleVectorSuggestions).mockResolvedValue({
+      items: [
+        { id: 'suggestion-1', status: 'REJECTED', assetId: 'asset-1', privacyChanged: false },
+      ],
+    });
+    const changed = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EagleVectorWorkspace
+        view="REVIEW"
+        onRecommendationsChanged={changed}
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+      />,
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('读取计数失败');
+    expect(screen.getByRole('button', { name: /全部建议.*—/ })).toBeInTheDocument();
+    const card = await screen.findByRole('button', { name: /选择 red-car.jpg/ });
+    fireEvent.click(card);
+    fireEvent.click(screen.getByRole('button', { name: '批量拒绝' }));
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
+    expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'REJECT');
+  });
+
   it('refreshes a committed review even when desktop cache invalidation fails', async () => {
     vi.mocked(desktopCache.invalidateDesktopAssets).mockRejectedValueOnce(
       new Error('cache unavailable'),
@@ -990,7 +1014,12 @@ describe('EagleVectorWorkspace', () => {
   it('does not poll saved recommendations or model health while the reviewer is idle', async () => {
     const interval = vi.spyOn(window, 'setInterval');
     try {
-      render(<EagleVectorWorkspace view="REVIEW" />);
+      render(
+        <EagleVectorWorkspace
+          view="REVIEW"
+          onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        />,
+      );
       await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(1));
       expect(api.fetchEagleVectorSummary).not.toHaveBeenCalled();
       expect(interval.mock.calls.filter(([, delay]) => delay === 10_000)).toEqual([]);

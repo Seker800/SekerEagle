@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import { performance } from 'node:perf_hooks';
+import { setImmediate } from 'node:timers';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
@@ -135,6 +136,211 @@ test('review score pages use ordered pending indexes with 30k synthetic suggesti
         `review page must use ${expectedIndex}`,
       );
     }
+  } finally {
+    await db.$disconnect();
+  }
+});
+
+test('saved review stays model-independent and publishes forty items atomically in both modes', async (t) => {
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('model offline');
+  });
+  const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+  const queries = [];
+  db.$on('query', (event) => queries.push(event.query));
+  const ownerId = randomUUID(),
+    spaceId = randomUUID();
+  try {
+    await db.user.create({
+      data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'synthetic' },
+    });
+    await db.eagleEmbeddingSpace.create({
+      data: {
+        id: spaceId,
+        model: 'synthetic',
+        revision: spaceId,
+        dimensions: 1024,
+        instructionVersion: 'test',
+        preprocessingVersion: 'test',
+      },
+    });
+    for (const mode of ['MATERIAL', 'PHOTO']) {
+      const tagId = randomUUID(),
+        snapshotId = randomUUID();
+      await db.eagleManualTag.create({
+        data: {
+          id: tagId,
+          ownerId,
+          libraryMode: mode,
+          name: mode,
+          normalizedName: mode,
+          marksAssetsPrivate: true,
+        },
+      });
+      await db.eagleTagPrototypeSnapshot.create({
+        data: {
+          id: snapshotId,
+          ownerId,
+          libraryMode: mode,
+          tagId,
+          spaceId,
+          version: 1,
+          generationId: spaceId,
+          status: 'ACTIVE',
+          isCurrent: true,
+          sourceAssetCount: 1,
+          sourceSetDigest: 'synthetic',
+          algorithm: 'synthetic',
+          algorithmVersion: 'test',
+          algorithmParams: {},
+        },
+      });
+      await db.eagleManualTagSemanticConfig.create({
+        data: {
+          ownerId,
+          libraryMode: mode,
+          tagId,
+          recommendationEnabled: true,
+          currentSnapshotId: snapshotId,
+        },
+      });
+      const ids = Array.from({ length: 43 }, () => randomUUID());
+      await db.eagleAsset.createMany({
+        data: ids.map((id) => ({
+          id,
+          ownerId,
+          libraryMode: mode,
+          originalName: 'test.jpg',
+          displayName: 'test',
+          normalizedDisplayName: 'test',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          originalObjectKey: `users/${ownerId}/${id}`,
+          lifecycleStatus: 'READY',
+          mediaRevision: 1,
+        })),
+      });
+      await db.eagleAssetEmbedding.createMany({
+        data: ids.map((id) => ({
+          id,
+          ownerId,
+          libraryMode: mode,
+          assetId: id,
+          assetRevision: 1,
+          spaceId,
+          status: 'READY',
+          isCurrent: true,
+        })),
+      });
+      await db.eagleVectorTagSuggestion.createMany({
+        data: ids.map((id) => ({
+          id,
+          ownerId,
+          libraryMode: mode,
+          assetId: id,
+          embeddingId: id,
+          suggestedTagId: tagId,
+          snapshotId,
+          generationId: spaceId,
+          isActive: true,
+          score: 0.9,
+          distance: 0.1,
+          prototypeRank: 0,
+        })),
+      });
+      const service = new EagleVectorService(db, mode);
+      const summary = await service.reviewSummary(ownerId, false);
+      assert.deepEqual(summary, { suggestions: { unclassified: 43, pending: 43 } });
+      await assert.rejects(
+        service.reviewSuggestions('other-owner', [ids[0]], 'ACCEPT'),
+        (error) => error.getStatus() === 404,
+      );
+      await assert.rejects(
+        new EagleVectorService(db, mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO').reviewSuggestions(
+          ownerId,
+          [ids[0]],
+          'ACCEPT',
+        ),
+        (error) => error.getStatus() === 404,
+      );
+      // A stale member must roll back the entire selection, including earlier valid members.
+      await db.eagleAsset.update({ where: { id: ids[1] }, data: { mediaRevision: 2 } });
+      await assert.rejects(
+        service.reviewSuggestions(ownerId, ids.slice(0, 40), 'ACCEPT'),
+        (error) => error.getStatus() === 409,
+      );
+      assert.equal(
+        await db.eagleAssetManualTag.count({ where: { ownerId, libraryMode: mode } }),
+        0,
+      );
+      assert.equal(
+        await db.eagleVectorTagSuggestion.count({
+          where: { ownerId, libraryMode: mode, status: 'ACCEPTED' },
+        }),
+        0,
+      );
+      await db.eagleAsset.update({ where: { id: ids[1] }, data: { mediaRevision: 1 } });
+      await new Promise((resolve) => setImmediate(resolve));
+      queries.length = 0;
+      const start = performance.now();
+      const result = await service.reviewSuggestions(ownerId, ids.slice(0, 40), 'ACCEPT');
+      const elapsed = performance.now() - start;
+      await new Promise((resolve) => setImmediate(resolve));
+      const statementCount = queries.length;
+      const commits = queries.filter((q) => q === 'COMMIT').length;
+      assert.equal(result.items.length, 40);
+      assert.equal(commits, 1);
+      assert.ok(statementCount < 25, `batch must amortize SQL: ${statementCount}`);
+      assert.equal(
+        await db.eagleAssetManualTag.count({
+          where: {
+            ownerId,
+            libraryMode: mode,
+            assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
+            acceptedSuggestionId: { in: ids },
+          },
+        }),
+        40,
+      );
+      assert.equal(
+        await db.eagleAsset.count({ where: { ownerId, libraryMode: mode, isPrivate: true } }),
+        40,
+      );
+      assert.equal(
+        await db.eagleTagMemberDistance.count({
+          where: { ownerId, libraryMode: mode, distance: 0.1, prototypeRank: 0 },
+        }),
+        40,
+      );
+      const again = await service.reviewSuggestions(ownerId, ids.slice(0, 40), 'ACCEPT', true);
+      assert.equal(again.items.length, 40);
+      await assert.rejects(
+        service.reviewSuggestions(ownerId, [ids[0]], 'REJECT', true),
+        (error) => error.getStatus() === 409,
+      );
+      const concurrent = await Promise.all([
+        service.reviewSuggestions(ownerId, [ids[40]], 'ACCEPT', true),
+        service.reviewSuggestions(ownerId, [ids[40]], 'ACCEPT', true),
+      ]);
+      assert.ok(concurrent.every((r) => r.items.length === 1));
+      const rejected = await service.reviewSuggestions(ownerId, ids.slice(41), 'REJECT');
+      assert.equal(rejected.items.length, 2);
+      assert.deepEqual(await service.reviewSuggestions(ownerId, ids.slice(41), 'REJECT'), rejected);
+      assert.equal((await service.reviewSummary(ownerId, true)).suggestions.pending, 0);
+      console.info(
+        JSON.stringify({
+          mode,
+          batchSize: 40,
+          sql: statementCount,
+          commits,
+          s3: 0,
+          modelRequests: 0,
+          requestMs: elapsed,
+        }),
+      );
+    }
+    assert.equal(fetchMock.mock.callCount(), 0);
   } finally {
     await db.$disconnect();
   }

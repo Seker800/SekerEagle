@@ -1,5 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Prisma, type LibraryMode } from '@prisma/client';
+import type { Prisma, LibraryMode } from '@prisma/client';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from './eagle-privacy.service';
 
 // Saved recommendations contain the immutable snapshot distance. Human review

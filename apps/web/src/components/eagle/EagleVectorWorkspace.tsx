@@ -32,6 +32,7 @@ interface EagleVectorWorkspaceProps {
   onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
   onTrashAssets?: (assetIds: string[]) => Promise<void>;
   onAssetPrivacyChanged?: () => void;
+  onRecommendationsChanged?: () => Promise<void>;
   onAssetRelationsChanged: (assetIds: string[]) => Promise<void>;
 }
 export function EagleVectorWorkspace({
@@ -42,6 +43,7 @@ export function EagleVectorWorkspace({
   onCreateManualTag,
   onTrashAssets,
   onAssetPrivacyChanged,
+  onRecommendationsChanged,
   onAssetRelationsChanged,
 }: EagleVectorWorkspaceProps) {
   const {
@@ -349,7 +351,7 @@ export function EagleVectorWorkspace({
             const ids = result.items.map(({ assetId }) => assetId);
             await onAssetRelationsChanged(ids);
           }
-        : undefined,
+        : onRecommendationsChanged,
     );
     if (reviewed) clearSelection();
   };
@@ -586,7 +588,7 @@ export function EagleVectorWorkspace({
                 }}
               >
                 <span>{t('全部建议')}</span>
-                <strong>{reviewSuggestionCount}</strong>
+                <strong>{tagLoadError && !tags.length ? '—' : reviewSuggestionCount}</strong>
               </button>
               {reviewTags.map((tag) => (
                 <button
