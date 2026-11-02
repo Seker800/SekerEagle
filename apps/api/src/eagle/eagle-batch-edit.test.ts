@@ -53,6 +53,10 @@ function harness(
   const requests = new Map<string, { jobId: unknown; job: { processorVersion: unknown } }>();
   const queries: Array<Record<string, unknown>> = [];
   const lutQueries: unknown[] = [];
+  const originalLut: { lut: string | null; commandOperationId: string | null } = {
+    lut: portableLut,
+    commandOperationId: null,
+  };
   const tx = {
     $queryRaw: async () => [],
     eagleAsset: {
@@ -81,7 +85,7 @@ function harness(
       }) => requests.get(where.ownerId_libraryMode_requestId.requestId) ?? null,
       findFirst: async (query: unknown) => {
         lutQueries.push(query);
-        return { lut: portableLut };
+        return originalLut;
       },
     },
     eagleAssetProcessingJob: {
@@ -99,7 +103,7 @@ function harness(
   registerBatchEditCommands(registry, {} as never);
   const definition = registry.get('BATCH_EDIT_RENDER');
   if (definition.protocol !== 'METADATA') throw new Error('wrong protocol');
-  return { definition, tx, jobs, queries, lutQueries };
+  return { definition, tx, jobs, queries, lutQueries, originalLut };
 }
 
 test('batch edit renders from immutable base, preserves unselected parts, and resumes idempotently', async () => {
@@ -154,17 +158,18 @@ test('batch edit hides cross-owner, wrong-mode, private, deleted and retired tar
 });
 
 test('batch edit rejects malformed portable LUT data without creating media jobs', async () => {
-  const { definition, tx, jobs } = harness();
+  const { definition, jobs } = harness();
   await assert.rejects(
-    definition.apply(
-      tx as never,
-      context,
-      {
-        recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:bad' } },
-        parts: { ...parts, filter: true },
-        lut: 'https://external.invalid/filter.cube',
-      },
-      ['copy'],
+    Promise.resolve().then(() =>
+      definition.admit!(
+        context,
+        {
+          recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:bad' } },
+          parts: { ...parts, filter: true },
+          lut: 'https://external.invalid/filter.cube',
+        },
+        ['copy'],
+      ),
     ),
     BadRequestException,
   );
@@ -196,16 +201,41 @@ test('adjustment-only paste preserves the target custom LUT instead of taking cl
         recipe: { path: ['edits', 'filter'], equals: 'lut:target' },
         job: { status: 'COMPLETED' },
       },
-      select: { lut: true },
+      select: { lut: true, commandOperationId: true },
     },
   ]);
 });
 
 test('selected portable LUT is referenced from the immutable operation instead of copied into every render job', async () => {
   const { definition, tx, jobs } = harness();
-  await definition.apply(tx as never, context, { recipe: { version: 1,
-    edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:clipboard' } }, parts: { ...parts, filter: true }, lut: portableLut }, ['copy']);
-  const edit = jobs[0]!.data.editRender as { create: { lut?: string; commandOperationId?: string } };
+  await definition.apply(
+    tx as never,
+    context,
+    {
+      recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:clipboard' } },
+      parts: { ...parts, filter: true },
+      lut: portableLut,
+    },
+    ['copy'],
+  );
+  const edit = jobs[0]!.data.editRender as {
+    create: { lut?: string; commandOperationId?: string };
+  };
   assert.equal(edit.create.commandOperationId, context.operationId);
+  assert.equal(edit.create.lut, undefined);
+});
+
+test('partial paste reuses the target render original shared LUT reference', async () => {
+  const { definition, tx, jobs, originalLut } = harness({
+    ...DEFAULT_PHOTO_EDITS,
+    filter: 'lut:target',
+  });
+  originalLut.lut = null;
+  originalLut.commandOperationId = 'original-operation';
+  await definition.apply(tx as never, context, { recipe, parts }, ['copy']);
+  const edit = jobs[0]!.data.editRender as {
+    create: { lut?: string; commandOperationId?: string };
+  };
+  assert.equal(edit.create.commandOperationId, 'original-operation');
   assert.equal(edit.create.lut, undefined);
 });

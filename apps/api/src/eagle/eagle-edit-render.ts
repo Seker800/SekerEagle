@@ -1,3 +1,4 @@
+import { runLibraryTransaction } from './eagle-library-command';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsObject, IsOptional, IsUUID, Min, MaxLength, IsString } from 'class-validator';
@@ -35,13 +36,17 @@ export async function createEditRender(
   assetId: string,
   input: CreateEditRenderDto,
   includePrivate: boolean,
+  transaction?: Prisma.TransactionClient,
+  commandOperationId?: string,
 ) {
   const recipe = validatedEditRecipe(input.recipe);
   if (recipe.edits.watermark !== 'none' && !findWatermark(recipe.edits.watermark))
     throw new BadRequestException('水印模板不受支持。');
   // A portable LUT is numeric data, never a remote URL or an object-store path.
-  if (recipe.edits.filter.startsWith('lut:') !== !!input.lut)
+  if (recipe.edits.filter.startsWith('lut:') !== !!(input.lut || commandOperationId))
     throw new BadRequestException('自定义滤镜数据缺失或不匹配。');
+  if (input.lut && commandOperationId)
+    throw new BadRequestException('滤镜引用与内联数据不能重复。');
   if (input.lut) {
     const { readPortableLut } = await import('@sekereagle/photo-render-core/portable-lut');
     try {
@@ -60,10 +65,11 @@ export async function createEditRender(
         rowVersion: input.rowVersion,
         recipe: payload,
         lut: input.lut ?? null,
+        ...(commandOperationId ? { commandOperationId } : {}),
       }),
     )
     .digest('hex');
-  return db.$transaction(async (tx) => {
+  return runLibraryTransaction(transaction ?? db, async (tx) => {
     await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE id=${assetId} AND "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" FOR UPDATE`;
     const source = await tx.eagleAsset.findFirst({
       where: scope(ownerId, libraryMode, assetId, includePrivate),
@@ -101,6 +107,7 @@ export async function createEditRender(
             requestId: input.requestId,
             sourceRowVersion: input.rowVersion,
             lut: input.lut,
+            commandOperationId,
             recipe: payload as unknown as Prisma.InputJsonValue,
           },
         },

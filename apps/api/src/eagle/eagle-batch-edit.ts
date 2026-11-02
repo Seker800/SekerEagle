@@ -18,6 +18,7 @@ import {
   selectPhotoEditParts,
   type PhotoEditParts,
 } from '@sekereagle/library-core';
+import { readPortableLut } from '@sekereagle/photo-render-core/portable-lut';
 import type { PrismaService } from '../prisma/prisma.service';
 import { LibraryCommandRegistry, type LibraryCommandContext } from './eagle-library-command';
 import { createEditRender } from './eagle-edit-render';
@@ -58,7 +59,15 @@ export function registerBatchEditCommands(registry: LibraryCommandRegistry, db: 
     protocol: 'METADATA',
     partition: (payload, ids) => ids.map((id) => ({ payload, assetIds: [id] })),
     admit: (_context, payload) => {
-      validatedEditRecipe(payload.recipe);
+      const recipe = validatedEditRecipe(payload.recipe);
+      const filterSelected = (payload.parts as unknown as PhotoEditParts)?.filter;
+      if (filterSelected && recipe.edits.filter.startsWith('lut:')) {
+        try {
+          readPortableLut(payload.lut as string);
+        } catch {
+          throw new BadRequestException('自定义滤镜数据无效。');
+        }
+      }
       const parts = payload.parts as unknown as PhotoEditParts;
       if (!parts || !Object.values(parts).some(Boolean))
         throw new BadRequestException('请选择要套用的编辑内容。');
@@ -98,8 +107,9 @@ export function registerBatchEditCommands(registry: LibraryCommandRegistry, db: 
         // A partial paste keeps the target's filter and its numeric table together.
         // Clipboard LUT bytes belong only to a selected clipboard filter.
         let lut: string | undefined;
+        let lutOperationId: string | undefined;
         if (edits.filter.startsWith('lut:')) {
-          if (parts.filter) lut = payload.lut as string | undefined;
+          if (parts.filter) lutOperationId = context.operationId;
           else {
             const originalRender = await tx.eagleEditRender.findFirst({
               where: {
@@ -109,9 +119,10 @@ export function registerBatchEditCommands(registry: LibraryCommandRegistry, db: 
                 recipe: { path: ['edits', 'filter'], equals: edits.filter },
                 job: { status: 'COMPLETED' },
               },
-              select: { lut: true },
+              select: { lut: true, commandOperationId: true },
             });
             lut = originalRender?.lut ?? undefined;
+            lutOperationId = originalRender?.commandOperationId ?? undefined;
           }
         }
         await createEditRender(
@@ -128,6 +139,7 @@ export function registerBatchEditCommands(registry: LibraryCommandRegistry, db: 
           },
           context.includePrivate,
           tx,
+          lutOperationId,
         );
       }
     },
