@@ -180,7 +180,7 @@ try {
   );
   assert.ok(worker);
   const policy = JSON.parse(
-    (await readFile('apps/desktop/src/main/main.ts', 'utf8')).match(
+    (await readFile('apps/desktop/src/main/navigation-policy.ts', 'utf8')).match(
       /"default-src 'self'; script-src[^"\n]+"/,
     )[0],
   );
