@@ -187,3 +187,18 @@ it('releases a queued batch tag mutation without waiting for list reads or deskt
   view.unmount();
   client.clear();
 });
+
+it('chains a rapid metadata edit to its own accepted rating receipt without inventing row versions or waiting for execution', async () => {
+ const client=new QueryClient(); const keys=createEagleQueryKeys('A');
+ const fetchMock=vi.fn(async()=>json({id:`command-${fetchMock.mock.calls.length}`,kind:'METADATA_COMMAND',commandType:'ASSET_UPDATE',libraryMode:'MATERIAL',total:1,completed:0,failed:0,cancelled:0,running:0,queued:1,state:'QUEUED',errors:[]}));
+ vi.stubGlobal('fetch',fetchMock);
+ vi.spyOn(client,'invalidateQueries').mockReturnValue(new Promise(()=>undefined));
+ const wrapper=({children}:{children:ReactNode})=><QueryClientProvider client={client}><LibraryWorkspaceProvider ownerId="A" libraryMode="MATERIAL">{children}</LibraryWorkspaceProvider></QueryClientProvider>;
+ const view=renderHook(()=>useEagleMutations('',keys,{onMetadataSaved:vi.fn(),onBatchTagsApplied:vi.fn(),onAssetPrivacyChanged:vi.fn(),onOperationStarted:vi.fn(),onSmartFolderCreated:vi.fn(),onSmartFolderUpdated:vi.fn()}),{wrapper});
+ await act(async()=>{await view.result.current.ratingMutation.mutateAsync({assets:[{assetId:'a',rowVersion:1}],rating:5});});
+ await act(async()=>{await view.result.current.metadataMutation.mutateAsync({assetId:'a',assets:[{assetId:'a',rowVersion:1}],input:{description:'new description'},revision:1});});
+ expect(fetchMock).toHaveBeenCalledTimes(2);
+ expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({description:'new description',rowVersion:1,predecessorOperationIds:['command-1']});
+ expect(view.result.current.metadataMutation.isPending).toBe(false);
+ view.unmount();client.clear();
+});
