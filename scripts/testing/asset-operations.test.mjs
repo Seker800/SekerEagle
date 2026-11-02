@@ -323,14 +323,32 @@ test('a live lease excludes other executors and stopping cancels only the waitin
   assert.equal(result.completed, OPERATION_SEND_CONCURRENCY);
   assert.equal(result.cancelled, 1);
   assert.equal(result.state, 'STOPPED');
-  assert.equal(await prisma.eagleAsset.count({ where: {
-    ownerId: f.ownerId, libraryMode: 'PHOTO', id: { in: rows.map((row) => row.id) },
-    deletedAt: { not: null }, transferredAt: { not: null },
-  } }), OPERATION_SEND_CONCURRENCY, 'already copying sources retire atomically with their targets');
-  assert.equal(await prisma.eagleAsset.count({ where: {
-    ownerId: f.ownerId, libraryMode: 'PHOTO', id: { in: rows.map((row) => row.id) },
-    deletedAt: null, transferredAt: null,
-  } }), 1, 'the cancelled waiting source stays active and untouched');
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        id: { in: rows.map((row) => row.id) },
+        deletedAt: { not: null },
+        transferredAt: { not: null },
+      },
+    }),
+    OPERATION_SEND_CONCURRENCY,
+    'already copying sources retire atomically with their targets',
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        id: { in: rows.map((row) => row.id) },
+        deletedAt: null,
+        transferredAt: null,
+      },
+    }),
+    1,
+    'the cancelled waiting source stays active and untouched',
+  );
 
   assert.equal(
     await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),

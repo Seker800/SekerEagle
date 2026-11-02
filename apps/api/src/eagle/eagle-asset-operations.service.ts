@@ -1202,11 +1202,17 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     operation: EagleAssetOperation,
     items: ClaimedItem[],
   ) {
-    await lockOperationPublication(tx, {
-      operationId: operation.id,
-      ownerId: operation.ownerId,
-      libraryMode: this.libraryMode,
-    });
+    // SEND's already claimed copy/journal unit completes; stopping only removes
+    // the waiting tail. All dynamic expansion protocols honor the durable stop.
+    await lockOperationPublication(
+      tx,
+      {
+        operationId: operation.id,
+        ownerId: operation.ownerId,
+        libraryMode: this.libraryMode,
+      },
+      operation.kind === 'SEND',
+    );
     await tx.$queryRaw`SELECT id FROM "User" WHERE id=${operation.ownerId} FOR SHARE`;
     const user = await tx.user.findUnique({
       where: { id: operation.ownerId },
