@@ -24,7 +24,7 @@ import { drawPhoto } from '@sekereagle/photo-render-core/photo-editor-geometry';
 interface WorkerResult {
   id: number;
   pixels?: Uint8Array;
-  error?: boolean;
+  error?: boolean | 'PHOTO_WASM_BLOCKED' | 'PHOTO_RENDER_FAILED';
 }
 
 export function composePhoto(
@@ -122,7 +122,8 @@ export function createPhotoRenderer() {
     if (!request || request.id !== data.id) return;
     active = null;
     try {
-      if (data.error || !data.pixels) throw new Error('PHOTO_RENDER_FAILED');
+      if (data.error || !data.pixels)
+        throw new Error(typeof data.error === 'string' ? data.error : 'PHOTO_RENDER_FAILED');
       const canvas = document.createElement('canvas');
       canvas.width = request.source.width;
       canvas.height = request.source.height;

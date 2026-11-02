@@ -1183,7 +1183,10 @@ export function SekerEaglePage({
       y: Math.max(8, Math.min(y, window.innerHeight - 280)),
     });
   };
-  const desktopAssetDragBridge = libraryMode === 'PHOTO' ? null : getDesktopAssetDragBridge();
+  const desktopAssetDragBridge = useMemo(
+    () => getDesktopAssetDragBridge(libraryMode),
+    [libraryMode],
+  );
   const assetDragSession = useMemo(
     () =>
       desktopAssetDragBridge

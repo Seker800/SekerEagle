@@ -260,8 +260,12 @@ it('keeps PHOTO originals in their immutable request mode through the download s
 
 it('accepts only the closed library drag request and rejects owner, URL and mode overrides', async () => {
   const module = await import('../src/main/original-drag-export');
-  const parse = (module as unknown as { parseLibraryDragRequest: (input: unknown) => unknown }).parseLibraryDragRequest;
-  expect(parse({ assetIds: [firstAssetId], libraryMode: 'PHOTO' })).toEqual({ assetIds: [firstAssetId], libraryMode: 'PHOTO' });
+  const parse = (module as unknown as { parseLibraryDragRequest: (input: unknown) => unknown })
+    .parseLibraryDragRequest;
+  expect(parse({ assetIds: [firstAssetId], libraryMode: 'PHOTO' })).toEqual({
+    assetIds: [firstAssetId],
+    libraryMode: 'PHOTO',
+  });
   for (const extra of [{ libraryMode: 'OTHER' }, { ownerId: 'other' }, { url: 'file:///private' }])
     expect(() => parse({ assetIds: [firstAssetId], libraryMode: 'PHOTO', ...extra })).toThrow();
 });

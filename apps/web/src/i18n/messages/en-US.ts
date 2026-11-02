@@ -2215,4 +2215,10 @@ export const enUS = {
   '地图更新于 {{value1}}': 'Map updated {{value1}}',
   '成片仍在后台处理，请稍后查看图库；也可留在当前编辑器重试保存。':
     'Your photo is still processing. Check the gallery later, or retry saving within this editor session.',
+  '客户端 {{value1}}': 'Client {{value1}}',
+  '旧版客户端（版本不可用）': 'Older client (version unavailable)',
+  '当前客户端阻止了照片处理模块，请更新桌面客户端后重新打开。':
+    'This client blocks the photo processing module. Update the desktop client and reopen the editor.',
+  '当前设备缺少这张照片使用的自定义滤镜，请在滤镜面板导入对应 LUT 后重试。':
+    'This device is missing the custom filter used by this photo. Import the matching LUT in the filter panel and retry.',
 } as const;

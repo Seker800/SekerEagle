@@ -54,6 +54,8 @@ import {
   OriginalDragExporter,
   parseAssetDragInput,
   parsePreparedDragToken,
+  parseLibraryDragRequest,
+  type OriginalLibraryMode,
 } from './original-drag-export';
 import {
   portableCacheRoot,
@@ -220,21 +222,28 @@ if (hasSingleInstanceLock)
             : null,
       };
     });
+    ipcMain.handle('desktop:app-info', (event) => {
+      assertTrustedIpcSender(event);
+      return { version: app.getVersion(), platform: process.platform };
+    });
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
     const originalDragExporter = new OriginalDragExporter({
       rootPath: path.join(app.getPath('temp'), 'SekerEagle', 'OriginalDrag'),
-      fetchOriginal: (assetId, signal) =>
-        currentBrowserSession().fetch(`/api/eagle/assets/${assetId}/original`, {
-          credentials: 'include',
-          signal,
-          headers: {
-            accept: 'application/octet-stream',
-            'accept-encoding': 'identity',
-            'cache-control': 'no-store',
+      fetchOriginal: (assetId, signal, libraryMode) =>
+        currentBrowserSession().fetch(
+          `/api/${libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${assetId}/original`,
+          {
+            credentials: 'include',
+            signal,
+            headers: {
+              accept: 'application/octet-stream',
+              'accept-encoding': 'identity',
+              'cache-control': 'no-store',
+            },
           },
-        }),
+        ),
     });
     await originalDragExporter.cleanupExpired().catch(() => undefined);
     clearPreparedOriginalDrags = registerOriginalDragIpc(owner, originalDragExporter);
@@ -546,7 +555,11 @@ function registerOriginalDragIpc(
     });
   };
 
-  ipcMain.handle('desktop:prepare-asset-drag', async (event, input: unknown) => {
+  const prepareDrag = async (
+    event: IpcMainInvokeEvent,
+    input: unknown,
+    libraryMode: OriginalLibraryMode,
+  ) => {
     assertTrustedIpcSender(event);
     if (dragInFlight) throw new Error('已有原文件正在准备，请稍候。');
     dragInFlight = true;
@@ -569,6 +582,7 @@ function registerOriginalDragIpc(
             event.sender.send('desktop:asset-drag-preparation-progress', progress);
           }
         },
+        libraryMode,
       );
       const icon = await app.getFileIcon(prepared.files[0], { size: 'normal' });
       const currentIdentity = await owner.get();
@@ -596,6 +610,14 @@ function registerOriginalDragIpc(
       if (dragPreparationController === preparationController) dragPreparationController = null;
       dragInFlight = false;
     }
+  };
+  ipcMain.handle('desktop:prepare-asset-drag', (event, input: unknown) =>
+    prepareDrag(event, input, 'MATERIAL'),
+  );
+  ipcMain.handle('desktop:prepare-library-asset-drag', (event, input: unknown) => {
+    assertTrustedIpcSender(event);
+    const request = parseLibraryDragRequest(input);
+    return prepareDrag(event, request.assetIds, request.libraryMode);
   });
 
   ipcMain.on('desktop:cancel-asset-drag-preparation', (event) => {

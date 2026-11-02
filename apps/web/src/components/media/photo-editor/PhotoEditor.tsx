@@ -49,6 +49,14 @@ import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo
 type Tab = 'adjust' | 'filters' | 'crop' | 'watermark';
 type History = { past: PhotoEdits[]; current: PhotoEdits; future: PhotoEdits[] };
 
+function renderErrorMessage(reason: unknown): string {
+  if (reason instanceof Error && reason.message === 'PHOTO_WASM_BLOCKED')
+    return t('当前客户端阻止了照片处理模块，请更新桌面客户端后重新打开。');
+  if (reason instanceof Error && reason.message === 'LUT_NOT_FOUND')
+    return t('当前设备缺少这张照片使用的自定义滤镜，请在滤镜面板导入对应 LUT 后重试。');
+  return t('照片处理失败，请重试。');
+}
+
 export function PhotoEditor({
   initialTab = 'adjust',
   presentation = 'web',
@@ -303,8 +311,8 @@ export function PhotoEditor({
     try {
       renderer = createPhotoRenderer();
       rendererRef.current = renderer;
-    } catch {
-      setError(t('照片处理失败，请重试。'));
+    } catch (reason) {
+      setError(renderErrorMessage(reason));
       return;
     }
     const image = new Image();
@@ -396,10 +404,10 @@ export function PhotoEditor({
           setRenderedKey(JSON.stringify({ edits, compare, tab, metadata }));
           setError('');
         })
-        .catch(() => {
+        .catch((reason: unknown) => {
           if (!cancelled) {
             setErrorRetry('load');
-            setError(t('照片处理失败，请重试。'));
+            setError(renderErrorMessage(reason));
             setRendering(false);
           }
         });

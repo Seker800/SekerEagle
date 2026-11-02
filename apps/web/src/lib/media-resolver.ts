@@ -26,6 +26,11 @@ export type DesktopMediaRequest =
     };
 export interface SekerDesktopBridge {
   readonly version: 1;
+  getAppInfo?(): Promise<{ version: string; platform: string }>;
+  prepareLibraryAssetDrag?(input: {
+    assetIds: string[];
+    libraryMode: LibraryMode;
+  }): Promise<{ token: string }>;
   refreshSession?(): Promise<{ status: number; code: string | null }>;
   createMediaUrl(media: DesktopMediaRequest): string;
   getCacheStatus?(): Promise<DesktopCacheStatus>;
@@ -116,10 +121,10 @@ export function getDesktopCacheBridge(): DesktopCacheBridge | null {
     ? (bridge as SekerDesktopBridge & DesktopCacheBridge)
     : null;
 }
-export function getDesktopConnectionBridge(): Pick<
-  Required<SekerDesktopBridge>,
-  'getConnectionStatus' | 'openConnectionManager'
-> | null {
+export function getDesktopConnectionBridge():
+  | (Pick<Required<SekerDesktopBridge>, 'getConnectionStatus' | 'openConnectionManager'> &
+      Pick<SekerDesktopBridge, 'getAppInfo'>)
+  | null {
   const bridge = desktopBridge();
   return bridge &&
     typeof bridge.getConnectionStatus === 'function' &&

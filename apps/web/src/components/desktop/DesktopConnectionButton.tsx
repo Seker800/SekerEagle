@@ -13,9 +13,14 @@ export function DesktopConnectionButton({
   reloadPage?: () => void;
 }) {
   const bridge = getDesktopConnectionBridge();
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [status, setStatus] = useState<DesktopConnectionStatus | null>(null);
   useEffect(() => {
     if (!bridge) return;
+    void bridge
+      .getAppInfo?.()
+      .then((info) => setAppVersion(info.version))
+      .catch(() => setAppVersion(null));
     void bridge
       .getConnectionStatus()
       .then(setStatus)
@@ -25,6 +30,11 @@ export function DesktopConnectionButton({
   const label = status?.activeSlot ? SLOT_LABELS[status.activeSlot] : t('未连接');
   return (
     <div className="desktop-connection-controls" role="group" aria-label={t('桌面连接控制')}>
+      <span>
+        {appVersion
+          ? t('客户端 {{value1}}', { value1: appVersion })
+          : t('旧版客户端（版本不可用）')}
+      </span>
       <button
         className="desktop-connection-button"
         type="button"

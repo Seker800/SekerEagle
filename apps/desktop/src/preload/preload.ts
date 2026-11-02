@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { createDesktopMediaUrl, type DesktopMediaIdentity } from '../shared/media-identity';
-import { parseAssetDragInput, parsePreparedDragToken } from '../main/original-drag-export';
+import {
+  parseAssetDragInput,
+  parsePreparedDragToken,
+  parseLibraryDragRequest,
+} from '../main/original-drag-export';
 
 (
   globalThis as unknown as { addEventListener(type: 'online', listener: () => void): void }
@@ -10,6 +14,19 @@ import { parseAssetDragInput, parsePreparedDragToken } from '../main/original-dr
 
 contextBridge.exposeInMainWorld('sekerDesktop', {
   version: 1,
+  getAppInfo(): Promise<{ version: string; platform: string }> {
+    return ipcRenderer.invoke('desktop:app-info');
+  },
+  async prepareLibraryAssetDrag(input: {
+    assetIds: unknown;
+    libraryMode: unknown;
+  }): Promise<{ token: string }> {
+    const result = await ipcRenderer.invoke(
+      'desktop:prepare-library-asset-drag',
+      parseLibraryDragRequest(input),
+    );
+    return { token: parsePreparedDragToken(result?.token) };
+  },
   refreshSession(): Promise<{ status: number; code: string | null }> {
     return ipcRenderer.invoke('desktop:refresh-session');
   },

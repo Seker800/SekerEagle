@@ -1,3 +1,4 @@
+import type { LibraryMode } from '../../lib/library-api-scope';
 import type { SekerDesktopBridge } from '../../lib/media-resolver';
 
 export type DesktopAssetDragBridge = Required<
@@ -8,8 +9,25 @@ export type DesktopAssetDragBridge = Required<
     'cancelAssetDragPreparation' | 'discardPreparedAssetDrag' | 'onAssetDragPreparationProgress'
   >;
 
-export function getDesktopAssetDragBridge(): DesktopAssetDragBridge | null {
+export function getDesktopAssetDragBridge(
+  libraryMode: LibraryMode = 'MATERIAL',
+): DesktopAssetDragBridge | null {
   const candidate = (globalThis as { sekerDesktop?: Partial<SekerDesktopBridge> }).sekerDesktop;
+  if (libraryMode === 'PHOTO') {
+    if (
+      candidate?.version !== 1 ||
+      typeof candidate.prepareLibraryAssetDrag !== 'function' ||
+      typeof candidate.startPreparedAssetDrag !== 'function'
+    )
+      return null;
+    return {
+      prepareAssetDrag: (assetIds) => candidate.prepareLibraryAssetDrag!({ assetIds, libraryMode }),
+      startPreparedAssetDrag: candidate.startPreparedAssetDrag.bind(candidate),
+      cancelAssetDragPreparation: candidate.cancelAssetDragPreparation?.bind(candidate),
+      discardPreparedAssetDrag: candidate.discardPreparedAssetDrag?.bind(candidate),
+      onAssetDragPreparationProgress: candidate.onAssetDragPreparationProgress?.bind(candidate),
+    };
+  }
   return candidate?.version === 1 &&
     typeof candidate.prepareAssetDrag === 'function' &&
     typeof candidate.startPreparedAssetDrag === 'function'
