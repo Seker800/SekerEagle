@@ -43,6 +43,33 @@ const videoAsset: EagleAssetListItem = {
   manualTags: [],
 };
 
+it.each(['MATERIAL', 'PHOTO'] as const)('reuses a warm desktop thumbnail before scheduling any network work in %s', async (libraryMode) => {
+  vi.stubGlobal('sekerDesktop', {
+    version: 1,
+    mediaCacheVersion: 2,
+    createMediaUrl: (media: { libraryMode: string; renditionKind: string; assetId: string; renditionId: string }) =>
+      `sekereagle-media://rendition/${media.libraryMode.toLowerCase()}/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`,
+  });
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }));
+  vi.stubGlobal('URL', { createObjectURL: () => 'blob:desktop-warm', revokeObjectURL: vi.fn() });
+  const service = new ThumbnailLoadService();
+  const asset = { ...imageAsset, libraryMode };
+  const source = getEagleAssetThumbnailUrls(asset, 240)[0]!;
+  const warm = await service.load(`${asset.id}:${asset.mediaRevision}:${source}`, source, new AbortController().signal);
+  warm.release();
+  const scheduler = new MediaLoadScheduler({ maxConcurrent: 1 });
+  let finish!: () => void;
+  scheduler.enqueue({ id: 'cold', priority: 'visible', order: 0, run: () => new Promise<void>((resolve) => { finish = resolve; }) });
+  await act(async () => undefined);
+  const view = render(<EagleAssetThumbnail asset={asset} scheduler={scheduler} loadService={service} order={1} displayWidth={240} />);
+  try {
+    expect(view.container.querySelector('img')).toHaveAttribute('src', 'blob:desktop-warm');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    view.unmount(); finish(); service.dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals();
+  }
+});
+
 const imageAsset: EagleAssetListItem = {
   ...videoAsset,
   id: 'image-1',
