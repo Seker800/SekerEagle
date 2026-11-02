@@ -621,3 +621,16 @@ it('refreshes photo-stack topology on every loaded page while retaining IDs and 
   expect(data.pages[11]).toEqual({...f.data.pages[11],photoStacks:[freshStack]});
  }finally{vi.restoreAllMocks();f.close();}
 });
+
+it('evicts newly inaccessible details opened outside loaded list pages and clears an active observer before removing its cache', async () => {
+ const f=fixture();const key=createEagleQueryKeys('owner','PHOTO').assetDetail('outside','ACTIVE');
+ const observer=new QueryObserver(f.client,{queryKey:key,queryFn:async()=>({id:'outside'}),initialData:{id:'outside'},staleTime:Infinity});
+ const stop=observer.subscribe(()=>{});
+ const {createEagleApi}=await import('../../lib/eagle-api');
+ const facts=vi.fn(async(_token,ids:string[])=>ids.filter(id=>id!=='outside').map(id=>({id,updatedAt:'2026-11-02',rowVersion:2,mediaRevision:1})));
+ vi.spyOn(await import('../../lib/eagle-api'),'createEagleApi').mockReturnValue({...createEagleApi('PHOTO'),listEagleAssetFacts:facts} as never);
+ const completed={...summary('METADATA_COMMAND'),commandType:'PRIVACY_SETTINGS',completed:1,failed:0,errors:[],state:'COMPLETED' as const};
+ mocks.results.mockResolvedValue({operation:completed,revision:'v1',membership:[],receipts:[],nextCursor:null});
+ try{await f.refresher.reconcile('PHOTO',completed);expect(facts.mock.calls[0][1]).toContain('outside');expect(observer.getCurrentResult().data).toBeNull();expect(f.client.getQueryData(key)).toBeUndefined();}
+ finally{vi.restoreAllMocks();stop();f.close();}
+});
