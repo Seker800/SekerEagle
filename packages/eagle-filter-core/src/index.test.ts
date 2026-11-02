@@ -204,3 +204,13 @@ test('ordinary filter groups and rules have no arbitrary 31/30 item cap', () => 
   assert.equal(result.conditions.length, 40);
   assert.equal(result.conditions[0]?.rules.length, 35);
 });
+
+
+test('photo capture date is available only in the photo rule catalog', async () => {
+  const { getEagleFilterFields, assertEagleFilterQueryMode } = await import('./index');
+  const query = parseEagleFilterQuery({version: 2, conditions: [{id:'date',match:'ALL',result:'MATCH',rules:[{id:'capture',field:'CAPTURED_AT',operator:'BETWEEN',value:['2016-01-01','2026-06-02']}]}]});
+  assert.equal(getEagleFilterFields('PHOTO').some(({field}) => String(field) === 'CAPTURED_AT'), true);
+  assert.equal(getEagleFilterFields('MATERIAL').some(({field}) => String(field) === 'CAPTURED_AT'), false);
+  assert.doesNotThrow(() => assertEagleFilterQueryMode(query,'PHOTO'));
+  assert.throws(() => assertEagleFilterQueryMode(query,'MATERIAL'), /摄影筛选/);
+});
