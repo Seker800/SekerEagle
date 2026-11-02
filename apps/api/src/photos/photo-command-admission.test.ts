@@ -36,7 +36,33 @@ test('photography writes acknowledge durable intent without executing blocked do
     await controller.privacy(principal, 'person', { marksAssetsPrivate: true, rowVersion: 2 }),
     queued,
   );
-  assert.equal(calls.length, 4);
+  assert.equal(
+    await controller.decidePeople(principal, {
+      firstId: 'first',
+      secondId: 'second',
+      firstVersion: 1,
+      secondVersion: 1,
+      decision: 'SAME',
+    }),
+    queued,
+  );
+  assert.equal(
+    await controller.mergeSelected(principal, {
+      targetId: 'first',
+      people: [
+        { id: 'first', rowVersion: 1 },
+        { id: 'second', rowVersion: 1 },
+      ],
+    }),
+    queued,
+  );
+  assert.equal(await controller.merge(principal, 'first', { targetId: 'second' }), queued);
+  assert.equal(await controller.assign(principal, 'face', { personId: null }), queued);
+  assert.equal(await controller.createGroup(principal, { assetIds: ['first', 'second'] }), queued);
+  assert.equal(await controller.removeMembers(principal, 'group', { assetIds: ['first'] }), queued);
+  assert.equal(await controller.mergeGroups(principal, 'first', { targetId: 'second' }), queued);
+  assert.equal(await controller.group(principal, 'group', { dismissed: true }), queued);
+  assert.equal(calls.length, 12);
   for (const [, input] of calls as [unknown, { type: string; assetIds?: string[] }][]) {
     assert.match(input.type, /^PHOTO_/);
     assert.equal(input.assetIds, undefined, 'person IDs must never be interpreted as asset IDs');
