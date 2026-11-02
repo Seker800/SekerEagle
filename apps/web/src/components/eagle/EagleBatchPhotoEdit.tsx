@@ -44,12 +44,32 @@ export function EagleBatchPhotoEdit({
     setSubmitting(true);
     setError('');
     try {
-      // Transfer personal/bundled LUT data once, never render target images here.
+      const targets = [...new Set(assetIds)];
+      // Ask only for target filters without a durable server source. Legacy
+      // browser uploads and draft recipes can refer to this machine's LUT store.
+      const preservedLuts: Record<string, string> = {};
+      if (!parts.filter) {
+        const context = await api.getBatchEaglePhotoEditContext(targets);
+        for (const filter of [...new Set(context.preservedFilterIds)].sort()) {
+          try {
+            preservedLuts[filter] = writePortableLut(await loadPhotoLut(filter.slice(4)));
+          } catch {
+            throw new Error(t('无法读取目标照片的自定义滤镜，请检查本机滤镜库后重试。'));
+          }
+        }
+      }
+      // Transfer each required numeric table once, never render target images here.
       const lut =
         parts.filter && recipe.edits.filter.startsWith('lut:')
           ? writePortableLut(await loadPhotoLut(recipe.edits.filter.slice(4)))
           : undefined;
-      const input = { assetIds: [...new Set(assetIds)], recipe, parts, ...(lut ? { lut } : {}) };
+      const input = {
+        assetIds: targets,
+        recipe,
+        parts,
+        ...(lut ? { lut } : {}),
+        ...(Object.keys(preservedLuts).length ? { preservedLuts } : {}),
+      };
       const key = JSON.stringify(input);
       const operationId = operationIds.current.get(key) ?? crypto.randomUUID();
       operationIds.current.set(key, operationId);

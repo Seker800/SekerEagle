@@ -568,6 +568,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
+  function getBatchEaglePhotoEditContext(assetIds: readonly string[]) {
+    return api<{ preservedFilterIds: string[] }>('/eagle/assets/batch/edit-render-context', {
+      method: 'POST',
+      body: JSON.stringify({ assetIds }),
+    });
+  }
+
   function batchEditEaglePhotos(
     _token: string,
     input: {
@@ -576,6 +583,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       recipe: PhotoEditRecipe;
       parts: PhotoEditParts;
       lut?: string;
+      preservedLuts?: Record<string, string>;
     },
   ) {
     return api<AssetOperationSummary>('/eagle/assets/batch/edit-renders', {
@@ -764,6 +772,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     updateEagleAsset,
     batchUpdateEagleAssets,
     batchEditEaglePhotos,
+    getBatchEaglePhotoEditContext,
     uploadEagleAsset,
     getEagleAssetContentUrl,
     getEaglePyramidDescriptor,
@@ -804,6 +813,7 @@ export const {
   updateEagleAsset,
   batchUpdateEagleAssets,
   batchEditEaglePhotos,
+  getBatchEaglePhotoEditContext,
   uploadEagleAsset,
   getEagleAssetContentUrl,
   getEaglePyramidDescriptor,

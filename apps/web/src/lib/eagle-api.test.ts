@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listEagleAssetUpdates, uploadEagleAsset } from './eagle-api';
+import { createEagleApi, listEagleAssetUpdates, uploadEagleAsset } from './eagle-api';
 
 describe('listEagleAssetUpdates', () => {
   afterEach(() => {
@@ -162,3 +162,28 @@ it('session revocation cancels an object PUT and prevents completion or cleanup 
     mock.mockRestore();
   }
 });
+
+it.each(['MATERIAL', 'PHOTO'] as const)(
+  'reads only missing preserved-filter identifiers through one mode-scoped batch request: %s',
+  async (mode) => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(Response.json({ preservedFilterIds: ['lut:legacy'] }));
+    try {
+      const result = await createEagleApi(mode).getBatchEaglePhotoEditContext([
+        'target-a',
+        'target-b',
+      ]);
+      expect(result).toEqual({ preservedFilterIds: ['lut:legacy'] });
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        `/api/${mode === 'PHOTO' ? 'photos' : 'eagle'}/assets/batch/edit-render-context`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ assetIds: ['target-a', 'target-b'] }),
+        }),
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+  },
+);

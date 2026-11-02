@@ -114,7 +114,7 @@ export function AssetOperationsPanel({
                 {t('重试失败任务')}
               </button>
             )}
-            {operation.queued > 0 && presentation.executable && (
+            {(operation.queued > 0 || operation.running > 0) && presentation.executable && (
               <button
                 type="button"
                 disabled={action.isPending}
