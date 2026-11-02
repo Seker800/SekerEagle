@@ -140,19 +140,25 @@ test('publication budget is configurable and rejects invalid resource budgets', 
 });
 
 test('PostgreSQL statement timeout is retryable while unrelated SQL errors remain failures', async () => {
-  for (const sqlCode of ['57014', '23505']) {
-    const error = new Prisma.PrismaClientKnownRequestError('Raw query failed', {
-      code: 'P2010',
-      clientVersion: '6.19.3',
-      meta: { code: sqlCode },
-    });
-    const { service } = fixture('PHOTO', async () => {
-      throw error;
-    });
-    await assert.rejects(
-      service.complete('owner', 'session', { parts: [{ partNumber: 1, etag: 'etag' }] }),
-      (received: unknown) =>
-        sqlCode === '57014' ? received instanceof ServiceUnavailableException : received === error,
-    );
-  }
+  for (const sqlCode of ['57014', '23505'])
+    for (const meta of [
+      { code: sqlCode },
+      { driverAdapterError: { cause: { originalCode: sqlCode, code: sqlCode, kind: 'postgres' } } },
+    ]) {
+      const error = new Prisma.PrismaClientKnownRequestError('Raw query failed', {
+        code: 'P2010',
+        clientVersion: '6.19.3',
+        meta,
+      });
+      const { service } = fixture('PHOTO', async () => {
+        throw error;
+      });
+      await assert.rejects(
+        service.complete('owner', 'session', { parts: [{ partNumber: 1, etag: 'etag' }] }),
+        (received: unknown) =>
+          sqlCode === '57014'
+            ? received instanceof ServiceUnavailableException
+            : received === error,
+      );
+    }
 });

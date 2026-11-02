@@ -35,20 +35,31 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
     assert.deepEqual(settings, [['11750ms']]);
     assert.equal(checks, 2, 'a lease/private grant may expire while SQL waits');
   });
-  for (const [code, sqlCode] of [
-    ['P2028', undefined],
-    ['P2024', undefined],
-    ['P2034', undefined],
-    ['P2010', '57014'],
+  for (const [code, sqlCode, adapter] of [
+    ['P2028', undefined, false],
+    ['P2024', undefined, false],
+    ['P2034', undefined, false],
+    ['P2010', '57014', false],
+    ['P2010', '57014', true],
   ] as const) {
-    test(`${mode} clear reports ${code}/${sqlCode ?? ''} as retryable busy`, async () => {
+    test(`${mode} clear reports ${code}/${sqlCode ?? ''}/${adapter ? 'driver' : 'legacy'} as retryable busy`, async () => {
       const service = new EagleService(
         {
           $transaction: async () => {
             throw new Prisma.PrismaClientKnownRequestError('synthetic', {
               code,
               clientVersion: '6.19.3',
-              ...(sqlCode ? { meta: { code: sqlCode } } : {}),
+              ...(sqlCode
+                ? {
+                    meta: adapter
+                      ? {
+                          driverAdapterError: {
+                            cause: { originalCode: sqlCode, kind: 'postgres' },
+                          },
+                        }
+                      : { code: sqlCode },
+                  }
+                : {}),
             });
           },
         } as never,

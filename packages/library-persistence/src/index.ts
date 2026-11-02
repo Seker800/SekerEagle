@@ -1,5 +1,6 @@
 import { lockOwnerPrivacyProjection } from './privacy-lock';
 export { createPrismaAdapter, databasePoolConfig } from './database-adapter';
+export { isDatabaseBusy } from './database-errors';
 export { lockOwnerPrivacyProjection } from './privacy-lock';
 import { inheritedPrivacyTag } from './privacy-tag';
 export { inheritedPrivacyTag } from './privacy-tag';

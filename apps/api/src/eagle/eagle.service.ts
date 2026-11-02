@@ -1,3 +1,4 @@
+import { isDatabaseBusy } from '@sekereagle/library-persistence';
 import { OPERATION_EMPTY_TRASH_BATCH_SIZE } from './eagle-operation-settings';
 import {
   publicPhotoMetadataSelect,
@@ -1228,11 +1229,7 @@ export class EagleService {
         { timeout },
       )
       .catch((error: unknown) => {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          (['P2028', 'P2024', 'P2034'].includes(error.code) ||
-            (error.code === 'P2010' && error.meta?.code === '57014'))
-        )
+        if (isDatabaseBusy(error))
           throw new ServiceUnavailableException({
             code: 'EMPTY_TRASH_BUSY',
             message: '清空回收站暂时繁忙，当前批次已回滚；可重试原任务继续处理。',

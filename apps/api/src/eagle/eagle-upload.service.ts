@@ -1,3 +1,4 @@
+import { isDatabaseBusy } from '@sekereagle/library-persistence';
 import {
   editedCopyTag,
   inheritEditedCopyDetails,
@@ -697,10 +698,7 @@ export class EagleUploadService {
         duplicate: finalized.duplicate,
       };
     } catch (error) {
-      const temporarilyBusy =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        (['P2028', 'P2024', 'P2034'].includes(error.code) ||
-          (error.code === 'P2010' && error.meta?.code === '57014'));
+      const temporarilyBusy = isDatabaseBusy(error);
       await this.prisma.uploadSession.updateMany({
         where: {
           id: session.id,

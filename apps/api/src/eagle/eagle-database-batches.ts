@@ -1,7 +1,8 @@
 import { OPERATION_DB_BATCH_SIZE } from './eagle-operation-settings';
 
-/** Prisma/PostgreSQL bind budget. Work targets are internal quanta, never selection limits. */
-export const DATABASE_PARAMETER_LIMIT = 32767;
+/** Prisma 7 PostgreSQL compiler binds at most 32766 values before implicit splitting.
+ * Work targets are internal quanta, never selection limits. */
+export const DATABASE_PARAMETER_LIMIT = 32766;
 export interface DatabaseStatementBudget {
   readonly fixedParameters: number;
   readonly parametersPerRow: number;
