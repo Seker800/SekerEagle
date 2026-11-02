@@ -523,22 +523,20 @@ it('shows unscanned photo coverage and starts a durable scan in the photo scope'
 });
 it('accepts a queued photo scan without claiming that face jobs have already been created', async () => {
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [] });
-  const start = vi
-    .fn()
-    .mockResolvedValue({
-      id: 'face-command',
-      kind: 'BACKGROUND_COMMAND',
-      commandType: 'PHOTO_PEOPLE_SCAN',
-      libraryMode: 'PHOTO',
-      total: 1,
-      completed: 0,
-      running: 0,
-      queued: 1,
-      failed: 0,
-      cancelled: 0,
-      state: 'QUEUED',
-      errors: [],
-    });
+  const start = vi.fn().mockResolvedValue({
+    id: 'face-command',
+    kind: 'BACKGROUND_COMMAND',
+    commandType: 'PHOTO_PEOPLE_SCAN',
+    libraryMode: 'PHOTO',
+    total: 1,
+    completed: 0,
+    running: 0,
+    queued: 1,
+    failed: 0,
+    cancelled: 0,
+    state: 'QUEUED',
+    errors: [],
+  });
   const photoApi = {
     ...api.createEagleTaskCenterApi('PHOTO'),
     startEagleTaskFamily: start,
