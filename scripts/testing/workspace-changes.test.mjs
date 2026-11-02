@@ -188,20 +188,21 @@ test('committed changes are discovered without scanning resources and private wr
     const release = new Promise((resolve) => {
       commit = resolve;
     });
+    // Asset writes now deliberately serialize the reader revision per owner.
+    // A rendition publishes the same ASSETS hint without taking that projection
+    // lock, so these two genuine business transactions can still commit out of order.
     const slow = db.$transaction(async (tx) => {
-      await tx.eagleAsset.create({
+      await tx.eagleAssetRendition.create({
         data: {
-          ...{
-            ownerId,
-            libraryMode: 'PHOTO',
-            originalName: 'late.jpg',
-            displayName: 'late',
-            normalizedDisplayName: 'late',
-            mimeType: 'image/jpeg',
-            format: 'jpeg',
-            byteSize: 1,
-            originalObjectKey: `users/${ownerId}/late`,
-          },
+          ownerId,
+          libraryMode: 'PHOTO',
+          assetId: asset.id,
+          kind: 'PREVIEW',
+          revision: 0,
+          storageKey: `users/${ownerId}/late-preview`,
+          mimeType: 'image/jpeg',
+          byteSize: 1,
+          status: 'READY',
         },
       });
       staged();
