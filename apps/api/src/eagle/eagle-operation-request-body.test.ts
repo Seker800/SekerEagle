@@ -58,3 +58,35 @@ test('large operation selection bodies work in both modes without widening ordin
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test('queued metadata and photo selections use the shared byte budget across methods', async () => {
+  const app = express();
+  installOperationRequestBodyParser(app as never);
+  app.use(express.json());
+  app.use((req, res) => res.json({ count: req.body.assetIds.length }));
+  const server = app.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  try {
+    const address = server.address();
+    assert(address && typeof address !== 'string');
+    const body = JSON.stringify({ assetIds: Array.from({ length: 5001 }, () => randomUUID()) });
+    for (const [method, path] of [
+      ['PATCH', '/api/eagle/assets/batch'], ['PATCH', '/api/photos/assets/batch'],
+      ['POST', '/api/eagle/assets/batch/manual-tags'], ['POST', '/api/photos/assets/batch/manual-tags'],
+      ['POST', '/api/eagle/vector/suggestions/review-batch'], ['POST', '/api/photos/vector/suggestions/review-batch'],
+      ['POST', '/api/photos/photography/people/merge-selected'],
+      ['PATCH', '/api/photos/photography/groups/abc/members'],
+      ['POST', '/api/photos/agent/tasks/abc/manual-action'],
+      ['POST', '/api/photos/agent/tasks/abc/review'],
+    ]) {
+      const response = await fetch(`http://127.0.0.1:${address.port}${path}`, {
+        method, headers: { 'content-type': 'application/json' }, body,
+      });
+      assert.equal(response.status, 200, `${method} ${path}`);
+      assert.equal(((await response.json()) as { count: number }).count, 5001);
+    }
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
