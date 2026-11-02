@@ -253,6 +253,7 @@ try {
       '--test-coverage-functions=80',
       '--test',
       'scripts/testing/asset-operations.test.mjs',
+      'scripts/testing/library-commands.test.mjs',
       'scripts/testing/duplicates.test.mjs',
     ],
     {

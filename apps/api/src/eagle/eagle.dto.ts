@@ -222,6 +222,13 @@ export class CountEagleAssetsDto {
 }
 
 export class UpdateEagleAssetDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  predecessorOperationIds?: string[];
+
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
@@ -295,6 +302,13 @@ export class EagleAssetVersionDto {
 }
 
 export class BatchUpdateEagleAssetsDto {
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  predecessorOperationIds?: string[];
+
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique((asset: EagleAssetVersionDto) => asset.assetId)

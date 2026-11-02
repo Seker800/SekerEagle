@@ -141,13 +141,19 @@ export class EagleController {
   ) {
     return this.duplicates!.cleanup(principal, input);
   }
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('duplicates/ignore')
   @UseGuards(BrowserOriginGuard)
   ignoreDuplicates(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: DuplicateIgnoreDto,
   ) {
-    return this.duplicates!.ignore(principal.sub, principal.canViewPrivate, input);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'DUPLICATE_IGNORE',
+      payload: libraryCommandPayload(input),
+    });
   }
 
   @ApiCreatedResponse({ type: EagleOperationSummaryResponseDto })
@@ -215,6 +221,7 @@ export class EagleController {
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('assets/batch/send')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   sendAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: SendEagleAssetsDto) {
     if (!this.operations) throw new Error('Asset operation service is unavailable');
@@ -229,6 +236,7 @@ export class EagleController {
 
   @Post('assets/batch/edit-renders')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   batchEditRenders(
@@ -557,6 +565,7 @@ export class EagleController {
   @Patch('assets/batch')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchUpdate(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchUpdateEagleAssetsDto,
@@ -571,6 +580,7 @@ export class EagleController {
   @Patch('assets/:assetId')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   updateAsset(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -592,8 +602,8 @@ export class EagleController {
 
   @Put('privacy-settings')
   @UseGuards(BrowserOriginGuard)
-  @ApiOkResponse({ type: EaglePrivacySettingsDto })
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   updatePrivacySettings(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: UpdateEaglePrivacySettingsDto,
@@ -607,6 +617,7 @@ export class EagleController {
   @Post('assets/trash')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   trashAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
     return this.operations!.enqueue(principal, {
       operationId: randomUUID(),
@@ -618,6 +629,7 @@ export class EagleController {
   @Post('assets/batch/trash')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchTrash(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
     return this.operations!.enqueue(principal, {
       operationId: randomUUID(),
@@ -629,6 +641,7 @@ export class EagleController {
   @Post('assets/batch/restore')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchRestore(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
     return this.operations!.enqueue(principal, {
       operationId: randomUUID(),
@@ -652,6 +665,7 @@ export class EagleController {
   @Post('trash/restore')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   restoreAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
     return this.operations!.enqueue(principal, {
       operationId: randomUUID(),
@@ -662,6 +676,7 @@ export class EagleController {
 
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Delete('trash')
   @UseGuards(BrowserOriginGuard)
   emptyTrash(@CurrentPrincipal() principal: AuthPrincipal) {
@@ -674,6 +689,7 @@ export class EagleController {
 
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('trash/empty')
   @UseGuards(BrowserOriginGuard)
   emptyTrashCompat(@CurrentPrincipal() principal: AuthPrincipal) {
@@ -694,6 +710,7 @@ export class EagleController {
   @Patch(['tags/:tagId', 'manual-tags/:tagId'])
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   updateTag(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
@@ -708,6 +725,7 @@ export class EagleController {
   @Delete(['tags/:tagId', 'manual-tags/:tagId'])
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   deleteTag(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
@@ -742,6 +760,7 @@ export class EagleController {
   @Delete(['tag-groups/:groupId', 'manual-tag-groups/:groupId'])
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   deleteTagGroup(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
@@ -760,6 +779,7 @@ export class EagleController {
   @Put('assets/:assetId/tags')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   replaceAssetTags(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -775,6 +795,7 @@ export class EagleController {
   @Put('assets/:assetId/manual-tags')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   replaceAssetManualTags(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -790,6 +811,7 @@ export class EagleController {
   @Post('assets/batch/manual-tags')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchChangeManualTags(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchChangeEagleManualTagsDto,

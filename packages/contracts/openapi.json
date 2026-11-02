@@ -630,8 +630,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -915,6 +922,40 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EagleMediaCapabilitiesDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/assets/batch/edit-renders": {
+      "post": {
+        "operationId": "EagleController_batchEditRenders",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEditRendersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
                 }
               }
             }
@@ -1537,8 +1578,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1804,6 +1852,52 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/facts": {
+      "post": {
+        "operationId": "EagleController_listAssetFacts",
+        "parameters": [
+          {
+            "name": "publicOnly",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EagleAssetIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleAssetListResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/batch": {
       "patch": {
         "operationId": "EagleController_batchUpdate",
@@ -1819,8 +1913,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1868,12 +1969,12 @@
           }
         },
         "responses": {
-          "200": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EaglePrivacySettingsDto"
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
                 }
               }
             }
@@ -1902,8 +2003,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1929,8 +2037,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1956,8 +2071,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2267,8 +2389,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2411,8 +2540,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2435,8 +2571,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2471,8 +2614,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2495,8 +2645,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2639,8 +2796,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2699,8 +2863,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2752,8 +2923,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2788,8 +2966,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2815,8 +3000,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3973,8 +4165,15 @@
         "operationId": "EagleProcessingController_retryFailed",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleProcessing"]
@@ -3985,8 +4184,15 @@
         "operationId": "EagleProcessingController_reconcile",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleProcessing"]
@@ -4090,8 +4296,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleTaskCenter"]
@@ -4112,8 +4325,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleTaskCenter"]
@@ -4303,8 +4523,15 @@
         "operationId": "EagleVectorController_retryFailedEmbeddings",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleVector"]
@@ -4315,8 +4542,15 @@
         "operationId": "EagleVectorController_scanMissingEmbeddings",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleVector"]
@@ -4327,8 +4561,15 @@
         "operationId": "EagleVectorController_scanUnclassifiedSuggestions",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleVector"]
@@ -4358,8 +4599,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleVector"]
@@ -4380,8 +4628,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["EagleVector"]
@@ -4712,8 +4967,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4997,6 +5259,40 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EagleMediaCapabilitiesDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/batch/edit-renders": {
+      "post": {
+        "operationId": "PhotosController_batchEditRenders",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEditRendersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
                 }
               }
             }
@@ -5619,8 +5915,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5886,6 +6189,52 @@
         "tags": ["eagle", "photos"]
       }
     },
+    "/api/photos/assets/facts": {
+      "post": {
+        "operationId": "PhotosController_listAssetFacts",
+        "parameters": [
+          {
+            "name": "publicOnly",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EagleAssetIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleAssetListResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
     "/api/photos/assets/batch": {
       "patch": {
         "operationId": "PhotosController_batchUpdate",
@@ -5901,8 +6250,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5950,12 +6306,12 @@
           }
         },
         "responses": {
-          "200": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EaglePrivacySettingsDto"
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
                 }
               }
             }
@@ -5984,8 +6340,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6011,8 +6374,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6038,8 +6408,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6349,8 +6726,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6493,8 +6877,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6517,8 +6908,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6553,8 +6951,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6577,8 +6982,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6721,8 +7133,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6781,8 +7200,15 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6834,8 +7260,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6870,8 +7303,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6897,8 +7337,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -7299,8 +7746,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7323,8 +7777,15 @@
         "operationId": "PhotoManagementController_scanPeople",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7354,8 +7815,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7385,8 +7853,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7407,8 +7882,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7438,8 +7920,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7469,8 +7958,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7493,8 +7989,15 @@
         "operationId": "PhotoManagementController_scanGroups",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7515,8 +8018,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7546,8 +8056,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7577,8 +8094,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7608,8 +8132,15 @@
           }
         },
         "responses": {
-          "200": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-management"]
@@ -7914,8 +8445,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-agent"]
@@ -7945,8 +8483,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-agent"]
@@ -8194,8 +8739,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-agent"]
@@ -8223,8 +8775,15 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-agent"]
@@ -8652,8 +9211,15 @@
         "operationId": "PhotoVectorsController_retryFailedEmbeddings",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-vectors"]
@@ -8664,8 +9230,15 @@
         "operationId": "PhotoVectorsController_scanMissingEmbeddings",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-vectors"]
@@ -8676,8 +9249,15 @@
         "operationId": "PhotoVectorsController_scanUnclassifiedSuggestions",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-vectors"]
@@ -8707,8 +9287,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-vectors"]
@@ -8729,8 +9316,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-vectors"]
@@ -8830,8 +9424,15 @@
         "operationId": "PhotoProcessingController_retryFailed",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-processing"]
@@ -8842,8 +9443,15 @@
         "operationId": "PhotoProcessingController_reconcile",
         "parameters": [],
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["photo-processing"]
@@ -8947,8 +9555,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["PhotoTaskCenter"]
@@ -8969,8 +9584,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": ["PhotoTaskCenter"]
@@ -9396,25 +10018,6 @@
         },
         "required": ["ignored"]
       },
-      "EnqueueAssetOperationDto": {
-        "type": "object",
-        "properties": {
-          "operationId": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": ["SEND", "TRASH", "RESTORE", "EMPTY_TRASH"]
-          },
-          "assetIds": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["operationId", "kind", "assetIds"]
-      },
       "EagleOperationErrorResponseDto": {
         "type": "object",
         "properties": {
@@ -9433,6 +10036,9 @@
           "undoOf": {
             "type": "string"
           },
+          "commandType": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -9444,7 +10050,9 @@
               "RESTORE",
               "EMPTY_TRASH",
               "DUPLICATE_SCAN",
-              "DUPLICATE_CLEANUP"
+              "DUPLICATE_CLEANUP",
+              "METADATA_COMMAND",
+              "BACKGROUND_COMMAND"
             ]
           },
           "libraryMode": {
@@ -9496,6 +10104,25 @@
           "state",
           "errors"
         ]
+      },
+      "EnqueueAssetOperationDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["SEND", "TRASH", "RESTORE", "EMPTY_TRASH"]
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["operationId", "kind", "assetIds"]
       },
       "EagleMembershipResponseDto": {
         "type": "object",
@@ -9701,6 +10328,48 @@
           }
         },
         "required": ["serverPhotoEditing", "version", "images", "videos"]
+      },
+      "BatchEditPartsDto": {
+        "type": "object",
+        "properties": {
+          "adjustments": {
+            "type": "boolean"
+          },
+          "filter": {
+            "type": "boolean"
+          },
+          "watermark": {
+            "type": "boolean"
+          },
+          "crop": {
+            "type": "boolean"
+          }
+        },
+        "required": ["adjustments", "filter", "watermark", "crop"]
+      },
+      "BatchEditRendersDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recipe": {
+            "type": "object"
+          },
+          "parts": {
+            "$ref": "#/components/schemas/BatchEditPartsDto"
+          },
+          "lut": {
+            "type": "string"
+          }
+        },
+        "required": ["assetIds", "recipe", "parts"]
       },
       "CreateEditRenderDto": {
         "type": "object",
@@ -10556,11 +11225,24 @@
       },
       "BatchUpdateEagleAssetsDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "predecessorOperationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       },
       "UpdateEagleAssetDto": {
         "type": "object",
         "properties": {
+          "predecessorOperationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "rowVersion": {
             "type": "number",
             "minimum": 1
@@ -10680,7 +11362,6 @@
         "properties": {
           "assetIds": {
             "minItems": 1,
-            "maxItems": 1000,
             "type": "array",
             "items": {
               "type": "string"
@@ -11153,7 +11834,6 @@
         "properties": {
           "assetIds": {
             "minItems": 1,
-            "maxItems": 500,
             "type": "array",
             "items": {
               "type": "string"
@@ -11288,7 +11968,6 @@
         "type": "object",
         "properties": {
           "suggestionIds": {
-            "maxItems": 200,
             "type": "array",
             "items": {
               "type": "string"
@@ -11329,7 +12008,6 @@
             "enum": ["SEND_TO_MATERIAL", "DELETE"]
           },
           "items": {
-            "maxItems": 100,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ManualPhotoItemDto"

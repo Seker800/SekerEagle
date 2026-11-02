@@ -1,3 +1,5 @@
+import { EagleOperationSummaryResponseDto } from '../eagle/eagle-operation-response.dto';
+import { ApiAcceptedResponse } from '@nestjs/swagger';
 import { safeMediaResponse } from '../common/media-response';
 import {
   Body,
@@ -92,6 +94,7 @@ export class PhotoAgentController {
   }
   @Post('tasks/:id/review')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   reviewRequest(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -105,6 +108,7 @@ export class PhotoAgentController {
   }
   @Post('tasks/:id/manual-action')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   manualAction(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -165,6 +169,7 @@ export class PhotoAgentController {
   }
   @Post('tasks/:id/suggestions/:suggestionId/review')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   review(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -179,6 +184,7 @@ export class PhotoAgentController {
   }
   @Post('tasks/:id/suggestions/:suggestionId/undo')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   undo(
     @CurrentPrincipal() p: AuthPrincipal,

@@ -1,3 +1,5 @@
+import { EagleOperationSummaryResponseDto } from './eagle-operation-response.dto';
+import { ApiAcceptedResponse } from '@nestjs/swagger';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { libraryReadObserver } from './eagle-memory-observability';
 import {
@@ -62,6 +64,7 @@ export class EagleProcessingController {
   @Post('retry-failed')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   retryFailed(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.operations!.enqueueCommand(principal, {
       type: 'PROCESSING_RETRY_FAILED',
@@ -72,6 +75,7 @@ export class EagleProcessingController {
   @Post('reconcile')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   reconcile(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.operations!.enqueueCommand(principal, {
       type: 'PROCESSING_RECONCILE',

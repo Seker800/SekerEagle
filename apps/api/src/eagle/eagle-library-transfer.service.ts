@@ -62,7 +62,7 @@ export interface TransferRequest {
     beforePublish: (tx: Prisma.TransactionClient) => Promise<void>;
     beforeCopy?: () => Promise<void>;
     afterPublish?: (tx: Prisma.TransactionClient) => Promise<void>;
-    componentIds: readonly string[];
+    componentIds?: readonly string[];
   };
 }
 type PublishTransfer = (
@@ -347,7 +347,7 @@ export class EagleLibraryTransferService {
       throw new ConflictException('发送存储计划无效。');
 
     if (
-      guard &&
+      guard?.componentIds &&
       JSON.stringify(planItems.map((item) => item.sourceId).sort()) !==
         JSON.stringify([...guard.componentIds].sort())
     )

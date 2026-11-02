@@ -609,6 +609,7 @@ export function checkLibrarySharing(sources) {
       'PhotoStatisticsService',
       'PhotoRevisionObserver',
       'PhotoAgentService',
+      'PhotoLibraryCommandSetup',
     ]);
     let spreads = 0;
     walk(photoTree, (node) => {

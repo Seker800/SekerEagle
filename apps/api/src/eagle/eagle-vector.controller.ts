@@ -1,3 +1,5 @@
+import { EagleOperationSummaryResponseDto } from './eagle-operation-response.dto';
+import { ApiAcceptedResponse } from '@nestjs/swagger';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import {
   Body,
@@ -113,6 +115,7 @@ export class EagleVectorController {
   @Post('embeddings/retry-failed')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   retryFailedEmbeddings(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.operations!.enqueueCommand(principal, { type: 'VECTOR_RETRY_FAILED', payload: {} });
   }
@@ -120,6 +123,7 @@ export class EagleVectorController {
   @Post('embeddings/scan-missing')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   scanMissingEmbeddings(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.operations!.enqueueCommand(principal, { type: 'VECTOR_SCAN_MISSING', payload: {} });
   }
@@ -127,6 +131,7 @@ export class EagleVectorController {
   @Post('suggestions/scan-unclassified')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   scanUnclassifiedSuggestions(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.operations!.enqueueCommand(principal, {
       type: 'VECTOR_SCAN_UNCLASSIFIED',
@@ -137,6 +142,7 @@ export class EagleVectorController {
   @Post('suggestions/:suggestionId/review')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   review(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('suggestionId', new ParseUUIDPipe({ version: '4' })) suggestionId: string,
@@ -151,6 +157,7 @@ export class EagleVectorController {
   @Post('suggestions/review-batch')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   reviewBatch(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchReviewVectorSuggestionsDto,

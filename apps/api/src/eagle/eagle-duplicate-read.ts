@@ -68,7 +68,7 @@ export async function readDuplicateReview(
     >`SELECT count(*)::int AS total,
         EXISTS(SELECT 1 FROM "EagleAssetOperation" o JOIN "EagleAssetOperationItem" i ON i."operationId"=o.id AND i."ownerId"=o."ownerId" AND i."libraryMode"=o."libraryMode"
           WHERE o."ownerId"=${ownerId} AND o."libraryMode"=${libraryMode}::"LibraryMode" AND o.kind='DUPLICATE_SCAN' AND o."isPrivate"=${includePrivate}
-          AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION} AND i.snapshots->>'kind' IN ('build','publish')) AS "originalCheckAttempted",
+          AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION} AND i.snapshots->>'kind' IN ('discover','build','publish')) AS "originalCheckAttempted",
         EXISTS(SELECT 1 FROM "EagleAssetOperation" o JOIN "EagleAssetOperationItem" i ON i."operationId"=o.id AND i."ownerId"=o."ownerId" AND i."libraryMode"=o."libraryMode"
           WHERE o."ownerId"=${ownerId} AND o."libraryMode"=${libraryMode}::"LibraryMode" AND o.kind='DUPLICATE_SCAN' AND o."isPrivate"=${includePrivate}
           AND i.status='COMPLETED' AND i.snapshots->>'kind' IN ('build','publish') AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION}

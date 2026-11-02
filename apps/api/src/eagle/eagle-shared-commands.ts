@@ -1,3 +1,4 @@
+import { prepareQueuedMetadata, applyQueuedMetadata } from './eagle-queued-metadata';
 import type { Prisma } from '@prisma/client';
 import { libraryCommandPayload } from './eagle-library-command';
 import type { LibraryCommandRegistry } from './eagle-library-command';
@@ -71,22 +72,30 @@ export function registerSharedLibraryCommands(
   });
   registry.register('ASSET_UPDATE', {
     protocol: 'METADATA',
+    prepare: (context, payload, ids, tx) => prepareQueuedMetadata(tx, context, payload, ids),
     partition: (payload, assetIds) => {
       const input = payload as unknown as BatchUpdateEagleAssetsDto;
       const versions = new Map(input.assets.map((asset) => [asset.assetId, asset]));
+      const bases = new Map(
+        (payload.queueBase as unknown as Array<{ assetId: string }> | undefined)?.map((base) => [
+          base.assetId,
+          base,
+        ]),
+      );
       return chunks(assetIds).map((ids) => ({
         assetIds: ids,
-        payload: libraryCommandPayload({ ...input, assets: ids.map((id) => versions.get(id)) }),
+        payload: libraryCommandPayload({
+          ...input,
+          assets: ids.map((id) => versions.get(id)),
+          ...('queueBase' in payload
+            ? {
+                queueBase: ids.map((id) => bases.get(id)),
+              }
+            : {}),
+        }),
       }));
     },
-    apply: async (tx, context, payload) => {
-      await eagle.batchUpdate(
-        context.ownerId,
-        payload as unknown as BatchUpdateEagleAssetsDto,
-        context.includePrivate,
-        tx,
-      );
-    },
+    apply: (tx, context, payload) => applyQueuedMetadata(eagle, tx, context, payload),
   });
   registry.register('TAG_UPDATE', {
     protocol: 'METADATA',
