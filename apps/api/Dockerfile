@@ -41,7 +41,7 @@ COPY --from=build /sekereagle/packages/media-core ./packages/media-core
 COPY --from=build /sekereagle/packages/eagle-filter-core ./packages/eagle-filter-core
 COPY --from=build /sekereagle/packages/vector-core ./packages/vector-core
 COPY scripts ./scripts
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json prisma.config.ts ./
 USER node
 # Check the compiled entry dependency in the actual runtime filesystem.
 RUN node -e "require('./apps/api/dist/eagle/eagle-edit-request-body.js')"
