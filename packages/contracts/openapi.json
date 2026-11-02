@@ -3879,6 +3879,18 @@
         "tags": ["eagle-imports"]
       }
     },
+    "/api/admin/eagle-processing/reader-metrics": {
+      "get": {
+        "operationId": "EagleProcessingController_readerMetrics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
     "/api/admin/eagle-processing/summary": {
       "get": {
         "operationId": "EagleProcessingController_summary",
@@ -8722,6 +8734,18 @@
           }
         },
         "tags": ["photo-vectors"]
+      }
+    },
+    "/api/admin/photo-processing/reader-metrics": {
+      "get": {
+        "operationId": "PhotoProcessingController_readerMetrics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-processing"]
       }
     },
     "/api/admin/photo-processing/summary": {

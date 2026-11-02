@@ -52,7 +52,8 @@ test('reader client requires a canonical scope and preserves page size and direc
     assert.equal(calls, 1);
     assert.ok(libraryReadMetrics.hits > 0);
   } finally {
-    if (oldActions === undefined) delete process.env.EAGLE_READER_ACTIONS; else process.env.EAGLE_READER_ACTIONS = oldActions;
+    if (oldActions === undefined) delete process.env.EAGLE_READER_ACTIONS;
+    else process.env.EAGLE_READER_ACTIONS = oldActions;
     if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
     else process.env.EAGLE_READER_URL = oldUrl;
     if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
@@ -63,14 +64,22 @@ test('reader client requires a canonical scope and preserves page size and direc
 });
 
 test('reader client bounds failures and keeps the authenticated scope authoritative', async () => {
-  const keys = ['EAGLE_READER_URL', 'EAGLE_READER_TOKEN', 'EAGLE_READER_TIMEOUT_MS', 'EAGLE_READER_ACTIONS', 'EAGLE_READER_RETRY_DELAY_MS'] as const;
+  const keys = [
+    'EAGLE_READER_URL',
+    'EAGLE_READER_TOKEN',
+    'EAGLE_READER_TIMEOUT_MS',
+    'EAGLE_READER_ACTIONS',
+    'EAGLE_READER_RETRY_DELAY_MS',
+  ] as const;
   const before = keys.map((key) => process.env[key]);
   let reply: unknown = { count: 0 },
     status = 200,
     invalid = false,
     hold = false,
-    received: unknown;
+    received: unknown,
+    calls = 0;
   const handle = async (request: IncomingMessage, response: ServerResponse) => {
+    calls++;
     const chunks: Buffer[] = [];
     for await (const chunk of request as AsyncIterable<Uint8Array>) chunks.push(Buffer.from(chunk));
     received = JSON.parse(Buffer.concat(chunks).toString());
@@ -160,7 +169,18 @@ test('reader client bounds failures and keeps the authenticated scope authoritat
     invalid = false;
     hold = true;
     process.env.EAGLE_READER_TIMEOUT_MS = '25';
+    process.env.EAGLE_READER_RETRY_DELAY_MS = '60000';
     assert.equal(await readMemoryCount(scope), null);
+    const afterTimeout = calls;
+    assert.equal(await readMemoryCount(scope), null);
+    assert.equal(calls, afterTimeout, 'cooldown skips a second slow reader request');
+    hold = false;
+    reply = { ids: ['a'] };
+    assert.deepEqual(await readMemoryPage(page), ['a'], 'other actions remain available');
+    delete process.env.EAGLE_READER_ACTIONS;
+    assert.equal(await readMemoryPage(page), null);
+    assert.equal(await readMemoryCount(scope), null);
+    assert.equal(calls, afterTimeout + 1, 'ordinary page/count default to SQL without reader I/O');
     delete process.env.EAGLE_READER_TOKEN;
     assert.equal(await readMemoryCount(scope), null);
   } finally {

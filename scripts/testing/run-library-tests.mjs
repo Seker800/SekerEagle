@@ -273,6 +273,10 @@ try {
     'scripts/testing/architecture-operation-cost.test.mjs',
   ])
     run(process.execPath, ['--test', file], { env, stdio: 'inherit' });
+  run(process.execPath, ['--test', 'scripts/testing/reader-performance.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   run(process.execPath, ['--test', 'scripts/testing/photo-face-scan.test.mjs'], {
     env,
     stdio: 'inherit',

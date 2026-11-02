@@ -14,7 +14,10 @@ import {
   createLibraryReadPool,
 } from '../../apps/api/dist/eagle/eagle-memory-store.js';
 import { createLibraryReaderServer } from '../../apps/api/dist/eagle/eagle-memory-server.js';
-import { libraryReadObserver } from '../../apps/api/dist/eagle/eagle-memory-observability.js';
+import {
+  DEFAULT_LIBRARY_READ_ACTIONS,
+  libraryReadObserver,
+} from '../../apps/api/dist/eagle/eagle-memory-observability.js';
 import { photoStatisticsFactFieldsSql } from '../../apps/api/dist/photos/photo-statistics-query.js';
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 import { readResidentPhotoFacets } from '../../apps/api/dist/photos/photo-facets-memory.js';
@@ -137,7 +140,9 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
         status: 'READY',
       },
     });
-    await db.$executeRaw(Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot" SET "isActive"=true,"queryVector"=${JSON.stringify([1,...Array(1023).fill(0)])}::vector WHERE id=${snapshotId}`);
+    await db.$executeRaw(
+      Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot" SET "isActive"=true,"queryVector"=${JSON.stringify([1, ...Array(1023).fill(0)])}::vector WHERE id=${snapshotId}`,
+    );
     await db.$executeRaw(Prisma.sql`INSERT INTO "EagleSmartFolderSemanticMatch" ("ownerId","libraryMode","snapshotId","embeddingId",similarity)
       SELECT "ownerId","libraryMode",${snapshotId},id,0.9 FROM "EagleAssetEmbedding" WHERE "ownerId"=${ownerId} AND "spaceId"=${spaceId}`);
     await db.$executeRawUnsafe('ANALYZE "EagleAsset"');
@@ -273,11 +278,12 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
     const percentile = (values, fraction) =>
       [...values].sort((a, b) => a - b)[Math.ceil(values.length * fraction) - 1];
     for (const [label, path, body] of cases) {
-      const samples = { sql: [], reader: [] };
+      const samples = { sql: [], reader: [], selected: [] };
       let baseline;
       for (let n = 0; n < 12; n++)
-        for (const mode of n % 2 ? ['reader', 'sql'] : ['sql', 'reader']) {
-          process.env.EAGLE_READER_ACTIONS = mode === 'sql' ? '' : allActions;
+        for (const mode of n % 2 ? ['selected', 'reader', 'sql'] : ['sql', 'reader', 'selected']) {
+          process.env.EAGLE_READER_ACTIONS =
+            mode === 'sql' ? '' : mode === 'reader' ? allActions : DEFAULT_LIBRARY_READ_ACTIONS;
           const result = await invoke(path, body);
           if (!baseline) baseline = result.data;
           else assert.deepEqual(result.data, baseline, `${label} SQL/reader must agree`);
@@ -293,26 +299,35 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
           sqlP95Ms: percentile(samples.sql, 0.95),
           readerP50Ms: percentile(samples.reader, 0.5),
           readerP95Ms: percentile(samples.reader, 0.95),
+          selectedP50Ms: percentile(samples.selected, 0.5),
+          selectedP95Ms: percentile(samples.selected, 0.95),
           scope:
             'warm local synthetic, includes auth, HTTP, hydration; excludes media GET and browser rendering',
         }),
       );
     }
-    process.env.EAGLE_READER_ACTIONS = '';
+    process.env.EAGLE_READER_ACTIONS = DEFAULT_LIBRARY_READ_ACTIONS;
     const before = libraryReadObserver.snapshot().actions.facets.attempts;
     const started = performance.now();
     const writer = db.eagleAsset.updateMany({
       where: { ownerId, libraryMode: 'PHOTO', rating: null },
       data: { rating: 2 },
     });
-    await writer;
+    const [, duringWrite] = await Promise.all([writer, invoke('/api/photos/photography/facets')]);
     await store.synchronize({ ownerId, libraryMode: 'PHOTO' });
     process.env.EAGLE_READER_ACTIONS = allActions;
-    await invoke('/api/photos/photography/facets');
-    assert.equal(libraryReadObserver.snapshot().actions.facets.attempts, before + 1);
+    const afterWrite = await invoke('/api/photos/photography/facets');
+    assert.deepEqual(
+      afterWrite.data,
+      duringWrite.data,
+      'rating writes do not change photography facets',
+    );
+    assert.equal(libraryReadObserver.snapshot().actions.facets.attempts, before + 2);
     log(
       JSON.stringify({
-        fixture: 'reader after concurrent bulk write',
+        fixture: 'reader during and after concurrent bulk write',
+        duringWriteApiMs: duringWrite.ms,
+        afterWriteApiMs: afterWrite.ms,
         writeAndCatchupMs: performance.now() - started,
       }),
     );

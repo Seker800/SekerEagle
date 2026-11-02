@@ -5,7 +5,13 @@ import { LibraryReadObserver, readerActionEnabled } from './eagle-memory-observa
 test('default policy leaves indexed pages and counts to SQL and keeps aggregate acceleration', () => {
   assert.equal(readerActionEnabled('page', undefined), false);
   assert.equal(readerActionEnabled('count', undefined), false);
-  for (const action of ['statistics', 'facets', 'peopleCounts', 'smartFolderPage', 'colorPage'] as const)
+  for (const action of [
+    'statistics',
+    'facets',
+    'peopleCounts',
+    'smartFolderPage',
+    'colorPage',
+  ] as const)
     assert.equal(readerActionEnabled(action, undefined), true);
   assert.equal(readerActionEnabled('page', 'page,count'), true);
   assert.equal(readerActionEnabled('count', ''), false);
