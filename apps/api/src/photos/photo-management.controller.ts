@@ -1,3 +1,5 @@
+import { EagleOperationSummaryResponseDto } from '../eagle/eagle-operation-response.dto';
+import { ApiAcceptedResponse } from '@nestjs/swagger';
 import {
   Body,
   HttpCode,
@@ -20,7 +22,6 @@ import {
   Min,
   IsArray,
   ArrayMinSize,
-  ArrayMaxSize,
   IsBoolean,
   IsOptional,
   IsString,
@@ -94,10 +95,9 @@ class ReassignFaceDto {
   personId?: string | null;
 }
 class GroupMembersDto {
-  @ApiProperty({ type: [String], minItems: 1, maxItems: 500 })
+  @ApiProperty({ type: [String], minItems: 1 })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(500)
   @IsUUID('4', { each: true })
   assetIds!: string[];
 }
@@ -156,10 +156,11 @@ export class PhotoManagementController {
   ) {
     return this.review.suggestions(p.sub, p.canViewPrivate, query.after);
   }
-  @Post('people/review') @HttpCode(202) @UseGuards(BrowserOriginGuard) decidePeople(
-    @CurrentPrincipal() p: AuthPrincipal,
-    @Body() dto: PersonReviewDto,
-  ) {
+  @Post('people/review')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  decidePeople(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: PersonReviewDto) {
     return this.operations.enqueueCommand(p, {
       type: 'PHOTO_PEOPLE_REVIEW',
       payload: libraryCommandPayload(dto),
@@ -170,12 +171,18 @@ export class PhotoManagementController {
     const result = await this.review.suggestions(p.sub, p.canViewPrivate);
     return { pairs: result.items };
   }
-  @Post('people/scan') @HttpCode(202) @UseGuards(BrowserOriginGuard) scanPeople(
-    @CurrentPrincipal() p: AuthPrincipal,
-  ) {
+  @Post('people/scan')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  scanPeople(@CurrentPrincipal() p: AuthPrincipal) {
     return this.operations.enqueueCommand(p, { type: 'PHOTO_PEOPLE_SCAN', payload: {} });
   }
-  @Patch('people/:id') @HttpCode(202) @UseGuards(BrowserOriginGuard) rename(
+  @Patch('people/:id')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  rename(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: RenamePersonDto,
@@ -185,7 +192,11 @@ export class PhotoManagementController {
       payload: libraryCommandPayload({ id, ...dto }),
     });
   }
-  @Patch('people/:id/privacy') @HttpCode(202) @UseGuards(BrowserOriginGuard) privacy(
+  @Patch('people/:id/privacy')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  privacy(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: PersonPrivacyDto,
@@ -195,16 +206,21 @@ export class PhotoManagementController {
       payload: libraryCommandPayload({ id, ...dto }),
     });
   }
-  @Post('people/merge-selected') @HttpCode(202) @UseGuards(BrowserOriginGuard) mergeSelected(
-    @CurrentPrincipal() p: AuthPrincipal,
-    @Body() dto: MergeSelectedPeopleDto,
-  ) {
+  @Post('people/merge-selected')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  mergeSelected(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: MergeSelectedPeopleDto) {
     return this.operations.enqueueCommand(p, {
       type: 'PHOTO_PEOPLE_MERGE_SELECTED',
       payload: libraryCommandPayload(dto),
     });
   }
-  @Post('people/:id/merge') @HttpCode(202) @UseGuards(BrowserOriginGuard) merge(
+  @Post('people/:id/merge')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  merge(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: MergePeopleDto,
@@ -214,7 +230,11 @@ export class PhotoManagementController {
       payload: libraryCommandPayload({ id, ...dto }),
     });
   }
-  @Patch('faces/:id/person') @HttpCode(202) @UseGuards(BrowserOriginGuard) assign(
+  @Patch('faces/:id/person')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  assign(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: ReassignFaceDto,
@@ -227,13 +247,16 @@ export class PhotoManagementController {
   @Get('groups') groups(@CurrentPrincipal() p: AuthPrincipal) {
     return this.photos.groups(p.sub, p.canViewPrivate);
   }
-  @Post('groups/scan') @HttpCode(202) @UseGuards(BrowserOriginGuard) scanGroups(
-    @CurrentPrincipal() p: AuthPrincipal,
-  ) {
+  @Post('groups/scan')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  scanGroups(@CurrentPrincipal() p: AuthPrincipal) {
     return this.operations.enqueueCommand(p, { type: 'PHOTO_GROUPS_SCAN', payload: {} });
   }
   @Post('groups/manual')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   createGroup(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: GroupMembersDto) {
     return this.operations.enqueueCommand(p, {
@@ -243,6 +266,7 @@ export class PhotoManagementController {
   }
   @Patch('groups/:id/members')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   removeMembers(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -256,6 +280,7 @@ export class PhotoManagementController {
   }
   @Post('groups/:id/merge')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   mergeGroups(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -267,7 +292,11 @@ export class PhotoManagementController {
       payload: libraryCommandPayload({ id, ...dto }),
     });
   }
-  @Patch('groups/:id') @HttpCode(202) @UseGuards(BrowserOriginGuard) group(
+  @Patch('groups/:id')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  group(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: UpdateGroupDto,

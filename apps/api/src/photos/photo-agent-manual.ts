@@ -1,3 +1,4 @@
+import { databaseBatches, DATABASE_STATEMENTS } from '../eagle/eagle-database-batches';
 import { isDeepStrictEqual } from 'node:util';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
@@ -77,16 +78,20 @@ export async function performManualPhotoAction(
     });
     if (done) return (done.details as unknown as { result: Receipt }).result;
     // A manual operation supersedes pending advice, while prior decisions retain their original meaning.
-    await tx.eaglePhotoAgentSuggestion.updateMany({
-      where: {
-        ownerId,
-        libraryMode: 'PHOTO',
-        taskId,
-        id: { in: start.targets.map((t) => t.suggestionId) },
-        status: { in: ['PENDING', 'FAILED'] },
-      },
-      data: { status: 'REJECTED', reviewedAt: new Date() },
-    });
+    for (const { rows } of databaseBatches(
+      start.targets.map((t) => t.suggestionId),
+      DATABASE_STATEMENTS.operationAssetLookup,
+    ))
+      await tx.eaglePhotoAgentSuggestion.updateMany({
+        where: {
+          ownerId,
+          libraryMode: 'PHOTO',
+          taskId,
+          id: { in: rows },
+          status: { in: ['PENDING', 'FAILED'] },
+        },
+        data: { status: 'REJECTED', reviewedAt: new Date() },
+      });
     const result = { affectedAssetCount: start.targets.length, action: input.action };
     await appendPhotoAgentEvent(tx, ownerId, taskId, 'MANUAL_EXECUTED', 'HUMAN', {
       operationId: input.operationId,
@@ -113,21 +118,26 @@ export async function performManualPhotoAction(
           result: done ? (done.details as unknown as { result: Receipt }).result : null,
         };
       }
-      const suggestions = await tx.eaglePhotoAgentSuggestion.findMany({
-        where: {
-          ownerId,
-          libraryMode: 'PHOTO',
-          taskId,
-          id: { in: canonical.items.map((i) => i.suggestionId) },
-        },
-      });
+      const suggestions: Array<{ id: string; assetId: string; status: string }> = [];
+      for (const { rows } of databaseBatches(
+        canonical.items.map((item) => item.suggestionId),
+        DATABASE_STATEMENTS.operationAssetLookup,
+      ))
+        suggestions.push(
+          ...(await tx.eaglePhotoAgentSuggestion.findMany({
+            where: { ownerId, libraryMode: 'PHOTO', taskId, id: { in: rows } },
+            select: { id: true, assetId: true, status: true },
+          })),
+        );
       if (suggestions.length !== canonical.items.length)
         throw new NotFoundException('整理建议不存在。');
+      const bySuggestion = new Map(suggestions.map((s) => [s.id, s]));
+      const byAsset = new Map(context.assets.map((asset) => [asset.id, asset]));
       const targets = canonical.items.map((item) => {
-        const suggestion = suggestions.find((s) => s.id === item.suggestionId)!;
+        const suggestion = bySuggestion.get(item.suggestionId)!;
         if (suggestion.status === 'APPLYING')
           throw new ConflictException('原申请尚未执行完成，请先处理原申请。');
-        const asset = context.assets.find((a) => a.id === suggestion.assetId);
+        const asset = byAsset.get(suggestion.assetId);
         if (
           !asset ||
           asset.deletedAt ||
@@ -139,27 +149,32 @@ export async function performManualPhotoAction(
       });
       const ids = targets.map((t) => t.assetId).sort();
       await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"='PHOTO' AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-      const current = await tx.eagleAsset.findMany({
-        where: {
-          ownerId,
-          libraryMode: 'PHOTO',
-          id: { in: ids },
-          deletedAt: null,
-          purgeAfter: null,
-          ...(includePrivate ? {} : { isPrivate: false }),
-        },
-      });
+      const current: Array<{ id: string; mediaRevision: number; rowVersion: number }> = [];
+      for (const { rows } of databaseBatches(ids, DATABASE_STATEMENTS.operationAssetLookup))
+        current.push(
+          ...(await tx.eagleAsset.findMany({
+            where: {
+              ownerId,
+              libraryMode: 'PHOTO',
+              id: { in: rows },
+              deletedAt: null,
+              purgeAfter: null,
+              ...(includePrivate ? {} : { isPrivate: false }),
+            },
+            select: { id: true, mediaRevision: true, rowVersion: true },
+          })),
+        );
+      const versions = new Map(current.map((asset) => [asset.id, asset]));
       if (
         current.length !== ids.length ||
-        targets.some(
-          (t) =>
-            !current.some(
-              (a) =>
-                a.id === t.assetId &&
-                a.mediaRevision === t.mediaRevision &&
-                a.rowVersion === t.rowVersion,
-            ),
-        )
+        targets.some((target) => {
+          const asset = versions.get(target.assetId);
+          return (
+            !asset ||
+            asset.mediaRevision !== target.mediaRevision ||
+            asset.rowVersion !== target.rowVersion
+          );
+        })
       )
         throw new ConflictException('照片已变化，请刷新后重新选择。');
       const start = { input: canonical, targets };
@@ -168,20 +183,29 @@ export async function performManualPhotoAction(
         ...start,
       });
       if (input.action === 'DELETE') {
-        const resources = await resolveEagleTrashTargets(
-          tx,
-          { ownerId, libraryMode: 'PHOTO' },
-          ids,
-          false,
-          includePrivate,
-        );
+        const resources: Array<{ id: string }> = [];
+        for (const { rows } of databaseBatches(ids, DATABASE_STATEMENTS.operationTrashTargets))
+          resources.push(
+            ...(await resolveEagleTrashTargets(
+              tx,
+              { ownerId, libraryMode: 'PHOTO' },
+              rows,
+              false,
+              includePrivate,
+            )),
+          );
         const resourceIds = resources.map((r) => r.id).sort();
         await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"='PHOTO' AND id=ANY(${resourceIds}::text[]) ORDER BY id FOR UPDATE`;
-        if (
-          (await setEagleTrash(tx, { ownerId, libraryMode: 'PHOTO' }, ids, false, includePrivate)) <
-          ids.length
-        )
-          throw new ConflictException('照片关联媒体已变化。');
+        let removed = 0;
+        for (const { rows } of databaseBatches(ids, DATABASE_STATEMENTS.operationTrashTargets))
+          removed += await setEagleTrash(
+            tx,
+            { ownerId, libraryMode: 'PHOTO' },
+            rows,
+            false,
+            includePrivate,
+          );
+        if (removed < ids.length) throw new ConflictException('照片关联媒体已变化。');
         return { start, result: await finish(tx, start) };
       }
       return { start, result: null };

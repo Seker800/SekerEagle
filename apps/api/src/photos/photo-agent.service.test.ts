@@ -201,7 +201,7 @@ test('instructions DTO accepts clear and bounded text but rejects owner, mode an
     );
 });
 
-test('manual selection DTO rejects injected ownership, unsafe actions, duplicate-free version bounds and oversized batches', async () => {
+test('manual selection DTO rejects injected ownership, unsafe actions, duplicate-free version bounds', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
   const item = {
     suggestionId: '00000000-0000-4000-8000-000000000001',
@@ -219,7 +219,6 @@ test('manual selection DTO rejects injected ownership, unsafe actions, duplicate
     { ...valid, action: 'PURGE' },
     { ...valid, items: [] },
     { ...valid, items: [{ ...item, rowVersion: 0 }] },
-    { ...valid, items: Array.from({ length: 101 }, () => item) },
   ])
     await assert.rejects(pipe.transform(input, { type: 'body', metatype: ManualPhotoActionDto }));
 });

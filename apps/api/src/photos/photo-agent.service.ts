@@ -1,3 +1,4 @@
+import { databaseBatches, DATABASE_STATEMENTS } from '../eagle/eagle-database-batches';
 import { performManualPhotoAction, manualActionsBySuggestion } from './photo-agent-manual';
 import type { ManualPhotoActionDto } from './photo-agent.dto';
 import { readPhotoInstructions, savePhotoInstructions } from './photo-agent-instructions';
@@ -114,13 +115,16 @@ export class PhotoAgentService {
         : ((p.items as Array<{ suggestionId: string }> | undefined)?.map(
             (item) => item.suggestionId,
           ) ?? []));
-    if (
-      suggestions.length &&
-      (await this.prisma.eaglePhotoAgentSuggestion.count({
-        where: { taskId, ownerId, libraryMode: 'PHOTO', id: { in: suggestions } },
-      })) !== new Set(suggestions).size
-    )
-      throw new NotFoundException('整理建议不存在。');
+    for (const { rows } of databaseBatches(
+      [...new Set(suggestions)],
+      DATABASE_STATEMENTS.operationAssetLookup,
+    ))
+      if (
+        (await this.prisma.eaglePhotoAgentSuggestion.count({
+          where: { taskId, ownerId, libraryMode: 'PHOTO', id: { in: rows } },
+        })) !== rows.length
+      )
+        throw new NotFoundException('整理建议不存在。');
   }
   instructions(ownerId: string) {
     return readPhotoInstructions(this.prisma, ownerId);
@@ -931,9 +935,14 @@ export class PhotoAgentService {
     await this.prisma.$transaction(async (tx) => {
       await beforePublish?.(tx);
       await this.task(tx, ownerId, taskId, includePrivate);
-      const count = await tx.eaglePhotoAgentSuggestion.count({
-        where: { ownerId, libraryMode: 'PHOTO', taskId, id: { in: input.suggestionIds } },
-      });
+      let count = 0;
+      for (const { rows } of databaseBatches(
+        input.suggestionIds,
+        DATABASE_STATEMENTS.operationAssetLookup,
+      ))
+        count += await tx.eaglePhotoAgentSuggestion.count({
+          where: { ownerId, libraryMode: 'PHOTO', taskId, id: { in: rows } },
+        });
       if (count !== input.suggestionIds.length) throw new NotFoundException('整理建议不存在。');
     });
     const results: Array<{ id: string; status: string; error?: string }> = [];

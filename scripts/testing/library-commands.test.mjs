@@ -333,6 +333,84 @@ test('background intent runs independently and rejects a stolen lease before pub
   );
 });
 
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode} consecutive accepted edits preserve both changes from the same visible row version`, async () => {
+    const f = await fixture(mode);
+    const asset = await f.add();
+    const update = (payload) =>
+      f.service.enqueueCommand(f.principal, {
+        type: 'ASSET_UPDATE',
+        assetIds: [asset.id],
+        payload: { assets: [{ assetId: asset.id, rowVersion: asset.rowVersion }], ...payload },
+      });
+    const first = await update({ rating: 5 });
+    const second = await update({ description: 'queued description' });
+    assert.equal((await f.drain(second.id)).state, 'COMPLETED');
+    assert.equal((await f.state(first.id)).state, 'COMPLETED');
+    const current = await db.eagleAsset.findUniqueOrThrow({ where: { id: asset.id } });
+    assert.equal(current.rating, 5);
+    assert.equal(current.rowVersion, asset.rowVersion + 2);
+    assert.equal(
+      (
+        await db.eagleAssetAnnotation.findUniqueOrThrow({
+          where: { ownerId_assetId: { ownerId: f.ownerId, assetId: asset.id } },
+        })
+      ).description,
+      'queued description',
+    );
+  });
+  test(`${mode} a completed predecessor permits its exact receipt version and rejects external intervening writes`, async () => {
+    const f = await fixture(mode);
+    const asset = await f.add();
+    const first = await f.service.enqueueCommand(f.principal, {
+      type: 'ASSET_UPDATE',
+      assetIds: [asset.id],
+      payload: { assets: [{ assetId: asset.id, rowVersion: asset.rowVersion }], rating: 4 },
+    });
+    assert.equal((await f.drain(first.id)).state, 'COMPLETED');
+    const input = {
+      type: 'ASSET_UPDATE',
+      assetIds: [asset.id],
+      payload: {
+        assets: [{ assetId: asset.id, rowVersion: asset.rowVersion }],
+        description: 'after receipt',
+        predecessorOperationIds: [first.id],
+      },
+    };
+    const second = await f.service.enqueueCommand(f.principal, input);
+    assert.equal((await f.drain(second.id)).state, 'COMPLETED');
+    assert.equal((await db.eagleAsset.findUniqueOrThrow({ where: { id: asset.id } })).rating, 4);
+    assert.equal(
+      (
+        await db.eagleAssetAnnotation.findUniqueOrThrow({
+          where: { ownerId_assetId: { ownerId: f.ownerId, assetId: asset.id } },
+        })
+      ).description,
+      'after receipt',
+    );
+    await db.eagleAsset.update({
+      where: { id: asset.id },
+      data: { rowVersion: { increment: 1 }, displayName: 'external edit' },
+    });
+    await assert.rejects(
+      f.service.enqueueCommand(f.principal, input),
+      (error) => error.getStatus?.() === 409,
+    );
+    assert.equal(
+      (await db.eagleAsset.findUniqueOrThrow({ where: { id: asset.id } })).displayName,
+      'external edit',
+    );
+    assert.equal(
+      (
+        await db.eagleAssetAnnotation.findUniqueOrThrow({
+          where: { ownerId_assetId: { ownerId: f.ownerId, assetId: asset.id } },
+        })
+      ).description,
+      'after receipt',
+    );
+  });
+}
+
 test(
   '60k metadata acceptance stays set-based and a healthy publication quantum has bounded SQL and no S3',
   { timeout: 120000 },

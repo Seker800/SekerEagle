@@ -1,3 +1,4 @@
+import { databaseBatches, DATABASE_STATEMENTS } from '../eagle/eagle-database-batches';
 import { runLibraryTransaction } from '../eagle/eagle-library-command';
 import { readMemoryPhotoFacets } from './photo-memory-client';
 import { readPeopleCountPage } from './photo-person-count-page';
@@ -54,13 +55,13 @@ export class PhotoManagementService {
                 ? [p.personId]
                 : [];
     const personIds = [...new Set(people as string[])];
-    if (
-      personIds.length &&
-      (await this.prisma.eaglePhotoPerson.count({
-        where: { ...visiblePhotoPeople(ownerId, includePrivate), id: { in: personIds } },
-      })) !== personIds.length
-    )
-      throw new NotFoundException('人物不存在。');
+    for (const { rows } of databaseBatches(personIds, DATABASE_STATEMENTS.operationAssetLookup))
+      if (
+        (await this.prisma.eaglePhotoPerson.count({
+          where: { ...visiblePhotoPeople(ownerId, includePrivate), id: { in: rows } },
+        })) !== rows.length
+      )
+        throw new NotFoundException('人物不存在。');
     if (
       type === 'PHOTO_FACE_REASSIGN' &&
       !(await this.prisma.eaglePhotoFace.findFirst({
@@ -93,27 +94,22 @@ export class PhotoManagementService {
       })) !== new Set(groupIds).size
     )
       throw new NotFoundException('照片组不存在。');
-    const assetIds = p.assetIds as string[] | undefined;
-    if (
-      assetIds?.length &&
-      (await this.prisma.eagleAsset.count({
-        where: { ...visible(ownerId, includePrivate), id: { in: [...new Set(assetIds)] } },
-      })) !== new Set(assetIds).size
-    )
-      throw new NotFoundException('照片不存在。');
-    if (
-      type === 'PHOTO_GROUP_REMOVE_MEMBERS' &&
-      assetIds?.length &&
-      (await this.prisma.eaglePhotoGroupMember.count({
-        where: {
-          groupId: p.id as string,
-          ownerId,
-          libraryMode: 'PHOTO',
-          assetId: { in: [...new Set(assetIds)] },
-        },
-      })) !== new Set(assetIds).size
-    )
-      throw new NotFoundException('组内照片不存在。');
+    const assetIds = [...new Set((p.assetIds as string[] | undefined) ?? [])];
+    for (const { rows } of databaseBatches(assetIds, DATABASE_STATEMENTS.operationAssetLookup)) {
+      if (
+        (await this.prisma.eagleAsset.count({
+          where: { ...visible(ownerId, includePrivate), id: { in: rows } },
+        })) !== rows.length
+      )
+        throw new NotFoundException('照片不存在。');
+      if (
+        type === 'PHOTO_GROUP_REMOVE_MEMBERS' &&
+        (await this.prisma.eaglePhotoGroupMember.count({
+          where: { groupId: p.id as string, ownerId, libraryMode: 'PHOTO', assetId: { in: rows } },
+        })) !== rows.length
+      )
+        throw new NotFoundException('组内照片不存在。');
+    }
     if (
       p.bestAssetId &&
       !(await this.prisma.eaglePhotoGroupMember.findFirst({
@@ -553,6 +549,7 @@ export class PhotoManagementService {
       orderBy: [{ capturedAt: 'desc' }, { assetId: 'asc' }],
     });
     const suggestions = suggestPhotoGroups(rows.map((row) => ({ ...row, id: row.assetId })));
+    const revisions = new Map(rows.map((row) => [row.assetId, row.assetRevision]));
     return this.prisma.$transaction(async (tx) => {
       await beforePublish?.(tx);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
@@ -570,7 +567,7 @@ export class PhotoManagementService {
             .update(
               [...suggestion.assetIds]
                 .sort()
-                .map((id) => `${id}:${rows.find((row) => row.assetId === id)?.assetRevision ?? 0}`)
+                .map((id) => `${id}:${revisions.get(id) ?? 0}`)
                 .join(':'),
             )
             .digest('hex');
@@ -607,13 +604,14 @@ export class PhotoManagementService {
     db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
     const unique = [...new Set(assetIds)];
-    if (unique.length < 2 || unique.length > 500)
-      throw new BadRequestException('请选择 2 到 500 张照片。');
+    if (unique.length < 2) throw new BadRequestException('请至少选择 2 张照片。');
     return runLibraryTransaction(db, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
-      const found = await tx.eagleAsset.count({
-        where: { ...visible(ownerId, includePrivate), id: { in: unique } },
-      });
+      let found = 0;
+      for (const { rows } of databaseBatches(unique, DATABASE_STATEMENTS.operationAssetLookup))
+        found += await tx.eagleAsset.count({
+          where: { ...visible(ownerId, includePrivate), id: { in: rows } },
+        });
       if (found !== unique.length) throw new NotFoundException('照片不存在。');
       const group = await tx.eaglePhotoGroup.create({
         data: {
@@ -623,14 +621,18 @@ export class PhotoManagementService {
           sourceKey: `manual:${randomUUID()}`,
         },
       });
-      await tx.eaglePhotoGroupMember.createMany({
-        data: unique.map((assetId) => ({
-          ownerId,
-          libraryMode: 'PHOTO',
-          groupId: group.id,
-          assetId,
-        })),
-      });
+      for (const { rows } of databaseBatches(unique, {
+        ...DATABASE_STATEMENTS.operationItems,
+        parametersPerRow: 6,
+      }))
+        await tx.eaglePhotoGroupMember.createMany({
+          data: rows.map((assetId) => ({
+            ownerId,
+            libraryMode: 'PHOTO',
+            groupId: group.id,
+            assetId,
+          })),
+        });
       return { id: group.id };
     });
   }
@@ -653,24 +655,27 @@ export class PhotoManagementService {
         },
         include: { members: true },
       });
-      if (
-        !group ||
-        assetIds.some((assetId) => !group.members.some((member) => member.assetId === assetId))
-      )
+      const memberIds = new Set(group?.members.map((member) => member.assetId));
+      if (!group || assetIds.some((assetId) => !memberIds.has(assetId)))
         throw new NotFoundException('组内照片不存在。');
-      const removed = await tx.eaglePhotoGroupMember.deleteMany({
-        where: { ownerId, libraryMode: 'PHOTO', groupId: id, assetId: { in: assetIds } },
-      });
+      const unique = [...new Set(assetIds)];
+      let removed = 0;
+      for (const { rows } of databaseBatches(unique, DATABASE_STATEMENTS.operationAssetLookup))
+        removed += (
+          await tx.eaglePhotoGroupMember.deleteMany({
+            where: { ownerId, libraryMode: 'PHOTO', groupId: id, assetId: { in: rows } },
+          })
+        ).count;
       const bestRemoved = group.bestAssetId !== null && assetIds.includes(group.bestAssetId);
       await tx.eaglePhotoGroup.update({
         where: { id },
         data: {
           kind: 'MANUAL',
-          dismissed: group.members.length - removed.count < 2,
+          dismissed: group.members.length - removed < 2,
           ...(bestRemoved ? { bestAssetId: null, bestSelectedByUser: false } : {}),
         },
       });
-      return { removed: removed.count };
+      return { removed };
     });
   }
   async mergeGroups(
@@ -695,15 +700,19 @@ export class PhotoManagementService {
       });
       if (groups.length !== 2) throw new NotFoundException('照片组不存在。');
       const source = groups.find((group) => group.id === sourceId)!;
-      await tx.eaglePhotoGroupMember.createMany({
-        data: source.members.map((member) => ({
-          ownerId,
-          libraryMode: 'PHOTO',
-          groupId: targetId,
-          assetId: member.assetId,
-        })),
-        skipDuplicates: true,
-      });
+      for (const { rows } of databaseBatches(source.members, {
+        ...DATABASE_STATEMENTS.operationItems,
+        parametersPerRow: 6,
+      }))
+        await tx.eaglePhotoGroupMember.createMany({
+          data: rows.map((member) => ({
+            ownerId,
+            libraryMode: 'PHOTO',
+            groupId: targetId,
+            assetId: member.assetId,
+          })),
+          skipDuplicates: true,
+        });
       await tx.eaglePhotoGroup.update({ where: { id: targetId }, data: { kind: 'MANUAL' } });
       await tx.eaglePhotoGroup.update({ where: { id: sourceId }, data: { dismissed: true } });
       return { id: targetId };

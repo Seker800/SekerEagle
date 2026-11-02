@@ -23,6 +23,7 @@ test('task family scans and retries persist intent without entering synchronous 
         return receipt;
       },
     } as never,
+    'PHOTO',
   );
   const principal = { sub: 'owner', canViewPrivate: false } as never;
   assert.equal(await c.start(principal, { family: 'FACES' }), receipt);

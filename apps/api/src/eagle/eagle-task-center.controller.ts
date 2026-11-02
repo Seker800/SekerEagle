@@ -1,3 +1,6 @@
+import type { LibraryMode } from '@prisma/client';
+import { EagleOperationSummaryResponseDto } from './eagle-operation-response.dto';
+import { ApiAcceptedResponse } from '@nestjs/swagger';
 import {
   Body,
   Controller,
@@ -65,8 +68,8 @@ export class EagleTaskCenterController {
   constructor(
     private readonly tasks: EagleTaskCenterService,
     private readonly processing: EagleProcessingService,
-    @Optional() private readonly operations?: EagleAssetOperationService,
-    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: string = 'PHOTO',
+    @Optional() private readonly operations: EagleAssetOperationService | undefined,
+    @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
   @Get()
   overview(@CurrentPrincipal() principal: AuthPrincipal) {
@@ -92,6 +95,7 @@ export class EagleTaskCenterController {
   }
   @Post('start')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   start(@CurrentPrincipal() principal: AuthPrincipal, @Body() _input: StartTaskFamilyDto) {
     if (this.libraryMode !== 'PHOTO' || _input.family !== 'FACES')
@@ -101,6 +105,7 @@ export class EagleTaskCenterController {
   }
   @Post('retry')
   @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   retry(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: RetryTaskFamilyDto) {
     if (!this.operations) throw new Error('Task operation queue is unavailable');
