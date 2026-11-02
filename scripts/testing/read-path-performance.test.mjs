@@ -9,6 +9,7 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
 import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { EagleImageSearchService } from '../../apps/api/dist/eagle/eagle-image-search.service.js';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -68,6 +69,25 @@ async function explain(query) {
   );
   return row['QUERY PLAN'][0];
 }
+test('date-ordered empty searches finish in one database round trip across sixty thousand photos', async () => {
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  queries = [];
+  const started = performance.now();
+  const result = await ranker.rankPage(
+    ownerId,
+    'no-synthetic-result-8e260cc8',
+    { status: 'UNAVAILABLE', spaceId: 'synthetic' },
+    undefined,
+    40,
+    false,
+    false,
+    undefined,
+    'CAPTURED_AT',
+  );
+  console.log('empty date search', JSON.stringify({ ms: performance.now() - started, sql: queries.length }));
+  assert.deepEqual(result, []);
+  assert.equal(queries.length, 1, 'no-match searches must not paginate through the entire library over SQL');
+});
 test('statistics compacts repeated daily facts before materializing chart inputs', async () => {
   let captured;
   const service = new PhotoStatisticsService({
