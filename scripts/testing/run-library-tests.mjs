@@ -254,6 +254,7 @@ try {
       '--test',
       'scripts/testing/asset-operations.test.mjs',
       'scripts/testing/library-commands.test.mjs',
+      'scripts/testing/operation-cancellation.test.mjs',
       'scripts/testing/duplicates.test.mjs',
     ],
     {

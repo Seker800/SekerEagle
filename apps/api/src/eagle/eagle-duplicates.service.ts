@@ -1,3 +1,5 @@
+import { lockOperationPublication } from './eagle-operation-cancellation';
+import { libraryCommandPayload, runLibraryTransaction } from './eagle-library-command';
 import { applyOrdinaryDuplicateCleanupBatch } from './eagle-duplicate-cleanup';
 import { DATABASE_STATEMENTS, databaseBatches } from './eagle-database-batches';
 import { filterDuplicateReview } from './eagle-duplicate-filters';
@@ -9,6 +11,7 @@ import {
   dismissalSignature,
   type Snapshot,
   type CleanupSnapshot,
+  type CleanupPreparationSnapshot,
   type ScanSnapshot,
   type Item,
 } from './eagle-duplicate-model';
@@ -181,8 +184,14 @@ export class EagleDuplicateService {
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 30_000 },
     );
   }
-  async ignore(ownerId: string, includePrivate: boolean, input: DuplicateIgnoreDto) {
-    return this.prisma.$transaction(
+  async ignore(
+    ownerId: string,
+    includePrivate: boolean,
+    input: DuplicateIgnoreDto,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    return runLibraryTransaction(
+      db,
       async (tx) => {
         await lockOwnerPrivacyProjection(tx, ownerId, this.libraryMode);
         const state = await filterDuplicateReview(
@@ -281,7 +290,11 @@ export class EagleDuplicateService {
     kind: string,
     inputIds: string[],
     isPrivate: boolean,
-    items: Array<{ assetIds: string[]; snapshots: ScanSnapshot | CleanupSnapshot; weight: number }>,
+    items: Array<{
+      assetIds: string[];
+      snapshots: ScanSnapshot | CleanupSnapshot | CleanupPreparationSnapshot;
+      weight: number;
+    }>,
   ) {
     if (!items.length) return { operationId: null };
     const privateUntil =
@@ -313,7 +326,7 @@ export class EagleDuplicateService {
       await tx.eagleAssetOperationItem.createMany({
         data: batchRows.map((item, index) => ({
           ...item,
-          snapshots: item.snapshots,
+          snapshots: libraryCommandPayload(item.snapshots),
           id: randomUUID(),
           operationId: id,
           ownerId: principal.sub,
@@ -340,7 +353,7 @@ export class EagleDuplicateService {
   async scan(principal: AuthPrincipal, id: string, onlyIfUnattempted = false) {
     return this.prisma.$transaction(
       async (tx) => {
-        await lockOwnerPrivacyProjection(tx, principal.sub, this.libraryMode);
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`duplicate-scan-admission:${principal.sub}:${this.libraryMode}`}, 0))::text`;
         const existing = await this.existing(tx, principal, id, 'DUPLICATE_SCAN', []);
         if (existing) return existing;
         const active = await tx.eagleAssetOperation.findFirst({
@@ -366,33 +379,13 @@ export class EagleDuplicateService {
           }))
         )
           return { operationId: null, alreadyAttempted: true };
-        const missing = await readMissingDuplicateFingerprints(
-          tx,
-          principal.sub,
-          this.libraryMode,
-          principal.canViewPrivate,
-        );
-        const items: Array<{ assetIds: string[]; snapshots: ScanSnapshot; weight: number }> = [];
-        for (let offset = 0; offset < missing.length; offset += BATCH) {
-          const part = missing.slice(offset, offset + BATCH);
-          items.push({
-            assetIds: part.map((r) => r.id),
-            snapshots: {
-              kind: 'scan',
-              rows: part.map(({ id, rowVersion, mediaRevision }) => ({
-                id,
-                rowVersion,
-                mediaRevision,
-              })),
-            },
-            weight: part.length,
-          });
-        }
-        items.push({
-          assetIds: [],
-          snapshots: { kind: 'build', version: DUPLICATE_GROUPING_VERSION },
-          weight: 1,
-        });
+        const items: Array<{ assetIds: string[]; snapshots: ScanSnapshot; weight: number }> = [
+          {
+            assetIds: [],
+            snapshots: { kind: 'discover', version: DUPLICATE_GROUPING_VERSION },
+            weight: 1,
+          },
+        ];
         return this.admit(tx, principal, id, 'DUPLICATE_SCAN', [], principal.canViewPrivate, items);
       },
       { timeout: 45_000 },
@@ -418,7 +411,7 @@ export class EagleDuplicateService {
       request[0] = digest([request[0], input.filters, input.keepOverrides]);
     return this.prisma.$transaction(
       async (tx) => {
-        await lockOwnerPrivacyProjection(tx, principal.sub, this.libraryMode);
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-admission:${principal.sub}:${this.libraryMode}:${input.operationId}`}, 0))::text`;
         const existing = await this.existing(
           tx,
           principal,
@@ -427,168 +420,273 @@ export class EagleDuplicateService {
           request,
         );
         if (existing) return existing;
-        const state = await filterDuplicateReview(
-          tx,
-          await this.read(tx, principal.sub, principal.canViewPrivate),
-          principal.sub,
-          this.libraryMode,
-          principal.canViewPrivate,
-          input.filters ?? {},
-        );
-        if (
-          input.revision &&
-          (input.allExact ? state.exactRevision : state.revision) !== input.revision
-        )
-          throw new ConflictException('图库已变化，请刷新后确认。');
-        const scopedGroups = state.groups.filter(
-          (g) =>
-            !input.filters?.kind || input.filters.kind === 'ALL' || g.kind === input.filters.kind,
-        );
-        const groupBySignature = new Map(scopedGroups.map((g) => [g.signature, g]));
-        const choices: DuplicateSelectionDto[] =
-          input.allExact || input.allVerified
-            ? scopedGroups
-                .filter(
-                  (g) =>
-                    (input.allVerified || g.kind === 'EXACT') && !state.ignored.has(g.signature),
-                )
-                .map((g) => ({ signature: g.signature, keepIds: [g.recommendedId] }))
-            : input.signatures
-              ? input.signatures.map((signature) => {
-                  const group = groupBySignature.get(signature);
-                  if (!group) throw new NotFoundException('查重结果已变化。');
-                  return { signature, keepIds: [group.recommendedId] };
-                })
-              : input.groups!;
-        const choiceSignatures = new Set(choices.map((c) => c.signature));
-        if (choiceSignatures.size !== choices.length)
-          throw new BadRequestException('不能重复选择同一组。');
-        const overrides = new Map(input.keepOverrides?.map((c) => [c.signature, c]));
-        if (
-          overrides.size !== (input.keepOverrides?.length ?? 0) ||
-          [...overrides.values()].some(
-            (c) =>
-              !!c.keepIds?.length === (c.removeIds !== undefined) ||
-              !choiceSignatures.has(c.signature),
-          )
-        )
-          throw new BadRequestException('保留规则必须属于本次所选分组。');
-        const plans = choices
-          .map((originalChoice) => {
-            const choice = overrides.get(originalChoice.signature) ?? originalChoice;
-            const group = groupBySignature.get(choice.signature);
-            if (!group || state.ignored.has(choice.signature))
-              throw new NotFoundException('查重结果已变化。');
-            if (!!choice.keepIds?.length === (choice.removeIds !== undefined))
-              throw new BadRequestException('请选择保留项或清理项。');
-            const memberIds = new Set(group.assetIds);
-            const removed = new Set(choice.removeIds ?? []);
-            if (
-              removed.size !== (choice.removeIds?.length ?? 0) ||
-              [...removed].some((id) => !memberIds.has(id))
-            )
-              throw new BadRequestException('只能清理本组内容。');
-            const keep = new Set(choice.keepIds ?? group.assetIds.filter((id) => !removed.has(id)));
-            if (
-              !keep.size ||
-              (choice.keepIds && keep.size !== choice.keepIds.length) ||
-              [...keep].some((id) => !memberIds.has(id))
-            )
-              throw new BadRequestException('每组必须保留至少一项，且只能保留本组内容。');
-            return {
-              group,
-              choice: { signature: choice.signature, keepIds: [...keep] },
-              assetIds: group.assetIds.filter((id) => !keep.has(id)),
-            };
-          })
-          .filter((plan) => plan.assetIds.length);
-        const selectedIds = plans.flatMap((p) => p.group.assetIds);
-        if (new Set(selectedIds).size !== selectedIds.length)
-          throw new ConflictException('所选查重组存在重叠，请刷新后重新检查。');
-        const resources = new Map<string, Snapshot>();
-        // One bulk resolution per database chunk, rather than two domain reads for every duplicate group.
-        for (const { rows: batchRows } of databaseBatches(
-          selectedIds,
-          DATABASE_STATEMENTS.duplicateTrashTargets,
-        ))
-          for (const row of await resolveEagleTrashTargets(
-            tx,
-            { ownerId: principal.sub, libraryMode: this.libraryMode },
-            batchRows,
-            false,
-            principal.canViewPrivate,
-          ))
-            resources.set(row.id, {
-              id: row.id,
-              rowVersion: row.rowVersion,
-              mediaRevision: row.mediaRevision,
-            });
-        const componentIds = [...resources.keys()];
-        const liveById = new Map<string, string | null>(),
-          motions = new Map<string, Snapshot[]>();
-        for (const { rows: batchRows } of databaseBatches(
-          componentIds,
-          DATABASE_STATEMENTS.duplicateAssetLookup,
-        )) {
-          const rows = await tx.eagleAsset.findMany({
-            where: {
-              ...this.inLibrary(principal.sub, principal.canViewPrivate),
-              id: { in: batchRows },
-            },
-            select: { id: true, livePhotoIdentifier: true, livePhotoRole: true },
-          });
-          for (const row of rows) {
-            liveById.set(row.id, row.livePhotoIdentifier);
-            if (row.livePhotoIdentifier && row.livePhotoRole === 'MOTION') {
-              const list = motions.get(row.livePhotoIdentifier) ?? [];
-              list.push(resources.get(row.id)!);
-              motions.set(row.livePhotoIdentifier, list);
-            }
-          }
-        }
-        const expand = (ids: string[]) => [
-          ...new Map(
-            ids
-              .flatMap((id) => [resources.get(id)!, ...(motions.get(liveById.get(id) ?? '') ?? [])])
-              .map((row) => [row.id, row]),
-          ).values(),
-        ];
-        const items = plans.map((plan) => ({
-          assetIds: plan.assetIds,
-          weight: plan.assetIds.length,
-          snapshots: {
-            kind: 'cleanup' as const,
-            signature: plan.group.signature,
-            resources: expand(plan.assetIds),
-            keepers: expand(plan.choice.keepIds),
-            exact: true,
-            targetId: plan.choice.keepIds[0]!,
-          },
-        }));
-        const keptIds = new Set(
-          items.flatMap((item) => item.snapshots.keepers.map((row) => row.id)),
-        );
-        if (items.some((item) => item.snapshots.resources.some((row) => keptIds.has(row.id))))
-          throw new ConflictException('这些项目共用实况组件，不能拆开清理。');
-        const isPrivate = selectedIds.some((id) => state.byId.get(id)!.isPrivate);
         return this.admit(
           tx,
           principal,
           input.operationId,
           'DUPLICATE_CLEANUP',
           request,
-          isPrivate,
-          items,
+          principal.canViewPrivate,
+          [{ assetIds: [], snapshots: { kind: 'prepare-cleanup', input }, weight: 1 }],
         );
       },
       { timeout: 45_000 },
     );
   }
+  private async prepareCleanup(
+    tx: Prisma.TransactionClient,
+    principal: AuthPrincipal,
+    input: DuplicateActionDto,
+  ) {
+    const state = await filterDuplicateReview(
+      tx,
+      await this.read(tx, principal.sub, principal.canViewPrivate),
+      principal.sub,
+      this.libraryMode,
+      principal.canViewPrivate,
+      input.filters ?? {},
+    );
+    if (
+      input.revision &&
+      (input.allExact ? state.exactRevision : state.revision) !== input.revision
+    )
+      throw new ConflictException('图库已变化，请刷新后确认。');
+    const scopedGroups = state.groups.filter(
+      (g) => !input.filters?.kind || input.filters.kind === 'ALL' || g.kind === input.filters.kind,
+    );
+    const groupBySignature = new Map(scopedGroups.map((g) => [g.signature, g]));
+    const choices: DuplicateSelectionDto[] =
+      input.allExact || input.allVerified
+        ? scopedGroups
+            .filter(
+              (g) => (input.allVerified || g.kind === 'EXACT') && !state.ignored.has(g.signature),
+            )
+            .map((g) => ({ signature: g.signature, keepIds: [g.recommendedId] }))
+        : input.signatures
+          ? input.signatures.map((signature) => {
+              const group = groupBySignature.get(signature);
+              if (!group) throw new NotFoundException('查重结果已变化。');
+              return { signature, keepIds: [group.recommendedId] };
+            })
+          : input.groups!;
+    const choiceSignatures = new Set(choices.map((c) => c.signature));
+    if (choiceSignatures.size !== choices.length)
+      throw new BadRequestException('不能重复选择同一组。');
+    const overrides = new Map(input.keepOverrides?.map((c) => [c.signature, c]));
+    if (
+      overrides.size !== (input.keepOverrides?.length ?? 0) ||
+      [...overrides.values()].some(
+        (c) =>
+          !!c.keepIds?.length === (c.removeIds !== undefined) || !choiceSignatures.has(c.signature),
+      )
+    )
+      throw new BadRequestException('保留规则必须属于本次所选分组。');
+    const plans = choices
+      .map((originalChoice) => {
+        const choice = overrides.get(originalChoice.signature) ?? originalChoice;
+        const group = groupBySignature.get(choice.signature);
+        if (!group || state.ignored.has(choice.signature))
+          throw new NotFoundException('查重结果已变化。');
+        if (!!choice.keepIds?.length === (choice.removeIds !== undefined))
+          throw new BadRequestException('请选择保留项或清理项。');
+        const memberIds = new Set(group.assetIds);
+        const removed = new Set(choice.removeIds ?? []);
+        if (
+          removed.size !== (choice.removeIds?.length ?? 0) ||
+          [...removed].some((id) => !memberIds.has(id))
+        )
+          throw new BadRequestException('只能清理本组内容。');
+        const keep = new Set(choice.keepIds ?? group.assetIds.filter((id) => !removed.has(id)));
+        if (
+          !keep.size ||
+          (choice.keepIds && keep.size !== choice.keepIds.length) ||
+          [...keep].some((id) => !memberIds.has(id))
+        )
+          throw new BadRequestException('每组必须保留至少一项，且只能保留本组内容。');
+        return {
+          group,
+          choice: { signature: choice.signature, keepIds: [...keep] },
+          assetIds: group.assetIds.filter((id) => !keep.has(id)),
+        };
+      })
+      .filter((plan) => plan.assetIds.length);
+    const selectedIds = plans.flatMap((p) => p.group.assetIds);
+    if (new Set(selectedIds).size !== selectedIds.length)
+      throw new ConflictException('所选查重组存在重叠，请刷新后重新检查。');
+    const resources = new Map<string, Snapshot>();
+    // One bulk resolution per database chunk, rather than two domain reads for every duplicate group.
+    for (const { rows: batchRows } of databaseBatches(
+      selectedIds,
+      DATABASE_STATEMENTS.duplicateTrashTargets,
+    ))
+      for (const row of await resolveEagleTrashTargets(
+        tx,
+        { ownerId: principal.sub, libraryMode: this.libraryMode },
+        batchRows,
+        false,
+        principal.canViewPrivate,
+      ))
+        resources.set(row.id, {
+          id: row.id,
+          rowVersion: row.rowVersion,
+          mediaRevision: row.mediaRevision,
+        });
+    const componentIds = [...resources.keys()];
+    const liveById = new Map<string, string | null>(),
+      motions = new Map<string, Snapshot[]>();
+    for (const { rows: batchRows } of databaseBatches(
+      componentIds,
+      DATABASE_STATEMENTS.duplicateAssetLookup,
+    )) {
+      const rows = await tx.eagleAsset.findMany({
+        where: {
+          ...this.inLibrary(principal.sub, principal.canViewPrivate),
+          id: { in: batchRows },
+        },
+        select: { id: true, livePhotoIdentifier: true, livePhotoRole: true },
+      });
+      for (const row of rows) {
+        liveById.set(row.id, row.livePhotoIdentifier);
+        if (row.livePhotoIdentifier && row.livePhotoRole === 'MOTION') {
+          const list = motions.get(row.livePhotoIdentifier) ?? [];
+          list.push(resources.get(row.id)!);
+          motions.set(row.livePhotoIdentifier, list);
+        }
+      }
+    }
+    const expand = (ids: string[]) => [
+      ...new Map(
+        ids
+          .flatMap((id) => [resources.get(id)!, ...(motions.get(liveById.get(id) ?? '') ?? [])])
+          .map((row) => [row.id, row]),
+      ).values(),
+    ];
+    const items = plans.map((plan) => ({
+      assetIds: plan.assetIds,
+      weight: plan.assetIds.length,
+      snapshots: {
+        kind: 'cleanup' as const,
+        signature: plan.group.signature,
+        resources: expand(plan.assetIds),
+        keepers: expand(plan.choice.keepIds),
+        exact: true,
+        targetId: plan.choice.keepIds[0]!,
+      },
+    }));
+    const keptIds = new Set(items.flatMap((item) => item.snapshots.keepers.map((row) => row.id)));
+    if (items.some((item) => item.snapshots.resources.some((row) => keptIds.has(row.id))))
+      throw new ConflictException('这些项目共用实况组件，不能拆开清理。');
+    return items;
+  }
   async executeScan(item: Item, assertActor: (tx: Prisma.TransactionClient) => Promise<void>) {
+    const snapshot = item.snapshots as unknown as ScanSnapshot;
+    if (snapshot.kind === 'discover') {
+      const missing = await readMissingDuplicateFingerprints(
+        this.prisma,
+        item.ownerId,
+        this.libraryMode,
+        item.operation.isPrivate,
+      );
+      const parts: Array<{ assetIds: string[]; snapshots: ScanSnapshot; weight: number }> = [];
+      for (let offset = 0; offset < missing.length; offset += BATCH) {
+        const rows = missing.slice(offset, offset + BATCH);
+        parts.push({
+          assetIds: rows.map((row) => row.id),
+          snapshots: { kind: 'scan', rows },
+          weight: rows.length,
+        });
+      }
+      parts.push({
+        assetIds: [],
+        snapshots: { kind: 'build', version: DUPLICATE_GROUPING_VERSION },
+        weight: 1,
+      });
+      await this.prisma.$transaction(
+        async (tx) => {
+          await assertActor(tx);
+          await this.expandPreparedItems(tx, item, parts);
+          await assertActor(tx);
+          await tx.eagleAssetOperationItem.updateMany({
+            where: {
+              id: item.id,
+              ownerId: item.ownerId,
+              libraryMode: this.libraryMode,
+              operationId: item.operationId,
+              leaseVersion: item.leaseVersion,
+              status: 'RUNNING',
+              leaseUntil: { gt: new Date() },
+            },
+            data: { status: 'COMPLETED', leaseUntil: null },
+          });
+        },
+        { timeout: 45_000 },
+      );
+      return;
+    }
     return executeDuplicateIndex(this.prisma, this.storage, this.libraryMode, item, assertActor);
+  }
+  private async expandPreparedItems(
+    tx: Prisma.TransactionClient,
+    item: Item,
+    parts: Array<{ assetIds: string[]; snapshots: ScanSnapshot | CleanupSnapshot; weight: number }>,
+  ) {
+    await lockOperationPublication(tx, {
+      operationId: item.operationId,
+      ownerId: item.ownerId,
+      libraryMode: this.libraryMode,
+    });
+    const tail = await tx.eagleAssetOperationItem.aggregate({
+      where: {
+        operationId: item.operationId,
+        ownerId: item.ownerId,
+        libraryMode: this.libraryMode,
+      },
+      _max: { ordinal: true },
+    });
+    const expanded = parts.map((part, index) => ({
+      ...part,
+      id: randomUUID(),
+      operationId: item.operationId,
+      ownerId: item.ownerId,
+      libraryMode: this.libraryMode,
+      ordinal: (tail._max.ordinal ?? 0) + index + 1,
+    }));
+    for (const { rows: data } of databaseBatches(
+      expanded,
+      DATABASE_STATEMENTS.duplicateOperationItems,
+    ))
+      await tx.eagleAssetOperationItem.createMany({ data });
+    await tx.eagleAssetOperationItem.updateMany({
+      where: {
+        id: item.id,
+        ownerId: item.ownerId,
+        libraryMode: this.libraryMode,
+        operationId: item.operationId,
+        leaseVersion: item.leaseVersion,
+        status: 'RUNNING',
+        leaseUntil: { gt: new Date() },
+      },
+      data: { weight: 0 },
+    });
   }
   /** Business rules only; the operation executor owns the transaction, actor, lease and receipts. */
   async applyCleanupBatch(tx: Prisma.TransactionClient, items: Item[]) {
+    if (items.some((item) => (item.snapshots as { kind?: string }).kind === 'prepare-cleanup')) {
+      for (const item of items) {
+        const snapshot = item.snapshots as unknown as CleanupPreparationSnapshot;
+        if (snapshot.kind !== 'prepare-cleanup') {
+          await this.executeCleanupItem(tx, item);
+          continue;
+        }
+        const principal = {
+          sub: item.ownerId,
+          canViewPrivate: item.operation.isPrivate,
+        } as AuthPrincipal;
+        const prepared = await this.prepareCleanup(tx, principal, snapshot.input);
+        await this.expandPreparedItems(tx, item, prepared);
+      }
+      return;
+    }
     if (
       items.length > 1 &&
       (await applyOrdinaryDuplicateCleanupBatch(
