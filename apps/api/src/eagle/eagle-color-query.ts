@@ -20,7 +20,23 @@ export function colorCandidateWhere(where: AssetSearchWhere): Prisma.EagleAssetW
     return Object.fromEntries(
       Object.entries(value)
         .filter(([key, child]) => key !== 'colorMatch' && !(key === 'NOT' && hasColorSearch(child)))
-        .map(([key, child]) => [key, visit(child)]),
+        .flatMap(([key, child]) => {
+          const mapped = visit(child);
+          if (key === 'AND' || key === 'OR') {
+            const parts = Array.isArray(mapped) ? mapped : [mapped];
+            const empty = (part: unknown) =>
+              part !== null && typeof part === 'object' && Object.keys(part).length === 0;
+            // Prisma ignores {} inside OR rather than treating it as TRUE.
+            // Removing a color predicate must widen the projection, never narrow it.
+            if (key === 'OR' && parts.some(empty)) return [];
+            if (key === 'AND') {
+              const remaining = parts.filter((part) => !empty(part));
+              if (!remaining.length) return [];
+              return [[key, Array.isArray(mapped) ? remaining : remaining[0]]];
+            }
+          }
+          return [[key, mapped]];
+        }),
     );
   };
   return visit(where) as Prisma.EagleAssetWhereInput;
