@@ -31,7 +31,7 @@ export async function readAccountCacheStats(
   requests: (namespace: string) => CacheRequestStats = emptyCacheRequestStats,
 ) {
   const stats = await Promise.all(
-    namespaces.map((namespace) => cache.getNamespaceStats(namespace)),
+    namespaces.map(async (namespace) => await cache.getNamespaceStats(namespace)),
   );
   return {
     ...sumCounters(stats, {

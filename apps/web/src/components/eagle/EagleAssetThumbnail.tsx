@@ -1,6 +1,7 @@
 import { isCameraVideoMime } from '@sekereagle/library-core';
 import { getEagleVideoContentUrl } from './eagle-media-sources';
 import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
+import { canUseThumbnailMemoryCache } from '../../lib/media-resolver';
 import { t } from '../../i18n';
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
@@ -151,7 +152,7 @@ export function EagleAssetThumbnail({
     transientRetriesRef.current = 0;
     setIsVideoPreviewActive(false);
     for (const [index, candidate] of sourceKey.split('\u0000').entries()) {
-      if (!loadService || !candidate.startsWith('/api/')) continue;
+      if (!loadService || !canUseThumbnailMemoryCache(candidate)) continue;
       const cached = loadService.acquireCached(`${asset.id}:${asset.mediaRevision}:${candidate}`);
       if (!cached) continue;
       loadedThumbnailRef.current = cached;
@@ -233,7 +234,7 @@ export function EagleAssetThumbnail({
       run: async (signal) => {
         let displaySource = source;
         let ownedThumbnail: LoadedThumbnail | null = null;
-        if (loadService && source.startsWith('/api/')) {
+        if (loadService && canUseThumbnailMemoryCache(source)) {
           try {
             const loaded = await loadService.load(
               `${asset.id}:${asset.mediaRevision}:${source}`,

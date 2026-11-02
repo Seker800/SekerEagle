@@ -150,6 +150,14 @@ export function resolveEagleRenditionUrl(
     libraryMode,
   );
 }
+
+/** Older clients lack the fetch CSP needed by the shared blob loader. */
+export function canUseThumbnailMemoryCache(source: string): boolean {
+  return (
+    source.startsWith('/api/') ||
+    (desktopBridge()?.mediaCacheVersion === 2 && source.startsWith('sekereagle-media://rendition/'))
+  );
+}
 export function resolveEagleMediaPath(path: string): string {
   const tile = TILE_PATH.exec(path);
   if (tile) {

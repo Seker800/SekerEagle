@@ -29,7 +29,7 @@ import {
   type MediaResolution,
 } from './media-cache-controller';
 import { MediaRequestLimiter } from './media-request-limiter';
-import { isAllowedAppNavigation } from './navigation-policy';
+import { isAllowedAppNavigation, desktopContentSecurityPolicy } from './navigation-policy';
 import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
 import {
   DEFAULT_CACHE_LIMIT_BYTES,
@@ -869,9 +869,7 @@ function lockDownSession(currentSession: Electron.Session): void {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: sekereagle-media:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
-          ],
+          'Content-Security-Policy': [desktopContentSecurityPolicy],
         },
       });
     },

@@ -3,10 +3,10 @@ import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { installClientCacheProbe } from './client-cache-probe.mjs';
 
-test('probe records end-to-end fetch completion without retaining URLs, headers or credentials', async () => {
+test('probe records response-header timing without retaining URLs, headers or credentials', async () => {
   const dom = new JSDOM('<main></main>', { url: 'https://example.com' });
   const originalFetch = async () =>
-    new Response('image', { headers: { 'x-sekereagle-cache-result': 'REVALIDATED' } });
+    new globalThis.Response('image', { headers: { 'x-sekereagle-cache-result': 'REVALIDATED' } });
   dom.window.fetch = originalFetch;
   const probe = installClientCacheProbe(dom.window);
   probe.begin('folder-open');
@@ -27,7 +27,7 @@ test('probe separates scenarios, ignores unrelated traffic, and preserves networ
   const dom = new JSDOM('', { url: 'https://example.com' });
   dom.window.fetch = async (url) => {
     if (url.includes('fail')) throw new Error('private error');
-    return new Response('ok');
+    return new globalThis.Response('ok');
   };
   const probe = installClientCacheProbe(dom.window);
   probe.begin('folder-open');
