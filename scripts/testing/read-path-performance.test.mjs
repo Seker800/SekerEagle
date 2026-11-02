@@ -26,6 +26,7 @@ const ownerId = randomUUID();
 const prefix = `${ownerId}-`;
 const assetId = (n) => `${prefix}asset-${String(n).padStart(5, '0')}`;
 let queries = [];
+const searchSpaces = [];
 
 before(async () => {
   await db.user.create({
@@ -59,6 +60,7 @@ after(async () => {
   await db.eaglePhotoPerson.deleteMany({ where: { ownerId } });
   await db.eagleSmartFolder.deleteMany({ where: { ownerId } });
   await db.user.delete({ where: { id: ownerId } });
+  await db.eagleEmbeddingSpace.deleteMany({ where: { id: { in: searchSpaces } } });
   await db.$disconnect();
 });
 function nodes(plan) {
@@ -412,5 +414,67 @@ test('sparse smart-folder filters do not repeatedly hydrate rejected candidate b
       limit: 10,
     }),
     /不存在/,
+  );
+});
+
+test('interactive relevance search hydrates only the requested page plus its continuation sentinel', async () => {
+  let space = await db.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } });
+  if (!space) {
+    space = await db.eagleEmbeddingSpace.create({
+      data: {
+        id: randomUUID(),
+        model: 'Qwen/Qwen3-VL-Embedding-2B',
+        revision: randomUUID(),
+        dimensions: 1024,
+        normalized: true,
+        instructionVersion: 'synthetic',
+        preprocessingVersion: 'synthetic',
+        isCurrent: true,
+      },
+    });
+    searchSpaces.push(space.id);
+  }
+  const vector = `[1,${Array(1023).fill(0).join(',')}]`;
+  await db.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt")
+    SELECT ${space.id}||'-'||id,${ownerId},'PHOTO',id,"mediaRevision",${space.id},'READY',true,${vector}::vector,1,now() FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND rating=5
+    ON CONFLICT ("assetId","assetRevision","spaceId") DO UPDATE SET embedding=EXCLUDED.embedding,"l2Norm"=1`;
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  const context = { status: 'READY', spaceId: space.id, vector };
+  const hydrated = [];
+  const traced = new Proxy(db, {
+    get(target, key) {
+      if (key === 'eagleAsset')
+        return new Proxy(target.eagleAsset, {
+          get(model, method) {
+            if (method === 'findMany')
+              return async (args) => {
+                const rows = await model.findMany(args);
+                hydrated.push(rows.length);
+                return rows;
+              };
+            return Reflect.get(model, method);
+          },
+        });
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const service = new EagleService(
+    traced,
+    { prepare: async () => context, rankPage: ranker.rankPage.bind(ranker) },
+    'PHOTO',
+  );
+  const first = await service.listAssets(ownerId, {
+    search: 'unmatched-text',
+    rating: 5,
+    limit: 40,
+  });
+  assert.equal(first.items.length, 40);
+  assert.ok(first.nextCursor);
+  console.log('relevance page hydration', JSON.stringify({ requested: 40, hydrated }));
+  assert.deepEqual(
+    hydrated,
+    [41],
+    'filtered ranking must not hydrate 250 full cards for a 40-card page',
   );
 });
