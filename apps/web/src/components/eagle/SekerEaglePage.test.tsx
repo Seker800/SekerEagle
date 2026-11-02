@@ -2180,6 +2180,32 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('button', { name: '保存到文件夹' })).toBeEnabled();
   });
 
+  it('drags PHOTO originals through a mode-aware desktop capability', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    const prepareLibraryAssetDrag = vi.fn().mockResolvedValue({ token: 'photo-drag' });
+    const prepareAssetDrag = vi.fn();
+    const startPreparedAssetDrag = vi.fn();
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      prepareAssetDrag,
+      prepareLibraryAssetDrag,
+      startPreparedAssetDrag,
+    };
+    renderPage();
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    expect(card).toHaveAttribute('draggable', 'true');
+    fireEvent.dragStart(card);
+    await waitFor(() =>
+      expect(prepareLibraryAssetDrag).toHaveBeenCalledWith({
+        assetIds: ['asset-1'],
+        libraryMode: 'PHOTO',
+      }),
+    );
+    await waitFor(() => expect(startPreparedAssetDrag).toHaveBeenCalledWith('photo-drag'));
+    expect(prepareAssetDrag).not.toHaveBeenCalled();
+  });
+
   it('downloads selected originals only after an explicit drag gesture', async () => {
     const pendingDrag = createDeferred<void>();
     const prepareAssetDrag = vi.fn(() =>
