@@ -302,7 +302,7 @@ export function PhotoEditor({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setError('');
     setErrorRetry('load');
     setLoaded(null);
@@ -315,34 +315,30 @@ export function PhotoEditor({
       setError(renderErrorMessage(reason));
       return;
     }
-    const image = new Image();
-    image.onload = () => {
-      if (cancelled) return;
-      if (
-        Math.max(
-          image.naturalWidth * image.naturalHeight,
-          (sourceSize?.width ?? image.naturalWidth) * (sourceSize?.height ?? image.naturalHeight),
-        ) > MAX_PHOTO_PIXELS
-      ) {
-        setError(t('暂支持不超过 4800 万像素的照片，请先缩小图片。'));
-        return;
-      }
-      try {
-        previewRef.current = sourceCanvas(image, 1280);
-        setLoaded(image);
-      } catch {
-        setError(t('照片读取失败，请选择 JPG、PNG 或 WebP 图片。'));
-      }
-    };
-    image.onerror = () => {
-      if (!cancelled) setError(t('照片读取失败，请选择 JPG、PNG 或 WebP 图片。'));
-    };
-    image.src = previewSource ?? source;
+    void loadEditablePhoto(previewSource ?? source, controller.signal)
+      .then((image) => {
+        if (controller.signal.aborted) return;
+        if (
+          Math.max(
+            image.naturalWidth * image.naturalHeight,
+            (sourceSize?.width ?? image.naturalWidth) * (sourceSize?.height ?? image.naturalHeight),
+          ) > MAX_PHOTO_PIXELS
+        ) {
+          setError(t('暂支持不超过 4800 万像素的照片，请先缩小图片。'));
+          return;
+        }
+        try {
+          previewRef.current = sourceCanvas(image, 1280);
+          setLoaded(image);
+        } catch {
+          setError(t('照片读取失败，请选择 JPG、PNG 或 WebP 图片。'));
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError(t('照片读取失败，请选择 JPG、PNG 或 WebP 图片。'));
+      });
     return () => {
-      cancelled = true;
-      image.onload = null;
-      image.onerror = null;
-      image.src = '';
+      controller.abort();
       renderer.dispose();
       rendererRef.current = null;
     };

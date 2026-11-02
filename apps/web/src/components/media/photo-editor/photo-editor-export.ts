@@ -40,6 +40,9 @@ export async function renderEditedPhotoFile(
 export function loadEditablePhoto(source: string, signal: AbortSignal): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    // Desktop cache images have their own origin. Negotiate the existing narrow
+    // CORS policy before loading so preview and export canvases remain readable.
+    image.crossOrigin = 'use-credentials';
     const cleanup = () => {
       image.onload = null;
       image.onerror = null;
