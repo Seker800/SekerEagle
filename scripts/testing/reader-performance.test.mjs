@@ -382,9 +382,19 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
       await new Promise((resolve) => server.close(resolve));
     }
     if (pool) await pool.end();
+    // Delete fixture children by scope before their parents; the final resource
+    // deletion still passes the database's ordinary foreign-key checks.
+    await db.eagleSmartFolder.deleteMany({ where: { ownerId } });
+    for (const child of [
+      db.eaglePhotoFace,
+      db.eagleAssetColorSwatch,
+      db.eagleAssetColorAnalysis,
+      db.eaglePhotoMetadata,
+      db.eagleAssetEmbedding,
+    ])
+      await child.deleteMany({ where: { ownerId } });
     await db.eagleAsset.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
     await db.eaglePhotoPerson.deleteMany({ where: { ownerId } });
-    await db.eagleSmartFolder.deleteMany({ where: { ownerId } });
     if (spaceId) await db.eagleEmbeddingSpace.deleteMany({ where: { id: spaceId } });
     await db.eagleLibraryReadState.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
     await db.user.deleteMany({ where: { id: { in: [ownerId, other] } } });
