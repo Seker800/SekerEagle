@@ -12,8 +12,8 @@ export function installClientCacheProbe(host) {
   let dropped = 0;
   // Bounds diagnostic memory during long manual sessions, not library actions.
   const maximumRecords = 4096;
-  const record = (list, value) => {
-    if (list.length === maximumRecords) {
+  const record = (list, value, limit = maximumRecords) => {
+    if (list.length === limit) {
       list.shift();
       dropped++;
     }
@@ -52,7 +52,7 @@ export function installClientCacheProbe(host) {
     if (stopped) throw new Error('Probe stopped');
     if (current) current.endMs = now();
     current = { scenario: name, startMs: now(), requests: [], firstVisibleImageMs: null };
-    record(scenarios, current);
+    record(scenarios, current, 64);
     return current.startMs;
   }
   const wrappedFetch = async function (...args) {
@@ -62,27 +62,35 @@ export function installClientCacheProbe(host) {
     try {
       const response = await nativeFetch.apply(this, args);
       if (!stopped && category && scenario)
-        record(scenario.requests, {
-          kind: category,
-          startMs: start - scenario.startMs,
-          headersMs: now() - start,
-          status: response.status,
-          cacheResult: ['LOCAL', 'REVALIDATED', 'MISS', 'COALESCED'].includes(
-            response.headers.get('x-sekereagle-cache-result'),
-          )
-            ? response.headers.get('x-sekereagle-cache-result')
-            : 'UNOBSERVED',
-        });
+        record(
+          scenario.requests,
+          {
+            kind: category,
+            startMs: start - scenario.startMs,
+            headersMs: now() - start,
+            status: response.status,
+            cacheResult: ['LOCAL', 'REVALIDATED', 'MISS', 'COALESCED'].includes(
+              response.headers.get('x-sekereagle-cache-result'),
+            )
+              ? response.headers.get('x-sekereagle-cache-result')
+              : 'UNOBSERVED',
+          },
+          128,
+        );
       return response;
     } catch (error) {
       if (!stopped && category && scenario)
-        record(scenario.requests, {
-          kind: category,
-          startMs: start - scenario.startMs,
-          headersMs: now() - start,
-          status: 0,
-          cacheResult: 'UNOBSERVED',
-        });
+        record(
+          scenario.requests,
+          {
+            kind: category,
+            startMs: start - scenario.startMs,
+            headersMs: now() - start,
+            status: 0,
+            cacheResult: 'UNOBSERVED',
+          },
+          128,
+        );
       throw error;
     }
   };
@@ -141,13 +149,11 @@ export function installClientCacheProbe(host) {
       return {
         viewport: { width: host.innerWidth, height: host.innerHeight },
         navigationMs:
-          host.performance
-            .getEntriesByType?.('navigation')
-            .map((entry) => ({
-              responseEnd: Math.round(entry.responseEnd),
-              domContentLoaded: Math.round(entry.domContentLoadedEventEnd),
-              load: Math.round(entry.loadEventEnd),
-            })) ?? [],
+          host.performance.getEntriesByType?.('navigation').map((entry) => ({
+            responseEnd: Math.round(entry.responseEnd),
+            domContentLoaded: Math.round(entry.domContentLoadedEventEnd),
+            load: Math.round(entry.loadEventEnd),
+          })) ?? [],
         scenarios: scenarios.map((scenario) => ({
           ...scenario,
           requests: scenario.requests.map((entry) => ({ ...entry })),

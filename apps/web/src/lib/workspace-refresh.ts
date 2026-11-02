@@ -16,7 +16,7 @@ type Load = (signal: AbortSignal) => Promise<WorkspaceChanges>;
 type Registration = {
   refs: number;
   stop: () => void;
-  waitForBaseline: (queryKey: readonly unknown[], signal: AbortSignal) => Promise<void>;
+  waitForBaseline: (queryKey: readonly unknown[], signal: AbortSignal) => Promise<void> | undefined;
 };
 const registries = new WeakMap<QueryClient, Map<string, Registration>>();
 
@@ -28,14 +28,12 @@ export function awaitWorkspaceRefreshBaseline(
   includePrivate: boolean,
   queryKey: readonly unknown[],
   signal: AbortSignal,
-): Promise<void> {
+): Promise<void> | undefined {
   signal.throwIfAborted();
-  return (
-    registries
-      .get(client)
-      ?.get(JSON.stringify([ownerId, includePrivate]))
-      ?.waitForBaseline(queryKey, signal) ?? Promise.resolve()
-  );
+  return registries
+    .get(client)
+    ?.get(JSON.stringify([ownerId, includePrivate]))
+    ?.waitForBaseline(queryKey, signal);
 }
 
 const resources: Record<WorkspaceChangeKind, readonly string[]> = {
@@ -233,8 +231,8 @@ export function acquireWorkspaceRefresh(
   schedule(0);
   const entry = {
     refs: 1,
-    waitForBaseline(queryKey: readonly unknown[], signal: AbortSignal): Promise<void> {
-      if (initialSettled || !visible()) return Promise.resolve();
+    waitForBaseline(queryKey: readonly unknown[], signal: AbortSignal): Promise<void> | undefined {
+      if (initialSettled || !visible()) return undefined;
       const hash = hashKey(queryKey);
       const configured = Number(import.meta.env.VITE_WORKSPACE_STARTUP_CHECK_MS ?? 250);
       const budget = Number.isFinite(configured) && configured >= 0 ? configured : 250;
@@ -246,7 +244,12 @@ export function acquireWorkspaceRefresh(
           clearTimeout(deadline);
           signal.removeEventListener('abort', abort);
           waitingForBaseline.delete(hash);
-          if (aborted) reject(signal.reason);
+          if (aborted)
+            reject(
+              signal.reason instanceof Error
+                ? signal.reason
+                : new DOMException('Aborted', 'AbortError'),
+            );
           else resolve();
         };
         const abort = () => finish(true);

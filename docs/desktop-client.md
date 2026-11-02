@@ -16,6 +16,8 @@ The desktop CSP permits same-origin Web Workers and WebAssembly compilation (`wa
 
 ## Cache behavior
 
+Desktop 0.1.8 adds capability-negotiated PHOTO and MATERIAL media URLs, isolated keys/namespaces, and reuse of the shared in-memory thumbnail cache. The matching web build is required; older clients retain authenticated network fallback for PHOTO. Disk hits still revalidate online. The settings panel distinguishes direct local reuse, validated reuse, network reads, shared downloads and failures for the current connection; internal SQLite lookups are no longer presented as request hit rate. Local implementation, measurement limits and validation are recorded in [client cache experience](client-cache-experience-2026-11-02.md); this statement does not declare an installed-client or server deployment.
+
 - Default capacity is 10 GiB; settings accept 1–100 GiB.
 - Only non-private WebP thumbnails, previews, posters, and tiles explicitly authorized by the API are stored.
 - Cache entries are isolated by deployment and account. Signing out locks old entries; clearing the current account does not delete server media.

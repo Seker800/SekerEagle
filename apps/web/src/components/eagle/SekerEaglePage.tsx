@@ -577,7 +577,14 @@ export function SekerEaglePage({
         : undefined;
     },
     queryFn: async ({ pageParam, signal }) => {
-      await awaitWorkspaceRefreshBaseline(queryClient, ownerId, privateVisible, listKey, signal);
+      const baseline = awaitWorkspaceRefreshBaseline(
+        queryClient,
+        ownerId,
+        privateVisible,
+        listKey,
+        signal,
+      );
+      if (baseline) await baseline;
       signal.throwIfAborted();
       const membershipRevision = workspaceCache.operations.getSnapshot();
       const pageFilters = { ...assetFilters, cursor: pageParam || undefined };
