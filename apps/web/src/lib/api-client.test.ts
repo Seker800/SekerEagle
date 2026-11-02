@@ -20,6 +20,69 @@ describe('browser session recovery', () => {
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
   });
 
+  it('keeps browser mutations synchronous up to their original fetch boundary', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+    const pending = request('/api/photos/assets/batch/trash', { method: 'POST', body: '{}' });
+    expect(fetch).toHaveBeenCalledOnce();
+    await pending;
+  });
+
+  it('reads a desktop list exactly once through main, while mutations invalidate list evidence before fetch', async () => {
+    const events: string[] = [];
+    const readLibrary = vi.fn(async () => ({
+      status: 200,
+      body: '{"items":[]}',
+      contentType: 'application/json',
+    }));
+    const resetMediaSnapshot = vi.fn(async () => {
+      events.push('reset');
+    });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      canReadLibrary: (p: string) => p === '/api/photos/assets',
+      readLibrary,
+      resetMediaSnapshot,
+    };
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      events.push('fetch');
+      return jsonResponse({ ok: true });
+    });
+    await expect(request('/api/photos/assets')).resolves.toEqual({ items: [] });
+    expect(readLibrary).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+    await request('/api/photos/assets/batch/trash', { method: 'POST', body: '{}' });
+    expect(events).toEqual(['reset', 'fetch']);
+  });
+
+  it('cancels a desktop list through main without issuing a second browser request', async () => {
+    const readLibrary = vi.fn(
+      (_path: string, _requestId: string) => new Promise<never>(() => undefined),
+    );
+    const cancelLibraryRead = vi.fn();
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      canReadLibrary: () => true,
+      readLibrary,
+      cancelLibraryRead,
+    };
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const controller = new AbortController();
+    const pending = request('/api/photos/assets', { signal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(cancelLibraryRead).toHaveBeenCalledWith(readLibrary.mock.calls[0]?.[1]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('preserves desktop list failures without falling back to an unobserved browser list', async () => {
+    const readLibrary = vi.fn().mockRejectedValue(new Error('connection changed'));
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      canReadLibrary: () => true,
+      readLibrary,
+    };
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    await expect(request('/api/photos/assets')).rejects.toThrow('connection changed');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('keeps full-library face admission entry points short without waiting for execution', async () => {
     const deadlines = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = vi

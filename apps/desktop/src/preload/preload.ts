@@ -1,3 +1,4 @@
+import { isLibraryReadPath } from '../shared/library-read';
 import { contextBridge, ipcRenderer } from 'electron';
 import { createDesktopMediaUrl, type DesktopMediaIdentity } from '../shared/media-identity';
 import {
@@ -29,6 +30,18 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
       throw new Error('原文件拖拽凭据无效。');
     }
     return { token: parsePreparedDragToken(result.token) };
+  },
+  mediaCacheVersion: 2,
+  canReadLibrary: isLibraryReadPath,
+  readLibrary(path: string, requestId: string) {
+    if (!isLibraryReadPath(path)) throw new Error('Unsupported library read');
+    return ipcRenderer.invoke('desktop:read-library', path, requestId);
+  },
+  cancelLibraryRead(requestId: string) {
+    ipcRenderer.send('desktop:cancel-library-read', requestId);
+  },
+  resetMediaSnapshot() {
+    return ipcRenderer.invoke('desktop:reset-media-snapshot');
   },
   refreshSession(): Promise<{ status: number; code: string | null }> {
     return ipcRenderer.invoke('desktop:refresh-session');

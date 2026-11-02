@@ -19,6 +19,35 @@ afterEach(() => {
 });
 
 describe('media resolver', () => {
+  it('uses mode-scoped URLs only when the installed client advertises support', () => {
+    const createMediaUrl = vi.fn(
+      (media: DesktopMediaRequest & { libraryMode?: string }) =>
+        `sekereagle-media://rendition/${media.libraryMode?.toLowerCase()}/${'renditionKind' in media ? media.renditionKind.toLowerCase() : ''}/${media.assetId}/${'renditionId' in media ? media.renditionId : ''}`,
+    );
+    const bridge = { version: 1 as const, mediaCacheVersion: 2, createMediaUrl };
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = bridge;
+    expect(resolveEagleRenditionUrl(assetId, renditionId, 'THUMBNAIL', 'PHOTO')).toBe(
+      `sekereagle-media://rendition/photo/thumbnail/${assetId}/${renditionId}`,
+    );
+    expect(resolveEagleRenditionUrl(assetId, renditionId, 'PREVIEW', 'MATERIAL')).toBe(
+      `sekereagle-media://rendition/material/preview/${assetId}/${renditionId}`,
+    );
+    bridge.mediaCacheVersion = 1;
+    createMediaUrl.mockClear();
+    expect(resolveEagleRenditionUrl(assetId, renditionId, 'THUMBNAIL', 'PHOTO')).toBe(
+      `/api/photos/assets/${assetId}/renditions/${renditionId}`,
+    );
+    expect(createMediaUrl).not.toHaveBeenCalled();
+  });
+
+  it('copies scoped photo previews using the photo API', () => {
+    expect(
+      resolveClipboardImageUrl(
+        `sekereagle-media://rendition/photo/preview/${assetId}/${renditionId}`,
+      ),
+    ).toBe(`/api/photos/assets/${assetId}/renditions/${renditionId}`);
+  });
+
   it('keeps ordinary web URLs unchanged when no desktop capability exists', () => {
     expect(resolveEagleRenditionUrl(assetId, renditionId, 'THUMBNAIL')).toBe(
       `/api/eagle/assets/${assetId}/renditions/${renditionId}`,

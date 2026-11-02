@@ -34,8 +34,13 @@ const messages = {
     allAccountsUsage: '全部账号占用',
     currentAccountUsage: '当前账号占用',
     cacheFiles: '缓存文件',
-    hitRate: '命中率',
-    trafficSaved: '已节省流量',
+    hitRate: '磁盘直接读取（本次连接）',
+    memoryReuseNote: '已在内存中的缩略图直接显示，不计入下方读取次数。',
+    revalidated: '联网确认后复用',
+    cacheMisses: '联网读取',
+    coalesced: '等待同批下载',
+    cacheErrors: '读取失败',
+    trafficSaved: '免传图片内容（本次连接）',
     diskAvailable: '磁盘剩余',
     cacheLimit: '缓存容量上限',
     cacheLimitDescription: '允许 1–100 GiB；达到上限后自动淘汰较少使用的文件。',
@@ -108,8 +113,14 @@ const messages = {
     allAccountsUsage: 'All accounts',
     currentAccountUsage: 'Current account',
     cacheFiles: 'Cached files',
-    hitRate: 'Hit rate',
-    trafficSaved: 'Bandwidth saved',
+    hitRate: 'Direct disk reads (this connection)',
+    memoryReuseNote:
+      'Thumbnails already in memory display immediately and are not included in these read counts.',
+    revalidated: 'Reused after online validation',
+    cacheMisses: 'Loaded from network',
+    coalesced: 'Waited for a shared download',
+    cacheErrors: 'Failed reads',
+    trafficSaved: 'Image bytes avoided (this connection)',
     diskAvailable: 'Disk available',
     cacheLimit: 'Cache capacity limit',
     cacheLimitDescription:
@@ -261,11 +272,20 @@ async function loadCacheStatus() {
   document.querySelector('#cache-entry-count').textContent = (
     account?.entryCount ?? state.globalEntryCount
   ).toLocaleString(locale);
-  document.querySelector('#cache-hit-rate').textContent = account
-    ? `${Math.round((account.hitCount / Math.max(1, account.hitCount + account.missCount)) * 100)}%`
-    : '—';
-  document.querySelector('#cache-saved-bytes').textContent = account
-    ? formatBytes(account.savedBytes)
+  const requests = account?.requests;
+  for (const [id, counter] of [
+    ['cache-hit-rate', 'localHitCount'],
+    ['cache-revalidated', 'revalidatedHitCount'],
+    ['cache-misses', 'missCount'],
+    ['cache-coalesced', 'coalescedCount'],
+    ['cache-errors', 'errorCount'],
+  ]) {
+    document.querySelector(`#${id}`).textContent = requests
+      ? requests[counter].toLocaleString(locale)
+      : '—';
+  }
+  document.querySelector('#cache-saved-bytes').textContent = requests
+    ? formatBytes(requests.savedBytes)
     : '—';
   document.querySelector('#cache-free-space').textContent = formatBytes(state.availableBytes);
   document.querySelector('#cache-path').textContent = state.cachePath;

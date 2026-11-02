@@ -4,7 +4,8 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const MAX_TILE_COORDINATE = 1_000_000;
 const MAX_TILE_LEVEL = 63;
 
-export type DesktopMediaIdentity =
+export type DesktopLibraryMode = 'MATERIAL' | 'PHOTO';
+export type DesktopMediaIdentity = (
   | {
       kind: 'RENDITION';
       renditionKind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
@@ -18,19 +19,27 @@ export type DesktopMediaIdentity =
       level: number;
       x: number;
       y: number;
-    };
+    }
+) & { libraryMode?: DesktopLibraryMode };
 
 export function createDesktopMediaUrl(media: DesktopMediaIdentity): string {
+  const scope =
+    media.libraryMode === undefined
+      ? ''
+      : `${parseLibraryMode(media.libraryMode.toLowerCase()).toLowerCase()}/`;
   const value =
     media.kind === 'RENDITION'
-      ? `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`
-      : `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`;
+      ? `sekereagle-media://rendition/${scope}${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`
+      : `sekereagle-media://tile/${scope}${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`;
   const canonical = parseDesktopMediaUrl(value);
   if (canonical.kind !== media.kind) throw new Error('桌面媒体类型无效。');
   return value.toLowerCase();
 }
 
 export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
+  // URL normalizes dot segments before pathname is exposed. Reject them first,
+  // so an invalid mode cannot silently become a valid legacy material URL.
+  if (/(?:\/|^)(?:\.|%2e){1,2}(?:\/|$)/iu.test(input)) throw new Error('媒体地址无效。');
   const url = parseUrl(input, '媒体地址无效。');
   if (
     url.protocol !== 'sekereagle-media:' ||
@@ -43,9 +52,14 @@ export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
   }
 
   const segments = url.pathname.split('/').filter(Boolean).map(decodePathSegment);
+  const scoped =
+    (url.hostname === 'rendition' && segments.length === 4) ||
+    (url.hostname === 'tile' && segments.length === 6);
+  const scope = scoped ? { libraryMode: parseLibraryMode(segments.shift()!) } : {};
   if (url.hostname === 'rendition' && segments.length === 3) {
     const [renditionKind, assetId, renditionId] = segments;
     return {
+      ...scope,
       kind: 'RENDITION',
       renditionKind: parseRenditionKind(renditionKind),
       assetId: assertUuid(assetId),
@@ -56,6 +70,7 @@ export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
   if (url.hostname === 'tile' && segments.length === 5) {
     const [assetId, pyramidId, level, x, y] = segments;
     return {
+      ...scope,
       kind: 'TILE',
       assetId: assertUuid(assetId),
       pyramidId: assertUuid(pyramidId),
@@ -85,7 +100,7 @@ export function buildCacheIdentity(
       ? `rendition:${media.renditionKind}:${media.assetId}:${media.renditionId}`
       : `tile:${media.assetId}:${media.pyramidId}:${media.level}:${media.x}:${media.y}`;
   assertDeploymentId(deploymentId);
-  return `v1\n${serverIdentity}\n${deploymentId}\n${ownerId}\n${mediaIdentity}`;
+  return `${cacheScopeIdentity(serverIdentity, ownerId, deploymentId, media.libraryMode)}\n${mediaIdentity}`;
 }
 
 export function hashCacheIdentity(identity: string): Buffer {
@@ -96,6 +111,7 @@ export function buildNamespaceId(
   serverUrl: string,
   authenticatedOwnerId: string,
   deploymentId: string,
+  libraryMode: DesktopLibraryMode = 'MATERIAL',
 ): string {
   const serverIdentity = normalizeServerIdentity(serverUrl);
   const ownerId = authenticatedOwnerId.trim();
@@ -104,8 +120,28 @@ export function buildNamespaceId(
   }
   assertDeploymentId(deploymentId);
   return createHash('sha256')
-    .update(`v1\n${serverIdentity}\n${deploymentId}\n${ownerId}`, 'utf8')
+    .update(cacheScopeIdentity(serverIdentity, ownerId, deploymentId, libraryMode), 'utf8')
     .digest('hex');
+}
+
+function cacheScopeIdentity(
+  server: string,
+  owner: string,
+  deployment: string,
+  mode: DesktopLibraryMode = 'MATERIAL',
+) {
+  if (mode !== 'MATERIAL' && mode !== 'PHOTO') throw new Error('图库模式无效。');
+  // v1 was exclusively MATERIAL. Preserve its existing files without ever
+  // admitting PHOTO into that key space, including on a legacy request.
+  return mode === 'MATERIAL'
+    ? `v1\n${server}\n${deployment}\n${owner}`
+    : `v2\n${server}\n${deployment}\n${owner}\nPHOTO`;
+}
+
+function parseLibraryMode(value: string): DesktopLibraryMode {
+  if (value === 'material') return 'MATERIAL';
+  if (value === 'photo') return 'PHOTO';
+  throw new Error('图库模式无效。');
 }
 
 function assertDeploymentId(value: string): void {

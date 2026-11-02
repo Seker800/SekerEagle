@@ -1,4 +1,5 @@
 import { EagleTrashConfirmation } from './EagleTrashConfirmation';
+import { awaitWorkspaceRefreshBaseline } from '../../lib/workspace-refresh';
 import { EagleOperationNotices } from './EagleOperationNotices';
 import { EagleDuplicates } from './EagleDuplicates';
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
@@ -576,6 +577,15 @@ export function SekerEaglePage({
         : undefined;
     },
     queryFn: async ({ pageParam, signal }) => {
+      const baseline = awaitWorkspaceRefreshBaseline(
+        queryClient,
+        ownerId,
+        privateVisible,
+        listKey,
+        signal,
+      );
+      if (baseline) await baseline;
+      signal.throwIfAborted();
       const membershipRevision = workspaceCache.operations.getSnapshot();
       const pageFilters = { ...assetFilters, cursor: pageParam || undefined };
       const page =

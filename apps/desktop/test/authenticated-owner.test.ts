@@ -68,3 +68,26 @@ it('rejects malformed owner and deployment identities instead of caching an ambi
     expect(fetchMe).toHaveBeenCalledTimes(2);
   }
 });
+
+it('fences identity reads across cookie changes without late responses replacing a newer owner', async () => {
+  let release!: (r: Response) => void;
+  const deploymentId = 'd'.repeat(64);
+  const fetchMe = vi.fn(async () =>
+    Response.json({ user: { id: 'new-owner' }, desktopCache: { deploymentId } }),
+  );
+  fetchMe.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const owner = new AuthenticatedOwner(fetchMe);
+  const old = owner.get();
+  owner.invalidate();
+  const current = owner.get();
+  release(Response.json({ user: { id: 'old-owner' }, desktopCache: { deploymentId } }));
+  expect(await old).toBeNull();
+  expect(await current).toEqual({ ownerId: 'new-owner', deploymentId });
+  expect(await owner.get()).toEqual({ ownerId: 'new-owner', deploymentId });
+  expect(fetchMe).toHaveBeenCalledTimes(2);
+});

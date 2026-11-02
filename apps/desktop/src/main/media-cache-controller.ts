@@ -59,6 +59,7 @@ interface CacheBackend {
 export type MediaResolution =
   | {
       source: 'cache';
+      cacheResult: 'LOCAL' | 'REVALIDATED' | 'MISS' | 'COALESCED';
       leaseId: string;
       filePath: string;
       contentType: string;
@@ -69,6 +70,32 @@ export type MediaResolution =
   | { source: 'upstream'; response: Response }
   | { source: 'error'; status: number; message: string };
 
+export interface CacheRequestStats {
+  localHitCount: number;
+  revalidatedHitCount: number;
+  missCount: number;
+  coalescedCount: number;
+  errorCount: number;
+  savedBytes: number;
+}
+
+export function emptyCacheRequestStats(): CacheRequestStats {
+  return {
+    localHitCount: 0,
+    revalidatedHitCount: 0,
+    missCount: 0,
+    coalescedCount: 0,
+    errorCount: 0,
+    savedBytes: 0,
+  };
+}
+
+type CanReadLocal = (
+  media: DesktopMediaIdentity,
+  identity: AuthenticatedIdentity,
+  file: ReadyCacheEntry,
+) => boolean;
+
 export class MediaCacheController {
   private readonly serverUrl: string;
   private readonly cache: CacheBackend;
@@ -78,7 +105,9 @@ export class MediaCacheController {
     options: { ifNoneMatch?: string; signal?: AbortSignal },
   ) => Promise<Response>;
   private readonly now: () => number;
+  private readonly canReadLocal: CanReadLocal;
   private readonly populating = new Map<string, Promise<void>>();
+  private readonly requestStats = new Map<string, CacheRequestStats>();
 
   constructor(options: {
     serverUrl: string;
@@ -89,12 +118,20 @@ export class MediaCacheController {
       options: { ifNoneMatch?: string; signal?: AbortSignal },
     ) => Promise<Response>;
     now?: () => number;
+    canReadLocal?: CanReadLocal;
   }) {
     this.serverUrl = options.serverUrl;
     this.cache = options.cache;
     this.authenticatedOwner = options.authenticatedOwner;
     this.fetchUpstream = options.fetchUpstream;
     this.now = options.now ?? Date.now;
+    this.canReadLocal = options.canReadLocal ?? (() => false);
+  }
+
+  /** Per media request, for this connection. SQLite acquisitions are internal IO,
+   * not evidence that a download or an authorization round trip was avoided. */
+  getRequestStats(namespaceId: string): CacheRequestStats {
+    return { ...(this.requestStats.get(namespaceId) ?? emptyCacheRequestStats()) };
   }
 
   async resolve(url: string, signal?: AbortSignal): Promise<MediaResolution> {
@@ -108,10 +145,42 @@ export class MediaCacheController {
     if (!identity) return { source: 'error', status: 401, message: '需要重新登录。' };
     const { ownerId, deploymentId } = identity;
 
-    const namespaceId = buildNamespaceId(this.serverUrl, ownerId, deploymentId);
+    const namespaceId = buildNamespaceId(this.serverUrl, ownerId, deploymentId, media.libraryMode);
     const keyHash = hashCacheIdentity(
       buildCacheIdentity(this.serverUrl, ownerId, deploymentId, media),
     );
+    try {
+      const result = await this.resolveAuthorized(media, keyHash, namespaceId, identity, signal);
+      this.recordResult(namespaceId, result);
+      return result;
+    } catch (error) {
+      if (!signal?.aborted)
+        this.recordResult(namespaceId, { source: 'error', status: 502, message: '' });
+      throw error;
+    }
+  }
+
+  private recordResult(namespaceId: string, result: MediaResolution): void {
+    const stats = this.requestStats.get(namespaceId) ?? emptyCacheRequestStats();
+    this.requestStats.set(namespaceId, stats);
+    if (result.source === 'error' || (result.source === 'upstream' && !result.response.ok))
+      stats.errorCount++;
+    else if (result.source === 'upstream' || result.cacheResult === 'MISS') stats.missCount++;
+    else if (result.cacheResult === 'COALESCED') stats.coalescedCount++;
+    else {
+      if (result.cacheResult === 'LOCAL') stats.localHitCount++;
+      else stats.revalidatedHitCount++;
+      stats.savedBytes += result.logicalBytes;
+    }
+  }
+
+  private async resolveAuthorized(
+    media: DesktopMediaIdentity,
+    keyHash: Buffer,
+    namespaceId: string,
+    identity: AuthenticatedIdentity,
+    signal?: AbortSignal,
+  ): Promise<MediaResolution> {
     const now = this.now();
     let existing;
     try {
@@ -123,7 +192,8 @@ export class MediaCacheController {
       };
     }
     try {
-      if (existing && existing.authorizationLeaseUntil > now) return cacheResolution(existing);
+      if (existing && this.canReadLocal(media, identity, existing))
+        return cacheResolution(existing);
       if (existing) {
         await this.cache.release(existing.leaseId);
         return await this.revalidate(media, keyHash, namespaceId, existing, signal);
@@ -149,7 +219,7 @@ export class MediaCacheController {
     if (active) {
       await waitForSignal(active, signal);
       const hit = await this.cache.acquire(keyHash, namespaceId, this.now());
-      if (hit) return cacheResolution(hit);
+      if (hit) return cacheResolution(hit, 'COALESCED');
       return this.resolveMiss(media, keyHash, namespaceId, signal);
     }
 
@@ -162,6 +232,7 @@ export class MediaCacheController {
         }
         const result = await this.populateResponse(media, keyHash, namespaceId, response);
         if (result.source === 'cache') await this.cache.release(result.leaseId);
+        else if (result.source === 'upstream') upstreamResponse = result.response;
       })
       .finally(() => {
         this.populating.delete(keyHex);
@@ -171,7 +242,7 @@ export class MediaCacheController {
     if (upstreamResponse) return { source: 'upstream', response: upstreamResponse };
     const hit = await this.cache.acquire(keyHash, namespaceId, this.now());
     return hit
-      ? cacheResolution(hit)
+      ? cacheResolution(hit, 'MISS')
       : { source: 'error', status: 502, message: '缓存提交后不可用。' };
   }
 
@@ -196,7 +267,7 @@ export class MediaCacheController {
       });
       const hit = await this.cache.acquire(keyHash, namespaceId, now);
       return hit
-        ? cacheResolution(hit)
+        ? cacheResolution(hit, 'REVALIDATED')
         : { source: 'error', status: 502, message: '缓存重验后不可用。' };
     }
 
@@ -256,7 +327,7 @@ export class MediaCacheController {
     }
     const hit = await this.cache.acquire(keyHash, namespaceId, this.now());
     return hit
-      ? cacheResolution(hit)
+      ? cacheResolution(hit, 'MISS')
       : { source: 'error', status: 502, message: '缓存提交后不可用。' };
   }
 }
@@ -280,10 +351,11 @@ function abortError(signal: AbortSignal): Error {
 }
 
 function upstreamPath(media: DesktopMediaIdentity): string {
+  const prefix = media.libraryMode === 'PHOTO' ? '/api/photos' : '/api/eagle';
   if (media.kind === 'RENDITION') {
-    return `/api/eagle/assets/${encodeURIComponent(media.assetId)}/renditions/${encodeURIComponent(media.renditionId)}`;
+    return `${prefix}/assets/${encodeURIComponent(media.assetId)}/renditions/${encodeURIComponent(media.renditionId)}`;
   }
-  return `/api/eagle/assets/${encodeURIComponent(media.assetId)}/pyramids/${encodeURIComponent(media.pyramidId)}/tiles/${media.level}/${media.x}/${media.y}`;
+  return `${prefix}/assets/${encodeURIComponent(media.assetId)}/pyramids/${encodeURIComponent(media.pyramidId)}/tiles/${media.level}/${media.x}/${media.y}`;
 }
 
 function isEligible(response: Response): boolean {
@@ -315,9 +387,11 @@ function cacheableLength(response: Response, maximumBytes = MAX_RENDITION_BYTES)
 
 function cacheResolution(
   entry: ReadyCacheEntry & { leaseId: string; filePath: string },
+  cacheResult: Extract<MediaResolution, { source: 'cache' }>['cacheResult'] = 'LOCAL',
 ): MediaResolution {
   return {
     source: 'cache',
+    cacheResult,
     leaseId: entry.leaseId,
     filePath: entry.filePath,
     contentType: entry.contentType,

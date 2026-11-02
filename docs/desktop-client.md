@@ -16,6 +16,8 @@ The desktop CSP permits same-origin Web Workers and WebAssembly compilation (`wa
 
 ## Cache behavior
 
+Desktop 0.1.8 adds capability-negotiated PHOTO and MATERIAL media URLs, isolated keys/namespaces, and reuse of the shared in-memory thumbnail cache. The matching web build is required; older clients retain authenticated network fallback for PHOTO. Disk hits still revalidate online. The settings panel distinguishes direct local reuse, validated reuse, network reads, shared downloads and failures for the current connection; internal SQLite lookups are no longer presented as request hit rate. Local implementation, measurement limits and validation are recorded in [client cache experience](client-cache-experience-2026-11-02.md); this statement does not declare an installed-client or server deployment.
+
 - Default capacity is 10 GiB; settings accept 1–100 GiB.
 - Only non-private WebP thumbnails, previews, posters, and tiles explicitly authorized by the API are stored.
 - Cache entries are isolated by deployment and account. Signing out locks old entries; clearing the current account does not delete server media.
@@ -94,3 +96,9 @@ Windows 0.1.8 restores the native window frame and retains the hidden applicatio
 The isolated Electron regression (`scripts/testing/desktop-photo-regression.mjs`) opens the real viewer and editor in both library modes, reproduces header occlusion with the old title-bar CSS, and verifies header hit-testing and full-dialog bounds after removal at 1000×700 and 1440×960 client sizes. It also verifies exact original-file hashes through the real IPC/HTTP export path, actual WASM pixels under the current CSP, and the explicit upgrade error under the previous CSP. Evidence is under `.omx/artifacts/desktop-018-acceptance/`; native Windows title-bar/DPI and physical OS drop acceptance were unavailable on this Mac host.
 
 Final local validation on 2026-11-02: `npm run ci:check` passed (architecture gate, lint, all workspace type checks/tests/builds, contract generation, formatting and OSS checks). Desktop coverage passed its 80% thresholds: statements 88.10%, branches 80.41%, functions 90.25%, lines 92.55%. Both packaging commands succeeded; Windows x64 and both Mac ASAR main/preload files byte-match the verified build, and installer checksums are in `apps/desktop/release/SHA256SUMS-0.1.8.txt`. The temporary workbench and its two owned containers were removed. These are local candidate artifacts; no push or production deployment occurred.
+
+## List-backed disk reuse (local candidate 0.1.9)
+
+With the matching web build, an allowlisted authenticated list/detail is fetched once by main and passed back to the page. Exact public current renditions already on disk can then return LOCAL without individual HTTP revalidation. Proof is transient, scoped by deployment/account/mode and revoked on writes, session/navigation changes and the existing shared change checks. Other windows follow existing list snapshot freshness, not instantaneous revocation. Unknown paths, tiles, private files and old clients keep the original network route.
+
+`SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES` is a positive integer, default 12000, bounding main-process projection memory. LRU eviction falls back to network validation without limiting library size. `npm run test:desktop-cache:list` reproduces the isolated real-Electron comparison. See [results and limitations](client-cache-list-reuse-2026-11-02.md). This candidate has not replaced the installed application or production web build.

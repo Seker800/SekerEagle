@@ -72,7 +72,9 @@ describe('desktop server and navigation security', () => {
 
   it('propagates custom-protocol cancellation into media resolution', async () => {
     const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
-    expect(source).toContain('handleMediaRequest(request.url, request.signal)');
+    expect(source).toMatch(
+      /handleMediaRequest\(request\.url, request\.signal, request\.headers\.get\('origin'\)\)/u,
+    );
     expect(source).toContain('mediaController.resolve(requestUrl, signal)');
     expect(source).toContain('options.signal');
   });

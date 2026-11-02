@@ -1,3 +1,5 @@
+import { registerLibraryReadIpc } from './library-read-ipc';
+import { LibraryMediaSnapshot } from './library-media-snapshot';
 import { createReadStream } from 'node:fs';
 import { copyFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -23,15 +25,29 @@ import {
 } from 'electron';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from './app-config';
 import { AuthenticatedOwner } from './authenticated-owner';
-import { MediaCacheController, type MediaResolution } from './media-cache-controller';
+import {
+  MediaCacheController,
+  emptyCacheRequestStats,
+  type MediaResolution,
+} from './media-cache-controller';
 import { MediaRequestLimiter } from './media-request-limiter';
-import { isAllowedAppNavigation } from './navigation-policy';
+import {
+  isAllowedAppNavigation,
+  desktopContentSecurityPolicy,
+  isAllowedMediaOrigin,
+  mediaCorsHeaders,
+} from './navigation-policy';
 import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
 import {
   DEFAULT_CACHE_LIMIT_BYTES,
   PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
 } from '../utility/cache/cache-policy';
 import { buildNamespaceId } from '../shared/media-identity';
+import {
+  accountCacheNamespaces,
+  readAccountCacheStats,
+  removeAccountCache,
+} from './account-media-cache';
 import { DesktopSettingsStore } from './desktop-settings';
 import { DesktopConnectionSettingsStore } from './connection-settings';
 import { connectionSettingsForServerUrl } from './connection-config';
@@ -72,7 +88,7 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       stream: true,
-      corsEnabled: false,
+      corsEnabled: true,
     },
   },
   {
@@ -116,6 +132,7 @@ let cacheRestartTimer: NodeJS.Timeout | null = null;
 let cacheRestartHistory: number[] = [];
 let shuttingDown = false;
 let connectionService: DesktopConnectionService | null = null;
+let librarySnapshot: LibraryMediaSnapshot | null = null;
 let mediaController: MediaCacheController | null = null;
 let connectionRecovery: Promise<void> | null = null;
 let browserSession: DesktopBrowserSession | null = null;
@@ -165,10 +182,12 @@ if (hasSingleInstanceLock)
       }),
     );
     currentSession.cookies.on('changed', () => {
+      librarySnapshot?.reset();
       owner.invalidate();
       clearPreparedOriginalDrags();
     });
     powerMonitor.on('resume', () => {
+      librarySnapshot?.reset();
       owner.invalidate();
       clearPreparedOriginalDrags();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
@@ -191,6 +210,8 @@ if (hasSingleInstanceLock)
       assertTrustedIpcSender(event);
       return { version: app.getVersion(), platform: process.platform };
     });
+
+    registerLibraryReadIpc({ ipcMain, assertTrustedIpcSender, snapshot: () => librarySnapshot });
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
@@ -219,6 +240,7 @@ if (hasSingleInstanceLock)
       } catch {
         return;
       }
+      librarySnapshot?.reset();
       owner.invalidate();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
       void recoverConnection(owner);
@@ -226,7 +248,7 @@ if (hasSingleInstanceLock)
 
     mediaController = createMediaController(owner);
     protocol.handle('sekereagle-media', (request) =>
-      handleMediaRequest(request.url, request.signal),
+      handleMediaRequest(request.url, request.signal, request.headers.get('origin')),
     );
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
     createWindow(initialConnection.active ? serverUrl : connectionPageUrl(desktopLocale), owner);
@@ -342,20 +364,24 @@ function cacheBackend() {
 }
 
 function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsStore): void {
-  const namespace = async (
+  const namespaces = async (
     event: IpcMainInvokeEvent,
     allowConnectionPage = false,
-  ): Promise<string> => {
+  ): Promise<string[]> => {
     if (allowConnectionPage) assertTrustedConnectionSender(event);
     else assertTrustedIpcSender(event);
     const identity = await owner.get();
     if (!identity) throw new Error('需要重新登录。');
-    return buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId);
+    return accountCacheNamespaces(serverUrl, identity);
   };
   ipcMain.handle('desktop:cache-status', async (event) => {
-    const namespaceId = await namespace(event);
+    const namespaceIds = await namespaces(event);
     const [namespaceStats, globalStats, currentSettings] = await Promise.all([
-      currentCache().getNamespaceStats(namespaceId),
+      readAccountCacheStats(
+        currentCache(),
+        namespaceIds,
+        (namespace) => mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
+      ),
       currentCache().getStats(),
       settings.load(),
     ]);
@@ -376,8 +402,10 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
       owner.get(),
     ]);
     const currentAccountStats = identity
-      ? await currentCache().getNamespaceStats(
-          buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId),
+      ? await readAccountCacheStats(
+          currentCache(),
+          accountCacheNamespaces(serverUrl, identity),
+          (namespace) => mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
         )
       : null;
     return {
@@ -397,7 +425,7 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
     await currentCache().setLimitBytes(updated.cacheLimitBytes);
   });
   ipcMain.handle('desktop:clear-cache', async (event) =>
-    currentCache().clearNamespace(await namespace(event, true)),
+    removeAccountCache(currentCache(), await namespaces(event, true)),
   );
   ipcMain.handle('desktop:open-cache-folder', async (event) => {
     assertConnectionPageSender(event);
@@ -408,7 +436,9 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   });
   ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
     if (typeof assetId !== 'string') throw new Error('资源标识无效。');
-    return currentCache().invalidateAsset(await namespace(event), assetId);
+    const scope = await namespaces(event);
+    librarySnapshot?.invalidateAsset(assetId);
+    return removeAccountCache(currentCache(), scope, assetId);
   });
 }
 
@@ -795,7 +825,11 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
     window.removeMenu();
   }
   window.once('ready-to-show', () => window.show());
+  window.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) librarySnapshot?.reset();
+  });
   window.on('closed', () => {
+    librarySnapshot?.reset();
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -830,23 +864,37 @@ function lockDownSession(currentSession: Electron.Session): void {
       callback({
         responseHeaders: {
           ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: sekereagle-media:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
-          ],
+          'Content-Security-Policy': [desktopContentSecurityPolicy],
         },
       });
     },
   );
 }
 
-async function handleMediaRequest(requestUrl: string, signal: AbortSignal): Promise<Response> {
+async function handleMediaRequest(
+  requestUrl: string,
+  signal: AbortSignal,
+  origin: string | null,
+): Promise<Response> {
+  const requestServer = serverUrl;
+  if (!isAllowedMediaOrigin(requestServer, origin)) return new Response(null, { status: 403 });
+  const respond = (response: Response) => {
+    const headers = new Headers(response.headers);
+    for (const [name, value] of Object.entries(mediaCorsHeaders(requestServer)))
+      headers.set(name, value);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
   try {
     if (!mediaController) throw new Error('媒体控制器不可用。');
     const resolution = await mediaController.resolve(requestUrl, signal);
-    return resolutionToResponse(resolution);
+    return respond(resolutionToResponse(resolution));
   } catch {
-    if (signal.aborted) return new Response(null, { status: 499 });
-    return new Response('媒体缓存暂时不可用。', { status: 502 });
+    if (signal.aborted) return respond(new Response(null, { status: 499 }));
+    return respond(new Response('媒体缓存暂时不可用。', { status: 502 }));
   }
 }
 
@@ -868,11 +916,19 @@ async function handleAppRequest(requestUrl: string): Promise<Response> {
 }
 
 function createMediaController(owner: AuthenticatedOwner): MediaCacheController {
+  librarySnapshot?.reset();
+  const snapshot = new LibraryMediaSnapshot({
+    fetch: (path, init) => currentBrowserSession().fetch(path, init),
+    authenticatedOwner: () => owner.get(),
+    maxEntries: Number(process.env.SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES ?? 12_000),
+  });
+  librarySnapshot = snapshot;
   const limiter = new MediaRequestLimiter(6, 64);
   return new MediaCacheController({
     serverUrl,
     cache: cacheBackend(),
     authenticatedOwner: () => owner.get(),
+    canReadLocal: (media, identity, file) => snapshot.allows(media, identity, file),
     fetchUpstream: (mediaPath, options) =>
       limiter.fetch(
         (signal) =>
@@ -943,6 +999,7 @@ function resolutionToResponse(resolution: MediaResolution): Response {
       'content-type': resolution.contentType,
       'content-length': String(resolution.logicalBytes),
       'cache-control': 'private, no-store',
+      'x-sekereagle-cache-result': resolution.cacheResult,
       ...(resolution.etag ? { etag: resolution.etag } : {}),
       ...(resolution.lastModified ? { 'last-modified': resolution.lastModified } : {}),
     },
