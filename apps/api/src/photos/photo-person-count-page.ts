@@ -1,4 +1,4 @@
-import { libraryReadMetrics } from '../eagle/eagle-memory-client';
+import { rejectLibraryRead } from '../eagle/eagle-memory-client';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { readMemoryPeopleCounts } from './photo-memory-client';
@@ -48,7 +48,7 @@ export async function readPeopleCountPage(
         WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO'
           AND (${view === 'ALL'} OR p.name IS NULL) AND (${includePrivate} OR NOT p."marksAssetsPrivate")
           AND (COALESCE(c.photos,0)>0 OR (${includePrivate} AND p."marksAssetsPrivate"))`;
-    } else libraryReadMetrics.fallbacks++;
+    } else rejectLibraryRead('peopleCounts');
   }
   const counts =
     resident ??

@@ -12,6 +12,8 @@ import {
 } from './eagle-memory-client';
 
 test('reader client requires a canonical scope and preserves page size and direction', async () => {
+  const oldActions = process.env.EAGLE_READER_ACTIONS;
+  process.env.EAGLE_READER_ACTIONS = 'page,count';
   const oldUrl = process.env.EAGLE_READER_URL,
     oldToken = process.env.EAGLE_READER_TOKEN;
   let calls = 0;
@@ -50,6 +52,7 @@ test('reader client requires a canonical scope and preserves page size and direc
     assert.equal(calls, 1);
     assert.ok(libraryReadMetrics.hits > 0);
   } finally {
+    if (oldActions === undefined) delete process.env.EAGLE_READER_ACTIONS; else process.env.EAGLE_READER_ACTIONS = oldActions;
     if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
     else process.env.EAGLE_READER_URL = oldUrl;
     if (oldToken === undefined) delete process.env.EAGLE_READER_TOKEN;
@@ -60,7 +63,7 @@ test('reader client requires a canonical scope and preserves page size and direc
 });
 
 test('reader client bounds failures and keeps the authenticated scope authoritative', async () => {
-  const keys = ['EAGLE_READER_URL', 'EAGLE_READER_TOKEN', 'EAGLE_READER_TIMEOUT_MS'] as const;
+  const keys = ['EAGLE_READER_URL', 'EAGLE_READER_TOKEN', 'EAGLE_READER_TIMEOUT_MS', 'EAGLE_READER_ACTIONS', 'EAGLE_READER_RETRY_DELAY_MS'] as const;
   const before = keys.map((key) => process.env[key]);
   let reply: unknown = { count: 0 },
     status = 200,
@@ -90,6 +93,8 @@ test('reader client bounds failures and keeps the authenticated scope authoritat
   };
   process.env.EAGLE_READER_URL = `http://127.0.0.1:${address.port}`;
   process.env.EAGLE_READER_TOKEN = 'test';
+  process.env.EAGLE_READER_ACTIONS = 'page,count,colorPage,smartFolderPage';
+  process.env.EAGLE_READER_RETRY_DELAY_MS = '0';
   try {
     await requestLibraryRead(scope, {
       action: 'count',

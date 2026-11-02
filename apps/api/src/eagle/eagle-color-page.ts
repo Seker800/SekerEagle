@@ -1,4 +1,4 @@
-import { readMemoryColorPage } from './eagle-memory-client';
+import { readMemoryColorPage, rejectLibraryRead } from './eagle-memory-client';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
@@ -149,8 +149,10 @@ export async function readColorAssetPage(
         include: assetListInclude,
       })
     : [];
-  if (resident && rows.length !== page.length)
+  if (resident && rows.length !== page.length) {
+    rejectLibraryRead('colorPage');
     return readColorAssetPage(prisma, scope, query, where, color, includePrivate, trash, false);
+  }
   const positions = new Map(page.map((p, index) => [p.id, index]));
   rows.sort((a, b) => positions.get(a.id)! - positions.get(b.id)!);
   const position = (p: (typeof page)[number], newer?: true): ColorPosition => ({

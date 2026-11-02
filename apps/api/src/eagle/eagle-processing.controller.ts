@@ -1,3 +1,4 @@
+import { libraryReadObserver } from './eagle-memory-observability';
 import {
   Body,
   Controller,
@@ -25,6 +26,10 @@ import {
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard, AdminGuard)
 export class EagleProcessingController {
   constructor(private readonly processing: EagleProcessingService) {}
+
+  @Get('reader-metrics') readerMetrics() {
+    return libraryReadObserver.snapshot();
+  }
 
   @Get('summary') summary(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.processing.summary(principal.sub, principal.canViewPrivate);

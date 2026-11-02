@@ -5,6 +5,8 @@ services:
     environment:
       EAGLE_READER_URL: http://library-reader:3001
       EAGLE_READER_TOKEN: ${EAGLE_READER_TOKEN:?Provide a private reader service token}
+      EAGLE_READER_ACTIONS: ${EAGLE_READER_ACTIONS-statistics,facets,peopleCounts,smartFolderPage,colorPage}
+      EAGLE_READER_RETRY_DELAY_MS: ${EAGLE_READER_RETRY_DELAY_MS:-5000}
       EAGLE_READER_TIMEOUT_MS: ${EAGLE_READER_TIMEOUT_MS:-200}
       EAGLE_READER_COMPLEX_TIMEOUT_MS: ${EAGLE_READER_COMPLEX_TIMEOUT_MS:-1000}
   library-reader:

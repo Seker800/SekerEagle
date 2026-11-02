@@ -1,4 +1,4 @@
-import { requestLibraryRead, libraryReadMetrics } from '../eagle/eagle-memory-client';
+import { requestLibraryRead } from '../eagle/eagle-memory-client';
 import {
   memoryStatisticsSummary,
   memoryPersonCounts,
@@ -18,7 +18,6 @@ export async function readMemoryStatistics(
   if (!result) return null;
   const parsed = memoryStatisticsSummary.safeParse(result.summary);
   if (!parsed.success) return null;
-  libraryReadMetrics.hits++;
   return parsed.data;
 }
 
@@ -31,7 +30,6 @@ export async function readMemoryPeopleCounts(ownerId: string, includePrivate: bo
   const parsed = memoryPersonCounts.safeParse(result.counts);
   if (!parsed.success || new Set(parsed.data.map((row) => row.id)).size !== parsed.data.length)
     return null;
-  libraryReadMetrics.hits++;
   return { revision: result.revision, counts: parsed.data };
 }
 
@@ -43,6 +41,5 @@ export async function readMemoryPhotoFacets(ownerId: string, includePrivate: boo
   if (!result) return null;
   const parsed = memoryPhotoFacets.safeParse(result.facets);
   if (!parsed.success) return null;
-  libraryReadMetrics.hits++;
   return parsed.data;
 }

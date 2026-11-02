@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { colorSearchPlan, hasColorSearch, colorCandidateWhere } from './eagle-color-query';
-import { readMemoryPage, readMemoryCount } from './eagle-memory-client';
+import { readMemoryPage, readMemoryCount, rejectLibraryRead } from './eagle-memory-client';
 export { hasColorSearch, colorCandidateWhere } from './eagle-color-query';
 
 type SearchDatabase = Pick<PrismaClient, 'eagleAsset' | '$queryRaw'>;
@@ -46,6 +46,7 @@ export async function findSearchAssets<T extends Prisma.EagleAssetFindManyArgs>(
         (a, b) => position.get((a as { id: string }).id)! - position.get((b as { id: string }).id)!,
       );
     }
+    rejectLibraryRead('page');
   }
   return findSearchAssetsInDatabase(prisma, args);
 }

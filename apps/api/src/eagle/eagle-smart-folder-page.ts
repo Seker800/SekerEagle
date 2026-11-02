@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { smartFolderMatchWhere } from '@sekereagle/library-persistence';
 import { assetDateField } from './eagle-asset-order';
 import { decodeImageSearchCursor, encodeImageSearchCursor } from './eagle-search-cursor';
-import { readMemorySmartFolderPage } from './eagle-memory-client';
+import { readMemorySmartFolderPage, rejectLibraryRead } from './eagle-memory-client';
 import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
 import type { ImageSearchPosition } from './eagle-image-search.service';
 import type { LibraryIdentity } from './library-mode';
@@ -94,6 +94,7 @@ export async function readSmartFolderPage<
             : null,
       };
     }
+    rejectLibraryRead('smartFolderPage');
   }
   const ranked: Array<{ row: T; position: ImageSearchPosition }> = [];
   // Eligibility is evaluated in the ranking SQL. Retry only if hydration loses a

@@ -48,7 +48,9 @@ const personId = randomUUID(),
 const pool = createLibraryReadPool(process.env.DATABASE_URL);
 const store = new LibraryReadStore(pool, photoStatisticsFactFieldsSql());
 const scope = { ownerId, libraryMode: 'PHOTO' };
+const savedReaderActions = process.env.EAGLE_READER_ACTIONS;
 before(async () => {
+  process.env.EAGLE_READER_ACTIONS = 'page,count,statistics,facets,peopleCounts,smartFolderPage,colorPage';
   await db.user.createMany({
     data: [ownerId, other].map((id) => ({
       id,
@@ -124,6 +126,7 @@ before(async () => {
   });
 });
 after(async () => {
+  if (savedReaderActions === undefined) delete process.env.EAGLE_READER_ACTIONS; else process.env.EAGLE_READER_ACTIONS = savedReaderActions;
   await db.eagleAsset.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
   await db.eaglePhotoPerson.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
   await db.eagleLibraryReadState.deleteMany({ where: { ownerId: { in: [ownerId, other] } } });
