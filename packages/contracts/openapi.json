@@ -949,6 +949,40 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/batch/edit-render-context": {
+      "post": {
+        "operationId": "EagleController_batchEditRenderContext",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEditRenderContextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchEditRenderContextResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/batch/edit-renders": {
       "post": {
         "operationId": "EagleController_batchEditRenders",
@@ -5287,6 +5321,40 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EagleMediaCapabilitiesDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/batch/edit-render-context": {
+      "post": {
+        "operationId": "PhotosController_batchEditRenderContext",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchEditRenderContextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchEditRenderContextResponseDto"
                 }
               }
             }
@@ -10376,6 +10444,30 @@
         },
         "required": ["serverPhotoEditing", "version", "images", "videos"]
       },
+      "BatchEditRenderContextDto": {
+        "type": "object",
+        "properties": {
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["assetIds"]
+      },
+      "BatchEditRenderContextResponseDto": {
+        "type": "object",
+        "properties": {
+          "preservedFilterIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["preservedFilterIds"]
+      },
       "BatchEditPartsDto": {
         "type": "object",
         "properties": {
@@ -10414,6 +10506,12 @@
           },
           "lut": {
             "type": "string"
+          },
+          "preservedLuts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": ["assetIds", "recipe", "parts"]

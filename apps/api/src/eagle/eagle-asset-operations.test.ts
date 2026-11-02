@@ -121,7 +121,7 @@ test('idle operation polling uses bounded unlocked probes and opens no claim tra
     'MATERIAL',
   );
   await service.tick();
-  assert.equal(probes.length, 3);
+  assert.equal(probes.length, 4);
   assert.equal(transactions, 0);
   for (const probe of probes) assert.deepEqual((probe as { select: unknown }).select, { id: true });
 });
@@ -213,8 +213,9 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
         assert.ok(
           where.operation.kind === 'SEND' ||
             where.operation.kind === 'DUPLICATE_SCAN' ||
+            where.operation.kind === 'BACKGROUND_COMMAND' ||
             JSON.stringify(where.operation.kind) ===
-              JSON.stringify({ notIn: ['SEND', 'DUPLICATE_SCAN'] }),
+              JSON.stringify({ notIn: ['SEND', 'DUPLICATE_SCAN', 'BACKGROUND_COMMAND'] }),
         );
         return 1;
       },
@@ -234,8 +235,8 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
     'MATERIAL',
   );
   await service.tick();
-  assert.equal(transactions, 3);
-  assert.equal(locks, 3);
+  assert.equal(transactions, 4);
+  assert.equal(locks, 4);
 });
 
 test('batch trash skips owned retired entries and isolates unavailable entries without blocking valid resources', async () => {
@@ -406,7 +407,14 @@ test('operation result receipts reject foreign, wrong-mode and locked private op
     queries,
     ['MATERIAL', 'PHOTO'].map((libraryMode) => ({
       where: { id: 'operation', ownerId: 'owner', libraryMode, isPrivate: false },
-      select: { id: true, kind: true, libraryMode: true, undoOfId: true, updatedAt: true },
+      select: {
+        id: true,
+        kind: true,
+        libraryMode: true,
+        undoOfId: true,
+        updatedAt: true,
+        inputIds: true,
+      },
     })),
   );
 });

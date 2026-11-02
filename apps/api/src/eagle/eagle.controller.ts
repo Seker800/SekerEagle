@@ -1,4 +1,8 @@
-import { BatchEditRendersDto } from './eagle-batch-edit';
+import {
+  BatchEditRendersDto,
+  BatchEditRenderContextDto,
+  BatchEditRenderContextResponseDto,
+} from './eagle-batch-edit';
 import { libraryCommandPayload } from './eagle-library-command';
 import { randomUUID } from 'node:crypto';
 import { EagleDuplicateService } from './eagle-duplicates.service';
@@ -235,6 +239,21 @@ export class EagleController {
   @ApiOkResponse({ type: EagleMediaCapabilitiesDto })
   getMediaCapabilities() {
     return this.mediaCapabilities.getCapabilities();
+  }
+
+  @Post('assets/batch/edit-render-context')
+  @HttpCode(200)
+  @ApiOkResponse({ type: BatchEditRenderContextResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  batchEditRenderContext(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: BatchEditRenderContextDto,
+  ) {
+    return this.eagle.batchEditRenderContext(
+      principal.sub,
+      input.assetIds,
+      principal.canViewPrivate,
+    );
   }
 
   @Post('assets/batch/edit-renders')

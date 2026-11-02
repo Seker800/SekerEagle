@@ -1,3 +1,4 @@
+import { readBatchEditRenderContext } from './eagle-batch-edit';
 import { runLibraryTransaction } from './eagle-library-command';
 import { isDatabaseBusy } from '@sekereagle/library-persistence';
 import { OPERATION_EMPTY_TRASH_BATCH_SIZE } from './eagle-operation-settings';
@@ -102,6 +103,15 @@ export class EagleService {
     @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
+  batchEditRenderContext(ownerId: string, assetIds: string[], includePrivate = false) {
+    return readBatchEditRenderContext(
+      this.prisma,
+      ownerId,
+      this.libraryMode,
+      assetIds,
+      includePrivate,
+    );
+  }
   createEditRender(
     ownerId: string,
     assetId: string,

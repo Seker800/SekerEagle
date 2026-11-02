@@ -7,7 +7,7 @@ export function installOperationRequestBodyParser(app: Pick<NestExpressApplicati
   const parse = json({ limit });
   app.use(
     [
-      /^\/api\/(eagle|photos)\/(operations|assets\/batch(?:\/(?:send|manual-tags|trash|restore))?|assets\/trash|trash\/restore|duplicates\/cleanup|vector\/suggestions\/review-batch)\/?$/,
+      /^\/api\/(eagle|photos)\/(operations|assets\/batch(?:\/(?:send|manual-tags|trash|restore|edit-render-context))?|assets\/trash|trash\/restore|duplicates\/cleanup|vector\/suggestions\/review-batch)\/?$/,
       /^\/api\/photos\/photography\/(people\/(?:review|merge-selected)|people\/[^/]+\/merge|groups\/(?:manual|[^/]+\/(?:members|merge)))\/?$/,
       /^\/api\/photos\/agent\/tasks\/[^/]+\/(?:review|manual-action)\/?$/,
     ],

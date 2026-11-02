@@ -436,6 +436,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/batch/edit-render-context': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_batchEditRenderContext'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/batch/edit-renders': {
     parameters: {
       query?: never;
@@ -2110,6 +2126,22 @@ export interface paths {
     get: operations['PhotosController_getMediaCapabilities'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/batch/edit-render-context': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_batchEditRenderContext'];
     delete?: never;
     options?: never;
     head?: never;
@@ -4263,6 +4295,12 @@ export interface components {
       images: components['schemas']['EagleImageMediaCapabilityDto'];
       videos: components['schemas']['EagleVideoMediaCapabilityDto'];
     };
+    BatchEditRenderContextDto: {
+      assetIds: string[];
+    };
+    BatchEditRenderContextResponseDto: {
+      preservedFilterIds: string[];
+    };
     BatchEditPartsDto: {
       adjustments: boolean;
       filter: boolean;
@@ -4275,6 +4313,9 @@ export interface components {
       recipe: Record<string, never>;
       parts: components['schemas']['BatchEditPartsDto'];
       lut?: string;
+      preservedLuts?: {
+        [key: string]: string;
+      };
     };
     CreateEditRenderDto: {
       requestId: string;
@@ -5416,6 +5457,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
+        };
+      };
+    };
+  };
+  EagleController_batchEditRenderContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchEditRenderContextDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BatchEditRenderContextResponseDto'];
         };
       };
     };
@@ -8103,6 +8167,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
+        };
+      };
+    };
+  };
+  PhotosController_batchEditRenderContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchEditRenderContextDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BatchEditRenderContextResponseDto'];
         };
       };
     };
