@@ -68,12 +68,14 @@ export interface LibraryReadHandlers {
     folderIds: string[],
     read: (context: MemorySearchContext, view: LibraryMemoryIndex) => T,
     signal?: AbortSignal,
-  ) => Promise<T>;
+  ) => T | Promise<T>;
   smartFolderPage?: (
     index: LibraryMemoryIndex,
     options: ResidentSmartFolderOptions,
     signal?: AbortSignal,
-  ) => Promise<{ revision: string; positions: ImageSearchPosition[] }>;
+  ) =>
+    | { revision: string; positions: ImageSearchPosition[] }
+    | Promise<{ revision: string; positions: ImageSearchPosition[] }>;
   statistics?: (
     index: LibraryMemoryIndex,
     includePrivate: boolean,
@@ -132,7 +134,7 @@ export function createLibraryReaderServer(
         return;
       }
       const query = parsed.data;
-      const index = await store.read(query.scope);
+      const index = await store.read(query.scope, cancellation.signal);
       cancellation.signal.throwIfAborted();
       const revision = index.revision;
       const where = query.where as AssetSearchWhere;

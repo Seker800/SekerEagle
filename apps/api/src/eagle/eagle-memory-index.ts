@@ -1,4 +1,4 @@
-import type { ResidentSemanticGraph } from './eagle-memory-semantic-store';
+import type { ResidentSemanticGraph } from './eagle-memory-semantic';
 import {
   compileMemorySearchPredicate,
   type MemoryAsset,
@@ -46,6 +46,7 @@ export class LibraryMemoryIndex {
   replace(revision: string, rows: MemoryAsset[]) {
     this.validate(revision, rows);
     this.rows = new Map(rows.map((row) => [row.id as string, row]));
+    this.semanticFolders = undefined;
     this.revision = revision;
     this.ordered.clear();
     this.derived.clear();

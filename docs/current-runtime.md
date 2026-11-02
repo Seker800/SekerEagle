@@ -1,5 +1,7 @@
 # 现用运行状态与交接
 
+> **2026-11-02 常驻读取修订仍为本地候选**：本轮按用户要求修复前台等待后台同步、关系增量全表扫描，以及语义成员／分数未常驻的问题。没有切换下方NAS应用／读取器镜像、执行线上迁移或改变用户任务和模型。配套新增读取日志字段及语义发布触发器，正式发布须迁移与镜像一起验收；本地验证与成本见[常用读取修订](library-read-efficiency-2026-11-01.md#2026-11-02-常驻读取修订本地候选未切换生产)。
+
 > **2026-11-02 全部分支及依赖整合已上线（覆盖下方应用／worker／依赖快照）**：main 已包含全部业务引用、20个工作区提交及17个 Dependabot 提案；17个远程依赖分支已在合并后删除，GitHub 开放依赖 PR 为0。API／独立 operations 为 `sekereagle/api:all-branches-final-20261102`，固定源码 `b0423ca614f334c95e48c65dd8d052acbdce6f55`；网页为 `sekereagle/web:all-branches-20261102-complete`，固定源码 `408a601100d2795beab4fe14c67d55ec85fc8cd4`，其后仅后端、驱动和验证兼容调整。09:33 三服务 healthy、零重启，80项迁移完成。查重分为完全重复与按条件查找，尺寸等条件仅勾选时生效；新增内网独立 `library-reader`，无 API／对象存储秘密，故障沿用 SQL 回退。
 >
 > 唯一 Mac 业务执行器已正常交接到不可变 `worker-b0423ca614f3`，现场 PID31292、独立心跳新鲜，旧进程正常排空退出；NAS worker 继续停止且 restart=no。MLX 依赖切为固定锁文件环境 `.runtime/mlx-dependencies/releases/deps-3b512beee79a`，原 `.venv` 保留在 `.runtime/mlx-dependencies/rollback-before-20261102` 供回退；原 LaunchAgent／模型／修订／1024维保持，切换后真实推理通过。三计算节点 READY、修订66与原容量／交互预留保持；正式无状态媒体包保持，CUDA未注册为生产节点。

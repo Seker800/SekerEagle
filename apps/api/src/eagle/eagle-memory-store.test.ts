@@ -82,12 +82,17 @@ test('foreground changes publish independently of a blocked background refresh',
   const background = store.synchronize(scope);
   await db.started();
   try {
+    const statementsBeforeRead = db.statements.length;
     const current = await Promise.race([
       store.read(scope),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('foreground waited for background')), 500),
       ),
     ]);
+    assert.ok(
+      !db.statements.slice(statementsBeforeRead).some((sql) => sql.startsWith('DELETE FROM')),
+      'in-flight background readers retain their change log',
+    );
     assert.equal(current.count({ rating: 2, isPrivate: true }), 1);
     assert.equal(current.count({ isPrivate: false }), 0);
     assert.equal(old.count({ rating: 1, isPrivate: false }), 1);
@@ -118,7 +123,6 @@ test('incremental relation queries constrain their own owner, mode and asset key
   }
 });
 
-
 test('a color-only commit refreshes colors without rereading tags, people or base assets', async () => {
   const db = database();
   const store = new LibraryReadStore(db.pool);
@@ -127,9 +131,32 @@ test('a color-only commit refreshes colors without rereading tags, people or bas
   const before = db.statements.length;
   const current = await store.read(scope);
   const queries = db.statements.slice(before);
-  assert.ok(queries.some(sql => sql.includes('FROM "EagleAssetColorAnalysis"')));
-  assert.ok(!queries.some(sql => sql.includes('FROM "EagleAssetAiTag"')));
-  assert.ok(!queries.some(sql => sql.includes('FROM "EaglePhotoFace"')));
-  assert.ok(!queries.some(sql => sql.includes('FROM "EagleAsset" a WHERE')));
+  assert.ok(queries.some((sql) => sql.includes('FROM "EagleAssetColorAnalysis"')));
+  assert.ok(!queries.some((sql) => sql.includes('FROM "EagleAssetAiTag"')));
+  assert.ok(!queries.some((sql) => sql.includes('FROM "EaglePhotoFace"')));
+  assert.ok(!queries.some((sql) => sql.includes('FROM "EagleAsset" a WHERE')));
   assert.equal(current.count({ rating: 1 }), 1);
+});
+
+test('cold requests fall back promptly while the independent reader prepares their scope', async () => {
+  const db = database();
+  const store = new LibraryReadStore(db.pool);
+  await assert.rejects(store.read(scope), /not ready/);
+  const prepared = await store.synchronize(scope);
+  assert.equal(await store.read(scope), prepared);
+});
+
+test('semantic memory exhaustion leaves ordinary metadata queries usable', async () => {
+  const db = database();
+  const store = new LibraryReadStore(db.pool);
+  const previous = process.env.EAGLE_READER_QUERY_WORKSPACE_BYTES;
+  try {
+    process.env.EAGLE_READER_QUERY_WORKSPACE_BYTES = '1';
+    const index = await store.synchronize(scope);
+    assert.equal(index.semanticFolders, undefined);
+    assert.equal((await store.read(scope)).count({ rating: 1 }), 1);
+  } finally {
+    if (previous === undefined) delete process.env.EAGLE_READER_QUERY_WORKSPACE_BYTES;
+    else process.env.EAGLE_READER_QUERY_WORKSPACE_BYTES = previous;
+  }
 });

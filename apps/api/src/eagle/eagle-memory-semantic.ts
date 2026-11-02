@@ -10,6 +10,9 @@ export interface SemanticReadGraph {
   context: MemorySearchContext;
   scores: ReadonlyMap<string, ReadonlyMap<number, number>>;
 }
+export interface ResidentSemanticGraph extends SemanticReadGraph {
+  residentBytes: number;
+}
 export interface ResidentSmartFolderOptions {
   where: AssetSearchWhere;
   folderIds: string[];

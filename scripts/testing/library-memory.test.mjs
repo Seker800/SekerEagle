@@ -1,3 +1,4 @@
+import { setTimeout, clearTimeout } from 'node:timers';
 import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { photoStatisticsFactFieldsSql } from '../../apps/api/dist/photos/photo-statistics-query.js';
 import assert from 'node:assert/strict';
@@ -207,6 +208,128 @@ test('committed updates are visible, rollback is invisible, and removed relation
     1,
   );
 });
+test('source-aware commits refresh only the changed information and preserve old snapshots', async () => {
+  const statements = [];
+  const observedPool = {
+    query: (sql, ...args) => {
+      statements.push(sql);
+      return pool.query(sql, ...args);
+    },
+    connect: async () => {
+      const connection = await pool.connect();
+      return {
+        query: (sql, ...args) => {
+          statements.push(sql);
+          return connection.query(sql, ...args);
+        },
+        release: () => connection.release(),
+      };
+    },
+  };
+  const observed = new LibraryReadStore(observedPool, photoStatisticsFactFieldsSql());
+  const old = await observed.synchronize(scope);
+  await db.eagleAssetAnnotation.create({
+    data: { ...scope, assetId: `${ownerId}-1`, description: 'updated in memory' },
+  });
+  statements.length = 0;
+  const updated = await observed.read(scope);
+  assert.equal(updated.count({ annotation: { is: { description: 'updated in memory' } } }), 1);
+  assert.equal(old.count({ annotation: { is: { description: 'updated in memory' } } }), 0);
+  assert.equal(statements.filter((sql) => sql.includes('FROM "EagleAssetAnnotation"')).length, 1);
+  assert.equal(
+    statements.filter((sql) =>
+      /FROM "EagleAssetAiTag"|FROM "EaglePhotoFace"|FROM "EagleAssetColorAnalysis"/.test(sql),
+    ).length,
+    0,
+  );
+  assert.equal(statements.filter((sql) => sql.includes('FROM "EagleAsset" a WHERE')).length, 0);
+  statements.length = 0;
+  for (let n = 0; n < 3; n++) assert.equal(await observed.read(scope), updated);
+  assert.equal(statements.length, 3, 'hot reads perform exactly one revision query each');
+  await db.eagleAssetAnnotation.delete({
+    where: { ownerId_assetId: { ownerId, assetId: `${ownerId}-1` } },
+  });
+  assert.equal(
+    (await observed.read(scope)).count({ id: `${ownerId}-1`, annotation: { is: null } }),
+    1,
+  );
+  await db.eagleAsset.update({ where: { id: `${ownerId}-1` }, data: { isPrivate: true } });
+  const privateIndex = await observed.read(scope);
+  assert.equal(privateIndex.count({ id: `${ownerId}-1`, isPrivate: false }), 0);
+  assert.equal(privateIndex.count({ id: `${ownerId}-1` }), 1);
+  await db.eagleAsset.update({ where: { id: `${ownerId}-1` }, data: { deletedAt: new Date() } });
+  assert.equal((await observed.read(scope)).count({ id: `${ownerId}-1`, deletedAt: null }), 0);
+  await db.eagleAsset.update({
+    where: { id: `${ownerId}-1` },
+    data: { isPrivate: false, deletedAt: null },
+  });
+  assert.equal(
+    (await observed.read(scope)).count({ id: `${ownerId}-1`, isPrivate: false, deletedAt: null }),
+    1,
+  );
+});
+
+test('real database foreground catch-up never waits for a slow background refresh', async () => {
+  let hold = false;
+  let release, entered;
+  const blocked = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const resumed = new Promise((resolve) => {
+    release = resolve;
+  });
+  const controlled = {
+    query: (...args) => pool.query(...args),
+    connect: async () => {
+      const connection = await pool.connect();
+      return {
+        query: async (sql, ...args) => {
+          if (hold && sql.includes('FROM "EagleAssetAnnotation"')) {
+            hold = false;
+            entered();
+            await resumed;
+          }
+          return connection.query(sql, ...args);
+        },
+        release: () => connection.release(),
+      };
+    },
+  };
+  const reader = new LibraryReadStore(controlled, photoStatisticsFactFieldsSql());
+  await reader.synchronize(scope);
+  await db.eagleAssetAnnotation.create({
+    data: { ...scope, assetId: `${ownerId}-1`, description: 'foreground sees committed change' },
+  });
+  hold = true;
+  const background = reader.synchronize(scope);
+  await blocked;
+  let timeout;
+  try {
+    const current = await Promise.race([
+      reader.read(scope),
+      new Promise(
+        (_, reject) =>
+          (timeout = setTimeout(() => reject(new Error('foreground waited for background')), 3000)),
+      ),
+    ]);
+    assert.equal(
+      current.count({ annotation: { is: { description: 'foreground sees committed change' } } }),
+      1,
+    );
+    assert.ok(
+      await db.eagleLibraryReadChange.count({ where: scope }),
+      'unpublished reader retains its journal',
+    );
+  } finally {
+    clearTimeout(timeout);
+    release();
+    await background;
+    await db.eagleAssetAnnotation.delete({
+      where: { ownerId_assetId: { ownerId, assetId: `${ownerId}-1` } },
+    });
+  }
+});
+
 test('a fresh reader reconstructs the same result after acknowledged logs are pruned', async () => {
   const current = await store.synchronize(scope);
   const restarted = await new LibraryReadStore(pool, photoStatisticsFactFieldsSql()).synchronize(
@@ -561,14 +684,14 @@ test('semantic resident page preserves real SQL scores, additional filters and v
           undefined,
           where,
         );
-        const actual = await readResidentSmartFolderPage(store, index, { ...options, after });
+        const actual = await readResidentSmartFolderPage(index, { ...options, after });
         assert.deepEqual(actual.positions, expected);
         if (expected.length <= 3) break;
         after = expected[2];
       } while (after);
-      await assert.rejects(readResidentSmartFolderPage(store, index, options, 1), /workspace/);
+      assert.throws(() => readResidentSmartFolderPage(index, options, 1), /workspace/);
       await db.eagleAsset.update({ where: { id: `${ownerId}-39` }, data: { rating: 2 } });
-      const laggedCacheRead = await readResidentSmartFolderPage(store, index, options);
+      const laggedCacheRead = readResidentSmartFolderPage(await store.read(scope), options);
       assert.ok(Array.isArray(laggedCacheRead.positions));
       const beforePublication = await rankSmartFolderMatches(
         db,
@@ -603,22 +726,61 @@ test('semantic resident page preserves real SQL scores, additional filters and v
           };
         },
       };
+      const overlappingIndex = await new LibraryReadStore(
+        overlappingPool,
+        photoStatisticsFactFieldsSql(),
+      ).synchronize(scope);
       assert.deepEqual(
-        (
-          await readResidentSmartFolderPage(
-            new LibraryReadStore(overlappingPool, photoStatisticsFactFieldsSql()),
-            index,
-            options,
-          )
-        ).positions,
+        readResidentSmartFolderPage(overlappingIndex, options).positions,
         beforePublication,
       );
       assert.ok(published);
 
+      const hotStatements = [];
+      const observedPool = {
+        query: (sql, ...args) => {
+          hotStatements.push(sql);
+          return pool.query(sql, ...args);
+        },
+        connect: async () => {
+          const connection = await pool.connect();
+          return {
+            query: (sql, ...args) => {
+              hotStatements.push(sql);
+              return connection.query(sql, ...args);
+            },
+            release: () => connection.release(),
+          };
+        },
+      };
+      const observed = new LibraryReadStore(observedPool, photoStatisticsFactFieldsSql());
+      const stable = await observed.synchronize(scope);
+      hotStatements.length = 0;
+      const samples = [];
+      for (let n = 0; n < 10; n++) {
+        const started = performance.now();
+        const hot = await observed.read(scope);
+        assert.equal(hot.semanticFolders, stable.semanticFolders);
+        readResidentSmartFolderPage(hot, options);
+        samples.push(performance.now() - started);
+      }
+      assert.equal(hotStatements.length, 10, 'semantic hot requests perform only commit fences');
+      assert.ok(hotStatements.every((sql) => sql.startsWith('SELECT revision,enabled')));
+      log(
+        JSON.stringify({
+          fixture: 'resident semantic hot reads',
+          requests: 10,
+          sql: hotStatements.length,
+          semanticReloads: 0,
+          transactions: 0,
+          maxMs: Math.max(...samples),
+        }),
+      );
+
       const server = createLibraryReaderServer(store, 'semantic-reader', 2097152, {
-        smartFolderPage: (index, options) => readResidentSmartFolderPage(store, index, options),
+        smartFolderPage: (index, options) => readResidentSmartFolderPage(index, options),
         semanticQuery: (index, ids, read) =>
-          withResidentSemanticGraph(store, index, ids, (graph, view) => read(graph.context, view)),
+          withResidentSemanticGraph(index, ids, (graph, view) => read(graph.context, view)),
       });
       server.listen(0, '127.0.0.1');
       await once(server, 'listening');
@@ -672,6 +834,47 @@ test('semantic resident page preserves real SQL scores, additional filters and v
         await new Promise((resolve) => server.close(resolve));
       }
     }
+    const prior = await store.read(scope);
+    const embedding = await db.eagleAssetEmbedding.findFirstOrThrow({
+      where: { ...scope, spaceId, assetId: `${ownerId}-2` },
+    });
+    const matchWhere = { snapshotId_embeddingId: { snapshotId, embeddingId: embedding.id } };
+    await assert.rejects(
+      db.$transaction(async (tx) => {
+        await tx.eagleSmartFolderSemanticMatch.update({
+          where: matchWhere,
+          data: { similarity: 0.99 },
+        });
+        throw new Error('rollback semantic change');
+      }),
+      /rollback semantic change/,
+    );
+    assert.equal((await store.read(scope)).revision, prior.revision);
+    await db.eagleSmartFolderSemanticMatch.update({
+      where: matchWhere,
+      data: { similarity: 0.99 },
+    });
+    const rescored = await store.read(scope);
+    assert.equal(rescored.semanticFolders.get(folderId).scores.get(`${ownerId}-2`).get(0), 0.99);
+    assert.notEqual(prior.semanticFolders.get(folderId).scores.get(`${ownerId}-2`).get(0), 0.99);
+    await db.eagleSmartFolderSemanticSnapshot.update({
+      where: { id: snapshotId },
+      data: { isActive: false },
+    });
+    assert.equal((await store.read(scope)).semanticFolders.has(folderId), false);
+    await db.eagleSmartFolderSemanticSnapshot.update({
+      where: { id: snapshotId },
+      data: { isActive: true },
+    });
+    assert.equal(
+      (await store.read(scope)).semanticFolders.get(folderId).scores.get(`${ownerId}-2`).get(0),
+      0.99,
+    );
+    await db.eagleAssetEmbedding.delete({ where: { id: embedding.id } });
+    assert.equal(
+      (await store.read(scope)).semanticFolders.get(folderId).scores.has(`${ownerId}-2`),
+      false,
+    );
   } finally {
     await db.eagleSmartFolder.deleteMany({ where: { id: folderId } });
     await db.eagleAssetEmbedding.deleteMany({ where: { spaceId } });

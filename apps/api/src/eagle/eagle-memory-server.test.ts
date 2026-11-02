@@ -92,18 +92,13 @@ test('semantic reader dispatches one complete page without exposing private serv
     },
   ];
   let calls = 0;
-  const server = createLibraryReaderServer(
-    { read: async () => index },
-    'semantic-test',
-    2097152,
-    {
-      smartFolderPage: async (_index, options) => {
-        calls++;
-        assert.deepEqual(options.folderIds, ['folder']);
-        return { revision: index.revision, positions };
-      },
+  const server = createLibraryReaderServer({ read: async () => index }, 'semantic-test', 2097152, {
+    smartFolderPage: async (_index, options) => {
+      calls++;
+      assert.deepEqual(options.folderIds, ['folder']);
+      return { revision: index.revision, positions };
     },
-  );
+  });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
