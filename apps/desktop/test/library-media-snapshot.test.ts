@@ -76,6 +76,24 @@ describe('server list authority for desktop media', () => {
     await expect(snapshot.read('/api/photos/assets')).rejects.toThrow();
     expect(snapshot.allows(media, identity, entry)).toBe(false);
   });
+  it('revokes evidence when a later detail returns 404', async () => {
+    const { snapshot, fetch } = setup(); await snapshot.read('/api/photos/assets');
+    fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await snapshot.read(`/api/photos/assets/${assetId}`);
+    expect(snapshot.allows(media, identity, entry)).toBe(false);
+  });
+  it('never lets an older page replace a later private projection', async () => {
+    const { snapshot, fetch } = setup();
+    let release!: (r: Response) => void;
+    fetch.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const older = snapshot.read('/api/photos/assets');
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    fetch.mockResolvedValueOnce(Response.json({ items: [asset({ isPrivate: true })] }));
+    await snapshot.read('/api/photos/assets');
+    release(Response.json({ items: [asset()] })); await older;
+    expect(snapshot.allows(media, identity, entry)).toBe(false);
+  });
+
   it('bounds ephemeral proof memory by eviction and falls back without limiting library size', async () => {
     const { snapshot } = setup({ items: [asset(), asset({ id: '00000000-0000-4000-8000-000000000003' })] }, 1);
     await snapshot.read('/api/photos/assets');
