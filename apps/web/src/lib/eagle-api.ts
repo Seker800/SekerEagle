@@ -539,6 +539,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     id: string,
     input: EagleAssetChanges & {
       rowVersion: number;
+      predecessorOperationIds?: string[];
     },
   ) {
     const result = await api<OperationResponse<EagleAsset>>(`/eagle/assets/${id}`, {
@@ -552,12 +553,14 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     _token: string,
     input: EagleAssetChanges & {
       assets: EagleAssetVersion[];
+      predecessorOperationIds?: string[];
     },
   ) {
     return api<
       OperationResponse<{
         affectedAssetCount: number;
         assets: EagleAssetVersion[];
+        predecessorOperationIds?: string[];
       }>
     >('/eagle/assets/batch', {
       method: 'PATCH',

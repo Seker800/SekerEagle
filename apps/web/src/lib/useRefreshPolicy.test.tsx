@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { renderHook } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { useProgressQueryInterval } from './useRefreshPolicy';
@@ -43,22 +44,32 @@ it('wakes once at a known scheduling boundary without idle progress reads', () =
 });
 
 it('refreshes local recommendation panels on a matching terminal command without polling model health or changing another owner', async () => {
-  const {QueryClient,QueryClientProvider}=await import('@tanstack/react-query');
-  const {LibraryWorkspaceProvider}=await import('./library-workspace');
-  const {useRefreshOnWorkspaceChanges}=await import('./useRefreshPolicy');
-  const {publishWorkspaceCommandCompletion,workspaceRefreshKey}=await import('./workspace-refresh');
-  const {act,waitFor}=await import('@testing-library/react');
-  const client=new QueryClient();
-  client.setQueryData(workspaceRefreshKey('owner',false),{});
-  client.setQueryData(workspaceRefreshKey('other',false),{});
-  const load=vi.fn(async()=>undefined);
-  const wrapper=({children}:{children:import('react').ReactNode})=><QueryClientProvider client={client}><LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">{children}</LibraryWorkspaceProvider></QueryClientProvider>;
-  const hook=renderHook(()=>useRefreshOnWorkspaceChanges(load,['RECOMMENDATIONS']),{wrapper});
-  act(()=>publishWorkspaceCommandCompletion(client,'other','MATERIAL','VECTOR_REVIEW'));
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  const { LibraryWorkspaceProvider } = await import('./library-workspace');
+  const { useRefreshOnWorkspaceChanges } = await import('./useRefreshPolicy');
+  const { publishWorkspaceCommandCompletion, workspaceRefreshKey } =
+    await import('./workspace-refresh');
+  const { act, waitFor } = await import('@testing-library/react');
+  const client = new QueryClient();
+  client.setQueryData(workspaceRefreshKey('owner', false), {});
+  client.setQueryData(workspaceRefreshKey('other', false), {});
+  const load = vi.fn(async () => undefined);
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const hook = renderHook(() => useRefreshOnWorkspaceChanges(load, ['RECOMMENDATIONS']), {
+    wrapper,
+  });
+  act(() => publishWorkspaceCommandCompletion(client, 'other', 'MATERIAL', 'VECTOR_REVIEW'));
   expect(load).not.toHaveBeenCalled();
-  act(()=>publishWorkspaceCommandCompletion(client,'owner','PHOTO','VECTOR_REVIEW'));
+  act(() => publishWorkspaceCommandCompletion(client, 'owner', 'PHOTO', 'VECTOR_REVIEW'));
   expect(load).not.toHaveBeenCalled();
-  act(()=>publishWorkspaceCommandCompletion(client,'owner','MATERIAL','VECTOR_REVIEW'));
-  await waitFor(()=>expect(load).toHaveBeenCalledOnce());
-  hook.unmount();client.clear();
+  act(() => publishWorkspaceCommandCompletion(client, 'owner', 'MATERIAL', 'VECTOR_REVIEW'));
+  await waitFor(() => expect(load).toHaveBeenCalledOnce());
+  hook.unmount();
+  client.clear();
 });

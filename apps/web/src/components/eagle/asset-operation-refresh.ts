@@ -1,3 +1,4 @@
+import { publishWorkspaceCommandCompletion } from '../../lib/workspace-refresh';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { createEagleApi } from '../../lib/eagle-api';
 import { invalidateDesktopAssets } from '../../lib/desktop-cache';
@@ -6,6 +7,7 @@ import {
   createEagleQueryKeys,
   isEagleQuery,
   isEagleTaskCenterKey,
+  isEagleAssetDetailKey,
   isEagleOperationKey,
   isEagleAssetListKey,
 } from './eagle-query-keys';
@@ -182,6 +184,12 @@ export class AssetOperationRefresher {
       if (actual.kind === 'METADATA_COMMAND' || actual.kind === 'BACKGROUND_COMMAND') {
         if (actual.commandType !== 'DUPLICATE_IGNORE') await this.refreshLoadedFacts(mode, epoch);
         if (
+          mode === 'PHOTO' &&
+          (actual.commandType?.startsWith('PHOTO_GROUP') ||
+            actual.commandType === 'BATCH_EDIT_RENDER')
+        )
+          await this.refreshPhotoStacks(mode, epoch, actual.commandType === 'BATCH_EDIT_RENDER');
+        if (
           actual.commandType &&
           [
             'ASSET_TAGS',
@@ -221,6 +229,8 @@ export class AssetOperationRefresher {
           { cancelRefetch: false },
         );
       }
+      if (actual.commandType)
+        publishWorkspaceCommandCompletion(this.client, this.ownerId, mode, actual.commandType);
       this.dirtyMetadata.add(mode);
       const membershipChange = assetOperationProtocol(actual.kind)?.membership;
       if (actual.completed > 0 && membershipChange === 'TRASH')
@@ -244,6 +254,64 @@ export class AssetOperationRefresher {
       await this.flush().catch(() => undefined);
     }
   }
+  private async refreshPhotoStacks(
+    mode: LibraryMode,
+    epoch: number,
+    existingCollectionsOnly = false,
+  ) {
+    const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
+    const queries = this.client
+      .getQueryCache()
+      .findAll({
+        predicate: (query) =>
+          query.isActive() &&
+          isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
+          !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
+      });
+    for (const query of queries) {
+      const data = query.state.data as InfiniteData<NormalizedEagleAssetPage, string> | undefined;
+      const fn = query.options.queryFn;
+      if (!data?.pages.length || typeof fn !== 'function') continue;
+      for (let index = 0; index < data.pages.length; index++) {
+        if (existingCollectionsOnly && !data.pages[index].photoStacks?.length) continue;
+        const fresh = await this.client.fetchQuery<NormalizedEagleAssetPage>({
+          queryKey: [...query.queryKey, 'operation-stack-page', data.pageParams[index]],
+          gcTime: 0,
+          staleTime: 0,
+          retry: 2,
+          queryFn: async ({ signal }) =>
+            (await fn({
+              client: this.client,
+              queryKey: query.queryKey,
+              signal,
+              pageParam: data.pageParams[index],
+              direction: 'forward',
+              meta: query.meta,
+            })) as NormalizedEagleAssetPage,
+        });
+        if (
+          this.disposed ||
+          cache.operations.epoch !== epoch ||
+          this.client.getQueryCache().get(query.queryHash) !== query
+        )
+          return;
+        // Only the collection projection changes. Loaded identity windows, page
+        // count and cursor history remain owned by the browse session.
+        this.client.setQueryData<InfiniteData<NormalizedEagleAssetPage, string>>(
+          query.queryKey,
+          (current) => {
+            if (!current || current.pageParams[index] !== data.pageParams[index]) return current;
+            return {
+              ...current,
+              pages: current.pages.map((page, pageIndex) =>
+                pageIndex === index ? { ...page, photoStacks: fresh.photoStacks ?? [] } : page,
+              ),
+            };
+          },
+        );
+      }
+    }
+  }
   private async refreshLoadedFacts(mode: LibraryMode, epoch: number) {
     const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
     const queries = this.client.getQueryCache().findAll({
@@ -251,13 +319,25 @@ export class AssetOperationRefresher {
         isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
         !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
     });
+    const details = this.client
+      .getQueryCache()
+      .findAll({ predicate: (query) => isEagleAssetDetailKey(query.queryKey, this.ownerId, mode) });
     const ids = [
-      ...new Set(
-        queries.flatMap((query) => {
+      ...new Set([
+        ...queries.flatMap((query) => {
           const data = query.state.data as InfiniteData<NormalizedEagleAssetPage> | undefined;
-          return data?.pages.flatMap((page) => page.assetIds) ?? [];
+          return (
+            data?.pages.flatMap((page) => [
+              ...page.assetIds,
+              ...(page.photoStacks?.flatMap((stack) => stack.assetIds) ?? []),
+            ]) ?? []
+          );
         }),
-      ),
+        ...details.flatMap((query) => {
+          const data = query.state.data as { id?: string } | undefined;
+          return data?.id ? [data.id] : [];
+        }),
+      ]),
     ];
     const api = createEagleApi(mode);
     // Bound response memory by page-sized transport batches; the user selection
@@ -272,10 +352,17 @@ export class AssetOperationRefresher {
       if (missing.size) {
         cache.store.removeMany(missing);
         cache.thumbnails.dispose();
-        for (const id of missing)
-          this.client.removeQueries({
-            queryKey: createEagleQueryKeys(this.ownerId, mode).assetDetailPrefix(id),
-          });
+        const unavailableDetails = details.filter((query) => {
+          const data = query.state.data as { id?: string } | undefined;
+          return data?.id && missing.has(data.id);
+        });
+        for (const query of unavailableDetails) {
+          await this.client.cancelQueries({ queryKey: query.queryKey, exact: true });
+          // Clear active observers before cache removal, so React cannot retain
+          // private detail data in an orphaned QueryObserver result.
+          this.client.setQueryData(query.queryKey, null);
+          this.client.removeQueries({ queryKey: query.queryKey, exact: true });
+        }
         for (const query of queries)
           this.client.setQueryData<InfiniteData<NormalizedEagleAssetPage>>(
             query.queryKey,

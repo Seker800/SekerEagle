@@ -70,6 +70,23 @@ export function useEagleMutations(
     );
 
   const latestVersions = useRef(new Map<string, number>()).current;
+  const predecessors = useRef(
+    new Map<string, { operationId: string; rowVersion: number }>(),
+  ).current;
+  const predecessorInput = (assets: EagleAssetVersion[]) => {
+    const ids = new Set<string>();
+    for (const asset of assets) {
+      const previous = predecessors.get(asset.assetId);
+      if (!previous) continue;
+      if (asset.rowVersion > previous.rowVersion) predecessors.delete(asset.assetId);
+      else ids.add(previous.operationId);
+    }
+    return ids.size ? { predecessorOperationIds: [...ids] } : {};
+  };
+  const rememberAccepted = (operationId: string, assets: EagleAssetVersion[]) => {
+    for (const asset of assets)
+      predecessors.set(asset.assetId, { operationId, rowVersion: asset.rowVersion });
+  };
   const withLatestVersions = (assets: EagleAssetVersion[]) =>
     assets.map((asset) => ({
       ...asset,
@@ -96,12 +113,23 @@ export function useEagleMutations(
         const asset = await updateEagleAsset(accessToken, target.assetId, {
           rating,
           rowVersion: target.rowVersion,
+          ...predecessorInput(targets),
         });
-        if (isAcceptedOperation(asset)) return asset;
+        if (isAcceptedOperation(asset)) {
+          rememberAccepted(asset.id, targets);
+          return asset;
+        }
         return { asset, versions: [{ assetId: asset.id, rowVersion: asset.rowVersion }] };
       }
-      const result = await batchUpdateEagleAssets(accessToken, { assets: targets, rating });
-      if (isAcceptedOperation(result)) return result;
+      const result = await batchUpdateEagleAssets(accessToken, {
+        assets: targets,
+        rating,
+        ...predecessorInput(targets),
+      });
+      if (isAcceptedOperation(result)) {
+        rememberAccepted(result.id, targets);
+        return result;
+      }
       return { asset: null, versions: result.assets };
     },
     onSuccess: async (result) => {
@@ -134,15 +162,26 @@ export function useEagleMutations(
         const asset = await updateEagleAsset(accessToken, target.assetId, {
           ...input,
           rowVersion: target.rowVersion,
+          ...predecessorInput(targets),
         });
-        if (isAcceptedOperation(asset)) return asset;
+        if (isAcceptedOperation(asset)) {
+          rememberAccepted(asset.id, targets);
+          return asset;
+        }
         return {
           asset,
           versions: [{ assetId: asset.id, rowVersion: asset.rowVersion }],
         };
       }
-      const result = await batchUpdateEagleAssets(accessToken, { assets: targets, ...input });
-      if (isAcceptedOperation(result)) return result;
+      const result = await batchUpdateEagleAssets(accessToken, {
+        assets: targets,
+        ...input,
+        ...predecessorInput(targets),
+      });
+      if (isAcceptedOperation(result)) {
+        rememberAccepted(result.id, targets);
+        return result;
+      }
       return { asset: null, versions: result.assets };
     },
     onSuccess: async (result, variables) => {

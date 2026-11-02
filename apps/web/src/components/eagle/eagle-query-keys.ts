@@ -67,6 +67,12 @@ export function isEagleTaskCenterKey(key: readonly unknown[], ownerId: string, m
   return key[0] === 'task-center' && key[1] === ownerId && key[2] === mode;
 }
 
+export function isEagleAssetDetailKey(key: readonly unknown[], ownerId: string, mode: string) {
+  return (
+    isEagleQuery(key, ownerId, mode) && (key[3] === 'asset-detail' || key[3] === 'stack-asset')
+  );
+}
+
 /** Privacy position belongs to each resource's key protocol, never its consumers. */
 export function photoQueryVisibility(
   key: readonly unknown[],
