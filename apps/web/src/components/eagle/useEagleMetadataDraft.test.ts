@@ -46,3 +46,15 @@ it('resets on an asset or privacy scope change, sending only edited fields', () 
   expect(result.current.values.displayName).toBe('');
   expect(result.current.submission()).toBeNull();
 });
+it('keeps a queued draft until committed facts match it and preserves newer edits', () => {
+  const {result}=renderHook(()=>useEagleMetadataDraft('scope'));
+  act(()=>result.current.load(asset));
+  act(()=>result.current.change('description','Queued'));
+  act(()=>result.current.load(asset));
+  expect(result.current.submission()?.input).toEqual({description:'Queued'});
+  act(()=>result.current.load({...asset, annotation:{...asset.annotation,description:'Queued'}}));
+  expect(result.current.dirty).toBe(false);
+  act(()=>result.current.change('description','Newer'));
+  act(()=>result.current.load({...asset, annotation:{...asset.annotation,description:'Queued'}}));
+  expect(result.current.submission()?.input).toEqual({description:'Newer'});
+});
