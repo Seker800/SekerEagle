@@ -569,6 +569,7 @@ test('scan start derives owner and private visibility from principal and require
       },
     } as never,
     {} as never,
+    { enqueueCommand: (...args: unknown[]) => calls.push(args) } as never,
   );
   const { StartTaskFamilyDto: StartDto } = await import('./eagle-task-center.controller');
   assert.ok(
@@ -583,7 +584,12 @@ test('scan start derives owner and private visibility from principal and require
     .value as object;
   assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [BrowserOriginGuard]);
   await controller.start({ sub: 'owner-a', canViewPrivate: false } as never, { family: 'FACES' });
-  assert.deepEqual(calls, [['owner-a', 'FACES', false]]);
+  assert.deepEqual(calls, [
+    [
+      { sub: 'owner-a', canViewPrivate: false },
+      { type: 'PHOTO_PEOPLE_SCAN', payload: {} },
+    ],
+  ]);
   assert.equal(
     (await validate(Object.assign(new StartTaskFamilyDto(), { family: 'FACES' }))).length,
     0,

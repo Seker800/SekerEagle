@@ -100,7 +100,8 @@ test('admission rejects inaccessible people before durable acceptance without pu
   const registry = new LibraryCommandRegistry();
   registerPhotoLibraryCommands(registry, { photos, review: {} as never, agent: {} as never });
   await assert.rejects(
-    registry.get('PHOTO_PERSON_RENAME').admit!(context, { id: 'foreign', name: 'Name' }, []),
+    async () =>
+      registry.get('PHOTO_PERSON_RENAME').admit!(context, { id: 'foreign', name: 'Name' }, []),
     /人物不存在/,
   );
   assert.match(JSON.stringify(queries), /"ownerId":"owner"/);
@@ -115,7 +116,8 @@ test('admission rejects photography commands in material scope before domain acc
     agent: {} as never,
   });
   await assert.rejects(
-    registry.get('PHOTO_AGENT_REVIEW').admit!({ ...context, libraryMode: 'MATERIAL' }, {}, []),
+    async () =>
+      registry.get('PHOTO_AGENT_REVIEW').admit!({ ...context, libraryMode: 'MATERIAL' }, {}, []),
     /仅用于照片/,
   );
 });

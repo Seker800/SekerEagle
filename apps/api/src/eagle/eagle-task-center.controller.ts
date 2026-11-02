@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+  HttpCode,
+  Optional,
+  Inject,
+  NotFoundException,
+} from '@nestjs/common';
 import { IsIn, IsBoolean, IsInt, Min, Max, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -11,6 +23,8 @@ import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
+import { LIBRARY_MODE } from './library-mode';
+import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { EagleTaskCenterService } from './eagle-task-center.service';
 import { EagleProcessingService } from './eagle-processing.service';
 import { UpdateEagleProcessingSettingsDto } from './eagle-processing.dto';
@@ -51,6 +65,8 @@ export class EagleTaskCenterController {
   constructor(
     private readonly tasks: EagleTaskCenterService,
     private readonly processing: EagleProcessingService,
+    @Optional() private readonly operations?: EagleAssetOperationService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: string = 'PHOTO',
   ) {}
   @Get()
   overview(@CurrentPrincipal() principal: AuthPrincipal) {
@@ -75,14 +91,23 @@ export class EagleTaskCenterController {
     return this.tasks.policy(principal.sub, input);
   }
   @Post('start')
+  @HttpCode(202)
   @UseGuards(BrowserOriginGuard)
-  start(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: StartTaskFamilyDto) {
-    return this.tasks.start(principal.sub, input.family, principal.canViewPrivate);
+  start(@CurrentPrincipal() principal: AuthPrincipal, @Body() _input: StartTaskFamilyDto) {
+    if (this.libraryMode !== 'PHOTO' || _input.family !== 'FACES')
+      throw new NotFoundException('没有可启动的扫描任务。');
+    if (!this.operations) throw new Error('Task operation queue is unavailable');
+    return this.operations.enqueueCommand(principal, { type: 'PHOTO_PEOPLE_SCAN', payload: {} });
   }
   @Post('retry')
+  @HttpCode(202)
   @UseGuards(BrowserOriginGuard)
   retry(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: RetryTaskFamilyDto) {
-    return this.tasks.retry(principal.sub, input.family, principal.canViewPrivate);
+    if (!this.operations) throw new Error('Task operation queue is unavailable');
+    return this.operations.enqueueCommand(principal, {
+      type: 'TASK_FAMILY_RETRY',
+      payload: { family: input.family },
+    });
   }
   @Patch('settings')
   @UseGuards(BrowserOriginGuard)

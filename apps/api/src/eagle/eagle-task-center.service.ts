@@ -1,3 +1,4 @@
+import { runLibraryTransaction } from './eagle-library-command';
 import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import {
@@ -69,8 +70,13 @@ export class EagleTaskCenterService {
     return queuePhotoFaceScan(this.prisma, ownerId, includePrivate);
   }
 
-  async retry(ownerId: string, family: TaskFamily, includePrivate = false) {
-    const retried = await this.prisma.$transaction(async (tx) => {
+  async retry(
+    ownerId: string,
+    family: TaskFamily,
+    includePrivate = false,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const retried = await runLibraryTransaction(db, async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, this.libraryMode);
       if (family === 'SMART_FOLDERS') {
         return (
