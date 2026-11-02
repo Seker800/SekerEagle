@@ -4,16 +4,46 @@ import { describe, expect, it, vi } from 'vitest';
 
 describe('offline-capable desktop connection page', () => {
   it('displays request outcomes for this connection instead of the historical SQLite hit rate', async () => {
-    const html = await readFile(new URL('../src/connection-page/index.html', import.meta.url), 'utf8');
-    const script = await readFile(new URL('../src/connection-page/connection.js', import.meta.url), 'utf8');
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
+    const script = await readFile(
+      new URL('../src/connection-page/connection.js', import.meta.url),
+      'utf8',
+    );
     const dom = new JSDOM(html, { url: 'https://connection.invalid/', runScripts: 'outside-only' });
-    Object.defineProperty(dom.window, 'sekerDesktop', { value: {
-      getConnectionManagerState: async () => ({ settings: { mode: 'AUTO' }, active: null, probes: [] }),
-      getCacheManagerStatus: async () => ({ globalAllocatedBytes: 0, limitBytes: 1024 ** 3, globalEntryCount: 2, availableBytes: 1024 ** 3, cachePath: '/tmp/cache', currentAccountStats: {
-        entryCount: 2, allocatedBytes: 0, hitCount: 990, missCount: 10, savedBytes: 1000000,
-        requests: { localHitCount: 0, revalidatedHitCount: 7, missCount: 3, coalescedCount: 2, errorCount: 1, savedBytes: 1024 },
-      } }),
-    } });
+    Object.defineProperty(dom.window, 'sekerDesktop', {
+      value: {
+        getConnectionManagerState: async () => ({
+          settings: { mode: 'AUTO' },
+          active: null,
+          probes: [],
+        }),
+        getCacheManagerStatus: async () => ({
+          globalAllocatedBytes: 0,
+          limitBytes: 1024 ** 3,
+          globalEntryCount: 2,
+          availableBytes: 1024 ** 3,
+          cachePath: '/tmp/cache',
+          currentAccountStats: {
+            entryCount: 2,
+            allocatedBytes: 0,
+            hitCount: 990,
+            missCount: 10,
+            savedBytes: 1000000,
+            requests: {
+              localHitCount: 0,
+              revalidatedHitCount: 7,
+              missCount: 3,
+              coalescedCount: 2,
+              errorCount: 1,
+              savedBytes: 1024,
+            },
+          },
+        }),
+      },
+    });
     try {
       dom.window.eval(script);
       await vi.waitFor(() => {
@@ -24,7 +54,9 @@ describe('offline-capable desktop connection page', () => {
         expect(dom.window.document.querySelector('#cache-errors')?.textContent).toBe('1');
         expect(dom.window.document.querySelector('#cache-saved-bytes')?.textContent).toBe('1 KiB');
       });
-    } finally { dom.window.close(); }
+    } finally {
+      dom.window.close();
+    }
   });
   it('ships local, LAN and public inputs without inline executable code', async () => {
     const html = await readFile(

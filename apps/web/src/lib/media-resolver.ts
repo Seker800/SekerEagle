@@ -72,6 +72,14 @@ export interface DesktopConnectionStatus {
   latencyMs: number | null;
 }
 export interface DesktopCacheStatus {
+  requests?: {
+    localHitCount: number;
+    revalidatedHitCount: number;
+    missCount: number;
+    coalescedCount: number;
+    errorCount: number;
+    savedBytes: number;
+  };
   limitBytes: number;
   globalAllocatedBytes: number;
   globalEntryCount: number;
