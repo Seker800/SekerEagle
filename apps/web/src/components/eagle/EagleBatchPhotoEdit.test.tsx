@@ -1,11 +1,13 @@
+import { writePortableLut } from '@sekereagle/photo-render-core/portable-lut';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_PHOTO_EDITS } from '@sekereagle/library-core';
 import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
-const mocks = vi.hoisted(() => ({ enqueue: vi.fn() }));
+const mocks = vi.hoisted(() => ({ enqueue: vi.fn(), context: vi.fn(), loadLut: vi.fn() }));
 vi.mock('../../lib/library-workspace', () => ({
-  useLibraryWorkspace: () => ({ api: { batchEditEaglePhotos: mocks.enqueue } }),
+  useLibraryWorkspace: () => ({ api: { batchEditEaglePhotos: mocks.enqueue, getBatchEaglePhotoEditContext: mocks.context } }),
 }));
+vi.mock('../media/photo-editor/photo-lut-storage', () => ({ loadPhotoLut: mocks.loadLut }));
 beforeEach(() => {
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
     configurable: true,
@@ -20,6 +22,8 @@ beforeEach(() => {
     },
   });
   mocks.enqueue.mockReset().mockResolvedValue({ id: 'operation', kind: 'BACKGROUND_COMMAND' });
+  mocks.context.mockReset().mockResolvedValue({preservedFilterIds:[]});
+  mocks.loadLut.mockReset();
 });
 it('submits the whole selection once and closes after durable acceptance without reading or rendering photos', async () => {
   const close = vi.fn(),
@@ -96,4 +100,31 @@ it('reuses the same render intent on a lost response and assigns a new intent wh
   fireEvent.click(screen.getByRole('button', { name: '开始套用' }));
   await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledTimes(3));
   expect(mocks.enqueue.mock.calls[2][1].operationId).not.toBe(first);
+});
+
+
+it('preserves the local LUT of legacy browser-uploaded or draft targets when their filter is not pasted', async () => {
+  const table={size:2,data:new Float32Array(24),domainMin:[0,0,0] as [number,number,number],domainMax:[1,1,1] as [number,number,number]};
+  mocks.context.mockResolvedValue({preservedFilterIds:['lut:legacy-target','lut:legacy-target']});
+  mocks.loadLut.mockResolvedValue(table);
+  const recipe={version:1 as const,edits:{...DEFAULT_PHOTO_EDITS,filter:'lut:clipboard',exposure:25}};
+  const resolveSession=vi.fn();const close=vi.fn();
+  render(<EagleBatchPhotoEdit assetIds={['legacy-copy','draft-target','legacy-copy']} recipe={recipe} resolveSession={resolveSession} onClose={close}/>);
+  fireEvent.click(screen.getByRole('checkbox',{name:'滤镜'}));
+  fireEvent.click(screen.getByRole('button',{name:'开始套用'}));
+  await waitFor(()=>expect(close).toHaveBeenCalledOnce());
+  expect(mocks.context).toHaveBeenCalledExactlyOnceWith(['legacy-copy','draft-target']);
+  expect(mocks.loadLut).toHaveBeenCalledExactlyOnceWith('legacy-target');
+  expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith('',expect.objectContaining({assetIds:['legacy-copy','draft-target'],recipe,parts:expect.objectContaining({filter:false}),preservedLuts:{'lut:legacy-target':writePortableLut(table)}}));
+  expect(mocks.enqueue.mock.calls[0][1]).not.toHaveProperty('lut');
+  expect(resolveSession).not.toHaveBeenCalled();
+});
+
+it('does not enqueue or read local tables when the preserved-filter context is inaccessible', async () => {
+  mocks.context.mockRejectedValue(new Error('photo unavailable'));
+  render(<EagleBatchPhotoEdit assetIds={['hidden']} recipe={{version:1,edits:DEFAULT_PHOTO_EDITS}} resolveSession={vi.fn()} onClose={vi.fn()}/>);
+  fireEvent.click(screen.getByRole('checkbox',{name:'滤镜'}));
+  fireEvent.click(screen.getByRole('button',{name:'开始套用'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent('photo unavailable');
+  expect(mocks.enqueue).not.toHaveBeenCalled();expect(mocks.loadLut).not.toHaveBeenCalled();
 });
