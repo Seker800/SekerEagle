@@ -238,3 +238,36 @@ describe('OriginalDragExporter', () => {
     await expect(stat(recentDirectory)).resolves.toBeDefined();
   });
 });
+
+it('keeps PHOTO originals in their immutable request mode through the download scheduler', async () => {
+  const rootPath = await createRoot();
+  const fetchOriginal = vi.fn(async () => originalResponse(new Uint8Array([1, 2, 3]), 'photo.jpg'));
+  const exporter = new OriginalDragExporter({
+    rootPath,
+    fetchOriginal,
+    minimumRequestIntervalMs: 0,
+  });
+  const prepared = await exporter.prepare(
+    namespaceId,
+    [firstAssetId],
+    undefined,
+    undefined,
+    'PHOTO',
+  );
+  expect(fetchOriginal).toHaveBeenCalledWith(firstAssetId, expect.any(AbortSignal), 'PHOTO');
+  expect(await readFile(prepared.files[0])).toEqual(Buffer.from([1, 2, 3]));
+});
+
+it('accepts only the closed library drag request and rejects owner, URL and mode overrides', async () => {
+  const module = await import('../src/main/original-drag-export');
+  const parse = (module as unknown as { parseLibraryDragRequest: (input: unknown) => unknown })
+    .parseLibraryDragRequest;
+  expect(parse({ assetIds: [firstAssetId], libraryMode: 'PHOTO' })).toEqual({
+    assetIds: [firstAssetId],
+    libraryMode: 'PHOTO',
+  });
+  for (const malformed of [null, [], { assetIds: [firstAssetId] }, { libraryMode: 'PHOTO' }])
+    expect(() => parse(malformed)).toThrow();
+  for (const extra of [{ libraryMode: 'OTHER' }, { ownerId: 'other' }, { url: 'file:///private' }])
+    expect(() => parse({ assetIds: [firstAssetId], libraryMode: 'PHOTO', ...extra })).toThrow();
+});

@@ -1,4 +1,12 @@
 export const enUS = {
+  '无法读取目标照片的自定义滤镜，请检查本机滤镜库后重试。':
+    'The target photo’s custom filter could not be loaded. Check the local filter library and retry.',
+  '提交后将在后台处理，可在任务中心查看进度。':
+    'After submission, processing continues in the background. View progress in the task center.',
+  更新信息: 'Update information',
+  后台任务: 'Background task',
+  '任务已加入后台队列，可在任务中心查看进度。':
+    'Task queued in the background. View progress in the task center.',
   最近观测: 'Last observed',
   检查模型连接: 'Check model connection',
 
@@ -631,6 +639,13 @@ export const enUS = {
   应用日期: 'Apply dates',
   '开始日期不能晚于结束日期。': 'Start date must not be later than end date.',
   当前条件下没有照片: 'No photos match these filters',
+  拍摄日期: 'Capture Date',
+  '按拍摄时间筛选，拍摄日期未知的照片不匹配。':
+    'Filters by capture time. Photos with an unknown capture date do not match.',
+  '按在 SekerEagle 中的更新时间筛选，不是拍摄时间。':
+    'Filters by the time updated in SekerEagle, rather than capture time.',
+  '按加入 SekerEagle 的时间筛选，不是拍摄时间。':
+    'Filters by the time added to SekerEagle, rather than capture time.',
   拍摄日期未知: 'Unknown capture date',
   拍摄量: 'Photos taken',
   拍摄量折线图: 'Photos over time',
@@ -2200,4 +2215,10 @@ export const enUS = {
   '地图更新于 {{value1}}': 'Map updated {{value1}}',
   '成片仍在后台处理，请稍后查看图库；也可留在当前编辑器重试保存。':
     'Your photo is still processing. Check the gallery later, or retry saving within this editor session.',
+  '客户端 {{value1}}': 'Client {{value1}}',
+  '旧版客户端（版本不可用）': 'Older client (version unavailable)',
+  '当前客户端阻止了照片处理模块，请更新桌面客户端后重新打开。':
+    'This client blocks the photo processing module. Update the desktop client and reopen the editor.',
+  '当前设备缺少这张照片使用的自定义滤镜，请在滤镜面板导入对应 LUT 后重试。':
+    'This device is missing the custom filter used by this photo. Import the matching LUT in the filter panel and retry.',
 } as const;

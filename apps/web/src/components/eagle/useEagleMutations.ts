@@ -1,3 +1,4 @@
+import { isAcceptedOperation, type OperationResponse } from '../../lib/accepted-operation';
 import { mergeEagleAssetFacts } from './eagle-asset-facts';
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { useEnqueueAssetOperation } from './useAssetOperations';
@@ -69,6 +70,23 @@ export function useEagleMutations(
     );
 
   const latestVersions = useRef(new Map<string, number>()).current;
+  const predecessors = useRef(
+    new Map<string, { operationId: string; rowVersion: number }>(),
+  ).current;
+  const predecessorInput = (assets: EagleAssetVersion[]) => {
+    const ids = new Set<string>();
+    for (const asset of assets) {
+      const previous = predecessors.get(asset.assetId);
+      if (!previous) continue;
+      if (asset.rowVersion > previous.rowVersion) predecessors.delete(asset.assetId);
+      else ids.add(previous.operationId);
+    }
+    return ids.size ? { predecessorOperationIds: [...ids] } : {};
+  };
+  const rememberAccepted = (operationId: string, assets: EagleAssetVersion[]) => {
+    for (const asset of assets)
+      predecessors.set(asset.assetId, { operationId, rowVersion: asset.rowVersion });
+  };
   const withLatestVersions = (assets: EagleAssetVersion[]) =>
     assets.map((asset) => ({
       ...asset,
@@ -88,20 +106,35 @@ export function useEagleMutations(
     }: {
       assets: EagleAssetVersion[];
       rating: number | null;
-    }): Promise<AssetMutationResult> => {
+    }): Promise<OperationResponse<AssetMutationResult>> => {
       const targets = withLatestVersions(assets);
       if (targets.length === 1) {
         const [target] = targets;
         const asset = await updateEagleAsset(accessToken, target.assetId, {
           rating,
           rowVersion: target.rowVersion,
+          ...predecessorInput(targets),
         });
+        if (isAcceptedOperation(asset)) {
+          rememberAccepted(asset.id, targets);
+          return asset;
+        }
         return { asset, versions: [{ assetId: asset.id, rowVersion: asset.rowVersion }] };
       }
-      const result = await batchUpdateEagleAssets(accessToken, { assets: targets, rating });
+      const result = await batchUpdateEagleAssets(accessToken, {
+        assets: targets,
+        rating,
+        ...predecessorInput(targets),
+      });
+      if (isAcceptedOperation(result)) {
+        rememberAccepted(result.id, targets);
+        return result;
+      }
       return { asset: null, versions: result.assets };
     },
-    onSuccess: async ({ asset, versions }) => {
+    onSuccess: async (result) => {
+      if (isAcceptedOperation(result)) return;
+      const { asset, versions } = result;
       rememberVersions(versions);
       if (asset)
         queryClient.setQueriesData<EagleAsset>(
@@ -122,25 +155,40 @@ export function useEagleMutations(
       assets: EagleAssetVersion[];
       input: EagleAssetMetadataInput;
       revision: number;
-    }): Promise<AssetMutationResult> => {
+    }): Promise<OperationResponse<AssetMutationResult>> => {
       const targets = withLatestVersions(assets);
       if (targets.length === 1) {
         const [target] = targets;
         const asset = await updateEagleAsset(accessToken, target.assetId, {
           ...input,
           rowVersion: target.rowVersion,
+          ...predecessorInput(targets),
         });
+        if (isAcceptedOperation(asset)) {
+          rememberAccepted(asset.id, targets);
+          return asset;
+        }
         return {
           asset,
           versions: [{ assetId: asset.id, rowVersion: asset.rowVersion }],
         };
       }
-      const result = await batchUpdateEagleAssets(accessToken, { assets: targets, ...input });
+      const result = await batchUpdateEagleAssets(accessToken, {
+        assets: targets,
+        ...input,
+        ...predecessorInput(targets),
+      });
+      if (isAcceptedOperation(result)) {
+        rememberAccepted(result.id, targets);
+        return result;
+      }
       return { asset: null, versions: result.assets };
     },
-    onSuccess: async ({ asset, versions }, variables) => {
-      rememberVersions(versions);
+    onSuccess: async (result, variables) => {
+      if (isAcceptedOperation(result)) return;
       callbacks.onMetadataSaved(variables.assetId, variables.revision);
+      const { asset, versions } = result;
+      rememberVersions(versions);
       if (asset)
         queryClient.setQueriesData<EagleAsset>(
           { queryKey: queryKeys.assetDetailPrefix(asset.id) },
@@ -152,7 +200,9 @@ export function useEagleMutations(
   const replaceTagsMutation = useMutation({
     mutationFn: ({ assetId, tagIds }: { assetId: string; tagIds: string[] }) =>
       replaceEagleAssetManualTags(accessToken, assetId, tagIds),
-    onSuccess: async ({ privacyChangedAssetCount }, { assetId }) => {
+    onSuccess: async (result, { assetId }) => {
+      if (isAcceptedOperation(result)) return;
+      const { privacyChangedAssetCount } = result;
       if (privacyChangedAssetCount > 0) callbacks.onAssetPrivacyChanged();
       await refreshEagleAssetRelations(queryClient, queryKeys, [assetId]);
     },
@@ -185,24 +235,28 @@ export function useEagleMutations(
       mapWithConcurrency(tags, 4, (tag) =>
         updateEagleManualTag(accessToken, tag.id, { ...changes, rowVersion: tag.rowVersion }),
       ),
-    onSettled: () =>
-      invalidate(
-        queryKeys.manualTags,
-        queryKeys.manualTagGroups,
-        queryKeys.assets,
-        queryKeys.assetDetails,
-      ),
+    onSettled: (results) =>
+      results?.some(isAcceptedOperation)
+        ? undefined
+        : invalidate(
+            queryKeys.manualTags,
+            queryKeys.manualTagGroups,
+            queryKeys.assets,
+            queryKeys.assetDetails,
+          ),
   });
   const deleteTagsMutation = useMutation({
     mutationFn: (tags: EagleManualTag[]) =>
       mapWithConcurrency(tags, 4, (tag) => deleteEagleManualTag(accessToken, tag.id)),
-    onSettled: () =>
-      invalidate(
-        queryKeys.manualTags,
-        queryKeys.manualTagGroups,
-        queryKeys.assets,
-        queryKeys.assetDetails,
-      ),
+    onSettled: (results) =>
+      results?.some(isAcceptedOperation)
+        ? undefined
+        : invalidate(
+            queryKeys.manualTags,
+            queryKeys.manualTagGroups,
+            queryKeys.assets,
+            queryKeys.assetDetails,
+          ),
   });
   const updateTagGroupMutation = useMutation({
     mutationFn: ({
@@ -220,7 +274,10 @@ export function useEagleMutations(
   });
   const deleteTagGroupMutation = useMutation({
     mutationFn: (group: EagleManualTagGroup) => deleteEagleManualTagGroup(accessToken, group.id),
-    onSuccess: () => invalidate(queryKeys.manualTags, queryKeys.manualTagGroups),
+    onSuccess: (result) =>
+      isAcceptedOperation(result)
+        ? undefined
+        : invalidate(queryKeys.manualTags, queryKeys.manualTagGroups),
   });
   const batchTagMutation = useMutation({
     mutationFn: ({
@@ -240,8 +297,10 @@ export function useEagleMutations(
         removeTagIds,
         ...(clearAll ? { clearAll: true } : {}),
       }),
-    onSuccess: async ({ privacyChangedAssetCount }, { assetIds }) => {
+    onSuccess: async (result, { assetIds }) => {
       callbacks.onBatchTagsApplied();
+      if (isAcceptedOperation(result)) return;
+      const { privacyChangedAssetCount } = result;
       if (privacyChangedAssetCount > 0) callbacks.onAssetPrivacyChanged();
       await refreshEagleAssetRelations(queryClient, queryKeys, assetIds);
     },

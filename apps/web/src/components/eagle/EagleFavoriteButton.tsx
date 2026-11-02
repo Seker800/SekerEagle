@@ -1,3 +1,4 @@
+import { isAcceptedOperation } from '../../lib/accepted-operation';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconHeart, IconHeartFilled } from '@tabler/icons-react';
@@ -33,7 +34,7 @@ export async function setLibraryFavorite(api: FavoriteApi, assetIds: string[], e
   if (!tag) return;
   const privacy = await api.getEaglePrivacySettings();
   if (privacy.tagIds.includes(tag.id)) throw new Error(t('收藏标签被设为私密，请先在设置中调整。'));
-  await api.batchChangeEagleManualTags('', {
+  return api.batchChangeEagleManualTags('', {
     assetIds,
     addTagIds: enabled ? [tag.id] : [],
     removeTagIds: enabled ? [] : [tag.id],
@@ -44,7 +45,7 @@ export async function toggleViewerFavorite(
   asset: EagleAssetListItem,
   favorite: boolean,
 ) {
-  await setLibraryFavorite(api, [asset.id], !favorite);
+  return setLibraryFavorite(api, [asset.id], !favorite);
 }
 
 export function EagleFavoriteButton(props: {
@@ -90,11 +91,12 @@ function FavoriteButton({
     setPending(true);
     setError('');
     try {
-      await setLibraryFavorite(
+      const result = await setLibraryFavorite(
         api,
         assets.map((asset) => asset.id),
         !favorite,
       );
+      if (isAcceptedOperation(result)) return;
       if (alive.current) setFavorite(!favorite);
       await client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode] });
     } catch (reason) {

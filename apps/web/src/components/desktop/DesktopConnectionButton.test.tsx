@@ -37,3 +37,19 @@ describe('DesktopConnectionButton', () => {
     await waitFor(() => expect(openConnectionManager).toHaveBeenCalledOnce());
   });
 });
+
+it('displays the full installed desktop version independently of the web version', async () => {
+  (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+    version: 1,
+    createMediaUrl: vi.fn(),
+    getAppInfo: vi.fn().mockResolvedValue({ version: '0.1.8', platform: 'win32' }),
+    getConnectionStatus: vi
+      .fn()
+      .mockResolvedValue({ activeSlot: 'PUBLIC', activeUrl: 'https://example.invalid' }),
+    openConnectionManager: vi.fn(),
+  };
+  const view = render(<DesktopConnectionButton />);
+  expect(await screen.findByText('客户端 0.1.8')).toBeInTheDocument();
+  view.unmount();
+  delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
+});

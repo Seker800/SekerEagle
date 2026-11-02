@@ -1,3 +1,4 @@
+import { executeAcceptedOperation } from './queued-operation-test.mjs';
 import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
@@ -377,16 +378,13 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.b.id, tagId: inheritedTagId },
     });
     await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, undefined, 'PHOTO'));
-    assert.equal(
-      (
-        await fetch(settingsUrl, {
-          method: 'PUT',
-          headers: auth,
-          body: JSON.stringify({ tagIds: [], expectedTagIds: loadedRules.tagIds }),
-        })
-      ).status,
-      409,
-    );
+    const staleRules = await fetch(settingsUrl, {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ tagIds: [], expectedTagIds: loadedRules.tagIds }),
+    });
+    assert.equal(staleRules.status, 202);
+    await executeAcceptedOperation(prisma, f.ownerId, await staleRules.json(), 1);
     assert.equal(
       (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
       true,
@@ -397,8 +395,9 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       headers: auth,
       body: JSON.stringify({ tagIds: currentRules.tagIds, expectedTagIds: currentRules.tagIds }),
     });
-    assert.equal(savedRules.status, 200);
-    assert.deepEqual(await savedRules.json(), currentRules);
+    assert.equal(savedRules.status, 202);
+    await executeAcceptedOperation(prisma, f.ownerId, await savedRules.json());
+    assert.deepEqual(await (await fetch(settingsUrl, { headers: auth })).json(), currentRules);
     assert.equal(
       (
         await fetch(`${base}/api/eagle/privacy-settings`, {
@@ -444,7 +443,15 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       404,
     );
     const marked = await patch(auth);
-    assert.equal(marked.status, 200, await marked.text());
+    const markedBody = await marked.text();
+    assert.equal(marked.status, 202, markedBody);
+    assert.equal(
+      (await prisma.eaglePhotoPerson.findUniqueOrThrow({ where: { id: f.person.id } }))
+        .marksAssetsPrivate,
+      false,
+      'HTTP only accepts person privacy intent',
+    );
+    await executeAcceptedOperation(prisma, f.ownerId, JSON.parse(markedBody));
     assert.equal((await patch(auth, { marksAssetsPrivate: false, rowVersion: 2 })).status, 404);
     for (const suffix of [
       '',
@@ -478,14 +485,22 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       'PHOTO',
     );
     const privateAuth = { ...auth, cookie: `${auth.cookie}; ${grantCookie}` };
+    const stalePerson = await patch(privateAuth, { marksAssetsPrivate: false, rowVersion: 1 });
+    assert.equal(stalePerson.status, 202);
+    await executeAcceptedOperation(prisma, f.ownerId, await stalePerson.json(), 1);
+    const afterStale = await prisma.eaglePhotoPerson.findUniqueOrThrow({
+      where: { id: f.person.id },
+    });
+    assert.equal(afterStale.marksAssetsPrivate, true);
+    assert.equal(afterStale.rowVersion, 2);
     assert.equal(
-      (await patch(privateAuth, { marksAssetsPrivate: false, rowVersion: 1 })).status,
-      409,
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).isPrivate,
+      true,
+      'stale publication leaves source visibility unchanged',
     );
-    assert.equal(
-      (await patch(privateAuth, { marksAssetsPrivate: false, rowVersion: 2 })).status,
-      200,
-    );
+    const unmarked = await patch(privateAuth, { marksAssetsPrivate: false, rowVersion: 2 });
+    assert.equal(unmarked.status, 202);
+    await executeAcceptedOperation(prisma, f.ownerId, await unmarked.json());
     assert.equal(
       (await fetch(`${base}/api/photos/assets/${f.a.id}`, { headers: auth })).status,
       200,

@@ -1077,3 +1077,39 @@ it('limits phone adjustment categories to tone, color and detail', async () => {
   for (const name of ['HSL', '曲线', '色彩分级'])
     expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
 });
+
+it('explains that blocked desktop WASM needs a client update instead of a blind reload', async () => {
+  const module = await import('./photo-editor-render');
+  vi.spyOn(module, 'createPhotoRenderer').mockReturnValue({
+    render: async () => {
+      throw new Error('PHOTO_WASM_BLOCKED');
+    },
+    dispose: vi.fn(),
+  });
+  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('请更新桌面客户端'));
+  expect(screen.getByRole('button', { name: '保存到相册' })).toBeDisabled();
+});
+
+it('identifies a missing local LUT on a second device without discarding the saved edits', async () => {
+  const module = await import('./photo-editor-render');
+  vi.spyOn(module, 'createPhotoRenderer').mockReturnValue({
+    render: async () => {
+      throw new Error('LUT_NOT_FOUND');
+    },
+    dispose: vi.fn(),
+  });
+  render(
+    <PhotoEditor
+      source="/photo.png"
+      name="Photo.png"
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      initialEdits={{ ...DEFAULT_PHOTO_EDITS, filter: 'lut:missing-on-windows' }}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('当前设备缺少这张照片使用的自定义滤镜'),
+  );
+  expect(screen.getByRole('button', { name: '保存到相册' })).toBeDisabled();
+});

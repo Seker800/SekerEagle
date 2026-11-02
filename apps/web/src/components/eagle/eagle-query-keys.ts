@@ -5,6 +5,7 @@ export function createEagleQueryKeys(
   const root = ['eagle', ownerId, libraryMode] as const;
   return {
     owner: ['eagle', ownerId] as const,
+    taskCenter: ['task-center', ownerId, libraryMode] as const,
     root,
     vectorSummary: [...root, 'vector-summary'] as const,
     pyramid: (assetId: string) => [...root, 'pyramid', assetId] as const,
@@ -62,6 +63,16 @@ export function isEagleQuery(key: readonly unknown[], ownerId: string, mode: str
   return key[0] === 'eagle' && key[1] === ownerId && key[2] === mode;
 }
 
+export function isEagleTaskCenterKey(key: readonly unknown[], ownerId: string, mode: string) {
+  return key[0] === 'task-center' && key[1] === ownerId && key[2] === mode;
+}
+
+export function isEagleAssetDetailKey(key: readonly unknown[], ownerId: string, mode: string) {
+  return (
+    isEagleQuery(key, ownerId, mode) && (key[3] === 'asset-detail' || key[3] === 'stack-asset')
+  );
+}
+
 /** Privacy position belongs to each resource's key protocol, never its consumers. */
 export function photoQueryVisibility(
   key: readonly unknown[],
@@ -71,6 +82,28 @@ export function photoQueryVisibility(
   const visibility = key[3] === 'people' && key[4] === 'options' ? key[5] : key[4];
   return typeof visibility === 'boolean' ? visibility : undefined;
 }
+const photoPrivacyProjections = new Set([
+  'people',
+  'people-merge-targets',
+  'people-summary',
+  'person-review',
+  'person-faces',
+  'agent',
+  'map',
+  'map-photos',
+  'statistics',
+  'photography-facets',
+  'timeline',
+]);
+/** Only data projections with an explicit visibility scope; instruction drafts are excluded. */
+export function isPhotoPrivacyProjection(key: readonly unknown[], ownerId: string) {
+  return (
+    isEagleQuery(key, ownerId, 'PHOTO') &&
+    photoPrivacyProjections.has(String(key[3])) &&
+    photoQueryVisibility(key, ownerId) !== undefined
+  );
+}
+
 export function isPhotoPeopleProjection(key: readonly unknown[], ownerId: string | null) {
   return (
     key[0] === 'eagle' &&

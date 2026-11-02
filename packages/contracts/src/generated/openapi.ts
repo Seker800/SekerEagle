@@ -436,6 +436,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/batch/edit-render-context': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_batchEditRenderContext'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/batch/edit-renders': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_batchEditRenders'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/{assetId}/edit-renders': {
     parameters: {
       query?: never;
@@ -686,6 +718,22 @@ export interface paths {
     get: operations['EagleController_getPyramidTile'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/facts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_listAssetFacts'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2084,6 +2132,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/assets/batch/edit-render-context': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_batchEditRenderContext'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/batch/edit-renders': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_batchEditRenders'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/assets/{assetId}/edit-renders': {
     parameters: {
       query?: never;
@@ -2334,6 +2414,22 @@ export interface paths {
     get: operations['PhotosController_getPyramidTile'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/facts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_listAssetFacts'];
     delete?: never;
     options?: never;
     head?: never;
@@ -4001,6 +4097,11 @@ export interface components {
       operationId: string;
       onlyIfUnattempted?: boolean;
     };
+    EagleDuplicateAdmissionResponseDto: {
+      operationId: string | null;
+      assetIds?: string[];
+      alreadyAttempted?: boolean;
+    };
     DuplicateListDto: {
       /** @enum {string} */
       sameVisual?: 'true' | 'false';
@@ -4052,21 +4153,24 @@ export interface components {
       filters?: components['schemas']['DuplicateListDto'];
       ignored: boolean;
     };
-    EnqueueAssetOperationDto: {
-      operationId: string;
-      /** @enum {string} */
-      kind: 'SEND' | 'TRASH' | 'RESTORE' | 'EMPTY_TRASH';
-      assetIds: string[];
-    };
     EagleOperationErrorResponseDto: {
       code: string;
       count: number;
     };
     EagleOperationSummaryResponseDto: {
       undoOf?: string;
+      commandType?: string;
       id: string;
       /** @enum {string} */
-      kind: 'SEND' | 'TRASH' | 'RESTORE' | 'EMPTY_TRASH' | 'DUPLICATE_SCAN' | 'DUPLICATE_CLEANUP';
+      kind:
+        | 'SEND'
+        | 'TRASH'
+        | 'RESTORE'
+        | 'EMPTY_TRASH'
+        | 'DUPLICATE_SCAN'
+        | 'DUPLICATE_CLEANUP'
+        | 'METADATA_COMMAND'
+        | 'BACKGROUND_COMMAND';
       /** @enum {string} */
       libraryMode: 'MATERIAL' | 'PHOTO';
       total: number;
@@ -4079,6 +4183,12 @@ export interface components {
       /** @enum {string} */
       state: 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'STOPPED';
       errors: components['schemas']['EagleOperationErrorResponseDto'][];
+    };
+    EnqueueAssetOperationDto: {
+      operationId: string;
+      /** @enum {string} */
+      kind: 'SEND' | 'TRASH' | 'RESTORE' | 'EMPTY_TRASH';
+      assetIds: string[];
     };
     EagleMembershipResponseDto: {
       id: string;
@@ -4184,6 +4294,28 @@ export interface components {
       version: 1;
       images: components['schemas']['EagleImageMediaCapabilityDto'];
       videos: components['schemas']['EagleVideoMediaCapabilityDto'];
+    };
+    BatchEditRenderContextDto: {
+      assetIds: string[];
+    };
+    BatchEditRenderContextResponseDto: {
+      preservedFilterIds: string[];
+    };
+    BatchEditPartsDto: {
+      adjustments: boolean;
+      filter: boolean;
+      watermark: boolean;
+      crop: boolean;
+    };
+    BatchEditRendersDto: {
+      operationId?: string;
+      assetIds: string[];
+      recipe: Record<string, never>;
+      parts: components['schemas']['BatchEditPartsDto'];
+      lut?: string;
+      preservedLuts?: {
+        [key: string]: string;
+      };
     };
     CreateEditRenderDto: {
       requestId: string;
@@ -4419,8 +4551,11 @@ export interface components {
       aiTags: components['schemas']['EagleAiTagResponseDto'][];
       colorAnalysis: components['schemas']['EagleColorAnalysisResponseDto'] | null;
     };
-    BatchUpdateEagleAssetsDto: Record<string, never>;
+    BatchUpdateEagleAssetsDto: {
+      predecessorOperationIds?: string[];
+    };
     UpdateEagleAssetDto: {
+      predecessorOperationIds?: string[];
       rowVersion: number;
       displayName?: string;
       rating?: Record<string, never> | null;
@@ -5093,11 +5228,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -5114,11 +5251,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -5135,11 +5274,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5316,6 +5457,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
+        };
+      };
+    };
+  };
+  EagleController_batchEditRenderContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchEditRenderContextDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BatchEditRenderContextResponseDto'];
+        };
+      };
+    };
+  };
+  EagleController_batchEditRenders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchEditRendersDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
         };
       };
     };
@@ -5599,11 +5786,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5754,6 +5943,31 @@ export interface operations {
       };
     };
   };
+  EagleController_listAssetFacts: {
+    parameters: {
+      query: {
+        publicOnly: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EagleAssetIdsDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EagleAssetListResponseDto'][];
+        };
+      };
+    };
+  };
   EagleController_batchUpdate: {
     parameters: {
       query?: never;
@@ -5767,11 +5981,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5807,12 +6023,12 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EaglePrivacySettingsDto'];
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
         };
       };
     };
@@ -5830,11 +6046,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5851,11 +6069,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5872,11 +6092,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -5966,11 +6188,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6080,11 +6304,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6103,11 +6329,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6122,11 +6350,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6145,11 +6375,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6240,11 +6472,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6282,11 +6516,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6345,11 +6581,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6368,11 +6606,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -6389,11 +6629,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7150,11 +7392,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7167,11 +7411,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7276,11 +7522,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7297,11 +7545,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7515,11 +7765,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7532,11 +7784,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7549,11 +7803,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7572,11 +7828,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7593,11 +7851,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7678,11 +7938,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -7699,11 +7961,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -7720,11 +7984,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -7901,6 +8167,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
+        };
+      };
+    };
+  };
+  PhotosController_batchEditRenderContext: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchEditRenderContextDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BatchEditRenderContextResponseDto'];
+        };
+      };
+    };
+  };
+  PhotosController_batchEditRenders: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchEditRendersDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
         };
       };
     };
@@ -8184,11 +8496,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8339,6 +8653,31 @@ export interface operations {
       };
     };
   };
+  PhotosController_listAssetFacts: {
+    parameters: {
+      query: {
+        publicOnly: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EagleAssetIdsDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EagleAssetListResponseDto'][];
+        };
+      };
+    };
+  };
   PhotosController_batchUpdate: {
     parameters: {
       query?: never;
@@ -8352,11 +8691,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8392,12 +8733,12 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EaglePrivacySettingsDto'];
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
         };
       };
     };
@@ -8415,11 +8756,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8436,11 +8779,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8457,11 +8802,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8551,11 +8898,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8665,11 +9014,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8688,11 +9039,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8707,11 +9060,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8730,11 +9085,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8825,11 +9182,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8867,11 +9226,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8930,11 +9291,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8953,11 +9316,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -8974,11 +9339,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9256,11 +9623,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9290,11 +9659,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9313,11 +9684,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9336,11 +9709,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9357,11 +9732,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9380,11 +9757,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9403,11 +9782,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9437,11 +9818,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9458,11 +9841,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9481,11 +9866,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9504,11 +9891,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9527,11 +9916,13 @@ export interface operations {
       };
     };
     responses: {
-      200: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9719,11 +10110,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9742,11 +10135,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9916,11 +10311,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -9936,11 +10333,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10315,11 +10714,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10332,11 +10733,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10349,11 +10752,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10372,11 +10777,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10393,11 +10800,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10518,11 +10927,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10535,11 +10946,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10644,11 +11057,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };
@@ -10665,11 +11080,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
       };
     };
   };

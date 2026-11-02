@@ -33,7 +33,9 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 const root = process.cwd(),
   name = `sekereagle-photo-workbench-${randomUUID().slice(0, 8)}`;
 const readerWorkbench = process.env.PHOTO_WORKBENCH_READER === '1';
-const workbenchRecord = readerWorkbench ? 'library-read-workbench.json' : 'photo-workbench.json';
+const workbenchRecord =
+  process.env.PHOTO_WORKBENCH_RECORD ??
+  (readerWorkbench ? 'library-read-workbench.json' : 'photo-workbench.json');
 const containers = [],
   children = [],
   timers = [];

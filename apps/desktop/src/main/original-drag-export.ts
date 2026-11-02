@@ -14,7 +14,16 @@ const DRAG_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 
 export const ORIGINAL_DRAG_EXPORT_TTL_MS = 60 * 60 * 1_000;
 
-type FetchOriginal = (assetId: string, signal?: AbortSignal) => Promise<Response>;
+export type OriginalLibraryMode = 'MATERIAL' | 'PHOTO';
+export function parseOriginalLibraryMode(input: unknown): OriginalLibraryMode {
+  if (input !== 'MATERIAL' && input !== 'PHOTO') throw new Error('图库模式无效。');
+  return input;
+}
+type FetchOriginal = (
+  assetId: string,
+  signal?: AbortSignal,
+  libraryMode?: OriginalLibraryMode,
+) => Promise<Response>;
 
 export interface PreparedOriginalDrag {
   directory: string;
@@ -58,6 +67,25 @@ export function parsePreparedDragToken(input: unknown): string {
   return input.toLowerCase();
 }
 
+/** The renderer supplies identifiers and a closed mode, never paths, URLs or owners. */
+export function parseLibraryDragRequest(input: unknown): {
+  assetIds: string[];
+  libraryMode: OriginalLibraryMode;
+} {
+  if (
+    !input ||
+    typeof input !== 'object' ||
+    Array.isArray(input) ||
+    Object.keys(input).some((key) => key !== 'assetIds' && key !== 'libraryMode')
+  )
+    throw new Error('原文件拖拽请求无效。');
+  const value = input as Record<string, unknown>;
+  return {
+    assetIds: parseAssetDragInput(value.assetIds),
+    libraryMode: parseOriginalLibraryMode(value.libraryMode),
+  };
+}
+
 export class OriginalDragExporter {
   private readonly rootPath: string;
   private readonly fetchOriginal: FetchOriginal;
@@ -97,7 +125,9 @@ export class OriginalDragExporter {
     input: unknown,
     signal?: AbortSignal,
     onProgress?: (progress: OriginalDragProgress) => void,
+    libraryMode: OriginalLibraryMode = 'MATERIAL',
   ): Promise<PreparedOriginalDrag> {
+    parseOriginalLibraryMode(libraryMode);
     if (!NAMESPACE_ID.test(namespaceId)) throw new Error('原文件临时目录命名空间无效。');
     const assetIds = parseAssetDragInput(input);
     const accountRoot = path.join(this.rootPath, namespaceId);
@@ -122,7 +152,11 @@ export class OriginalDragExporter {
           if (index >= assetIds.length) return;
           try {
             const assetId = assetIds[index]!;
-            const response = await this.fetchOriginalWithPacing(assetId, controller.signal);
+            const response = await this.fetchOriginalWithPacing(
+              assetId,
+              controller.signal,
+              libraryMode,
+            );
             if (!response.ok || !response.body) {
               throw new Error(`原文件下载失败（${response.status}）。`);
             }
@@ -208,7 +242,11 @@ export class OriginalDragExporter {
     );
   }
 
-  private async fetchOriginalWithPacing(assetId: string, signal?: AbortSignal): Promise<Response> {
+  private async fetchOriginalWithPacing(
+    assetId: string,
+    signal: AbortSignal | undefined,
+    libraryMode: OriginalLibraryMode,
+  ): Promise<Response> {
     const launch = this.requestQueue.then(async () => {
       const delayMs = Math.max(0, this.nextRequestAt - this.now());
       if (delayMs > 0) await delay(delayMs, signal);
@@ -220,7 +258,7 @@ export class OriginalDragExporter {
       () => undefined,
     );
     await launch;
-    return this.fetchOriginal(assetId, signal);
+    return this.fetchOriginal(assetId, signal, libraryMode);
   }
 }
 

@@ -1,3 +1,4 @@
+import { executeAcceptedOperation } from './queued-operation-test.mjs';
 import { observePrismaAdapter } from './database-query-probe.mjs';
 import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
@@ -498,7 +499,18 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
         body: JSON.stringify({ action: 'ACCEPT' }),
       },
     );
-    assert.equal(response.status, 201, await response.text());
+    const responseBody = await response.text();
+    assert.equal(response.status, 202, responseBody);
+    assert.equal(
+      (await prisma.eaglePhotoAgentSuggestion.findUniqueOrThrow({ where: { id: p.id } })).status,
+      'PENDING',
+      'HTTP must not synchronously apply the proposal',
+    );
+    await executeAcceptedOperation(prisma, f.ownerId, JSON.parse(responseBody));
+    assert.equal(
+      (await prisma.eaglePhotoAgentSuggestion.findUniqueOrThrow({ where: { id: p.id } })).status,
+      'ACCEPTED',
+    );
     const current = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } });
     const manualBody = {
       operationId: randomUUID(),
@@ -513,7 +525,7 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
     };
     for (const [origin, status] of [
       ['http://untrusted.invalid', 403],
-      ['http://localhost:8180', 201],
+      ['http://localhost:8180', 202],
     ]) {
       const manual = await fetch(`${base}/api/photos/agent/tasks/${t.id}/manual-action`, {
         method: 'POST',
@@ -524,7 +536,16 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
         },
         body: JSON.stringify(manualBody),
       });
-      assert.equal(manual.status, status, await manual.text());
+      const manualResponse = await manual.text();
+      assert.equal(manual.status, status, manualResponse);
+      if (status === 202) {
+        assert.equal(
+          (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+          null,
+          'manual acceptance performs no deletion',
+        );
+        await executeAcceptedOperation(prisma, f.ownerId, JSON.parse(manualResponse));
+      }
     }
     assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt);
   } finally {

@@ -28,12 +28,12 @@ test('batch manual tag changes accept up to 1000 assets', async () => {
   );
 });
 
-test('batch manual tag changes still reject more than 1000 assets', async () => {
+test('batch manual tags accept the whole selection beyond the old 1000-item product cap', async () => {
   const errors = await validate(createBatchDto(1001));
 
   assert.equal(
     errors.some(({ property }) => property === 'assetIds'),
-    true,
+    false,
   );
 });
 

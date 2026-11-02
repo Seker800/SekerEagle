@@ -56,9 +56,11 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
               : 'status'
           }
         >
-          <strong>{operationKindPresentation(row.kind, libraryMode).title}</strong>
+          <strong>
+            {operationKindPresentation(row.kind, libraryMode, row.summary?.commandType).title}
+          </strong>
           <span>
-            {!operationKindPresentation(row.kind, libraryMode).executable
+            {!operationKindPresentation(row.kind, libraryMode, row.summary?.commandType).executable
               ? t('不支持的操作类型，无法执行。')
               : row.uncertain
                 ? t('正在确认操作是否受理，请勿重复提交。')
@@ -91,7 +93,8 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
               ({item.count})
             </span>
           ))}
-          {operationKindPresentation(row.kind, libraryMode).compensation === 'RESTORE' &&
+          {operationKindPresentation(row.kind, libraryMode, row.summary?.commandType)
+            .compensation === 'RESTORE' &&
             !row.undoId && (
               <button
                 type="button"
@@ -111,14 +114,16 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
               </button>
             )}
           {row.undoId && <span>{t('已申请撤销，可查看恢复进度。')}</span>}
-          {operationKindPresentation(row.kind, libraryMode).executable &&
+          {operationKindPresentation(row.kind, libraryMode, row.summary?.commandType).executable &&
             (row.failedIds.length > 0 || (row.summary?.failed ?? 0) > 0) && (
               <button
                 type="button"
                 onClick={() => {
                   if (
                     row.summary &&
-                    (row.kind === 'DUPLICATE_CLEANUP' ||
+                    (row.kind === 'METADATA_COMMAND' ||
+                      row.kind === 'BACKGROUND_COMMAND' ||
+                      row.kind === 'DUPLICATE_CLEANUP' ||
                       row.summary.undoOf ||
                       !row.failedIds.length)
                   )
@@ -132,36 +137,40 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
                 {t('重试未完成项')}
               </button>
             )}
-          {row.uncertain && operationKindPresentation(row.kind, libraryMode).executable && (
-            <button
-              type="button"
-              onClick={() =>
-                void (
-                  row.duplicateInput
-                    ? createDuplicatesApi(libraryMode)
-                        .cleanup(row.duplicateInput)
-                        .then(() => api.list(true))
-                        .then((rows) => rows.find((value) => value.id === row.id))
-                    : api.enqueue({
-                        operationId: row.id,
-                        kind: row.kind,
-                        assetIds: row.requestAssetIds,
-                      })
-                )
-                  .then((result) => {
-                    if (result) changes.observe(result);
-                    void client.invalidateQueries({
-                      queryKey: createEagleQueryKeys(ownerId, libraryMode).operations,
-                    });
-                  })
-                  .catch((reason) =>
-                    setError(reason instanceof Error ? reason.message : String(reason)),
+          {row.uncertain &&
+            operationKindPresentation(row.kind, libraryMode, row.summary?.commandType)
+              .executable && (
+              <button
+                type="button"
+                onClick={() =>
+                  void (
+                    row.duplicateInput
+                      ? createDuplicatesApi(libraryMode)
+                          .cleanup(row.duplicateInput)
+                          .then(() => api.list(true))
+                          .then((rows) => rows.find((value) => value.id === row.id))
+                      : row.kind === 'METADATA_COMMAND' || row.kind === 'BACKGROUND_COMMAND'
+                        ? api.list(true).then((rows) => rows.find((value) => value.id === row.id))
+                        : api.enqueue({
+                            operationId: row.id,
+                            kind: row.kind,
+                            assetIds: row.requestAssetIds,
+                          })
                   )
-              }
-            >
-              {t('重试确认')}
-            </button>
-          )}
+                    .then((result) => {
+                      if (result) changes.observe(result);
+                      void client.invalidateQueries({
+                        queryKey: createEagleQueryKeys(ownerId, libraryMode).operations,
+                      });
+                    })
+                    .catch((reason) =>
+                      setError(reason instanceof Error ? reason.message : String(reason)),
+                    )
+                }
+              >
+                {t('重试确认')}
+              </button>
+            )}
           {onShowProgress && (
             <button type="button" onClick={onShowProgress}>
               {t('查看进度')}

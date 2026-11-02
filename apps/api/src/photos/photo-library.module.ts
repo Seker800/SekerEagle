@@ -1,3 +1,4 @@
+import { PhotoLibraryCommandSetup } from './photo-library-command-setup';
 import { PhotoStatisticsController } from './photo-statistics.controller';
 import { PhotoStatisticsService } from './photo-statistics.service';
 import { PhotoMapService } from './photo-map.service';
@@ -96,6 +97,7 @@ export class PhotoPrivacyVisibilityController {
     PhotoTaskCenterController,
   ],
   providers: [
+    PhotoLibraryCommandSetup,
     PhotoManagementService,
     PhotoPersonReviewService,
     PhotoMapService,

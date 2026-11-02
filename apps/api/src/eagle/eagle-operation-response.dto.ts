@@ -13,6 +13,7 @@ export class EagleOperationErrorResponseDto {
 }
 export class EagleOperationSummaryResponseDto implements AssetOperationSummary {
   @ApiPropertyOptional() undoOf?: string;
+  @ApiPropertyOptional() commandType?: string;
   @ApiProperty() id!: string;
   @ApiProperty({ enum: [...ASSET_OPERATION_KINDS] }) kind!: AssetOperationSummary['kind'];
   @ApiProperty({ enum: ['MATERIAL', 'PHOTO'] }) libraryMode!: AssetOperationSummary['libraryMode'];
@@ -47,4 +48,11 @@ export class EagleOperationResultsResponseDto implements AssetOperationResults {
   @ApiProperty({ type: [EagleOperationReceiptResponseDto] })
   receipts!: EagleOperationReceiptResponseDto[];
   @ApiProperty({ type: Number, nullable: true }) nextCursor!: number | null;
+}
+
+/** Legacy duplicate endpoints return a queue reference rather than a summary. */
+export class EagleDuplicateAdmissionResponseDto {
+  @ApiProperty({ type: String, nullable: true }) operationId!: string | null;
+  @ApiPropertyOptional({ type: [String] }) assetIds?: string[];
+  @ApiPropertyOptional() alreadyAttempted?: boolean;
 }

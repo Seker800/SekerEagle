@@ -5,6 +5,8 @@ export const ASSET_OPERATION_KINDS = [
   'EMPTY_TRASH',
   'DUPLICATE_SCAN',
   'DUPLICATE_CLEANUP',
+  'METADATA_COMMAND',
+  'BACKGROUND_COMMAND',
 ] as const;
 export type AssetOperationKind = (typeof ASSET_OPERATION_KINDS)[number];
 /** Direct commands are opt-in: adding a kind never expands the public DTO. */
@@ -15,25 +17,33 @@ export const DIRECT_ASSET_OPERATION_KINDS = [
   'EMPTY_TRASH',
 ] as const satisfies readonly AssetOperationKind[];
 export type DirectAssetOperationKind = (typeof DIRECT_ASSET_OPERATION_KINDS)[number];
-export type MetadataOperationKind = 'TRASH' | 'RESTORE' | 'DUPLICATE_CLEANUP';
+export type MetadataOperationKind = 'TRASH' | 'RESTORE' | 'DUPLICATE_CLEANUP' | 'METADATA_COMMAND';
 type OperationProtocolFor<K extends AssetOperationKind> = {
-  admission: K extends DirectAssetOperationKind ? 'DIRECT' : 'DUPLICATES';
+  admission: K extends DirectAssetOperationKind
+    ? 'DIRECT'
+    : K extends 'METADATA_COMMAND' | 'BACKGROUND_COMMAND'
+      ? 'DOMAIN'
+      : 'DUPLICATES';
   execution: K extends MetadataOperationKind
     ? 'METADATA'
-    : K extends 'SEND'
-      ? 'TRANSFER'
-      : K extends 'DUPLICATE_SCAN'
-        ? 'SCAN'
-        : 'CUTOFF';
-  snapshot: K extends 'SEND' | 'TRASH'
-    ? 'RESOURCE_VERSIONS'
-    : K extends 'RESTORE'
-      ? 'RESOURCE_VERSIONS_OR_UNDO'
-      : K extends 'DUPLICATE_CLEANUP'
-        ? 'CLEANUP_REVIEW'
+    : K extends 'BACKGROUND_COMMAND'
+      ? 'COMMAND'
+      : K extends 'SEND'
+        ? 'TRANSFER'
         : K extends 'DUPLICATE_SCAN'
-          ? 'SCAN_STAGE'
-          : 'CREATED_AT_CUTOFF';
+          ? 'SCAN'
+          : 'CUTOFF';
+  snapshot: K extends 'METADATA_COMMAND' | 'BACKGROUND_COMMAND'
+    ? 'COMMAND'
+    : K extends 'SEND' | 'TRASH'
+      ? 'RESOURCE_VERSIONS'
+      : K extends 'RESTORE'
+        ? 'RESOURCE_VERSIONS_OR_UNDO'
+        : K extends 'DUPLICATE_CLEANUP'
+          ? 'CLEANUP_REVIEW'
+          : K extends 'DUPLICATE_SCAN'
+            ? 'SCAN_STAGE'
+            : 'CREATED_AT_CUTOFF';
   membership: K extends 'SEND'
     ? 'SOURCE_REMOVED'
     : K extends 'TRASH' | 'DUPLICATE_CLEANUP'
@@ -47,6 +57,20 @@ type OperationProtocolFor<K extends AssetOperationKind> = {
 };
 /** Execution, receipts and compensation are explicit for every persisted kind. */
 export const ASSET_OPERATION_PROTOCOLS = {
+  METADATA_COMMAND: {
+    admission: 'DOMAIN',
+    execution: 'METADATA',
+    snapshot: 'COMMAND',
+    membership: 'UNCHANGED',
+    compensation: null,
+  },
+  BACKGROUND_COMMAND: {
+    admission: 'DOMAIN',
+    execution: 'COMMAND',
+    snapshot: 'COMMAND',
+    membership: 'UNCHANGED',
+    compensation: null,
+  },
   SEND: {
     admission: 'DIRECT',
     execution: 'TRANSFER',
@@ -97,6 +121,7 @@ export function assetOperationProtocol(kind: string) {
 }
 
 export interface AssetOperationSummary {
+  commandType?: string;
   undoOf?: string;
   id: string;
   kind: AssetOperationKind;

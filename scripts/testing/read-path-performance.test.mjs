@@ -4,11 +4,13 @@ import console from 'node:console';
 import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
+import { performance } from 'node:perf_hooks';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
 import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { EagleImageSearchService } from '../../apps/api/dist/eagle/eagle-image-search.service.js';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -24,6 +26,7 @@ const ownerId = randomUUID();
 const prefix = `${ownerId}-`;
 const assetId = (n) => `${prefix}asset-${String(n).padStart(5, '0')}`;
 let queries = [];
+const searchSpaces = [];
 
 before(async () => {
   await db.user.create({
@@ -57,6 +60,7 @@ after(async () => {
   await db.eaglePhotoPerson.deleteMany({ where: { ownerId } });
   await db.eagleSmartFolder.deleteMany({ where: { ownerId } });
   await db.user.delete({ where: { id: ownerId } });
+  await db.eagleEmbeddingSpace.deleteMany({ where: { id: { in: searchSpaces } } });
   await db.$disconnect();
 });
 function nodes(plan) {
@@ -68,6 +72,136 @@ async function explain(query) {
   );
   return row['QUERY PLAN'][0];
 }
+test('date-ordered empty searches finish in one database round trip across sixty thousand photos', async () => {
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  queries = [];
+  const started = performance.now();
+  const result = await ranker.rankPage(
+    ownerId,
+    'no-synthetic-result-8e260cc8',
+    { status: 'UNAVAILABLE', spaceId: 'synthetic' },
+    undefined,
+    40,
+    false,
+    false,
+    undefined,
+    'CAPTURED_AT',
+  );
+  console.log(
+    'empty date search',
+    JSON.stringify({ ms: performance.now() - started, sql: queries.length }),
+  );
+  assert.deepEqual(result, []);
+  assert.equal(
+    queries.length,
+    1,
+    'no-match searches must not paginate through the entire library over SQL',
+  );
+});
+test('sparse date searches page every match past a thousand while retaining owner, mode, private and trash boundaries', async () => {
+  const match = 'sparse-date-search-8e260cc8';
+  const changed = Array.from({ length: 1053 }, (_, n) => assetId(n));
+  await db.eagleAsset.updateMany({
+    where: { id: { in: changed } },
+    data: { normalizedDisplayName: match },
+  });
+  await db.eagleAsset.update({ where: { id: assetId(0) }, data: { isPrivate: true } });
+  await db.eagleAsset.update({ where: { id: assetId(1) }, data: { deletedAt: new Date() } });
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  const context = { status: 'UNAVAILABLE', spaceId: 'synthetic' };
+  try {
+    for (const sort of ['CAPTURED_AT', 'ADDED_AT'])
+      for (const includePrivate of [false, true]) {
+        const field = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
+        const expected = await db.eagleAsset.findMany({
+          where: {
+            ownerId,
+            libraryMode: 'PHOTO',
+            deletedAt: null,
+            normalizedDisplayName: match,
+            ...(includePrivate ? {} : { isPrivate: false }),
+          },
+          orderBy: [{ [field]: 'desc' }, { id: 'desc' }],
+          select: { id: true },
+        });
+        const seen = [];
+        let after;
+        for (;;) {
+          queries = [];
+          const page = await ranker.rankPage(
+            ownerId,
+            match,
+            context,
+            after,
+            40,
+            includePrivate,
+            false,
+            undefined,
+            sort,
+          );
+          assert.equal(queries.length, 1);
+          assert.ok(page.every((row) => row.tier === 3 && row.similarity === 1));
+          seen.push(...page.map((row) => row.assetId));
+          assert.ok(seen.length <= expected.length, 'cursor must advance without duplicates');
+          if (page.length < 40) break;
+          after = page.at(-1);
+        }
+        assert.deepEqual(
+          seen,
+          expected.map((row) => row.id),
+        );
+        assert.ok(seen.length > 1000);
+      }
+    assert.deepEqual(
+      await ranker.rankPage(
+        randomUUID(),
+        match,
+        context,
+        undefined,
+        40,
+        true,
+        false,
+        undefined,
+        'CAPTURED_AT',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      await new EagleImageSearchService(db, {}, 'MATERIAL').rankPage(
+        ownerId,
+        match,
+        context,
+        undefined,
+        40,
+        true,
+        false,
+        undefined,
+        'ADDED_AT',
+      ),
+      [],
+    );
+    const trash = await ranker.rankPage(
+      ownerId,
+      match,
+      context,
+      undefined,
+      40,
+      true,
+      true,
+      undefined,
+      'CAPTURED_AT',
+    );
+    assert.deepEqual(
+      trash.map((row) => row.assetId),
+      [assetId(1)],
+    );
+  } finally {
+    await db.eagleAsset.updateMany({
+      where: { id: { in: changed } },
+      data: { normalizedDisplayName: 'synthetic', isPrivate: false, deletedAt: null },
+    });
+  }
+});
 test('statistics compacts repeated daily facts before materializing chart inputs', async () => {
   let captured;
   const service = new PhotoStatisticsService({
@@ -281,4 +415,219 @@ test('sparse smart-folder filters do not repeatedly hydrate rejected candidate b
     }),
     /不存在/,
   );
+});
+
+async function prepareRelevanceFixture() {
+  let space = await db.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } });
+  if (!space) {
+    space = await db.eagleEmbeddingSpace.create({
+      data: {
+        id: randomUUID(),
+        model: 'Qwen/Qwen3-VL-Embedding-2B',
+        revision: randomUUID(),
+        dimensions: 1024,
+        normalized: true,
+        instructionVersion: 'synthetic',
+        preprocessingVersion: 'synthetic',
+        isCurrent: true,
+      },
+    });
+    searchSpaces.push(space.id);
+  }
+  const vector = `[1,${Array(1023).fill(0).join(',')}]`;
+  await db.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt")
+    SELECT ${space.id}||'-'||id,${ownerId},'PHOTO',id,"mediaRevision",${space.id},'READY',true,${vector}::vector,1,now() FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND rating=5
+    ON CONFLICT ("assetId","assetRevision","spaceId") DO UPDATE SET embedding=EXCLUDED.embedding,"l2Norm"=1`;
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  const context = { status: 'READY', spaceId: space.id, vector };
+  return { ranker, context };
+}
+function observeHydration(hydrated, beforeRead = async () => {}) {
+  return new Proxy(db, {
+    get(target, key) {
+      if (key === 'eagleAsset')
+        return new Proxy(target.eagleAsset, {
+          get(model, method) {
+            if (method === 'findMany')
+              return async (args) => {
+                await beforeRead(args);
+                const rows = await model.findMany(args);
+                hydrated.push(rows.length);
+                return rows;
+              };
+            return Reflect.get(model, method);
+          },
+        });
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+test('interactive relevance search hydrates only the requested page plus its continuation sentinel', async () => {
+  const { ranker, context } = await prepareRelevanceFixture();
+  const hydrated = [];
+  const traced = observeHydration(hydrated);
+  const service = new EagleService(
+    traced,
+    { prepare: async () => context, rankPage: ranker.rankPage.bind(ranker) },
+    'PHOTO',
+  );
+  const first = await service.listAssets(ownerId, {
+    search: 'unmatched-text',
+    rating: 5,
+    limit: 40,
+  });
+  assert.equal(first.items.length, 40);
+  assert.ok(first.nextCursor);
+  console.log('relevance page hydration', JSON.stringify({ requested: 40, hydrated }));
+  assert.deepEqual(
+    hydrated,
+    [41],
+    'filtered ranking must not hydrate 250 full cards for a 40-card page',
+  );
+});
+
+test('relevance search fills concurrent candidate losses and keeps every remaining page complete', async () => {
+  const { ranker, context } = await prepareRelevanceFixture();
+  const expected = await db.eagleAsset.findMany({
+    where: { ownerId, libraryMode: 'PHOTO', rating: 5, deletedAt: null, isPrivate: false },
+    orderBy: [{ libraryAddedAt: 'desc' }, { id: 'desc' }],
+    select: { id: true },
+  });
+  const removed = expected[0].id,
+    hydrated = [];
+  let changed = false;
+  const traced = observeHydration(hydrated, async () => {
+    if (!changed) {
+      changed = true;
+      await db.eagleAsset.update({ where: { id: removed }, data: { rating: 1 } });
+    }
+  });
+  const service = new EagleService(
+    traced,
+    { prepare: async () => context, rankPage: ranker.rankPage.bind(ranker) },
+    'PHOTO',
+  );
+  try {
+    const first = await service.listAssets(ownerId, {
+      search: 'unmatched-text',
+      rating: 5,
+      limit: 40,
+    });
+    assert.equal(first.items.length, 40);
+    assert.deepEqual(
+      hydrated,
+      [40, 1],
+      'a stale candidate should refill only the missing sentinel',
+    );
+    const seen = first.items.map((row) => row.id);
+    let cursor = first.nextCursor;
+    while (cursor) {
+      const page = await service.listAssets(ownerId, {
+        search: 'unmatched-text',
+        rating: 5,
+        limit: 40,
+        cursor,
+      });
+      seen.push(...page.items.map((row) => row.id));
+      assert.ok(seen.length < expected.length);
+      cursor = page.nextCursor;
+    }
+    assert.deepEqual(
+      seen,
+      expected.slice(1).map((row) => row.id),
+    );
+    assert.ok(hydrated.every((count) => count <= 41));
+  } finally {
+    await db.eagleAsset.update({ where: { id: removed }, data: { rating: 5 } });
+  }
+});
+
+test('capture-date smart folders and quick filters include old photographs and the end day without leaking unknown dates or scope', async () => {
+  const service = new EagleService(db, undefined, 'PHOTO');
+  const name = `${prefix}capture-date`;
+  const cases = [
+    ['old', '2018-01-01T12:00:00Z', {}],
+    ['end', '2026-06-02T23:59:59.999Z', {}],
+    ['next', '2026-06-03T00:00:00Z', {}],
+    ['unknown', null, {}],
+    ['private', '2018-01-01T12:00:00Z', { isPrivate: true }],
+    ['trash', '2018-01-01T12:00:00Z', { deletedAt: new Date() }],
+    ['material', '2018-01-01T12:00:00Z', { libraryMode: 'MATERIAL' }],
+  ];
+  const ids = [];
+  for (const [suffix, capturedAt, extra] of cases) {
+    const id = `${name}-${suffix}`;
+    ids.push(id);
+    await db.eagleAsset.create({
+      data: {
+        id,
+        ownerId,
+        libraryMode: 'PHOTO',
+        originalName: name,
+        displayName: name,
+        normalizedDisplayName: name,
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 42,
+        originalObjectKey: id,
+        ...extra,
+        ...(extra.libraryMode === 'MATERIAL'
+          ? {}
+          : {
+              photoMetadata: {
+                create: {
+                  assetRevision: 0,
+                  processorVersion: 'capture-date-test',
+                  capturedAt: capturedAt ? new Date(capturedAt) : null,
+                },
+              },
+            }),
+      },
+    });
+  }
+  const condition = (field, operator, value) => ({
+    id: field,
+    match: 'ALL',
+    result: 'MATCH',
+    rules: [{ id: field, field, operator, value }],
+  });
+  const ordinary = { version: 2, conditions: [condition('NAME', 'EQUALS', name)] };
+  const capture = {
+    version: 2,
+    conditions: [condition('CAPTURED_AT', 'BETWEEN', ['2016-01-01', '2026-06-02'])],
+  };
+  const combined = { ...ordinary, conditions: [...ordinary.conditions, ...capture.conditions] };
+  const folder = await service.createSmartFolder(ownerId, { name, query: ordinary });
+  try {
+    const page = await service.listAssets(ownerId, {
+      smartFolderId: folder.id,
+      rules: JSON.stringify(capture),
+      limit: 40,
+    });
+    assert.deepEqual(new Set(page.items.map((a) => a.id)), new Set([`${name}-old`, `${name}-end`]));
+    assert.deepEqual(await service.countAssets(ownerId, combined), { count: 2 });
+    assert.deepEqual(await service.countAssets(ownerId, combined, true), { count: 3 });
+    const saved = await service.createSmartFolder(ownerId, {
+      name: `${name}-saved`,
+      query: combined,
+    });
+    const savedPage = await service.listAssets(ownerId, { smartFolderId: saved.id, limit: 40 });
+    assert.deepEqual(
+      new Set(savedPage.items.map((a) => a.id)),
+      new Set(page.items.map((a) => a.id)),
+    );
+    await assert.rejects(
+      () => new EagleService(db, undefined, 'MATERIAL').countAssets(ownerId, combined),
+      /摄影筛选/,
+    );
+    await assert.rejects(
+      () => service.listAssets(randomUUID(), { smartFolderId: folder.id, limit: 40 }),
+      /智能文件夹不存在/,
+    );
+    await db.eagleSmartFolder.delete({ where: { id: saved.id } });
+  } finally {
+    await db.eagleSmartFolder.delete({ where: { id: folder.id } });
+    await db.eagleAsset.deleteMany({ where: { id: { in: ids } } });
+  }
 });

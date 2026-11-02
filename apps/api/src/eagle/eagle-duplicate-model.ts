@@ -1,3 +1,4 @@
+import type { DuplicateActionDto } from './eagle-duplicates.dto';
 import { createHash } from 'node:crypto';
 import type { LibraryMode, EagleAssetOperation, EagleAssetOperationItem } from '@prisma/client';
 import type { DuplicateGroup, DuplicateCandidate } from '@sekereagle/library-core';
@@ -11,7 +12,9 @@ export type CleanupSnapshot = {
   exact: boolean;
   targetId: string;
 };
+export type CleanupPreparationSnapshot = { kind: 'prepare-cleanup'; input: DuplicateActionDto };
 export type ScanSnapshot =
+  | { kind: 'discover'; version?: string }
   | { kind: 'scan'; rows: Snapshot[] }
   | { kind: 'verify'; rows: Snapshot[] }
   | { kind: 'build'; version?: string }

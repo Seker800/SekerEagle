@@ -1,3 +1,5 @@
+import { LibraryCommandRegistry } from './eagle-library-command';
+import { EagleLibraryCommandSetup } from './eagle-library-command-setup';
 import type { Provider } from '@nestjs/common';
 import type { LibraryMode } from '@prisma/client';
 import { EagleDuplicateService } from './eagle-duplicates.service';
@@ -143,9 +145,9 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
   {
     id: 'operations',
     modes: ['MATERIAL', 'PHOTO'],
-    providers: [EagleAssetOperationService],
+    providers: [EagleAssetOperationService, LibraryCommandRegistry, EagleLibraryCommandSetup],
     tables: ['EagleAssetOperation', 'EagleAssetOperationItem'],
-    dependsOn: ['assets', 'transfers', 'duplicates'],
+    dependsOn: ['assets', 'transfers', 'duplicates', 'search', 'processing'],
   },
   {
     id: 'processing',

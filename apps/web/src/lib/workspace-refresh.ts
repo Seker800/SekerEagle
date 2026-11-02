@@ -11,7 +11,50 @@ import { retryRefreshDelay } from './refresh-policy';
 
 export const workspaceRefreshKey = (ownerId: string, includePrivate: boolean) =>
   ['workspace-changes', ownerId, includePrivate] as const;
-export type WorkspaceRefreshObservation = { snapshot?: WorkspaceChanges; error?: string };
+export type WorkspaceRefreshObservation = {
+  snapshot?: WorkspaceChanges;
+  error?: string;
+  /** Local invalidation only; never substitutes for database change watermarks. */
+  commandChanges?: Partial<
+    Record<'MATERIAL' | 'PHOTO', Partial<Record<WorkspaceChangeKind, number>>>
+  >;
+};
+/** Wake existing local-state observers from a durable terminal receipt, with no network probe. */
+export function publishWorkspaceCommandCompletion(
+  client: QueryClient,
+  ownerId: string,
+  mode: 'MATERIAL' | 'PHOTO',
+  commandType: string,
+) {
+  const recommendations =
+    commandType.startsWith('VECTOR_') ||
+    [
+      'ASSET_TAGS',
+      'ASSET_TAGS_REPLACE',
+      'TAG_UPDATE',
+      'TAG_DELETE',
+      'TAG_GROUP_DELETE',
+      'PRIVACY_SETTINGS',
+    ].includes(commandType);
+  const tasks =
+    commandType.startsWith('PROCESSING_') ||
+    commandType.startsWith('VECTOR_') ||
+    commandType.startsWith('TASK_FAMILY_') ||
+    commandType === 'BATCH_EDIT_RENDER' ||
+    commandType === 'PHOTO_PEOPLE_SCAN';
+  const kinds: WorkspaceChangeKind[] = [
+    ...(recommendations ? ['RECOMMENDATIONS' as const] : []),
+    ...(tasks ? ['TASKS' as const] : []),
+  ];
+  if (!kinds.length) return;
+  for (const [key] of client.getQueriesData({ queryKey: ['workspace-changes', ownerId] })) {
+    client.setQueryData<WorkspaceRefreshObservation>(key, (current) => {
+      const counters = { ...current?.commandChanges?.[mode] };
+      for (const kind of kinds) counters[kind] = (counters[kind] ?? 0) + 1;
+      return { ...current, commandChanges: { ...current?.commandChanges, [mode]: counters } };
+    });
+  }
+}
 type Load = (signal: AbortSignal) => Promise<WorkspaceChanges>;
 const registries = new WeakMap<QueryClient, Map<string, { refs: number; stop: () => void }>>();
 
@@ -143,7 +186,11 @@ export function acquireWorkspaceRefresh(
       const next = await load(controller.signal);
       if (stopped || !visible()) return;
       failures = 0;
-      client.setQueryData<WorkspaceRefreshObservation>(key, { snapshot: next });
+      client.setQueryData<WorkspaceRefreshObservation>(key, (current) => ({
+        ...current,
+        snapshot: next,
+        error: undefined,
+      }));
       for (const mode of ['MATERIAL', 'PHOTO'] as const) {
         const kinds = new Set(
           WORKSPACE_CHANGE_KINDS.filter(

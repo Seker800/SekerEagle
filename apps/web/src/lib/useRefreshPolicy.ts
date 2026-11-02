@@ -58,11 +58,15 @@ export function useRefreshOnWorkspaceChanges(
     const value = client.getQueryData<WorkspaceRefreshObservation>(
       workspaceRefreshKey(ownerId, includePrivate),
     );
-    return value?.snapshot
+    return value?.snapshot ||
+      kinds.some((kind) => value?.commandChanges?.[libraryMode]?.[kind] !== undefined)
       ? JSON.stringify([
-          value.snapshot.epoch,
-          ...kinds.map((kind) => value.snapshot!.scopes[libraryMode][kind]),
-          kinds.includes('TASKS') ? value.snapshot.health : null,
+          value?.snapshot?.epoch,
+          ...kinds.map((kind) => [
+            value?.snapshot?.scopes[libraryMode][kind],
+            value?.commandChanges?.[libraryMode]?.[kind],
+          ]),
+          kinds.includes('TASKS') ? value?.snapshot?.health : null,
         ])
       : '';
   };

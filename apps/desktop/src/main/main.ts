@@ -54,6 +54,8 @@ import {
   OriginalDragExporter,
   parseAssetDragInput,
   parsePreparedDragToken,
+  parseLibraryDragRequest,
+  type OriginalLibraryMode,
 } from './original-drag-export';
 import {
   portableCacheRoot,
@@ -83,41 +85,6 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
-
-const WINDOWS_TITLE_BAR_CSS = `
-html,
-body {
-  height: 100% !important;
-  min-height: 0 !important;
-}
-body {
-  box-sizing: border-box !important;
-  height: calc(100vh - 32px) !important;
-  margin-top: 32px !important;
-}
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0 138px auto 0;
-  height: 32px;
-  z-index: 2147483647;
-  background: #1b1c1f;
-  -webkit-app-region: drag;
-}
-body > .workspace,
-body > #root,
-.standalone-eagle-shell,
-.standalone-eagle-shell > main,
-.standalone-eagle-shell > main > div:first-child {
-  height: 100% !important;
-  min-height: 0 !important;
-}
-.auth-loading,
-.auth-shell,
-.auth-intro {
-  min-height: 100% !important;
-}
-`;
 
 let portableDataRoot: string | null = null;
 let portableStartupFailed = false;
@@ -220,21 +187,28 @@ if (hasSingleInstanceLock)
             : null,
       };
     });
+    ipcMain.handle('desktop:app-info', (event) => {
+      assertTrustedIpcSender(event);
+      return { version: app.getVersion(), platform: process.platform };
+    });
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
     const originalDragExporter = new OriginalDragExporter({
       rootPath: path.join(app.getPath('temp'), 'SekerEagle', 'OriginalDrag'),
-      fetchOriginal: (assetId, signal) =>
-        currentBrowserSession().fetch(`/api/eagle/assets/${assetId}/original`, {
-          credentials: 'include',
-          signal,
-          headers: {
-            accept: 'application/octet-stream',
-            'accept-encoding': 'identity',
-            'cache-control': 'no-store',
+      fetchOriginal: (assetId, signal, libraryMode) =>
+        currentBrowserSession().fetch(
+          `/api/${libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${assetId}/original`,
+          {
+            credentials: 'include',
+            signal,
+            headers: {
+              accept: 'application/octet-stream',
+              'accept-encoding': 'identity',
+              'cache-control': 'no-store',
+            },
           },
-        }),
+        ),
     });
     await originalDragExporter.cleanupExpired().catch(() => undefined);
     clearPreparedOriginalDrags = registerOriginalDragIpc(owner, originalDragExporter);
@@ -546,7 +520,11 @@ function registerOriginalDragIpc(
     });
   };
 
-  ipcMain.handle('desktop:prepare-asset-drag', async (event, input: unknown) => {
+  const prepareDrag = async (
+    event: IpcMainInvokeEvent,
+    input: unknown,
+    libraryMode: OriginalLibraryMode,
+  ) => {
     assertTrustedIpcSender(event);
     if (dragInFlight) throw new Error('已有原文件正在准备，请稍候。');
     dragInFlight = true;
@@ -569,6 +547,7 @@ function registerOriginalDragIpc(
             event.sender.send('desktop:asset-drag-preparation-progress', progress);
           }
         },
+        libraryMode,
       );
       const icon = await app.getFileIcon(prepared.files[0], { size: 'normal' });
       const currentIdentity = await owner.get();
@@ -596,6 +575,14 @@ function registerOriginalDragIpc(
       if (dragPreparationController === preparationController) dragPreparationController = null;
       dragInFlight = false;
     }
+  };
+  ipcMain.handle('desktop:prepare-asset-drag', (event, input: unknown) =>
+    prepareDrag(event, input, 'MATERIAL'),
+  );
+  ipcMain.handle('desktop:prepare-library-asset-drag', (event, input: unknown) => {
+    assertTrustedIpcSender(event);
+    const request = parseLibraryDragRequest(input);
+    return prepareDrag(event, request.assetIds, request.libraryMode);
   });
 
   ipcMain.on('desktop:cancel-asset-drag-preparation', (event) => {
@@ -790,17 +777,9 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
     minHeight: 640,
     show: false,
     title: 'SekerEagle',
-    ...(process.platform === 'win32'
-      ? {
-          autoHideMenuBar: true,
-          titleBarStyle: 'hidden' as const,
-          titleBarOverlay: {
-            color: '#1b1c1f',
-            symbolColor: '#f5f5f5',
-            height: 32,
-          },
-        }
-      : {}),
+    // Native frame reserves client space for fixed viewers, editors and dialogs.
+    // A CSS margin cannot move viewport-positioned overlays below a title bar.
+    ...(process.platform === 'win32' ? { autoHideMenuBar: true } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -814,9 +793,6 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
   mainWindow = window;
   if (process.platform === 'win32') {
     window.removeMenu();
-    window.webContents.on('dom-ready', () => {
-      void window.webContents.insertCSS(WINDOWS_TITLE_BAR_CSS);
-    });
   }
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => {

@@ -1,3 +1,9 @@
+import {
+  BatchEditRendersDto,
+  BatchEditRenderContextDto,
+  BatchEditRenderContextResponseDto,
+} from './eagle-batch-edit';
+import { libraryCommandPayload } from './eagle-library-command';
 import { randomUUID } from 'node:crypto';
 import { EagleDuplicateService } from './eagle-duplicates.service';
 import {
@@ -19,10 +25,15 @@ import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
-import { EagleAssetPageResponseDto, EagleAssetResponseDto } from './eagle-asset-response.dto';
+import {
+  EagleAssetPageResponseDto,
+  EagleAssetResponseDto,
+  EagleAssetListResponseDto,
+} from './eagle-asset-response.dto';
 import {
   EagleOperationResultsResponseDto,
   EagleOperationSummaryResponseDto,
+  EagleDuplicateAdmissionResponseDto,
 } from './eagle-operation-response.dto';
 import { Optional } from '@nestjs/common';
 import { SendEagleAssetsDto } from './eagle.dto';
@@ -123,11 +134,15 @@ export class EagleController {
     );
   }
   @Post('duplicates/scan')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleDuplicateAdmissionResponseDto })
   @UseGuards(BrowserOriginGuard)
   scanDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: DuplicateScanDto) {
     return this.duplicates!.scan(principal, input.operationId, input.onlyIfUnattempted);
   }
   @Post('duplicates/cleanup')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleDuplicateAdmissionResponseDto })
   @UseGuards(BrowserOriginGuard)
   cleanupDuplicates(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -135,13 +150,18 @@ export class EagleController {
   ) {
     return this.duplicates!.cleanup(principal, input);
   }
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('duplicates/ignore')
   @UseGuards(BrowserOriginGuard)
   ignoreDuplicates(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: DuplicateIgnoreDto,
   ) {
-    return this.duplicates!.ignore(principal.sub, principal.canViewPrivate, input);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'DUPLICATE_IGNORE',
+      payload: libraryCommandPayload(input),
+    });
   }
 
   @ApiCreatedResponse({ type: EagleOperationSummaryResponseDto })
@@ -219,6 +239,38 @@ export class EagleController {
   @ApiOkResponse({ type: EagleMediaCapabilitiesDto })
   getMediaCapabilities() {
     return this.mediaCapabilities.getCapabilities();
+  }
+
+  @Post('assets/batch/edit-render-context')
+  @HttpCode(200)
+  @ApiOkResponse({ type: BatchEditRenderContextResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  batchEditRenderContext(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: BatchEditRenderContextDto,
+  ) {
+    return this.eagle.batchEditRenderContext(
+      principal.sub,
+      input.assetIds,
+      principal.canViewPrivate,
+    );
+  }
+
+  @Post('assets/batch/edit-renders')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  batchEditRenders(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: BatchEditRendersDto,
+  ) {
+    const { assetIds, operationId, ...payload } = input;
+    return this.operations!.enqueueCommand(principal, {
+      operationId,
+      type: 'BATCH_EDIT_RENDER',
+      assetIds,
+      payload: libraryCommandPayload(payload),
+    });
   }
 
   @Post('assets/:assetId/edit-renders')
@@ -515,23 +567,52 @@ export class EagleController {
     return new StreamableFile(media.stream!);
   }
 
+  @Post('assets/facts')
+  @UseGuards(BrowserOriginGuard)
+  @HttpCode(200)
+  @ApiOkResponse({ type: [EagleAssetListResponseDto] })
+  listAssetFacts(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: EagleAssetIdsDto,
+    @Query('publicOnly') publicOnly?: string,
+  ) {
+    return this.eagle.listAssetFacts(
+      principal.sub,
+      input.assetIds,
+      principal.canViewPrivate && publicOnly !== 'true',
+    );
+  }
+
   @Patch('assets/batch')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchUpdate(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchUpdateEagleAssetsDto,
   ) {
-    return this.eagle.batchUpdate(principal.sub, input, principal.canViewPrivate);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'ASSET_UPDATE',
+      assetIds: input.assets.map(({ assetId }) => assetId),
+      payload: libraryCommandPayload(input),
+    });
   }
 
   @Patch('assets/:assetId')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   updateAsset(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Body() input: UpdateEagleAssetDto,
   ) {
-    return this.eagle.updateAsset(principal.sub, assetId, input, principal.canViewPrivate);
+    const { rowVersion, ...changes } = input;
+    return this.operations!.enqueueCommand(principal, {
+      type: 'ASSET_UPDATE',
+      assetIds: [assetId],
+      payload: libraryCommandPayload({ ...changes, assets: [{ assetId, rowVersion }] }),
+    });
   }
 
   @Get('privacy-settings')
@@ -542,30 +623,52 @@ export class EagleController {
 
   @Put('privacy-settings')
   @UseGuards(BrowserOriginGuard)
-  @ApiOkResponse({ type: EaglePrivacySettingsDto })
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   updatePrivacySettings(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: UpdateEaglePrivacySettingsDto,
   ) {
-    return this.privacy.updateSettings(principal.sub, input);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'PRIVACY_SETTINGS',
+      payload: libraryCommandPayload(input),
+    });
   }
 
   @Post('assets/trash')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   trashAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, false, principal.canViewPrivate);
+    return this.operations!.enqueue(principal, {
+      operationId: randomUUID(),
+      kind: 'TRASH',
+      assetIds: input.assetIds,
+    });
   }
 
   @Post('assets/batch/trash')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchTrash(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, false, principal.canViewPrivate);
+    return this.operations!.enqueue(principal, {
+      operationId: randomUUID(),
+      kind: 'TRASH',
+      assetIds: input.assetIds,
+    });
   }
 
   @Post('assets/batch/restore')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchRestore(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, true, principal.canViewPrivate);
+    return this.operations!.enqueue(principal, {
+      operationId: randomUUID(),
+      kind: 'RESTORE',
+      assetIds: input.assetIds,
+    });
   }
 
   @ApiOkResponse({ type: EagleAssetPageResponseDto })
@@ -582,8 +685,14 @@ export class EagleController {
 
   @Post('trash/restore')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   restoreAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, true, principal.canViewPrivate);
+    return this.operations!.enqueue(principal, {
+      operationId: randomUUID(),
+      kind: 'RESTORE',
+      assetIds: input.assetIds,
+    });
   }
 
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
@@ -619,21 +728,28 @@ export class EagleController {
 
   @Patch(['tags/:tagId', 'manual-tags/:tagId'])
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   updateTag(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
     @Body() input: UpdateManualTagDto,
   ) {
-    return this.eagle.updateManualTag(principal.sub, tagId, input, principal.canViewPrivate);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'TAG_UPDATE',
+      payload: libraryCommandPayload({ tagId, input }),
+    });
   }
 
   @Delete(['tags/:tagId', 'manual-tags/:tagId'])
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   deleteTag(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
   ) {
-    return this.eagle.deleteManualTag(principal.sub, tagId);
+    return this.operations!.enqueueCommand(principal, { type: 'TAG_DELETE', payload: { tagId } });
   }
 
   @Get(['tag-groups', 'manual-tag-groups'])
@@ -662,11 +778,16 @@ export class EagleController {
 
   @Delete(['tag-groups/:groupId', 'manual-tag-groups/:groupId'])
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   deleteTagGroup(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
   ) {
-    return this.eagle.deleteManualTagGroup(principal.sub, groupId);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'TAG_GROUP_DELETE',
+      payload: { groupId },
+    });
   }
 
   @Get('ai-tags')
@@ -676,41 +797,50 @@ export class EagleController {
 
   @Put('assets/:assetId/tags')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   replaceAssetTags(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Body() input: ReplaceAssetTagsDto,
   ) {
-    return this.eagle.replaceAssetTags(
-      principal.sub,
-      assetId,
-      input.tagIds,
-      principal.canViewPrivate,
-    );
+    return this.operations!.enqueueCommand(principal, {
+      type: 'ASSET_TAGS_REPLACE',
+      assetIds: [assetId],
+      payload: libraryCommandPayload(input),
+    });
   }
 
   @Put('assets/:assetId/manual-tags')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   replaceAssetManualTags(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Body() input: ReplaceAssetTagsDto,
   ) {
-    return this.eagle.replaceAssetTags(
-      principal.sub,
-      assetId,
-      input.tagIds,
-      principal.canViewPrivate,
-    );
+    return this.operations!.enqueueCommand(principal, {
+      type: 'ASSET_TAGS_REPLACE',
+      assetIds: [assetId],
+      payload: libraryCommandPayload(input),
+    });
   }
 
   @Post('assets/batch/manual-tags')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   batchChangeManualTags(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchChangeEagleManualTagsDto,
   ) {
-    return this.eagle.batchChangeManualTags(principal.sub, input, principal.canViewPrivate);
+    const { assetIds, ...changes } = input;
+    return this.operations!.enqueueCommand(principal, {
+      type: 'ASSET_TAGS',
+      assetIds,
+      payload: libraryCommandPayload(changes),
+    });
   }
 
   @Get('smart-folders')

@@ -256,6 +256,30 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
       ['material-page', '/api/eagle/assets?limit=40'],
       ['count-all', '/api/photos/assets/filter-count', { query: { version: 2, conditions: [] } }],
       ['count-rating', '/api/photos/assets/filter-count', { query: rating }],
+      [
+        'count-captured',
+        '/api/photos/assets/filter-count',
+        {
+          query: {
+            version: 2,
+            conditions: [
+              {
+                id: 'capture',
+                match: 'ALL',
+                result: 'MATCH',
+                rules: [
+                  {
+                    id: 'date',
+                    field: 'CAPTURED_AT',
+                    operator: 'BETWEEN',
+                    value: ['2020-01-01', '2020-02-01'],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
       ['statistics', '/api/photos/photography/statistics?grain=month&groupBy=camera'],
       ['facets', '/api/photos/photography/facets'],
       ['people', '/api/photos/photography/people?view=ALL&projection=cards'],
@@ -312,6 +336,7 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
         'material-page': 'page',
         'count-all': 'count',
         'count-rating': 'count',
+        'count-captured': 'count',
         statistics: 'statistics',
         facets: 'facets',
         people: 'peopleCounts',

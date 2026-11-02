@@ -6,6 +6,9 @@ test('reconciler creates every missing current-version image task', async () => 
   const created: unknown[] = [];
   const service = new EagleProcessingService(
     {
+      async $transaction(work: (tx: never) => Promise<unknown>) {
+        return work(this as never);
+      },
       eagleAsset: {
         findMany: async () => [
           { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 1, width: 100, height: 100 },
@@ -77,7 +80,7 @@ test('reconciler creates every missing current-version image task', async () => 
   );
 });
 
-test('reconciler scans beyond the first page without exceeding its creation bound', async () => {
+test('reconciler automatically schedules every missing task beyond the first page', async () => {
   const assets = Array.from({ length: 501 }, (_, index) => ({
     id: `asset-${String(index).padStart(3, '0')}`,
     ownerId: 'owner-1',
@@ -88,6 +91,9 @@ test('reconciler scans beyond the first page without exceeding its creation boun
   let page = 0;
   const service = new EagleProcessingService(
     {
+      async $transaction(work: (tx: never) => Promise<unknown>) {
+        return work(this as never);
+      },
       eagleAsset: {
         findMany: async () => (page++ === 0 ? assets.slice(0, 500) : assets.slice(500)),
       },
@@ -103,7 +109,7 @@ test('reconciler scans beyond the first page without exceeding its creation boun
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1003 });
+  assert.deepEqual(result, { scanned: 501, created: 1503, skipped: 0, remaining: 0 });
   assert.equal(page, 2);
 });
 
@@ -112,6 +118,9 @@ test('reconciler skips an AI job whose completed result survived job pruning', a
   const completionQueries: unknown[] = [];
   const service = new EagleProcessingService(
     {
+      async $transaction(work: (tx: never) => Promise<unknown>) {
+        return work(this as never);
+      },
       eagleAsset: {
         findMany: async () => [
           { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 2, width: 100, height: 100 },

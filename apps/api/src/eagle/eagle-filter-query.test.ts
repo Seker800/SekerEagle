@@ -171,3 +171,110 @@ test('semantic predicates participate in ALL, ANY and group negation without esc
       assert.throws(() => buildEagleFilterWhere(query, 'MATERIAL', scene), /照片/);
     }
 });
+
+test('capture date filters actual metadata, includes the complete last day and rejects material mode', () => {
+  const query = readEagleFilterQuery({
+    version: 2,
+    conditions: [
+      {
+        id: 'date',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [
+          {
+            id: 'capture',
+            field: 'CAPTURED_AT',
+            operator: 'BETWEEN',
+            value: ['2016-01-01', '2026-06-02'],
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(buildEagleFilterWhere(query, 'PHOTO'), {
+    AND: [
+      {
+        AND: [
+          {
+            photoMetadata: {
+              is: {
+                capturedAt: {
+                  gte: new Date('2016-01-01T00:00:00.000Z'),
+                  lte: new Date('2026-06-02T23:59:59.999Z'),
+                },
+              },
+            },
+          },
+        ],
+      },
+    ],
+  });
+  assert.throws(() => buildEagleFilterWhere(query, 'MATERIAL'), /摄影筛选/);
+});
+test('date-only ranges include the complete end date even when entered in reverse', () => {
+  for (const value of [
+    ['2016-01-01', '2026-06-02'],
+    ['2026-06-02', '2016-01-01'],
+  ]) {
+    const query = readEagleFilterQuery({
+      version: 2,
+      conditions: [
+        {
+          id: 'date',
+          match: 'ALL',
+          result: 'MATCH',
+          rules: [{ id: 'modified', field: 'MODIFIED_AT', operator: 'BETWEEN', value }],
+        },
+      ],
+    });
+    assert.deepEqual(buildEagleFilterWhere(query), {
+      AND: [
+        {
+          AND: [
+            {
+              updatedAt: {
+                gte: new Date('2016-01-01T00:00:00.000Z'),
+                lte: new Date('2026-06-02T23:59:59.999Z'),
+              },
+            },
+          ],
+        },
+      ],
+    });
+  }
+});
+
+test('explicit timestamp ranges retain their exact instant rather than expanding to a day', () => {
+  const query = readEagleFilterQuery({
+    version: 2,
+    conditions: [
+      {
+        id: 'date',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [
+          {
+            id: 'added',
+            field: 'ADDED_AT',
+            operator: 'BETWEEN',
+            value: ['2026-06-02T10:00:00+08:00', '2026-06-02T11:00:00+08:00'],
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(buildEagleFilterWhere(query), {
+    AND: [
+      {
+        AND: [
+          {
+            libraryAddedAt: {
+              gte: new Date('2026-06-02T02:00:00Z'),
+              lte: new Date('2026-06-02T03:00:00Z'),
+            },
+          },
+        ],
+      },
+    ],
+  });
+});

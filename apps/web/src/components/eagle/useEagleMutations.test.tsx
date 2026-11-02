@@ -129,3 +129,140 @@ it('partial tag failures drain writes, refresh committed results, and retry only
   view.unmount();
   client.clear();
 });
+
+it('releases a queued batch tag mutation without waiting for list reads or desktop cache and tracks its receipt', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  const summary = {
+    id: 'metadata-command',
+    kind: 'METADATA_COMMAND',
+    libraryMode: 'MATERIAL',
+    total: 2,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+    running: 0,
+    queued: 2,
+    state: 'QUEUED',
+    errors: [],
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json(summary)),
+  );
+  const invalidate = vi
+    .spyOn(client, 'invalidateQueries')
+    .mockReturnValue(new Promise(() => undefined));
+  const applied = vi.fn();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="A" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const view = renderHook(
+    () =>
+      useEagleMutations('', keys, {
+        onMetadataSaved: vi.fn(),
+        onBatchTagsApplied: applied,
+        onAssetPrivacyChanged: vi.fn(),
+        onOperationStarted: vi.fn(),
+        onSmartFolderCreated: vi.fn(),
+        onSmartFolderUpdated: vi.fn(),
+      }),
+    { wrapper },
+  );
+  await act(async () => {
+    expect(
+      await view.result.current.batchTagMutation.mutateAsync({
+        assetIds: ['a', 'b'],
+        addTagIds: ['tag'],
+      }),
+    ).toEqual(summary);
+  });
+  expect(view.result.current.batchTagMutation.isPending).toBe(false);
+  expect(applied).toHaveBeenCalledOnce();
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: keys.operations });
+  view.unmount();
+  client.clear();
+});
+
+it('chains a rapid metadata edit to its own accepted rating receipt without inventing row versions or waiting for execution', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  let count = 0;
+  const fetchMock = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) =>
+    json({
+      id: `command-${++count}`,
+      kind: 'METADATA_COMMAND',
+      commandType: 'ASSET_UPDATE',
+      libraryMode: 'MATERIAL',
+      total: 1,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      running: 0,
+      queued: 1,
+      state: 'QUEUED',
+      errors: [],
+    }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  vi.spyOn(client, 'invalidateQueries').mockReturnValue(new Promise(() => undefined));
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="A" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const view = renderHook(
+    () =>
+      useEagleMutations('', keys, {
+        onMetadataSaved: vi.fn(),
+        onBatchTagsApplied: vi.fn(),
+        onAssetPrivacyChanged: vi.fn(),
+        onOperationStarted: vi.fn(),
+        onSmartFolderCreated: vi.fn(),
+        onSmartFolderUpdated: vi.fn(),
+      }),
+    { wrapper },
+  );
+  await act(async () => {
+    await view.result.current.ratingMutation.mutateAsync({
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      rating: 5,
+    });
+  });
+  await act(async () => {
+    await view.result.current.metadataMutation.mutateAsync({
+      assetId: 'a',
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      input: { description: 'new description' },
+      revision: 1,
+    });
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(fetchMock.mock.calls[1][1]?.body as string)).toEqual({
+    description: 'new description',
+    rowVersion: 1,
+    predecessorOperationIds: ['command-1'],
+  });
+  expect(view.result.current.metadataMutation.isPending).toBe(false);
+  await act(async () => {
+    await view.result.current.ratingMutation.mutateAsync({
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      rating: 4,
+    });
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(JSON.parse(fetchMock.mock.calls[2][1]?.body as string)).toEqual({
+    rating: 4,
+    rowVersion: 1,
+    predecessorOperationIds: ['command-2'],
+  });
+
+  view.unmount();
+  client.clear();
+});

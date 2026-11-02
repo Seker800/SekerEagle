@@ -111,6 +111,7 @@ const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
   SOURCE_URL: IconLink,
   ADDED_AT: IconCalendar,
   MODIFIED_AT: IconCalendar,
+  CAPTURED_AT: IconCalendar,
 };
 export function EagleQuickFilterBar(props: EagleQuickFilterBarProps) {
   const { ownerId, libraryMode } = useLibraryWorkspace();
@@ -451,6 +452,7 @@ function renderFieldControl(
     case 'FILE_SIZE':
     case 'DURATION':
       return <RangeControl field={field} value={value} onChange={onChange} />;
+    case 'CAPTURED_AT':
     case 'ADDED_AT':
     case 'MODIFIED_AT':
       return <DateControl field={field} value={value} onChange={onChange} />;
@@ -725,6 +727,13 @@ function DateControl({
     onChange({ ...value, dates: { ...value.dates, [field]: next } });
   return (
     <div className={styles.dateControl}>
+      <p className={styles.dateHint}>
+        {field === 'CAPTURED_AT'
+          ? t('按拍摄时间筛选，拍摄日期未知的照片不匹配。')
+          : field === 'MODIFIED_AT'
+            ? t('按在 SekerEagle 中的更新时间筛选，不是拍摄时间。')
+            : t('按加入 SekerEagle 的时间筛选，不是拍摄时间。')}
+      </p>
       <label>
         {' ' + t('从') + ' '}
         <input

@@ -138,8 +138,8 @@ test('explicit search date order uses date and ID for both ORDER BY and continua
     );
     const field = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
     assert.ok(sql.includes(`ORDER BY asset."${field}" DESC,asset.id DESC`));
-    assert.ok(sql.includes(`AND (asset."${field}",asset.id)<`));
-    assert.ok(sql.includes(`asset."${field}" AS "orderDate"`));
+    assert.ok(sql.includes(`(asset."${field}",asset.id)<`));
+    assert.ok(sql.includes(`asset."${field}" AS "libraryAddedAt"`));
     assert.ok(sql.includes('asset."ownerId"='));
     assert.ok(sql.includes('asset."libraryMode"='));
     assert.ok(sql.includes('asset."isPrivate"=false'));
@@ -176,22 +176,13 @@ test('date-ordered mobile searches do not sort and aggregate every matching vect
   assert.match(sql, /embedding\."assetRevision"=asset\."mediaRevision"/);
 });
 
-test('date search crosses nonmatching windows without truncating sparse results or leaking internal flags', async () => {
+test('date search returns the matched database page without exposing internal fields', async () => {
   const when = new Date('2026-10-01T00:00:00Z');
   let calls = 0;
   const service = new EagleImageSearchService(
     {
-      $queryRaw: async (q: { values: unknown[] }) => {
+      $queryRaw: async () => {
         calls++;
-        if (calls === 1)
-          return Array.from({ length: 64 }, (_, i) => ({
-            assetId: `skip-${i}`,
-            tier: 0,
-            similarity: 0,
-            libraryAddedAt: when,
-            matches: false,
-          }));
-        assert.ok(q.values.includes('skip-63'));
         return [{ assetId: 'hit', tier: 1, similarity: 0.8, libraryAddedAt: when, matches: true }];
       },
     } as never,
@@ -212,7 +203,7 @@ test('date search crosses nonmatching windows without truncating sparse results 
     ),
     [{ assetId: 'hit', tier: 1, similarity: 0.8, libraryAddedAt: when.toISOString() }],
   );
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
 });
 
 test('incompatible vector spaces never invoke inference or masquerade as semantic search', async () => {

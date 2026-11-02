@@ -1,3 +1,4 @@
+import { isAcceptedOperation, observeAcceptedOperation } from '../../lib/accepted-operation';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { applyPhotoPersonMerge } from './photo-person-merge-cache';
 import { ApiError } from '../../lib/api-error';
@@ -198,6 +199,13 @@ export function PhotoPeopleReview({
           targetId: target.id,
           people: chosen.map((p) => ({ id: p.id, rowVersion: p.rowVersion })),
         });
+        if (isAcceptedOperation(merged)) {
+          if (ownerId) observeAcceptedOperation(client, ownerId, 'PHOTO', merged);
+          setResult(t('任务已加入后台队列，可在任务中心查看进度。'));
+          setSelected(new Set());
+          setTargetId('');
+          return;
+        }
         applyPhotoPersonMerge(client, ownerId, merged);
         privacy = merged.marksAssetsPrivate && chosen.some((p) => !p.marksAssetsPrivate);
         setResult(t('人物已合并'));
@@ -211,6 +219,13 @@ export function PhotoPeopleReview({
           secondVersion: b.rowVersion,
           decision: 'DIFFERENT',
         });
+        if (isAcceptedOperation(decision)) {
+          if (ownerId) observeAcceptedOperation(client, ownerId, 'PHOTO', decision);
+          setResult(t('任务已加入后台队列，可在任务中心查看进度。'));
+          setSelected(new Set());
+          setTargetId('');
+          return;
+        }
         updatePeople(
           new Set(),
           new Map((decision.people ?? []).map((p) => [p.id, { rowVersion: p.rowVersion }])),

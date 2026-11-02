@@ -97,6 +97,7 @@ test('review endpoints derive owner/private visibility from browser principal an
         calls.push(args);
       },
     } as never,
+    { enqueueCommand: (...args: unknown[]) => calls.push(args) } as never,
   );
   const input = Object.assign(new PersonReviewDto(), {
     firstId: '00000000-0000-4000-8000-000000000001',
@@ -112,7 +113,8 @@ test('review endpoints derive owner/private visibility from browser principal an
     { pairs: [] },
   );
   assert.deepEqual(calls[0], ['trusted-owner', false, undefined]);
-  assert.equal(calls[1]?.[0], 'trusted-owner');
+  assert.deepEqual(calls[1]?.[0], { sub: 'trusted-owner', canViewPrivate: false });
+  assert.deepEqual(calls[1]?.[1], { type: 'PHOTO_PEOPLE_REVIEW', payload: { ...input } });
   assert.deepEqual(calls[2], ['trusted-owner', false]);
   assert.equal((await validate(input)).length, 0);
   assert(
@@ -188,9 +190,13 @@ test('bulk merge derives owner and privacy, guards origin and validates every su
     { mergeSelection: (...args: unknown[]) => calls.push(args) } as never,
     {} as never,
     {} as never,
+    { enqueueCommand: (...args: unknown[]) => calls.push(args) } as never,
   );
   c.mergeSelected({ sub: 'trusted', canViewPrivate: false } as never, good);
-  assert.deepEqual(calls[0], ['trusted', false, good.targetId, good.people]);
+  assert.deepEqual(calls[0], [
+    { sub: 'trusted', canViewPrivate: false },
+    { type: 'PHOTO_PEOPLE_MERGE_SELECTED', payload: good },
+  ]);
   const { GUARDS_METADATA } = await import('@nestjs/common/constants');
   const { BrowserOriginGuard } = await import('../auth/browser-origin.guard');
   const method = Object.getOwnPropertyDescriptor(

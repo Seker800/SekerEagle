@@ -1,3 +1,4 @@
+import type { OperationResponse } from './accepted-operation';
 import type {
   BackgroundSchedule,
   TaskCenterOverview,
@@ -24,14 +25,14 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
         body: JSON.stringify(policy),
       }),
     startEagleTaskFamily: (family: TaskFamily) =>
-      request<{ queued: number }>(
+      request<OperationResponse<{ queued: number }>>(
         '/start',
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ family }),
         },
-        690_000,
+        30_000,
       ),
     fetchEagleTaskCenter: (signal?: AbortSignal) => request<TaskCenterOverview>('', { signal }),
     fetchEagleTaskHistory: (signal?: AbortSignal) =>
@@ -49,7 +50,7 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
         }),
       }),
     retryEagleTaskFamily: (family: TaskFamily) =>
-      request<{ retried: number }>('/retry', {
+      request<OperationResponse<{ retried: number }>>('/retry', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ family }),

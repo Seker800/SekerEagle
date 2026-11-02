@@ -185,6 +185,8 @@ model EagleAssetOperation {
   libraryMode LibraryMode
   kind String
   inputIds String[]
+  commandPayload Json?
+  cancelRequestedAt DateTime?
   undoOfId String? @unique
   undoSource EagleAssetOperation? @relation("EagleOperationUndo", fields: [ownerId, libraryMode, undoOfId], references: [ownerId, libraryMode, id], onDelete: NoAction, onUpdate: NoAction, map: "EagleAssetOperation_undo_scope_fkey")
   undoRequests EagleAssetOperation[] @relation("EagleOperationUndo")
@@ -196,6 +198,7 @@ model EagleAssetOperation {
   updatedAt DateTime @updatedAt
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   items EagleAssetOperationItem[]
+  editRenderReferences EagleEditRender[]
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, createdAt])
   @@index([libraryMode, kind, lastClaimedAt, createdAt])
@@ -1732,11 +1735,15 @@ model EagleEditRender {
   sourceRowVersion Int
   recipe Json
   lut String?
+  commandOperationId String?
+  commandOperation EagleAssetOperation? @relation(fields: [ownerId, libraryMode, commandOperationId], references: [ownerId, libraryMode, id], onDelete: NoAction, onUpdate: NoAction)
   resultAssetId String?
   job EagleAssetProcessingJob @relation(fields: [ownerId, libraryMode, jobId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   result EagleAsset? @relation(fields: [ownerId, libraryMode, resultAssetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   @@unique([ownerId, libraryMode, requestId])
   @@unique([ownerId, libraryMode, jobId])
+  @@index([ownerId, libraryMode, resultAssetId])
+  @@index([ownerId, libraryMode, commandOperationId])
 }
 
 // Intrinsic facts carried across a mode boundary; these are not active PHOTO relationships.

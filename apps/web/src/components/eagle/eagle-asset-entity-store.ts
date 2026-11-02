@@ -93,6 +93,16 @@ export class EagleAssetEntityStore {
     if (changed) this.#emit();
   }
 
+  removeMany(ids: ReadonlySet<string>) {
+    let changed = false;
+    for (const id of ids) {
+      changed = this.#entities.delete(id) || changed;
+      this.#metadataUpdatedAt.delete(id);
+      this.#mediaUpdatedAt.delete(id);
+    }
+    if (changed) this.#emit();
+  }
+
   retainOnly(ids: ReadonlySet<string>) {
     let changed = false;
     for (const id of this.#entities.keys())

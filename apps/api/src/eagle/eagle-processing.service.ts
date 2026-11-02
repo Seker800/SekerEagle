@@ -195,8 +195,13 @@ export class EagleProcessingService {
     if (!retried) throw new NotFoundException('没有可重试的处理任务。');
     return { retried };
   }
-  async retryFailed(ownerId: string, includePrivate = false) {
+  async retryFailed(
+    ownerId: string,
+    includePrivate = false,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
     const retried = await this.prisma.$transaction(async (transaction) => {
+      await beforePublish?.(transaction);
       const rows = await transaction.$queryRaw<Array<{ retried: bigint }>>(Prisma.sql`
         WITH retried AS (
           UPDATE "EagleMediaJob" AS job
@@ -237,13 +242,17 @@ export class EagleProcessingService {
         )
         SELECT COUNT(*)::bigint AS retried FROM retried
       `);
+      await beforePublish?.(transaction);
       return Number(rows[0]?.retried ?? 0n);
     });
     return { retried };
   }
-  async reconcile(ownerId: string, includePrivate = false) {
+  async reconcile(
+    ownerId: string,
+    includePrivate = false,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
     const pageSize = 500;
-    const creationLimit = 500;
     let cursor: string | undefined;
     let scanned = 0;
     let created = 0;
@@ -329,28 +338,32 @@ export class EagleProcessingService {
         return jobs;
       });
       missingCount += missing.length + repairIds.length;
-      const retryIds = repairIds.slice(0, Math.max(0, creationLimit - created));
-      if (retryIds.length) {
-        const repaired = await this.prisma.eagleAssetProcessingJob.updateMany({
-          where: {
-            id: { in: retryIds },
-            ownerId,
-            libraryMode: this.libraryMode,
-            status: 'COMPLETED',
-            asset: { deletedAt: null },
-          },
-          data: mediaRequeueData(),
-        });
-        created += repaired.count;
-      }
-      const creatable = missing.slice(0, Math.max(0, creationLimit - created));
-      if (creatable.length) {
-        const result = await this.prisma.eagleAssetProcessingJob.createMany({
-          data: creatable.map((row) => inLibrary(this.libraryMode, row)),
-          skipDuplicates: true,
-        });
-        created += result.count;
-      }
+      await this.prisma.$transaction(async (transaction) => {
+        await beforePublish?.(transaction);
+        const retryIds = repairIds;
+        if (retryIds.length) {
+          const repaired = await transaction.eagleAssetProcessingJob.updateMany({
+            where: {
+              id: { in: retryIds },
+              ownerId,
+              libraryMode: this.libraryMode,
+              status: 'COMPLETED',
+              asset: { deletedAt: null },
+            },
+            data: mediaRequeueData(),
+          });
+          created += repaired.count;
+        }
+        const creatable = missing;
+        if (creatable.length) {
+          const result = await transaction.eagleAssetProcessingJob.createMany({
+            data: creatable.map((row) => inLibrary(this.libraryMode, row)),
+            skipDuplicates: true,
+          });
+          created += result.count;
+        }
+        await beforePublish?.(transaction);
+      });
       cursor = assets.at(-1)?.id;
       if (assets.length < pageSize) break;
     } while (cursor);

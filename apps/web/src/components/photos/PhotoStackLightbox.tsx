@@ -1,3 +1,4 @@
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { IconStar, IconStarFilled, IconLayersSubtract } from '@tabler/icons-react';
 import { PhotoStackFilmstrip, stackAssetKey } from './PhotoStackFilmstrip';
@@ -52,7 +53,8 @@ export function PhotoStackLightbox({
     setPending(true);
     setError(null);
     try {
-      await updatePhotoGroup(stack.id, { bestAssetId: currentId });
+      const result = await updatePhotoGroup(stack.id, { bestAssetId: currentId });
+      if (observeAcceptedOperation(client, ownerId, 'PHOTO', result)) return;
       await client.invalidateQueries({ queryKey: createEagleQueryKeys(ownerId, 'PHOTO').root });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
@@ -103,7 +105,11 @@ export function PhotoStackLightbox({
               setPending(true);
               setError(null);
               void updatePhotoGroup(stack.id, { dismissed: true })
-                .then(async () => {
+                .then(async (result) => {
+                  if (observeAcceptedOperation(client, ownerId, 'PHOTO', result)) {
+                    onClose();
+                    return;
+                  }
                   await client.invalidateQueries({
                     queryKey: createEagleQueryKeys(ownerId, 'PHOTO').root,
                   });

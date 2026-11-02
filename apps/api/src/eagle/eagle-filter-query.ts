@@ -158,6 +158,8 @@ function buildRuleWhere(rule: EagleFilterRule): AssetSearchWhere {
       return { libraryAddedAt: buildDateFilter(rule) };
     case 'MODIFIED_AT':
       return { updatedAt: buildDateFilter(rule) };
+    case 'CAPTURED_AT':
+      return { photoMetadata: { is: { capturedAt: buildDateFilter(rule) } } };
   }
   throw new BadRequestException('当前部署不支持该筛选字段。');
 }
@@ -322,7 +324,14 @@ function buildDateFilter(rule: EagleFilterRule): Prisma.DateTimeFilter {
   if (rule.operator === 'BETWEEN') {
     const [start, end] = dates;
     if (!start || !end) throw new BadRequestException('日期区间缺少结束日期。');
-    return start <= end ? { gte: start, lte: end } : { gte: end, lte: start };
+    const reversed = start > end;
+    const upper = reversed ? start : end;
+    const upperValue = values[reversed ? 0 : 1];
+    // Date inputs name a whole calendar day; explicit timestamps keep their exact instant.
+    const inclusiveEnd = /^\d{4}-\d{2}-\d{2}$/.test(String(upperValue))
+      ? new Date(upper.getTime() + 86_400_000 - 1)
+      : upper;
+    return { gte: reversed ? end : start, lte: inclusiveEnd };
   }
   return { gt: dates[0] };
 }

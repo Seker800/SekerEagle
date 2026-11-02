@@ -1,3 +1,5 @@
+import { readBatchEditRenderContext } from './eagle-batch-edit';
+import { runLibraryTransaction } from './eagle-library-command';
 import { isDatabaseBusy } from '@sekereagle/library-persistence';
 import { OPERATION_EMPTY_TRASH_BATCH_SIZE } from './eagle-operation-settings';
 import {
@@ -101,6 +103,15 @@ export class EagleService {
     @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode,
   ) {}
 
+  batchEditRenderContext(ownerId: string, assetIds: string[], includePrivate = false) {
+    return readBatchEditRenderContext(
+      this.prisma,
+      ownerId,
+      this.libraryMode,
+      assetIds,
+      includePrivate,
+    );
+  }
   createEditRender(
     ownerId: string,
     assetId: string,
@@ -536,8 +547,10 @@ export class EagleService {
     const ranked: Array<{ row: AssetListRecord; position: ImageSearchPosition }> = [];
     let after = startPosition;
     let exhausted = false;
-    const candidateBatchSize = 250;
     while (ranked.length <= query.limit && !exhausted) {
+      // Ranking already applies the full predicate. Hydrate only this page and
+      // one continuation row; concurrent invalidations can still request more.
+      const candidateBatchSize = query.limit + 1 - ranked.length;
       const candidates = await this.imageSearch!.rankPage(
         ownerId,
         search,
@@ -890,6 +903,20 @@ export class EagleService {
     );
   }
 
+  async listAssetFacts(ownerId: string, assetIds: string[], includePrivate = false) {
+    const assets = await this.prisma.eagleAsset.findMany({
+      where: {
+        ownerId,
+        libraryMode: this.libraryMode,
+        id: { in: assetIds },
+        deletedAt: null,
+        ...privateVisibilityWhere(includePrivate),
+      },
+      include: assetListInclude,
+    });
+    return this.withLivePhotoMotions(ownerId, assets, includePrivate);
+  }
+
   async getAsset(
     ownerId: string,
     assetId: string,
@@ -1001,9 +1028,29 @@ export class EagleService {
       );
   }
 
-  async batchUpdate(ownerId: string, input: BatchUpdateEagleAssetsDto, includePrivate = false) {
+  async assertCommandTags(ownerId: string, tagIds: string[], groupId?: string | null) {
+    const ids = [...new Set(tagIds)];
+    const count = await this.prisma.eagleManualTag.count({
+      where: { ownerId, libraryMode: this.libraryMode, id: { in: ids } },
+    });
+    if (count !== ids.length) throw new NotFoundException('一个或多个标签不存在。');
+    if (
+      groupId &&
+      !(await this.prisma.eagleManualTagGroup.count({
+        where: { ownerId, libraryMode: this.libraryMode, id: groupId },
+      }))
+    )
+      throw new NotFoundException('标签组不存在。');
+  }
+
+  async batchUpdate(
+    ownerId: string,
+    input: BatchUpdateEagleAssetsDto,
+    includePrivate = false,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
     const { data, annotation } = buildAssetChanges(input);
-    const updatedAssets = await this.prisma.$transaction(async (transaction) => {
+    const updatedAssets = await runLibraryTransaction(db, async (transaction) => {
       const current = await transaction.eagleAsset.findMany({
         where: {
           ownerId,
@@ -1051,10 +1098,11 @@ export class EagleService {
     ownerId: string,
     input: BatchChangeEagleManualTagsDto,
     includePrivate = false,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
     const tagIds = [...new Set([...input.addTagIds, ...input.removeTagIds])];
     const [assets, tags] = await Promise.all([
-      findSearchAssets(this.prisma, {
+      findSearchAssets(db, {
         where: {
           ownerId,
           id: { in: input.assetIds },
@@ -1064,7 +1112,7 @@ export class EagleService {
         },
         select: { id: true },
       }),
-      this.prisma.eagleManualTag.findMany({
+      db.eagleManualTag.findMany({
         where: { ownerId, id: { in: tagIds }, libraryMode: this.libraryMode },
         select: { id: true },
       }),
@@ -1072,7 +1120,7 @@ export class EagleService {
     if (assets.length !== input.assetIds.length || tags.length !== tagIds.length) {
       throw new NotFoundException('一个或多个素材或标签不存在。');
     }
-    const privacyChangedAssetCount = await this.prisma.$transaction(async (transaction) => {
+    const privacyChangedAssetCount = await runLibraryTransaction(db, async (transaction) => {
       await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
       if (input.clearAll) {
         const where = { ownerId, assetId: { in: input.assetIds } };
@@ -1307,8 +1355,9 @@ export class EagleService {
     tagId: string,
     input: UpdateManualTagDto,
     includePrivate = false,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    const current = await this.prisma.eagleManualTag.findFirst({
+    const current = await db.eagleManualTag.findFirst({
       where: { ownerId, id: tagId, libraryMode: this.libraryMode },
     });
     if (!current) throw new NotFoundException('标签不存在。');
@@ -1316,13 +1365,13 @@ export class EagleService {
       input.name === undefined ? current.name : normalizeName(input.name, 64, '标签名称');
     if (
       input.groupId &&
-      !(await this.prisma.eagleManualTagGroup.count({
+      !(await db.eagleManualTagGroup.count({
         where: { ownerId, id: input.groupId, libraryMode: this.libraryMode },
       }))
     )
       throw new NotFoundException('标签组不存在。');
     try {
-      await this.prisma.$transaction(async (transaction) => {
+      await runLibraryTransaction(db, async (transaction) => {
         const updated = await transaction.eagleManualTag.updateMany({
           where: {
             ownerId,
@@ -1358,7 +1407,7 @@ export class EagleService {
       if (isUniqueError(error)) throw new ConflictException('标签名称已存在。');
       throw error;
     }
-    const tag = await this.prisma.eagleManualTag.findFirstOrThrow({
+    const tag = await db.eagleManualTag.findFirstOrThrow({
       where: { ownerId, id: tagId, libraryMode: this.libraryMode },
       select: {
         id: true,
@@ -1387,9 +1436,13 @@ export class EagleService {
     };
   }
 
-  async deleteManualTag(ownerId: string, tagId: string) {
+  async deleteManualTag(
+    ownerId: string,
+    tagId: string,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
     try {
-      await this.prisma.$transaction(async (transaction) => {
+      await runLibraryTransaction(db, async (transaction) => {
         await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
         const tag = await transaction.eagleManualTag.findFirst({
           where: { ownerId, id: tagId, libraryMode: this.libraryMode },
@@ -1499,13 +1552,17 @@ export class EagleService {
     }
   }
 
-  async deleteManualTagGroup(ownerId: string, groupId: string) {
-    const group = await this.prisma.eagleManualTagGroup.findFirst({
+  async deleteManualTagGroup(
+    ownerId: string,
+    groupId: string,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const group = await db.eagleManualTagGroup.findFirst({
       where: { ownerId, id: groupId, libraryMode: this.libraryMode },
       select: { id: true },
     });
     if (!group) throw new NotFoundException('标签组不存在。');
-    await this.prisma.$transaction(async (transaction) => {
+    await runLibraryTransaction(db, async (transaction) => {
       await transaction.eagleManualTag.updateMany({
         where: { ownerId, groupId, libraryMode: this.libraryMode },
         data: { groupId: null, rowVersion: { increment: 1 } },
@@ -1561,10 +1618,11 @@ export class EagleService {
     assetId: string,
     tagIds: string[],
     includePrivate = false,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
     const ids = [...new Set(tagIds)];
     if (ids.length !== tagIds.length) throw new BadRequestException('标签不能重复。');
-    const privacyChangedAssetCount = await this.prisma.$transaction(async (transaction) => {
+    const privacyChangedAssetCount = await runLibraryTransaction(db, async (transaction) => {
       await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
       const [asset, tagCount] = await Promise.all([
         transaction.eagleAsset.findFirst({

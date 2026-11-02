@@ -1,3 +1,5 @@
+import type { OperationResponse } from './accepted-operation';
+import type { AssetOperationSummary } from '@sekereagle/library-core';
 import { t } from '../i18n';
 import { request } from './api-client';
 export interface PhotoCity {
@@ -66,12 +68,12 @@ export const reviewPhotoAgentSuggestion = (
   action: 'ACCEPT' | 'REJECT',
   city?: PhotoCity,
 ) =>
-  request(
+  request<AssetOperationSummary>(
     `${base}/tasks/${encodeURIComponent(taskId)}/suggestions/${encodeURIComponent(id)}/review`,
     { method: 'POST', body: JSON.stringify({ action, ...(city ? { city } : {}) }) },
   );
 export const undoPhotoAgentSuggestion = (taskId: string, id: string) =>
-  request(
+  request<AssetOperationSummary>(
     `${base}/tasks/${encodeURIComponent(taskId)}/suggestions/${encodeURIComponent(id)}/undo`,
     { method: 'POST', body: '{}' },
   );
@@ -107,10 +109,13 @@ export const reviewPhotoRequest = (
   suggestionIds: string[],
   action: 'ACCEPT' | 'REJECT',
 ) =>
-  request<PhotoRequestReviewResult>(`${base}/tasks/${encodeURIComponent(taskId)}/review`, {
-    method: 'POST',
-    body: JSON.stringify({ suggestionIds, action }),
-  });
+  request<OperationResponse<PhotoRequestReviewResult>>(
+    `${base}/tasks/${encodeURIComponent(taskId)}/review`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ suggestionIds, action }),
+    },
+  );
 
 export interface PhotoAgentEvent {
   id: string;
@@ -171,7 +176,7 @@ export const manualPhotoRequestAction = (
     items: Array<{ suggestionId: string; mediaRevision: number; rowVersion: number }>;
   },
 ) =>
-  request<{ affectedAssetCount: number; action: ManualPhotoAction }>(
+  request<OperationResponse<{ affectedAssetCount: number; action: ManualPhotoAction }>>(
     `${base}/tasks/${encodeURIComponent(taskId)}/manual-action`,
     { method: 'POST', body: JSON.stringify(input) },
   );

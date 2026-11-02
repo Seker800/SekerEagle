@@ -1,5 +1,8 @@
+import { EagleOperationSummaryResponseDto } from '../eagle/eagle-operation-response.dto';
+import { ApiAcceptedResponse } from '@nestjs/swagger';
 import {
   Body,
+  HttpCode,
   Controller,
   Get,
   Param,
@@ -19,7 +22,6 @@ import {
   Min,
   IsArray,
   ArrayMinSize,
-  ArrayMaxSize,
   IsBoolean,
   IsOptional,
   IsString,
@@ -31,6 +33,8 @@ import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
+import { EagleAssetOperationService } from '../eagle/eagle-asset-operations.service';
+import { libraryCommandPayload } from '../eagle/eagle-library-command';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoMapService } from './photo-map.service';
 import { MapViewportDto, MapPhotosDto } from './photo-map.dto';
@@ -91,10 +95,9 @@ class ReassignFaceDto {
   personId?: string | null;
 }
 class GroupMembersDto {
-  @ApiProperty({ type: [String], minItems: 1, maxItems: 500 })
+  @ApiProperty({ type: [String], minItems: 1 })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(500)
   @IsUUID('4', { each: true })
   assetIds!: string[];
 }
@@ -111,6 +114,7 @@ export class PhotoManagementController {
     private readonly photos: PhotoManagementService,
     private readonly map: PhotoMapService,
     private readonly review: PhotoPersonReviewService,
+    private readonly operations: EagleAssetOperationService,
   ) {}
   @Get('map')
   mapClusters(@CurrentPrincipal() p: AuthPrincipal, @Query() query: MapViewportDto) {
@@ -152,98 +156,154 @@ export class PhotoManagementController {
   ) {
     return this.review.suggestions(p.sub, p.canViewPrivate, query.after);
   }
-  @Post('people/review') @UseGuards(BrowserOriginGuard) decidePeople(
-    @CurrentPrincipal() p: AuthPrincipal,
-    @Body() dto: PersonReviewDto,
-  ) {
-    return this.review.decide(p.sub, p.canViewPrivate, dto);
+  @Post('people/review')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  decidePeople(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: PersonReviewDto) {
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_PEOPLE_REVIEW',
+      payload: libraryCommandPayload(dto),
+    });
   }
   @Get('people/review-priority')
   async priorityPeople(@CurrentPrincipal() p: AuthPrincipal) {
     const result = await this.review.suggestions(p.sub, p.canViewPrivate);
     return { pairs: result.items };
   }
-  @Post('people/scan') @UseGuards(BrowserOriginGuard) scanPeople(
-    @CurrentPrincipal() p: AuthPrincipal,
-  ) {
-    return this.photos.scanFaces(p.sub, p.canViewPrivate);
+  @Post('people/scan')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  scanPeople(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.operations.enqueueCommand(p, { type: 'PHOTO_PEOPLE_SCAN', payload: {} });
   }
-  @Patch('people/:id') @UseGuards(BrowserOriginGuard) rename(
+  @Patch('people/:id')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  rename(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: RenamePersonDto,
   ) {
-    return this.photos.renamePerson(p.sub, id, dto.name, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_PERSON_RENAME',
+      payload: libraryCommandPayload({ id, ...dto }),
+    });
   }
-  @Patch('people/:id/privacy') @UseGuards(BrowserOriginGuard) privacy(
+  @Patch('people/:id/privacy')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  privacy(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: PersonPrivacyDto,
   ) {
-    return this.photos.setPersonPrivacy(
-      p.sub,
-      id,
-      dto.marksAssetsPrivate,
-      dto.rowVersion,
-      p.canViewPrivate,
-    );
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_PERSON_PRIVACY',
+      payload: libraryCommandPayload({ id, ...dto }),
+    });
   }
-  @Post('people/merge-selected') @UseGuards(BrowserOriginGuard) mergeSelected(
-    @CurrentPrincipal() p: AuthPrincipal,
-    @Body() dto: MergeSelectedPeopleDto,
-  ) {
-    return this.photos.mergeSelection(p.sub, p.canViewPrivate, dto.targetId, dto.people);
+  @Post('people/merge-selected')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  mergeSelected(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: MergeSelectedPeopleDto) {
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_PEOPLE_MERGE_SELECTED',
+      payload: libraryCommandPayload(dto),
+    });
   }
-  @Post('people/:id/merge') @UseGuards(BrowserOriginGuard) merge(
+  @Post('people/:id/merge')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  merge(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: MergePeopleDto,
   ) {
-    return this.photos.mergePeople(p.sub, id, dto.targetId, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_PEOPLE_MERGE',
+      payload: libraryCommandPayload({ id, ...dto }),
+    });
   }
-  @Patch('faces/:id/person') @UseGuards(BrowserOriginGuard) assign(
+  @Patch('faces/:id/person')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  assign(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: ReassignFaceDto,
   ) {
-    return this.photos.reassignFace(p.sub, id, dto.personId ?? null, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_FACE_REASSIGN',
+      payload: libraryCommandPayload({ id, personId: dto.personId ?? null }),
+    });
   }
   @Get('groups') groups(@CurrentPrincipal() p: AuthPrincipal) {
     return this.photos.groups(p.sub, p.canViewPrivate);
   }
-  @Post('groups/scan') @UseGuards(BrowserOriginGuard) scanGroups(
-    @CurrentPrincipal() p: AuthPrincipal,
-  ) {
-    return this.photos.scanGroups(p.sub, p.canViewPrivate);
+  @Post('groups/scan')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  scanGroups(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.operations.enqueueCommand(p, { type: 'PHOTO_GROUPS_SCAN', payload: {} });
   }
   @Post('groups/manual')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   createGroup(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: GroupMembersDto) {
-    return this.photos.createGroup(p.sub, dto.assetIds, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_GROUP_CREATE',
+      payload: libraryCommandPayload(dto),
+    });
   }
   @Patch('groups/:id/members')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   removeMembers(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: GroupMembersDto,
   ) {
-    return this.photos.removeGroupMembers(p.sub, id, dto.assetIds, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_GROUP_REMOVE_MEMBERS',
+      payload: libraryCommandPayload({ id, ...dto }),
+    });
   }
   @Post('groups/:id/merge')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   mergeGroups(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: MergePeopleDto,
   ) {
-    return this.photos.mergeGroups(p.sub, id, dto.targetId, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_GROUP_MERGE',
+      payload: libraryCommandPayload({ id, ...dto }),
+    });
   }
-  @Patch('groups/:id') @UseGuards(BrowserOriginGuard) group(
+  @Patch('groups/:id')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  group(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id') id: string,
     @Body() dto: UpdateGroupDto,
   ) {
-    return this.photos.updateGroup(p.sub, id, dto, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_GROUP_UPDATE',
+      payload: libraryCommandPayload({ id, ...dto }),
+    });
   }
 }

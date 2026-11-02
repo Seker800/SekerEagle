@@ -23,7 +23,8 @@ export function AssetOperationsPanel({
   );
   const history = operations.filter((operation) => !active.includes(operation));
   const state = (operation: AssetOperationSummary) =>
-    !operationKindPresentation(operation.kind, operation.libraryMode).executable
+    !operationKindPresentation(operation.kind, operation.libraryMode, operation.commandType)
+      .executable
       ? t('不支持的操作类型，无法执行。')
       : operation.running
         ? operation.kind === 'SEND'
@@ -55,7 +56,11 @@ export function AssetOperationsPanel({
                   ? t('数据库事务等待超时，未提交的项目可以重试。')
                   : t('操作失败，请重试。');
   function card(operation: AssetOperationSummary) {
-    const presentation = operationKindPresentation(operation.kind, operation.libraryMode);
+    const presentation = operationKindPresentation(
+      operation.kind,
+      operation.libraryMode,
+      operation.commandType,
+    );
     return (
       <article key={operation.id} className={styles.card} data-state={operation.state}>
         <header>
@@ -109,7 +114,7 @@ export function AssetOperationsPanel({
                 {t('重试失败任务')}
               </button>
             )}
-            {operation.queued > 0 && presentation.executable && (
+            {(operation.queued > 0 || operation.running > 0) && presentation.executable && (
               <button
                 type="button"
                 disabled={action.isPending}

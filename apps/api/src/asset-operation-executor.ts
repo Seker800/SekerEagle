@@ -1,3 +1,16 @@
+import { registerTaskCommands } from './eagle/eagle-task-commands';
+import { EagleTaskCenterService } from './eagle/eagle-task-center.service';
+import { registerDuplicateCommands } from './eagle/eagle-duplicate-commands';
+import { registerBatchEditCommands } from './eagle/eagle-batch-edit';
+import { LibraryCommandRegistry } from './eagle/eagle-library-command';
+import { registerSharedLibraryCommands } from './eagle/eagle-shared-commands';
+import { EaglePrivacyService } from './eagle/eagle-privacy.service';
+import { EagleVectorService } from './eagle/eagle-vector.service';
+import { EagleProcessingService } from './eagle/eagle-processing.service';
+import { registerPhotoLibraryCommands } from './photos/photo-library-commands';
+import { PhotoManagementService } from './photos/photo-management.service';
+import { PhotoPersonReviewService } from './photos/photo-person-review.service';
+import { PhotoAgentService } from './photos/photo-agent.service';
 import { PhotoRevisionObserver } from './photos/photo-revision.observer';
 import { AssetOperationWakeup } from './asset-operation-wakeup';
 import { EagleDuplicateService } from './eagle/eagle-duplicates.service';
@@ -26,16 +39,30 @@ export function createAssetOperationExecutors(
   prisma: PrismaService,
   storage: ObjectStorageService,
 ) {
-  return (['MATERIAL', 'PHOTO'] as const).map(
-    (mode) =>
-      new EagleAssetOperationService(
-        prisma,
-        new EagleLibraryTransferService(prisma, storage, mode),
-        new EagleService(prisma, undefined, mode),
-        mode,
-        new EagleDuplicateService(prisma, storage, mode),
-      ),
-  );
+  return (['MATERIAL', 'PHOTO'] as const).map((mode) => {
+    const commands = new LibraryCommandRegistry();
+    const eagle = new EagleService(prisma, undefined, mode);
+    const transfers = new EagleLibraryTransferService(prisma, storage, mode);
+    registerSharedLibraryCommands(commands, {
+      eagle,
+      privacy: new EaglePrivacyService(prisma, mode),
+      vectors: new EagleVectorService(prisma, mode),
+      processing: new EagleProcessingService(prisma, mode),
+    });
+    registerBatchEditCommands(commands, prisma);
+    const duplicates = new EagleDuplicateService(prisma, storage, mode);
+    registerDuplicateCommands(commands, duplicates);
+    registerTaskCommands(commands, new EagleTaskCenterService(prisma, mode));
+    if (mode === 'PHOTO') {
+      const photos = new PhotoManagementService(prisma);
+      registerPhotoLibraryCommands(commands, {
+        photos,
+        review: new PhotoPersonReviewService(prisma, photos),
+        agent: new PhotoAgentService(prisma, undefined as never, transfers),
+      });
+    }
+    return new EagleAssetOperationService(prisma, transfers, eagle, mode, duplicates, commands);
+  });
 }
 
 export function createAssetOperationBackground(

@@ -1,7 +1,14 @@
+import { publishWorkspaceCommandCompletion } from '../../lib/workspace-refresh';
+import { getDesktopCacheBridge } from '../../lib/media-resolver';
+import { createEagleApi } from '../../lib/eagle-api';
+import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 import { assetOperationProtocol } from '@sekereagle/library-core';
 import {
   createEagleQueryKeys,
   isEagleQuery,
+  isEagleTaskCenterKey,
+  isEagleAssetDetailKey,
+  isPhotoPrivacyProjection,
   isEagleOperationKey,
   isEagleAssetListKey,
 } from './eagle-query-keys';
@@ -15,6 +22,21 @@ import type { LibraryMode } from '../../lib/library-api-scope';
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
+
+const PRIVACY_COMMAND_TYPES = new Set([
+  'ASSET_TAGS',
+  'ASSET_TAGS_REPLACE',
+  'TAG_UPDATE',
+  'TAG_DELETE',
+  'TAG_GROUP_DELETE',
+  'PRIVACY_SETTINGS',
+  'VECTOR_REVIEW',
+  'PHOTO_PERSON_PRIVACY',
+  'PHOTO_PEOPLE_MERGE',
+  'PHOTO_PEOPLE_MERGE_SELECTED',
+  'PHOTO_PEOPLE_REVIEW',
+  'PHOTO_FACE_REASSIGN',
+]);
 
 type AssetListView = 'ACTIVE' | 'PRIVATE' | 'TRASH';
 
@@ -102,7 +124,8 @@ export class AssetOperationRefresher {
     await this.client.invalidateQueries(
       {
         predicate: (query) =>
-          isEagleQuery(query.queryKey, this.ownerId, mode) &&
+          (isEagleQuery(query.queryKey, this.ownerId, mode) ||
+            isEagleTaskCenterKey(query.queryKey, this.ownerId, mode)) &&
           !isEagleOperationKey(query.queryKey, this.ownerId, mode) &&
           !(
             isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
@@ -174,6 +197,21 @@ export class AssetOperationRefresher {
         revision = result.revision;
         cursor = result.nextCursor ?? undefined;
       } while (cursor !== undefined);
+      if (actual.kind === 'METADATA_COMMAND' || actual.kind === 'BACKGROUND_COMMAND') {
+        const privacyChanged =
+          !!actual.commandType && PRIVACY_COMMAND_TYPES.has(actual.commandType);
+        if (privacyChanged && mode === 'PHOTO') await this.clearPhotoPrivacyProjections(epoch);
+
+        if (actual.commandType !== 'DUPLICATE_IGNORE') await this.refreshLoadedFacts(mode, epoch);
+        if (
+          mode === 'PHOTO' &&
+          (actual.commandType?.startsWith('PHOTO_GROUP') ||
+            actual.commandType === 'BATCH_EDIT_RENDER')
+        )
+          await this.refreshPhotoStacks(mode, epoch, actual.commandType === 'BATCH_EDIT_RENDER');
+        if (privacyChanged) await getDesktopCacheBridge()?.clearCache();
+        if (changes.epoch !== epoch || this.disposed) return;
+      }
       changes.finish(
         actual.id,
         actual.kind,
@@ -194,11 +232,15 @@ export class AssetOperationRefresher {
           { cancelRefetch: false },
         );
       }
+      if (actual.commandType)
+        publishWorkspaceCommandCompletion(this.client, this.ownerId, mode, actual.commandType);
       this.dirtyMetadata.add(mode);
       const membershipChange = assetOperationProtocol(actual.kind)?.membership;
       if (actual.completed > 0 && membershipChange === 'TRASH')
         this.addDestination(mode, ['TRASH']);
       if (actual.completed > 0 && membershipChange === 'ACTIVE')
+        this.addDestination(mode, ['ACTIVE', 'PRIVATE']);
+      if (actual.commandType === 'BATCH_EDIT_RENDER' && actual.completed > 0)
         this.addDestination(mode, ['ACTIVE', 'PRIVATE']);
       if (actual.kind === 'SEND') {
         const target = mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
@@ -213,6 +255,150 @@ export class AssetOperationRefresher {
     } finally {
       this.reading.delete(key);
       await this.flush().catch(() => undefined);
+    }
+  }
+  private async clearPhotoPrivacyProjections(epoch: number) {
+    const cache = getEagleWorkspaceCache(this.client, this.ownerId, 'PHOTO');
+    const queries = this.client
+      .getQueryCache()
+      .findAll({ predicate: (query) => isPhotoPrivacyProjection(query.queryKey, this.ownerId) });
+    await this.client.cancelQueries({
+      predicate: (query) => isPhotoPrivacyProjection(query.queryKey, this.ownerId),
+    });
+    if (this.disposed || cache.operations.epoch !== epoch) return;
+    for (const query of queries) {
+      if (this.client.getQueryCache().get(query.queryHash) !== query) continue;
+      // A denied or offline refetch must not retain a previously visible face,
+      // task photo, location or statistic. Keep the scoped observer to refetch.
+      this.client.setQueryData(query.queryKey, null);
+    }
+  }
+  private async refreshPhotoStacks(
+    mode: LibraryMode,
+    epoch: number,
+    existingCollectionsOnly = false,
+  ) {
+    const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
+    const queries = this.client.getQueryCache().findAll({
+      predicate: (query) =>
+        query.isActive() &&
+        isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
+        !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
+    });
+    for (const query of queries) {
+      const data = query.state.data as InfiniteData<NormalizedEagleAssetPage, string> | undefined;
+      const fn = query.options.queryFn;
+      if (!data?.pages.length || typeof fn !== 'function') continue;
+      for (let index = 0; index < data.pages.length; index++) {
+        if (existingCollectionsOnly && !data.pages[index].photoStacks?.length) continue;
+        const fresh = await this.client.fetchQuery<NormalizedEagleAssetPage>({
+          queryKey: [...query.queryKey, 'operation-stack-page', data.pageParams[index]],
+          gcTime: 0,
+          staleTime: 0,
+          retry: 2,
+          queryFn: async ({ signal }) =>
+            (await fn({
+              client: this.client,
+              queryKey: query.queryKey,
+              signal,
+              pageParam: data.pageParams[index],
+              direction: 'forward',
+              meta: query.meta,
+            })) as NormalizedEagleAssetPage,
+        });
+        if (
+          this.disposed ||
+          cache.operations.epoch !== epoch ||
+          this.client.getQueryCache().get(query.queryHash) !== query
+        )
+          return;
+        // Only the collection projection changes. Loaded identity windows, page
+        // count and cursor history remain owned by the browse session.
+        this.client.setQueryData<InfiniteData<NormalizedEagleAssetPage, string>>(
+          query.queryKey,
+          (current) => {
+            if (!current || current.pageParams[index] !== data.pageParams[index]) return current;
+            return {
+              ...current,
+              pages: current.pages.map((page, pageIndex) =>
+                pageIndex === index ? { ...page, photoStacks: fresh.photoStacks ?? [] } : page,
+              ),
+            };
+          },
+        );
+      }
+    }
+  }
+  private async refreshLoadedFacts(mode: LibraryMode, epoch: number) {
+    const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
+    const queries = this.client.getQueryCache().findAll({
+      predicate: (query) =>
+        isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
+        !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
+    });
+    const details = this.client
+      .getQueryCache()
+      .findAll({ predicate: (query) => isEagleAssetDetailKey(query.queryKey, this.ownerId, mode) });
+    const ids = [
+      ...new Set([
+        ...queries.flatMap((query) => {
+          const data = query.state.data as InfiniteData<NormalizedEagleAssetPage> | undefined;
+          return (
+            data?.pages.flatMap((page) => [
+              ...page.assetIds,
+              ...(page.photoStacks?.flatMap((stack) => stack.assetIds) ?? []),
+            ]) ?? []
+          );
+        }),
+        ...details.flatMap((query) => {
+          const data = query.state.data as { id?: string } | undefined;
+          return data?.id ? [data.id] : [];
+        }),
+      ]),
+    ];
+    const api = createEagleApi(mode);
+    // Bound response memory by page-sized transport batches; the user selection
+    // remains one durable command, with no manual splitting or pagination reset.
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = ids.slice(offset, offset + 100);
+      const facts = await api.listEagleAssetFacts('', batch);
+      if (this.disposed || cache.operations.epoch !== epoch) return;
+      cache.store.upsertMany(facts);
+      const visible = new Set(facts.map((asset) => asset.id));
+      const missing = new Set(batch.filter((id) => !visible.has(id)));
+      if (missing.size) {
+        cache.store.removeMany(missing);
+        cache.thumbnails.dispose();
+        const unavailableDetails = details.filter((query) => {
+          const data = query.state.data as { id?: string } | undefined;
+          return data?.id && missing.has(data.id);
+        });
+        for (const query of unavailableDetails) {
+          await this.client.cancelQueries({ queryKey: query.queryKey, exact: true });
+          // Clear active observers before cache removal, so React cannot retain
+          // private detail data in an orphaned QueryObserver result.
+          this.client.setQueryData(query.queryKey, null);
+          this.client.removeQueries({ queryKey: query.queryKey, exact: true });
+        }
+        for (const query of queries)
+          this.client.setQueryData<InfiniteData<NormalizedEagleAssetPage>>(
+            query.queryKey,
+            (data) =>
+              data
+                ? {
+                    ...data,
+                    pages: data.pages.map((page) => ({
+                      ...page,
+                      assetIds: page.assetIds.filter((id) => !missing.has(id)),
+                      photoStacks: page.photoStacks?.filter(
+                        (stack) => !stack.assetIds.some((id) => missing.has(id)),
+                      ),
+                    })),
+                  }
+                : data,
+          );
+      }
+      await invalidateDesktopAssets(batch);
     }
   }
   private addDestination(mode: LibraryMode, views: readonly AssetListView[]) {

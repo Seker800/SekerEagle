@@ -1,3 +1,4 @@
+import { resolveEditRenderLut } from './edit-render-lut';
 import { mediaCompletion } from '@sekereagle/library-core';
 import { createHash, randomUUID } from 'node:crypto';
 import type { EagleAssetProcessingJob, PrismaClient, Prisma } from '@prisma/client';
@@ -38,7 +39,7 @@ export async function renderEditedCopy(
   if (!source.originalObjectKey.startsWith(`users/${job.ownerId}/assets/`))
     throw new Error('EDIT_SOURCE_SCOPE');
   const recipe = readPhotoEditRecipe(row.recipe);
-  const lut = row.lut;
+  const lut = await resolveEditRenderLut(db, row, recipe.edits.filter);
   const object = await storage.send(
     new GetObjectCommand({ Bucket: bucket, Key: source.originalObjectKey }),
   );

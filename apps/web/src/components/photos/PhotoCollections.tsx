@@ -1,3 +1,4 @@
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { PhotoPersonMergeSelection } from './PhotoPersonMergeSelection';
 import { applyPhotoPersonMerge } from './photo-person-merge-cache';
@@ -77,7 +78,11 @@ export function PhotoCollections({
     setError(null);
     setPending(true);
     try {
-      await action();
+      const result = await action();
+      if (observeAcceptedOperation(queryClient, ownerId, 'PHOTO', result)) {
+        setFeedback(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return true;
+      }
       if (changesPrivacy) {
         onPrivacyRulesChange();
         try {
@@ -147,7 +152,7 @@ export function PhotoCollections({
           onClick={() =>
             void perform(async () => {
               const result = await scanPhotoPeople();
-              setFeedback(t('已加入 {{value1}} 个本地人脸分析任务', { value1: result.queued }));
+              return result;
             })
           }
         >
@@ -221,7 +226,9 @@ export function PhotoCollections({
                   ownerId={ownerId}
                   includePrivate={includePrivate}
                   scopeRevision={scopeRevision}
-                  selected={Object.values(directorySelection)}
+                  selected={Object.values(directorySelection).filter((person) =>
+                    people.data?.people.some((visible) => visible.id === person.id),
+                  )}
                   onClear={clearDirectorySelection}
                   onPendingChange={setPending}
                   onConflict={() =>
@@ -304,7 +311,9 @@ export function PhotoCollections({
                   perform={(action, changesPrivacy) => perform(action, changesPrivacy)}
                   onPrivacyChange={(person, checked) =>
                     perform(async () => {
-                      await updatePhotoPersonPrivacy(person, checked);
+                      const result = await updatePhotoPersonPrivacy(person, checked);
+                      if (observeAcceptedOperation(queryClient, ownerId, 'PHOTO', result))
+                        return result;
                       setFeedback(
                         checked && !includePrivate
                           ? t('已设为私密，开启显示隐私内容后可管理。')

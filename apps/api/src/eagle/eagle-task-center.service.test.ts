@@ -70,7 +70,12 @@ test('ordinary owners may change their own schedule, and DTO rejects malformed w
       return {};
     },
   };
-  const controller = new EagleTaskCenterController({} as never, processing as never);
+  const controller = new EagleTaskCenterController(
+    {} as never,
+    processing as never,
+    undefined,
+    'PHOTO',
+  );
   const input = Object.assign(new UpdateEagleProcessingSettingsDto(), {
     mode: 'ALWAYS',
     nightStart: '23:00',
@@ -569,6 +574,8 @@ test('scan start derives owner and private visibility from principal and require
       },
     } as never,
     {} as never,
+    { enqueueCommand: (...args: unknown[]) => calls.push(args) } as never,
+    'PHOTO',
   );
   const { StartTaskFamilyDto: StartDto } = await import('./eagle-task-center.controller');
   assert.ok(
@@ -583,7 +590,12 @@ test('scan start derives owner and private visibility from principal and require
     .value as object;
   assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [BrowserOriginGuard]);
   await controller.start({ sub: 'owner-a', canViewPrivate: false } as never, { family: 'FACES' });
-  assert.deepEqual(calls, [['owner-a', 'FACES', false]]);
+  assert.deepEqual(calls, [
+    [
+      { sub: 'owner-a', canViewPrivate: false },
+      { type: 'PHOTO_PEOPLE_SCAN', payload: {} },
+    ],
+  ]);
   assert.equal(
     (await validate(Object.assign(new StartTaskFamilyDto(), { family: 'FACES' }))).length,
     0,
@@ -684,6 +696,8 @@ test('controller includes fleet summary only for an administrator active overvie
       overview: (...args: unknown[]) => calls.push(args),
     } as never,
     {} as never,
+    undefined,
+    'PHOTO',
   );
   for (const role of ['ADMIN', 'USER'] as const) {
     const principal = { sub: 'owner', canViewPrivate: false, role } as Parameters<

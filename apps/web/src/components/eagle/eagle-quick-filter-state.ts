@@ -9,7 +9,7 @@ import {
 export type EagleQuickFilterField = Exclude<EagleFilterField, 'SEMANTIC'>;
 export type EagleQuickTagMatch = 'ANY' | 'ALL';
 export type EagleQuickRangeField = 'WIDTH' | 'HEIGHT' | 'FILE_SIZE' | 'DURATION';
-export type EagleQuickDateField = 'ADDED_AT' | 'MODIFIED_AT';
+export type EagleQuickDateField = 'ADDED_AT' | 'MODIFIED_AT' | 'CAPTURED_AT';
 export type EagleQuickTextField =
   'NAME' | 'DESCRIPTION' | 'SOURCE_URL' | 'CITY' | 'CAMERA_MODEL' | 'LENS_MODEL';
 export interface EagleQuickNumberRange {
@@ -64,6 +64,7 @@ export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, stri
   SOURCE_URL: t('链接'),
   ADDED_AT: t('添加日期'),
   MODIFIED_AT: t('修改日期'),
+  CAPTURED_AT: t('拍摄日期'),
 };
 export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   ...DEFAULT_EAGLE_QUICK_FILTER_FIELDS,
@@ -82,6 +83,7 @@ export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   'SOURCE_URL',
   'ADDED_AT',
   'MODIFIED_AT',
+  'CAPTURED_AT',
 ];
 export function createEmptyEagleQuickFilterState(): EagleQuickFilterState {
   return {
@@ -126,6 +128,7 @@ export function isEagleQuickFilterActive(
       const range = state.ranges[field];
       return Boolean(range?.min.trim() || range?.max.trim());
     }
+    case 'CAPTURED_AT':
     case 'ADDED_AT':
     case 'MODIFIED_AT': {
       const range = state.dates[field];
@@ -182,6 +185,7 @@ export function summarizeEagleQuickFilter(
       if (range.max) return `≤ ${range.max}${suffix}`;
       return undefined;
     }
+    case 'CAPTURED_AT':
     case 'ADDED_AT':
     case 'MODIFIED_AT': {
       const range = state.dates[field];
@@ -233,6 +237,7 @@ export function clearEagleQuickFilter(
       delete ranges[field];
       return { ...state, ranges };
     }
+    case 'CAPTURED_AT':
     case 'ADDED_AT':
     case 'MODIFIED_AT': {
       const dates = { ...state.dates };
@@ -291,12 +296,14 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
     else if (min !== undefined) addRule(field, 'GTE', min, range.unit);
     else if (max !== undefined) addRule(field, 'LTE', max, range.unit);
   }
-  for (const field of ['ADDED_AT', 'MODIFIED_AT'] as const) {
+  for (const field of ['ADDED_AT', 'MODIFIED_AT', 'CAPTURED_AT'] as const) {
     const range = state.dates[field];
     if (!range) continue;
     if (range.from && range.to) addRule(field, 'BETWEEN', [range.from, range.to]);
-    else if (range.from) addRule(field, 'AFTER', range.from);
-    else if (range.to) addRule(field, 'BEFORE', range.to);
+    else if (range.from)
+      addRule(field, 'AFTER', new Date(Date.parse(range.from) - 1).toISOString());
+    else if (range.to)
+      addRule(field, 'BEFORE', new Date(Date.parse(range.to) + 86_400_000).toISOString());
   }
   for (const field of [
     'NAME',

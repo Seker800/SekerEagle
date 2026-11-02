@@ -1,32 +1,17 @@
-import { readPhotoMetadata } from '../media/photo-editor/photo-editor-metadata';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  DEFAULT_PHOTO_EDITS,
-  selectPhotoEditParts,
-  type PhotoEditParts,
-  type PhotoEditRecipe,
-} from '@sekereagle/library-core';
+import type { PhotoEditParts, PhotoEditRecipe } from '@sekereagle/library-core';
+import { writePortableLut } from '@sekereagle/photo-render-core/portable-lut';
+import { loadPhotoLut } from '../media/photo-editor/photo-lut-storage';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import type { PhotoEditSession } from './EaglePhotoEditing';
-import { createPhotoRenderer } from '../media/photo-editor/photo-editor-render';
-import {
-  loadEditablePhoto,
-  renderEditedPhotoFile,
-} from '../media/photo-editor/photo-editor-export';
 import styles from './EagleBatchPhotoEdit.module.css';
-type Row = {
-  id: string;
-  name: string;
-  status: 'pending' | 'running' | 'success' | 'error';
-  error?: string;
-};
+
 export function EagleBatchPhotoEdit({
   assetIds,
   recipe,
-  resolveSession,
   onClose,
 }: {
   assetIds: string[];
@@ -36,123 +21,64 @@ export function EagleBatchPhotoEdit({
 }) {
   const { api } = useLibraryWorkspace();
   const dialog = useRef<HTMLDialogElement>(null);
+  const alive = useRef(true);
+  const operationIds = useRef(new Map<string, string>());
   const [parts, setParts] = useState<PhotoEditParts>({
     adjustments: true,
     filter: true,
     watermark: true,
     crop: false,
   });
-  const [rows, setRows] = useState<Row[]>(() =>
-    [...new Set(assetIds)].map((id, index) => ({
-      id,
-      name: t('照片 {{value1}}', { value1: index + 1 }),
-      status: 'pending',
-    })),
-  );
-  const [running, setRunning] = useState(false),
-    [started, setStarted] = useState(false);
-  const cancelled = useRef(false),
-    alive = useRef(true),
-    controller = useRef<AbortController | null>(null);
-  const retained = useRef(
-    new Map<string, { session: PhotoEditSession; file?: File; edits: PhotoEditRecipe }>(),
-  );
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   useEffect(() => {
     alive.current = true;
     dialog.current?.showModal();
     return () => {
       alive.current = false;
-      cancelled.current = true;
-      controller.current?.abort();
       dialog.current?.close();
     };
   }, []);
-  const update = (id: string, patch: Partial<Row>) => {
-    if (alive.current)
-      setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
-  };
   async function run() {
-    if (running) return;
-    cancelled.current = false;
-    controller.current = new AbortController();
-    setRunning(true);
-    setStarted(true);
-    let renderer: ReturnType<typeof createPhotoRenderer> | null = null;
+    if (submitting) return;
+    setSubmitting(true);
+    setError('');
     try {
-      for (const row of rows.filter((row) => row.status !== 'success')) {
-        if (cancelled.current || !alive.current) break;
-        update(row.id, { status: 'running', error: undefined });
-        try {
-          let cached = retained.current.get(row.id);
-          if (!cached) {
-            const asset = await api.getEagleAsset('', row.id);
-            const session = await resolveSession(asset);
-            cached = {
-              session,
-              edits: {
-                version: 1,
-                edits: selectPhotoEditParts(
-                  recipe.edits,
-                  session.initialEdits ?? DEFAULT_PHOTO_EDITS,
-                  parts,
-                ),
-              },
-            };
-            retained.current.set(row.id, cached);
-            update(row.id, { name: asset.displayName });
+      const targets = [...new Set(assetIds)];
+      // Ask only for target filters without a durable server source. Legacy
+      // browser uploads and draft recipes can refer to this machine's LUT store.
+      const preservedLuts: Record<string, string> = {};
+      if (!parts.filter) {
+        const context = await api.getBatchEaglePhotoEditContext(targets);
+        for (const filter of [...new Set(context.preservedFilterIds)].sort()) {
+          try {
+            preservedLuts[filter] = writePortableLut(await loadPhotoLut(filter.slice(4)));
+          } catch {
+            throw new Error(t('无法读取目标照片的自定义滤镜，请检查本机滤镜库后重试。'));
           }
-          if (cancelled.current || !alive.current) {
-            update(row.id, { status: 'pending' });
-            break;
-          }
-          if (!cached.file) {
-            renderer ??= createPhotoRenderer();
-            const image = await loadEditablePhoto(cached.session.source, controller.current.signal);
-            try {
-              cached.file = await renderEditedPhotoFile(
-                image,
-                cached.edits.edits,
-                {
-                  ...(await readPhotoMetadata(
-                    cached.session.source,
-                    controller.current.signal,
-                  ).catch(() => ({}))),
-                  ...Object.fromEntries(
-                    Object.entries(cached.session.initialMetadata).filter(
-                      ([, value]) => value !== undefined,
-                    ),
-                  ),
-                },
-                renderer,
-                cached.session.name,
-              );
-            } finally {
-              image.src = '';
-            }
-          }
-          if (cancelled.current || !alive.current) {
-            update(row.id, { status: 'pending' });
-            break;
-          }
-          await cached.session.onSave(cached.file, cached.edits);
-          update(row.id, { status: 'success' });
-          retained.current.delete(row.id);
-        } catch (reason) {
-          if (cancelled.current) {
-            update(row.id, { status: 'pending' });
-            break;
-          }
-          update(row.id, {
-            status: 'error',
-            error: reason instanceof Error ? reason.message : t('操作失败'),
-          });
-          // Keep at most one full-size failed upload for resumable retry.
-          if (retained.current.get(row.id)?.file) break;
         }
       }
+      // Transfer each required numeric table once, never render target images here.
+      const lut =
+        parts.filter && recipe.edits.filter.startsWith('lut:')
+          ? writePortableLut(await loadPhotoLut(recipe.edits.filter.slice(4)))
+          : undefined;
+      const input = {
+        assetIds: targets,
+        recipe,
+        parts,
+        ...(lut ? { lut } : {}),
+        ...(Object.keys(preservedLuts).length ? { preservedLuts } : {}),
+      };
+      const key = JSON.stringify(input);
+      const operationId = operationIds.current.get(key) ?? crypto.randomUUID();
+      operationIds.current.set(key, operationId);
+      await api.batchEditEaglePhotos('', { operationId, ...input });
+      if (alive.current) onClose();
+    } catch (reason) {
+      if (alive.current) setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
-      renderer?.dispose();
-      if (alive.current) setRunning(false);
+      if (alive.current) setSubmitting(false);
     }
   }
   const options: Array<[keyof PhotoEditParts, string]> = [
@@ -168,20 +94,17 @@ export function EagleBatchPhotoEdit({
       aria-label={t('批量套用编辑参数')}
       onCancel={(event) => {
         event.preventDefault();
-        if (running) {
-          cancelled.current = true;
-          controller.current?.abort();
-        } else onClose();
+        onClose();
       }}
     >
       <header>
         <h2>{t('批量套用编辑参数')}</h2>
-        <button onClick={onClose} disabled={running} aria-label={t('关闭')}>
+        <button onClick={onClose} aria-label={t('关闭')}>
           ×
         </button>
       </header>
       <p>{t('使用每张照片自己的拍摄信息，保存为独立副本。')}</p>
-      <fieldset disabled={started}>
+      <fieldset disabled={submitting}>
         <legend>{t('套用内容')}</legend>
         {options.map(([key, label]) => (
           <label key={key}>
@@ -196,51 +119,16 @@ export function EagleBatchPhotoEdit({
           </label>
         ))}
       </fieldset>
-      <p role="status" aria-live="polite">
-        {t('已完成 {{value1}} / {{value2}}', {
-          value1: rows.filter((row) => row.status === 'success').length,
-          value2: rows.length,
-        })}
-      </p>
-      <ol>
-        {rows.map((row) => (
-          <li key={row.id}>
-            <span title={row.name}>{row.name}</span>
-            <small>
-              {row.status === 'success'
-                ? t('已保存')
-                : row.status === 'running'
-                  ? t('正在处理…')
-                  : row.status === 'error'
-                    ? row.error
-                    : t('等待处理')}
-            </small>
-          </li>
-        ))}
-      </ol>
+      <p>{t('提交后将在后台处理，可在任务中心查看进度。')}</p>
+      {error && <p role="alert">{error}</p>}
       <footer>
-        {running ? (
-          <button
-            onClick={() => {
-              cancelled.current = true;
-              controller.current?.abort();
-            }}
-          >
-            {t('停止后续处理')}
-          </button>
-        ) : (
-          <button
-            disabled={
-              !Object.values(parts).some(Boolean) || rows.every((row) => row.status === 'success')
-            }
-            onClick={() => void run()}
-          >
-            {started ? t('继续未完成项') : t('开始套用')}
-          </button>
-        )}
-        <button disabled={running} onClick={onClose}>
-          {t('关闭')}
+        <button
+          disabled={submitting || !assetIds.length || !Object.values(parts).some(Boolean)}
+          onClick={() => void run()}
+        >
+          {submitting ? t('正在处理…') : t('开始套用')}
         </button>
+        <button onClick={onClose}>{t('关闭')}</button>
       </footer>
     </dialog>,
     document.body,

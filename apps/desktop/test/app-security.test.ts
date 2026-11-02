@@ -58,17 +58,16 @@ describe('desktop server and navigation security', () => {
     expect(source).toMatch(/mainWindow\?\.focus\(\)/u);
   });
 
-  it('uses a separate empty Windows drag bar without duplicating the product brand', async () => {
+  it('lets Windows reserve native title bar space for every fixed overlay', async () => {
     const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
     expect(source).toContain("process.platform === 'win32'");
     expect(source).toContain('autoHideMenuBar: true');
     expect(source).toContain('window.removeMenu()');
-    expect(source).toContain("titleBarStyle: 'hidden'");
-    expect(source).toContain('titleBarOverlay:');
-    expect(source).toContain("window.webContents.on('dom-ready'");
-    expect(source).toContain('window.webContents.insertCSS(WINDOWS_TITLE_BAR_CSS)');
-    expect(source).toContain('margin-top: 32px');
-    expect(source).toContain('-webkit-app-region: drag');
+    expect(source).not.toContain("titleBarStyle: 'hidden'");
+    expect(source).not.toContain('titleBarOverlay:');
+    expect(source).not.toContain('WINDOWS_TITLE_BAR_CSS');
+    expect(source).not.toContain('margin-top: 32px');
+    expect(source).not.toContain('-webkit-app-region: drag');
   });
 
   it('propagates custom-protocol cancellation into media resolution', async () => {

@@ -31,7 +31,7 @@ function fixture(view = 'ACTIVE') {
     })),
     pageParams: Array.from({ length: 12 }, (_, i) => String(i)),
   };
-  const queryFn = vi.fn(async () => ({ assetIds: ['new'], nextCursor: 'next' }));
+  const queryFn = vi.fn(async (_context?: unknown) => ({ assetIds: ['new'], nextCursor: 'next' }));
   const observer = new InfiniteQueryObserver(client, {
     queryKey: key,
     queryFn,
@@ -439,6 +439,322 @@ it('retains a second destination intent arriving while the first window is in fl
     expect(current.pages).toHaveLength(12);
     expect(current.pageParams).toEqual(f.data.pageParams);
   } finally {
+    f.close();
+  }
+});
+
+it('updates metadata cards across loaded pages once without replaying pages or changing their cursors', async () => {
+  const f = fixture();
+  const facts = vi.fn(async (_token: string, ids: readonly string[]) =>
+    ids.map((id) => ({
+      id,
+      displayName: 'updated',
+      rowVersion: 2,
+      updatedAt: '2026-11-02T00:00:00Z',
+      mediaRevision: 1,
+    })),
+  );
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: facts,
+  } as never);
+  const completed = {
+    ...summary('METADATA_COMMAND'),
+    failed: 0,
+    errors: [],
+    completed: 2,
+    state: 'COMPLETED' as const,
+  };
+  f.cache.beginOperation(completed.id, completed.kind, []);
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(facts).toHaveBeenCalledOnce();
+    expect(facts.mock.calls[0][1]).toContain('a-11');
+    expect(f.cache.store.get('a-11')?.displayName).toBe('updated');
+    expect(f.client.getQueryData(f.key)).toEqual(f.data);
+    expect(f.queryFn).not.toHaveBeenCalled();
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(facts).toHaveBeenCalledOnce();
+  } finally {
+    vi.restoreAllMocks();
+    f.close();
+  }
+});
+
+it('removes inaccessible metadata command cards and details without discarding unrelated pages', async () => {
+  const f = fixture();
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async () => []),
+  } as never);
+  const detailKey = createEagleQueryKeys('owner', 'PHOTO').assetDetail('a-0', 'ACTIVE');
+  f.client.setQueryData(detailKey, { id: 'a-0' });
+  const completed = {
+    ...summary('METADATA_COMMAND'),
+    completed: 2,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(f.client.getQueryData(detailKey)).toBeUndefined();
+    const current = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(current.pages).toHaveLength(12);
+    expect(current.pageParams).toEqual(f.data.pageParams);
+    expect(current.pages.flatMap((page) => page.assetIds)).toEqual([]);
+  } finally {
+    vi.restoreAllMocks();
+    f.close();
+  }
+});
+
+it('merges newly rendered copies from one destination window while retaining every loaded page', async () => {
+  const f = fixture();
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+      ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
+    ),
+  } as never);
+  const completed = {
+    ...summary('BACKGROUND_COMMAND'),
+    commandType: 'BATCH_EDIT_RENDER',
+    completed: 2,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(f.queryFn).toHaveBeenCalledOnce();
+    const data = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(data.pages).toHaveLength(12);
+    expect(data.pages[0].assetIds).toContain('new');
+    expect(data.pages[11]).toEqual(f.data.pages[11]);
+  } finally {
+    vi.restoreAllMocks();
+    f.close();
+  }
+});
+
+it('refreshes the scoped task-center family counts after command execution', async () => {
+  const f = fixture();
+  const read = vi.fn(async () => ({ groups: [] }));
+  const observer = new QueryObserver(f.client, {
+    queryKey: ['task-center', 'owner', 'PHOTO', false, 'ACTIVE'],
+    queryFn: read,
+    initialData: { groups: [] },
+    staleTime: Infinity,
+  });
+  const stop = observer.subscribe(() => {});
+  const completed = {
+    ...summary('BACKGROUND_COMMAND'),
+    commandType: 'TASK_FAMILY_RETRY',
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async () => []),
+  } as never);
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(read).toHaveBeenCalledOnce();
+  } finally {
+    vi.restoreAllMocks();
+    stop();
+    f.close();
+  }
+});
+
+it('refreshes photo-stack topology on every loaded page while retaining IDs and cursor history', async () => {
+  const f = fixture();
+  const freshStack = { id: 'fresh-stack', assetIds: ['a-11', 'b-11'] };
+  f.queryFn.mockResolvedValue({
+    assetIds: ['moved'],
+    nextCursor: 'different',
+    photoStacks: [freshStack],
+  } as never);
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+      ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
+    ),
+  } as never);
+  const completed = {
+    ...summary('METADATA_COMMAND'),
+    commandType: 'PHOTO_GROUP_UPDATE',
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(f.queryFn).toHaveBeenCalledTimes(12);
+    expect(
+      f.queryFn.mock.calls.map(([context]) => (context as { pageParam: string }).pageParam),
+    ).toEqual(f.data.pageParams);
+    const data = f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(data.pages).toHaveLength(12);
+    expect(data.pageParams).toEqual(f.data.pageParams);
+    expect(data.pages.map((page) => page.assetIds)).toEqual(
+      f.data.pages.map((page) => page.assetIds),
+    );
+    expect(data.pages[11]).toEqual({ ...f.data.pages[11], photoStacks: [freshStack] });
+  } finally {
+    vi.restoreAllMocks();
+    f.close();
+  }
+});
+
+it('evicts newly inaccessible details opened outside loaded list pages and clears an active observer before removing its cache', async () => {
+  const f = fixture();
+  const key = createEagleQueryKeys('owner', 'PHOTO').assetDetail('outside', 'ACTIVE');
+  const observer = new QueryObserver(f.client, {
+    queryKey: key,
+    queryFn: async () => ({ id: 'outside' }),
+    initialData: { id: 'outside' },
+    staleTime: Infinity,
+  });
+  const stop = observer.subscribe(() => {});
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  const facts = vi.fn(async (_token, ids: string[]) =>
+    ids
+      .filter((id) => id !== 'outside')
+      .map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
+  );
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: facts,
+  } as never);
+  const completed = {
+    ...summary('METADATA_COMMAND'),
+    commandType: 'PRIVACY_SETTINGS',
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(facts.mock.calls[0][1]).toContain('outside');
+    expect(observer.getCurrentResult().data).toBeNull();
+    expect(f.client.getQueryData(key)).toBeUndefined();
+  } finally {
+    vi.restoreAllMocks();
+    stop();
+    f.close();
+  }
+});
+
+it('clears scoped photo privacy projections before a denied refetch while preserving unrelated pages and instruction drafts', async () => {
+  const f = fixture();
+  const key = createEagleQueryKeys('owner', 'PHOTO').photoAgentTask(false, 'task');
+  const secret = {
+    assets: [{ id: 'private-photo', displayName: 'private name' }],
+    suggestions: [],
+  };
+  const { ApiError } = await import('../../lib/api-error');
+  const observer = new QueryObserver(f.client, {
+    queryKey: key,
+    queryFn: async () => {
+      throw new ApiError('not found', 404, null);
+    },
+    initialData: secret,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const stop = observer.subscribe(() => {});
+  const instructionKey = createEagleQueryKeys('owner', 'PHOTO').photoAgentInstructions;
+  const otherKey = createEagleQueryKeys('other', 'PHOTO').photoAgentTask(false, 'task');
+  const materialKey = createEagleQueryKeys('owner', 'MATERIAL').photoAgentTask(false, 'task');
+  f.client.setQueryData(instructionKey, { content: 'unsaved instructions' });
+  f.client.setQueryData(otherKey, secret);
+  f.client.setQueryData(materialKey, secret);
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+      ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
+    ),
+  } as never);
+  const completed = {
+    ...summary('METADATA_COMMAND'),
+    commandType: 'ASSET_TAGS',
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(observer.getCurrentResult().data).toBeNull();
+    expect(observer.getCurrentResult().error).toBeInstanceOf(ApiError);
+    expect(f.client.getQueryData(f.key)).toEqual(f.data);
+    expect(f.client.getQueryData(instructionKey)).toEqual({ content: 'unsaved instructions' });
+    expect(f.client.getQueryData(otherKey)).toEqual(secret);
+    expect(f.client.getQueryData(materialKey)).toEqual(secret);
+  } finally {
+    vi.restoreAllMocks();
+    stop();
     f.close();
   }
 });

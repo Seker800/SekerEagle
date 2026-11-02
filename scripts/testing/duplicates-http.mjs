@@ -119,7 +119,7 @@ export async function verifyDuplicatesHttp({
     operationId,
     groups: [{ signature: group.signature, keepIds: [source.id] }],
   });
-  assert.equal(response.status, 201);
+  assert.equal(response.status, 202);
   for (let i = 0; i < 160; i++) {
     const row = await db.eagleAsset.findUniqueOrThrow({ where: { id: cloneId } });
     if (row.deletedAt) break;
@@ -142,7 +142,7 @@ export async function verifyDuplicatesHttp({
     if (i === 159) throw new Error('restore did not finish');
   }
   response = await call('/photos/duplicates/scan', 'POST', { operationId: randomUUID() });
-  assert.equal(response.status, 201);
+  assert.equal(response.status, 202);
   const scan = await response.json();
   for (let i = 0; i < 200; i++) {
     const response = await call('/photos/operations'),

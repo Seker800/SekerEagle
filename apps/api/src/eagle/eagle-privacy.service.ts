@@ -1,4 +1,5 @@
-import type { LibraryMode } from '@prisma/client';
+import { runLibraryTransaction } from './eagle-library-command';
+import type { Prisma, LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
 import { ConflictException, Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,9 +30,10 @@ export class EaglePrivacyService {
   async updateSettings(
     ownerId: string,
     input: EaglePrivacySettings & { expectedTagIds: string[] },
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<EaglePrivacySettings> {
     const tagIds = [...new Set(input.tagIds)];
-    await this.prisma.$transaction(async (transaction) => {
+    await runLibraryTransaction(db, async (transaction) => {
       await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
       const ownedTagCount = await transaction.eagleManualTag.count({
         where: { ownerId, id: { in: tagIds }, libraryMode: this.libraryMode },

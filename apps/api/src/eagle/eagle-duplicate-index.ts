@@ -76,6 +76,8 @@ export async function executeDuplicateIndex(
   if (snapshot.kind === 'verify')
     return executeDuplicateVerification(prisma, storage, libraryMode, item, assertActor);
   if (snapshot.kind === 'publish') return buildProjection(prisma, libraryMode, item, assertActor);
+  if (snapshot.kind === 'discover')
+    throw new Error('Discovery must execute through the operation service');
   const rows = await prisma.eagleAsset.findMany({
     where: {
       ...inDuplicateLibrary(item.ownerId, libraryMode, item.operation.isPrivate),

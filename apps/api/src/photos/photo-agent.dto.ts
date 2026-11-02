@@ -120,10 +120,9 @@ export class SubmitPhotoRequestDto {
   items!: ProposePhotoDto[];
 }
 export class ReviewPhotoRequestDto {
-  @ApiProperty({ type: [String], maxItems: 200 })
+  @ApiProperty({ type: [String] })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(200)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   suggestionIds!: string[];
@@ -146,10 +145,9 @@ export class ManualPhotoActionDto {
   @ApiProperty({ enum: ['SEND_TO_MATERIAL', 'DELETE'] })
   @IsIn(['SEND_TO_MATERIAL', 'DELETE'])
   action!: 'SEND_TO_MATERIAL' | 'DELETE';
-  @ApiProperty({ type: [ManualPhotoItemDto], maxItems: 100 })
+  @ApiProperty({ type: [ManualPhotoItemDto] })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => ManualPhotoItemDto)
   items!: ManualPhotoItemDto[];
