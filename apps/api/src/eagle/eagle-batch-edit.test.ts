@@ -239,3 +239,31 @@ test('partial paste reuses the target render original shared LUT reference', asy
   assert.equal(edit.create.commandOperationId, 'original-operation');
   assert.equal(edit.create.lut, undefined);
 });
+
+test('partial paste preserves custom LUT from a historical browser-uploaded edit recipe without a render journal', async () => {
+  const { definition, tx, jobs } = harness({
+    ...DEFAULT_PHOTO_EDITS,
+    filter: 'lut:browser-upload',
+  });
+  Object.assign(tx.eagleEditRender, { findFirst: async () => null });
+  await definition.apply(
+    tx as never,
+    context,
+    { recipe, parts, preservedLuts: { 'lut:browser-upload': portableLut } },
+    ['copy'],
+  );
+  const edit = jobs[0]!.data.editRender as {
+    create: {
+      commandOperationId?: string;
+      lut?: string;
+      recipe: { edits: typeof DEFAULT_PHOTO_EDITS };
+    };
+  };
+  assert.equal(edit.create.recipe.edits.filter, 'lut:browser-upload');
+  assert.equal(edit.create.commandOperationId, context.operationId);
+  assert.equal(
+    edit.create.lut,
+    undefined,
+    'fallback numeric tables are shared once by the operation',
+  );
+});

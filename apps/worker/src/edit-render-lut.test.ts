@@ -64,3 +64,20 @@ test('worker retains pre-migration inline LUT compatibility and rejects missing 
     /EDIT_LUT_MISSING/,
   );
 });
+
+test('worker resolves a preserved target filter independently of the clipboard filter', async () => {
+  const db = {
+    eagleAssetOperation: {
+      findFirst: async () => ({
+        commandPayload: {
+          recipe: { version: 1, edits: DEFAULT_PHOTO_EDITS },
+          preservedLuts: { 'lut:browser-upload': 'portable-preserved' },
+        },
+      }),
+    },
+  };
+  assert.equal(
+    await resolveEditRenderLut(db as never, row, 'lut:browser-upload'),
+    'portable-preserved',
+  );
+});
