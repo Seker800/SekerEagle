@@ -41,7 +41,9 @@ test('bounded diagnostics count actual fallback reasons and approximate latency 
   assert.equal(snapshot.actions.count.bypassed, 1);
   assert.equal(snapshot.actions.colorPage.attempts, 2);
   assert.equal(snapshot.actions.colorPage.hits, 1);
-  assert.equal(snapshot.actions.colorPage.fallbacks, 1);
+  assert.equal(snapshot.actions.colorPage.fallbacks, 2);
+  assert.equal(snapshot.actions.colorPage.hitRate, 1 / 3);
+  assert.equal(snapshot.actions.colorPage.fallbackRate, 2 / 3);
   assert.equal(snapshot.actions.colorPage.reasons.timeout, 1);
   assert.equal(snapshot.actions.colorPage.reasons.circuitOpen, 1);
   assert.equal(snapshot.actions.colorPage.p95UpperBoundMs, 1000);
