@@ -71,6 +71,8 @@ test('queued metadata and photo selections use the shared byte budget across met
     assert(address && typeof address !== 'string');
     const body = JSON.stringify({ assetIds: Array.from({ length: 5001 }, () => randomUUID()) });
     for (const [method, path] of [
+      ['POST', '/api/eagle/assets/batch/edit-render-context'],
+      ['POST', '/api/photos/assets/batch/edit-render-context'],
       ['PATCH', '/api/eagle/assets/batch'],
       ['PATCH', '/api/photos/assets/batch'],
       ['POST', '/api/eagle/assets/batch/manual-tags'],
