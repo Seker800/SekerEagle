@@ -78,7 +78,6 @@ export async function fetchWithBrowserSession(
   timeoutMs = 30_000,
 ): Promise<Response> {
   init?.signal?.throwIfAborted();
-  if ((init?.method ?? 'GET').toUpperCase() !== 'GET') await libraryReader()?.resetMediaSnapshot?.();
   if (path === '/api/auth/login') {
     advanceSession();
     loggingOut = false;
@@ -86,6 +85,11 @@ export async function fetchWithBrowserSession(
   if (path === '/api/auth/logout') {
     advanceSession();
     loggingOut = true;
+  }
+  const desktop = libraryReader();
+  if ((init?.method ?? 'GET').toUpperCase() !== 'GET' && desktop?.resetMediaSnapshot)
+    await desktop.resetMediaSnapshot();
+  if (path === '/api/auth/logout') {
     await refreshInFlight?.catch(() => undefined);
     return fetch(path, { ...init, credentials: 'include', signal: AbortSignal.timeout(30_000) });
   }
