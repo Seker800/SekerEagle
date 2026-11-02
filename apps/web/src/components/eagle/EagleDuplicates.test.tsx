@@ -84,6 +84,19 @@ function render(onClose = () => {}) {
   };
 }
 describe('duplicate cleanup review', () => {
+  it('releases preserved-group actions when queued without waiting for the duplicate list', async () => {
+    const receipt = {id:'ignore-command',kind:'METADATA_COMMAND',commandType:'DUPLICATE_IGNORE',libraryMode:'MATERIAL',total:1,completed:0,queued:1,running:0,failed:0,cancelled:0,state:'QUEUED',errors:[]};
+    mocks.ignoreFiltered.mockResolvedValue(receipt);
+    const view=render();
+    await screen.findByRole('button',{name:'全部保留并不再提示'});
+    const count=mocks.list.mock.calls.length;
+    mocks.list.mockImplementation(()=>new Promise(()=>undefined));
+    fireEvent.click(screen.getByRole('button',{name:'全部保留并不再提示'}));
+    await screen.findByText('任务已加入后台队列，可在任务中心查看进度。');
+    expect(screen.getByRole('button',{name:'全部保留并不再提示'})).toBeEnabled();
+    expect(mocks.list).toHaveBeenCalledTimes(count);
+    view.unmount();view.client.clear();
+  });
   it('keeps the review open when Escape is pressed while confirmation is submitting', async () => {
     mocks.cleanup.mockImplementation(() => new Promise(() => {}));
     const onClose = vi.fn();
