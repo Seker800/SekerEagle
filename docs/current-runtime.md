@@ -1,5 +1,11 @@
 # 现用运行状态与交接
 
+> **2026-11-02 全部分支及依赖整合已上线（覆盖下方应用／worker／依赖快照）**：main 已包含全部业务引用、20个工作区提交及17个 Dependabot 提案；17个远程依赖分支已在合并后删除，GitHub 开放依赖 PR 为0。API／独立 operations 为 `sekereagle/api:all-branches-final-20261102`，固定源码 `b0423ca614f334c95e48c65dd8d052acbdce6f55`；网页为 `sekereagle/web:all-branches-20261102-complete`，固定源码 `408a601100d2795beab4fe14c67d55ec85fc8cd4`，其后仅后端、驱动和验证兼容调整。09:33 三服务 healthy、零重启，80项迁移完成。查重分为完全重复与按条件查找，尺寸等条件仅勾选时生效；新增内网独立 `library-reader`，无 API／对象存储秘密，故障沿用 SQL 回退。
+>
+> 唯一 Mac 业务执行器已正常交接到不可变 `worker-b0423ca614f3`，现场 PID31292、独立心跳新鲜，旧进程正常排空退出；NAS worker 继续停止且 restart=no。MLX 依赖切为固定锁文件环境 `.runtime/mlx-dependencies/releases/deps-3b512beee79a`，原 `.venv` 保留在 `.runtime/mlx-dependencies/rollback-before-20261102` 供回退；原 LaunchAgent／模型／修订／1024维保持，切换后真实推理通过。三计算节点 READY、修订66与原容量／交互预留保持；正式无状态媒体包保持，CUDA未注册为生产节点。
+>
+> 完整CI、六万项数据库／历史升级／完整还原、最终API镜像及固定Mac worker验收通过。923551936字节数据库备份已完整解析并核验SHA；部署与回退资料在 NAS `maintenance/all-branches-20261102/`，完整Compose链只追加本次 `images.json`。用户暂停／时段与处理设置逐项保持；数据库、MinIO、协调器、中继及停止的NAS worker身份保持，网关只校验并reload。原62个静态资源与3份分发文件哈希保持，公网入口及新脚本逐字节一致、gzip和APK Range206通过。详细双端验收与合成主体清理见[全部分支整合发布记录](all-branches-release-2026-11-02.md)。本段为2026-11-02现场快照，动态任务进度仍从检查点读取。
+
 > **2026-11-01 刷新优化与推荐审核修复已上线（覆盖下方应用／业务 worker 快照）**：API／独立 operations 为 `sekereagle/api:refresh-ff0c9ac7`，固定源码 `ff0c9ac7a97eb8f723ae3edf50e509155f014751`；网页为 `sekereagle/web:refresh-cc4d1978-complete`，固定源码 `cc4d19787b077974af2c9f37afc0a0e111e1fbac`，追加断网保留工作区与重连合并校准。三服务 healthy、零重启，78 项迁移完成。唯一 Mac 业务 worker 已切为不可变 `worker-ff0c9ac7`，现场 PID28050、新鲜心跳；旧 worker 经原 SIGTERM 排空退出。NAS worker 继续停止且 restart=no。
 >
 > 界面只对可见活动任务观察进度，完成后停止完整读取；跨设备共用轻量检查每60秒一次，隐藏暂停。已有推荐／整批审核读取持久结果，不再探测模型；未激活向量面板不请求概览，显式诊断独立。临时断网保留页面、选择和草稿，真实撤权仍清理缓存。完整 CI、六万项隔离集成／历史升级／完整恢复、最终 API 镜像、不可变 Mac worker 与实际 Chrome／Electron 验收通过；生产静态入口逐字节一致，旧静态文件与APK哈希、Range206保持。
