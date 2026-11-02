@@ -20,6 +20,13 @@ describe('browser session recovery', () => {
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
   });
 
+  it('keeps browser mutations synchronous up to their original fetch boundary', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ ok: true }));
+    const pending = request('/api/photos/assets/batch/trash', { method: 'POST', body: '{}' });
+    expect(fetch).toHaveBeenCalledOnce();
+    await pending;
+  });
+
   it('reads a desktop list exactly once through main, while mutations invalidate list evidence before fetch', async () => {
     const events: string[] = [];
     const readLibrary = vi.fn(async () => ({ status: 200, body: '{"items":[]}', contentType: 'application/json' }));
