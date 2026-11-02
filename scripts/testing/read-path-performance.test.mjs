@@ -4,6 +4,7 @@ import console from 'node:console';
 import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
+import { performance } from 'node:perf_hooks';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
@@ -84,9 +85,120 @@ test('date-ordered empty searches finish in one database round trip across sixty
     undefined,
     'CAPTURED_AT',
   );
-  console.log('empty date search', JSON.stringify({ ms: performance.now() - started, sql: queries.length }));
+  console.log(
+    'empty date search',
+    JSON.stringify({ ms: performance.now() - started, sql: queries.length }),
+  );
   assert.deepEqual(result, []);
-  assert.equal(queries.length, 1, 'no-match searches must not paginate through the entire library over SQL');
+  assert.equal(
+    queries.length,
+    1,
+    'no-match searches must not paginate through the entire library over SQL',
+  );
+});
+test('sparse date searches page every match past a thousand while retaining owner, mode, private and trash boundaries', async () => {
+  const match = 'sparse-date-search-8e260cc8';
+  const changed = Array.from({ length: 1053 }, (_, n) => assetId(n));
+  await db.eagleAsset.updateMany({
+    where: { id: { in: changed } },
+    data: { normalizedDisplayName: match },
+  });
+  await db.eagleAsset.update({ where: { id: assetId(0) }, data: { isPrivate: true } });
+  await db.eagleAsset.update({ where: { id: assetId(1) }, data: { deletedAt: new Date() } });
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  const context = { status: 'UNAVAILABLE', spaceId: 'synthetic' };
+  try {
+    for (const sort of ['CAPTURED_AT', 'ADDED_AT'])
+      for (const includePrivate of [false, true]) {
+        const field = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
+        const expected = await db.eagleAsset.findMany({
+          where: {
+            ownerId,
+            libraryMode: 'PHOTO',
+            deletedAt: null,
+            normalizedDisplayName: match,
+            ...(includePrivate ? {} : { isPrivate: false }),
+          },
+          orderBy: [{ [field]: 'desc' }, { id: 'desc' }],
+          select: { id: true },
+        });
+        const seen = [];
+        let after;
+        for (;;) {
+          queries = [];
+          const page = await ranker.rankPage(
+            ownerId,
+            match,
+            context,
+            after,
+            40,
+            includePrivate,
+            false,
+            undefined,
+            sort,
+          );
+          assert.equal(queries.length, 1);
+          assert.ok(page.every((row) => row.tier === 3 && row.similarity === 1));
+          seen.push(...page.map((row) => row.assetId));
+          assert.ok(seen.length <= expected.length, 'cursor must advance without duplicates');
+          if (page.length < 40) break;
+          after = page.at(-1);
+        }
+        assert.deepEqual(
+          seen,
+          expected.map((row) => row.id),
+        );
+        assert.ok(seen.length > 1000);
+      }
+    assert.deepEqual(
+      await ranker.rankPage(
+        randomUUID(),
+        match,
+        context,
+        undefined,
+        40,
+        true,
+        false,
+        undefined,
+        'CAPTURED_AT',
+      ),
+      [],
+    );
+    assert.deepEqual(
+      await new EagleImageSearchService(db, {}, 'MATERIAL').rankPage(
+        ownerId,
+        match,
+        context,
+        undefined,
+        40,
+        true,
+        false,
+        undefined,
+        'ADDED_AT',
+      ),
+      [],
+    );
+    const trash = await ranker.rankPage(
+      ownerId,
+      match,
+      context,
+      undefined,
+      40,
+      true,
+      true,
+      undefined,
+      'CAPTURED_AT',
+    );
+    assert.deepEqual(
+      trash.map((row) => row.assetId),
+      [assetId(1)],
+    );
+  } finally {
+    await db.eagleAsset.updateMany({
+      where: { id: { in: changed } },
+      data: { normalizedDisplayName: 'synthetic', isPrivate: false, deletedAt: null },
+    });
+  }
 });
 test('statistics compacts repeated daily facts before materializing chart inputs', async () => {
   let captured;
