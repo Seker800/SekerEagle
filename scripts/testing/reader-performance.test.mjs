@@ -336,6 +336,7 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
         'material-page': 'page',
         'count-all': 'count',
         'count-rating': 'count',
+        'count-captured': 'count',
         statistics: 'statistics',
         facets: 'facets',
         people: 'peopleCounts',
