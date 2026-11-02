@@ -5,6 +5,7 @@ import { Pool, type PoolClient } from 'pg';
 import { LibraryMemoryIndex } from './eagle-memory-index';
 import type { MemoryAsset } from './eagle-memory-predicate';
 import type { LibraryIdentity } from './library-mode';
+import { loadResidentSemanticFolders, SemanticMemoryBudgetError } from './eagle-memory-semantic-store';
 
 async function execute<T extends MemoryAsset>(
   connection: Pick<PoolClient, 'query'>,
@@ -36,10 +37,12 @@ export async function readMemoryAssets(
   metadataFactFields?: Prisma.Sql,
 ): Promise<MemoryAsset[]> {
   if (ids?.length === 0) return [];
-  const selected = ids
-    ? Prisma.sql`AND a.id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`
-    : Prisma.empty;
-  const scoped = Prisma.sql`a."ownerId"=${scope.ownerId} AND a."libraryMode"=${scope.libraryMode}::"LibraryMode" ${selected}`;
+  const scopedFor = (alias: string, key: string) => Prisma.sql`${Prisma.raw(alias)}."ownerId"=${scope.ownerId}
+    AND ${Prisma.raw(alias)}."libraryMode"=${scope.libraryMode}::"LibraryMode"
+    ${ids ? Prisma.sql`AND ${Prisma.raw(alias)}.${Prisma.raw('"' + key + '"')} IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))` : Prisma.empty}`;
+  const scoped = scopedFor('a', 'id');
+  const relationScope = Prisma.sql`${scoped} AND ${scopedFor('c', 'assetId')}`;
+  const metadataScope = Prisma.sql`${scoped} AND ${scopedFor('m', 'assetId')}`;
   const assets = await execute<MemoryAsset>(
     tx,
     Prisma.sql`
@@ -78,34 +81,34 @@ export async function readMemoryAssets(
   };
   // Set-based reads avoid Prisma's full-library relation parameter expansion.
   await attach(
-    Prisma.sql`SELECT c."assetId",c.description,c."sourceUrl" FROM "EagleAssetAnnotation" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${scoped}`,
+    Prisma.sql`SELECT c."assetId",c.description,c."sourceUrl" FROM "EagleAssetAnnotation" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope}`,
     'annotation',
     false,
   );
   await attach(
     Prisma.sql`SELECT m."assetId",m."cameraModel",m."lensModel",m."capturedAt" AT TIME ZONE 'UTC' "capturedAt",m.latitude,m.longitude,
       ${metadataFactFields ? Prisma.sql`CASE WHEN m."assetRevision"=a."mediaRevision" THEN (SELECT row_to_json(fact) FROM (SELECT ${metadataFactFields}) fact) ELSE NULL END` : Prisma.sql`NULL`} AS "statisticsFact"
-      FROM "EaglePhotoMetadata" m JOIN "EagleAsset" a ON a.id=m."assetId" WHERE ${scoped}`,
+      FROM "EaglePhotoMetadata" m JOIN "EagleAsset" a ON a.id=m."assetId" WHERE ${metadataScope}`,
     'photoMetadata',
     false,
   );
   await attach(
-    Prisma.sql`SELECT c."assetId",c.name FROM "EaglePhotoLocation" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${scoped}`,
+    Prisma.sql`SELECT c."assetId",c.name FROM "EaglePhotoLocation" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope}`,
     'photoLocation',
     false,
   );
   await attach(
-    Prisma.sql`SELECT c."assetId",c."tagId",jsonb_build_object('normalizedName',t."normalizedName") tag FROM "EagleAssetManualTag" c JOIN "EagleAsset" a ON a.id=c."assetId" JOIN "EagleManualTag" t ON t.id=c."tagId" WHERE ${scoped}`,
+    Prisma.sql`SELECT c."assetId",c."tagId",jsonb_build_object('normalizedName',t."normalizedName") tag FROM "EagleAssetManualTag" c JOIN "EagleAsset" a ON a.id=c."assetId" JOIN "EagleManualTag" t ON t.id=c."tagId" WHERE ${relationScope}`,
     'manualTagLinks',
     true,
   );
   await attach(
-    Prisma.sql`SELECT c."assetId",c."aiTagId",c.status FROM "EagleAssetAiTag" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${scoped} AND c.status='ACTIVE'`,
+    Prisma.sql`SELECT c."assetId",c."aiTagId",c.status FROM "EagleAssetAiTag" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope} AND c.status='ACTIVE'`,
     'aiTagLinks',
     true,
   );
   await attach(
-    Prisma.sql`SELECT c."assetId",c."personId",c."isCurrent",c."assetRevision" FROM "EaglePhotoFace" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${scoped} AND c."isCurrent"`,
+    Prisma.sql`SELECT c."assetId",c."personId",c."isCurrent",c."assetRevision" FROM "EaglePhotoFace" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope} AND c."isCurrent"`,
     'photoFaces',
     true,
   );
@@ -114,8 +117,8 @@ export async function readMemoryAssets(
     Prisma.sql`
     SELECT c."assetId",c.id,c."assetRevision",c."processorVersion",c.status,c."isCurrent",
       s.rank,s.hex,s.weight FROM "EagleAssetColorAnalysis" c JOIN "EagleAsset" a ON a.id=c."assetId"
-      LEFT JOIN "EagleAssetColorSwatch" s ON s."analysisId"=c.id AND s.rank<2
-    WHERE ${scoped} AND c."isCurrent" ORDER BY c.id,s.rank`,
+      LEFT JOIN "EagleAssetColorSwatch" s ON s."analysisId"=c.id AND s."ownerId"=c."ownerId" AND s."libraryMode"=c."libraryMode" AND s.rank<2
+    WHERE ${relationScope} AND c."isCurrent" ORDER BY c.id,s.rank`,
   );
   const analyses = new Map<unknown, MemoryAsset>();
   for (const { assetId, rank, hex, weight, ...analysis } of colors) {
@@ -147,13 +150,12 @@ async function readMemorySnapshot(
   if (!state?.enabled) throw new Error('Library read state unavailable');
   const revision = String(state.revision);
   const cached = latest();
-  const current =
-    cached && BigInt(cached.revision) <= BigInt(revision) ? cached.snapshot() : undefined;
-  if (current?.revision === revision) return current;
+  if (cached?.revision === revision) return cached;
+  const current = cached && BigInt(cached.revision) < BigInt(revision) ? cached.snapshot() : undefined;
   const changes = current
-    ? await execute<{ revision: string; rebuild: boolean; assetIds: string[] }>(
+    ? await execute<{ revision: string; rebuild: boolean; assetIds: string[]; folderIds: string[] }>(
         connection,
-        Prisma.sql`SELECT revision,rebuild,"assetIds" FROM "EagleLibraryReadChange" WHERE ${scoped}
+        Prisma.sql`SELECT revision,rebuild,"assetIds","folderIds" FROM "EagleLibraryReadChange" WHERE ${scoped}
       AND revision>${BigInt(current.revision)} AND revision<=${BigInt(revision)} ORDER BY revision`,
       )
     : [];
@@ -172,6 +174,23 @@ async function readMemorySnapshot(
   const view = rebuild ? new LibraryMemoryIndex(scope.ownerId, scope.libraryMode) : current;
   if (ids) view.update(revision, ids, rows);
   else view.replace(revision, rows);
+  const folderIds = rebuild ? undefined : [...new Set(changes.flatMap(change => change.folderIds))];
+  if (folderIds === undefined || folderIds.length) {
+    try {
+      const prepared = await loadResidentSemanticFolders(connection, scope, folderIds);
+      const folders = new Map(rebuild ? [] : current?.semanticFolders);
+      for (const id of folderIds ?? []) folders.delete(id);
+      for (const [id, graph] of prepared) folders.set(id, graph);
+      const bytes = [...folders.values()].reduce((sum, graph) => sum + graph.residentBytes, 0);
+      if (bytes > Number(process.env.EAGLE_READER_QUERY_WORKSPACE_BYTES ?? 134217728))
+        throw new SemanticMemoryBudgetError();
+      view.semanticFolders = folders;
+    } catch (error) {
+      if (!(error instanceof SemanticMemoryBudgetError)) throw error;
+      // Keep ordinary reads available when semantic facts exceed their memory budget.
+      view.semanticFolders = undefined;
+    }
+  }
   return view;
 }
 
@@ -179,6 +198,7 @@ async function readMemorySnapshot(
 export class LibraryReadStore {
   private readonly indexes = new Map<string, LibraryMemoryIndex>();
   private readonly loading = new Map<string, Promise<LibraryMemoryIndex>>();
+  private readonly readers = new Map<string, number>();
   constructor(
     private readonly db: Pool,
     private readonly metadataFactFields?: Prisma.Sql,
@@ -186,10 +206,7 @@ export class LibraryReadStore {
   async synchronize(scope: LibraryIdentity): Promise<LibraryMemoryIndex> {
     const key = JSON.stringify([scope.ownerId, scope.libraryMode]);
     const running = this.loading.get(key);
-    if (running) {
-      await running;
-      return this.synchronize(scope);
-    }
+    if (running) return running;
     const work = this.load(scope, key);
     this.loading.set(key, work);
     try {
@@ -197,6 +214,21 @@ export class LibraryReadStore {
     } finally {
       this.loading.delete(key);
     }
+  }
+  /** A foreground reader never joins a background refresh. The fence preserves read-after-write. */
+  async read(scope: LibraryIdentity): Promise<LibraryMemoryIndex> {
+    const key = JSON.stringify([scope.ownerId, scope.libraryMode]);
+    const cached = this.indexes.get(key);
+    if (!cached) {
+      void this.synchronize(scope).catch(() => undefined);
+      throw new Error('Library read snapshot is not ready');
+    }
+    const [state] = await execute<{ revision: string; enabled: boolean }>(this.db,
+      Prisma.sql`SELECT revision,enabled FROM "EagleLibraryReadState" WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"`);
+    if (!state?.enabled) throw new Error('Library read state unavailable');
+    const latest = this.indexes.get(key)!;
+    if (BigInt(latest.revision) >= BigInt(state.revision)) return latest;
+    return this.readSnapshot(scope, (_connection, view) => view);
   }
   private async load(scope: LibraryIdentity, key: string) {
     let current = this.indexes.get(key);
@@ -228,6 +260,9 @@ export class LibraryReadStore {
   ): Promise<T> {
     signal?.throwIfAborted();
     const key = JSON.stringify([scope.ownerId, scope.libraryMode]);
+    const baseline = this.indexes.get(key);
+    this.readers.set(key, (this.readers.get(key) ?? 0) + 1);
+    try {
     const connection = await this.db.connect();
     let inTransaction = false;
     let view: LibraryMemoryIndex;
@@ -241,7 +276,7 @@ export class LibraryReadStore {
       view = await readMemorySnapshot(
         connection,
         scope,
-        () => this.indexes.get(key),
+        () => baseline,
         this.metadataFactFields,
       );
       signal?.throwIfAborted();
@@ -257,14 +292,18 @@ export class LibraryReadStore {
     const current = this.indexes.get(key);
     if (!current || BigInt(current.revision) < BigInt(view.revision)) {
       this.indexes.set(key, view);
-      // Publication is monotonic even if another foreground snapshot finishes first.
-      await execute(
-        this.db,
-        Prisma.sql`DELETE FROM "EagleLibraryReadChange"
-        WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"
-          AND revision<=${BigInt(view.revision)}`,
-      );
     }
     return result;
+    } finally {
+      const remaining = this.readers.get(key)! - 1;
+      if (remaining) this.readers.set(key, remaining);
+      else {
+        this.readers.delete(key);
+        const published = this.indexes.get(key);
+        if (published) await execute(this.db, Prisma.sql`DELETE FROM "EagleLibraryReadChange"
+          WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"
+            AND revision<=${BigInt(published.revision)}`);
+      }
+    }
   }
 }

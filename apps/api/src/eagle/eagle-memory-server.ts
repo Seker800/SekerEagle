@@ -86,7 +86,7 @@ export interface LibraryReadHandlers {
 }
 /** Internal service only; public owner/mode and authentication remain the API's responsibility. */
 export function createLibraryReaderServer(
-  store: Pick<LibraryReadStore, 'synchronize'>,
+  store: Pick<LibraryReadStore, 'read'>,
   token: string,
   maxBytes = 2 * 1024 * 1024,
   handlers: LibraryReadHandlers = {},
@@ -132,7 +132,7 @@ export function createLibraryReaderServer(
         return;
       }
       const query = parsed.data;
-      const index = await store.synchronize(query.scope);
+      const index = await store.read(query.scope);
       cancellation.signal.throwIfAborted();
       const revision = index.revision;
       const where = query.where as AssetSearchWhere;

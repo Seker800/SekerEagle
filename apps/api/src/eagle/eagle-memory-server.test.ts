@@ -5,7 +5,7 @@ import { createLibraryReaderServer } from './eagle-memory-server';
 import { LibraryMemoryIndex } from './eagle-memory-index';
 
 test('reader cannot start with missing identity or an invalid body byte budget', () => {
-  const store = { synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') };
+  const store = { read: async () => new LibraryMemoryIndex('owner', 'PHOTO') };
   assert.throws(() => createLibraryReaderServer(store, ''), /identity/);
   for (const bytes of [0, -1, NaN, 1.5])
     assert.throws(() => createLibraryReaderServer(store, 'identity', bytes), /budget/);
@@ -16,7 +16,7 @@ test('internal reader authenticates before reading and validates scope, page and
   const token = 'test-reader-identity';
   const server = createLibraryReaderServer(
     {
-      synchronize: async ({ ownerId, libraryMode }) => {
+      read: async ({ ownerId, libraryMode }) => {
         reads++;
         const index = new LibraryMemoryIndex(ownerId, libraryMode);
         index.replace('1', []);
@@ -93,7 +93,7 @@ test('semantic reader dispatches one complete page without exposing private serv
   ];
   let calls = 0;
   const server = createLibraryReaderServer(
-    { synchronize: async () => index },
+    { read: async () => index },
     'semantic-test',
     2097152,
     {
@@ -136,7 +136,7 @@ test('semantic reader dispatches one complete page without exposing private serv
 
 test('photo facets capability is explicitly owned by the photo handler', () => {
   const server = createLibraryReaderServer(
-    { synchronize: async () => new LibraryMemoryIndex('owner', 'PHOTO') },
+    { read: async () => new LibraryMemoryIndex('owner', 'PHOTO') },
     'test',
     1024,
     {

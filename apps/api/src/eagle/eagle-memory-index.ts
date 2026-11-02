@@ -1,3 +1,4 @@
+import type { ResidentSemanticGraph } from './eagle-memory-semantic-store';
 import {
   compileMemorySearchPredicate,
   type MemoryAsset,
@@ -18,6 +19,7 @@ export const memoryDateTime = (value: unknown): number =>
  */
 export class LibraryMemoryIndex {
   revision = '0';
+  semanticFolders: ReadonlyMap<string, ResidentSemanticGraph> | undefined;
   private rows = new Map<string, MemoryAsset>();
   private ordered = new Map<MemoryDateField, string[]>();
   private derived = new Map<string, { dependencies: readonly string[]; value: unknown }>();
@@ -94,6 +96,7 @@ export class LibraryMemoryIndex {
   snapshot(): LibraryMemoryIndex {
     const view = new LibraryMemoryIndex(this.ownerId, this.libraryMode);
     view.revision = this.revision;
+    view.semanticFolders = this.semanticFolders;
     view.rows = new Map(this.rows);
     view.ordered = new Map(this.ordered);
     view.derived = new Map(this.derived);
