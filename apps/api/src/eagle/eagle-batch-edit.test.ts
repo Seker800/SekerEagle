@@ -200,3 +200,12 @@ test('adjustment-only paste preserves the target custom LUT instead of taking cl
     },
   ]);
 });
+
+test('selected portable LUT is referenced from the immutable operation instead of copied into every render job', async () => {
+  const { definition, tx, jobs } = harness();
+  await definition.apply(tx as never, context, { recipe: { version: 1,
+    edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:clipboard' } }, parts: { ...parts, filter: true }, lut: portableLut }, ['copy']);
+  const edit = jobs[0]!.data.editRender as { create: { lut?: string; commandOperationId?: string } };
+  assert.equal(edit.create.commandOperationId, context.operationId);
+  assert.equal(edit.create.lut, undefined);
+});
