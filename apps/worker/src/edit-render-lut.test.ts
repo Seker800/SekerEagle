@@ -110,3 +110,20 @@ test('unselected filter always uses preserved target table even when clipboard h
   };
   assert.equal(await resolveEditRenderLut(db as never, row, 'lut:target'), 'preserved-target');
 });
+
+test('worker projects one selected numeric table instead of transferring the operation bank', async () => {
+  let projected = false;
+  const db = {
+    eagleAssetOperation: {
+      findFirst: async () => {
+        throw new Error('whole bank must not cross the database boundary');
+      },
+    },
+    $queryRaw: async () => {
+      projected = true;
+      return [{ lut: 'selected-table', payloadExists: true, recipeMatches: false }];
+    },
+  };
+  assert.equal(await resolveEditRenderLut(db as never, row, 'lut:target'), 'selected-table');
+  assert.equal(projected, true);
+});
