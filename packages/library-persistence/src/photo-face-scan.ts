@@ -28,9 +28,11 @@ export async function queuePhotoFaceScan(
   db: Pick<PrismaClient, '$transaction'>,
   ownerId: string,
   includePrivate: boolean,
+  beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
 ) {
   return db.$transaction(
     async (tx) => {
+      await beforePublish?.(tx);
       // Admission writes the whole library atomically. Leave a bounded window for
       // NAS WAL flushes, with transaction and scan-route deadlines above it.
       await tx.$executeRaw`SET LOCAL statement_timeout = '600s'`;

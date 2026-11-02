@@ -71,6 +71,7 @@ const select = {
     take: 4,
   },
 } satisfies Prisma.EagleAssetSelect;
+type BeforePublish = (tx: Prisma.TransactionClient) => Promise<void>;
 type Photo = Prisma.EagleAssetGetPayload<{ select: typeof select }>;
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const serialize = (a: Photo) => ({
@@ -87,6 +88,40 @@ export class PhotoAgentService {
     private readonly search: EagleImageSearchService,
     @Optional() private readonly transfer?: EagleLibraryTransferService,
   ) {}
+  /** Admission checks visibility without taking the task or library publication locks. */
+  async admitCommand(ownerId: string, includePrivate: boolean, payload: Prisma.InputJsonObject) {
+    const p = payload as Record<string, unknown>;
+    const taskId = p.taskId as string;
+    const task = await this.prisma.eaglePhotoAgentTask.findFirst({
+      where: { id: taskId, ownerId, libraryMode: 'PHOTO' },
+      select: { scope: true },
+    });
+    if (!task) throw new NotFoundException('整理任务不存在。');
+    const frozen = task.scope as unknown as Snapshot[];
+    const ids = [...new Set(frozen.map((asset) => asset.id))];
+    const count = await this.prisma.eagleAsset.count({
+      where: {
+        ...scope(ownerId, includePrivate),
+        id: { in: ids },
+        OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
+      },
+    });
+    if (count !== ids.length) throw new NotFoundException('整理任务中的照片不存在。');
+    const suggestions =
+      (p.suggestionIds as string[] | undefined) ??
+      (p.suggestionId
+        ? [p.suggestionId as string]
+        : ((p.items as Array<{ suggestionId: string }> | undefined)?.map(
+            (item) => item.suggestionId,
+          ) ?? []));
+    if (
+      suggestions.length &&
+      (await this.prisma.eaglePhotoAgentSuggestion.count({
+        where: { taskId, ownerId, libraryMode: 'PHOTO', id: { in: suggestions } },
+      })) !== new Set(suggestions).size
+    )
+      throw new NotFoundException('整理建议不存在。');
+  }
   instructions(ownerId: string) {
     return readPhotoInstructions(this.prisma, ownerId);
   }
@@ -335,6 +370,7 @@ export class PhotoAgentService {
     taskId: string,
     input: ManualPhotoActionDto,
     includePrivate: boolean,
+    beforePublish?: BeforePublish,
   ) {
     return performManualPhotoAction(
       this.prisma,
@@ -344,6 +380,7 @@ export class PhotoAgentService {
       input,
       includePrivate,
       (tx) => this.task(tx, ownerId, taskId, includePrivate),
+      beforePublish,
     );
   }
   async history(
@@ -635,9 +672,17 @@ export class PhotoAgentService {
     suggestionId: string,
     input: ReviewPhotoSuggestionDto,
     includePrivate: boolean,
+    beforePublish?: BeforePublish,
   ) {
     try {
-      return await this.reviewDecision(ownerId, taskId, suggestionId, input, includePrivate);
+      return await this.reviewDecision(
+        ownerId,
+        taskId,
+        suggestionId,
+        input,
+        includePrivate,
+        beforePublish,
+      );
     } catch (error) {
       await this.recordFailure(
         ownerId,
@@ -647,6 +692,7 @@ export class PhotoAgentService {
         input.action,
         includePrivate,
         error,
+        beforePublish,
       );
       throw error;
     }
@@ -659,9 +705,11 @@ export class PhotoAgentService {
     attemptedAction: string,
     includePrivate: boolean,
     error: unknown,
+    beforePublish?: BeforePublish,
   ) {
     if (error instanceof NotFoundException) return;
     await this.prisma.$transaction(async (tx) => {
+      await beforePublish?.(tx);
       await this.task(tx, ownerId, taskId, includePrivate);
       const suggestion = await tx.eaglePhotoAgentSuggestion.findFirst({
         where: { id: suggestionId, taskId, ownerId, libraryMode: 'PHOTO' },
@@ -694,6 +742,7 @@ export class PhotoAgentService {
     suggestionId: string,
     input: ReviewPhotoSuggestionDto,
     includePrivate: boolean,
+    beforePublish?: BeforePublish,
   ) {
     const requested = await this.prisma.eaglePhotoAgentSuggestion.findFirst({
       where: { id: suggestionId, taskId, ownerId, libraryMode: 'PHOTO' },
@@ -702,8 +751,9 @@ export class PhotoAgentService {
     if (requested?.kind === 'SEND_TO_MATERIAL' && input.city)
       throw new BadRequestException('发送申请不接受位置修改。');
     if (requested?.kind === 'SEND_TO_MATERIAL' && input.action === 'ACCEPT')
-      return this.reviewTransfer(ownerId, taskId, suggestionId, includePrivate);
+      return this.reviewTransfer(ownerId, taskId, suggestionId, includePrivate, beforePublish);
     return this.prisma.$transaction(async (tx) => {
+      await beforePublish?.(tx);
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} FOR UPDATE`;
       const { task, assets } = await this.task(tx, ownerId, taskId, includePrivate);
@@ -875,9 +925,11 @@ export class PhotoAgentService {
     taskId: string,
     input: ReviewPhotoRequestDto,
     includePrivate: boolean,
+    beforePublish?: BeforePublish,
   ) {
     // Reject a mixed or foreign scope before applying even the first item.
     await this.prisma.$transaction(async (tx) => {
+      await beforePublish?.(tx);
       await this.task(tx, ownerId, taskId, includePrivate);
       const count = await tx.eaglePhotoAgentSuggestion.count({
         where: { ownerId, libraryMode: 'PHOTO', taskId, id: { in: input.suggestionIds } },
@@ -894,6 +946,7 @@ export class PhotoAgentService {
           id,
           { action: input.action },
           includePrivate,
+          beforePublish,
         );
         results.push({ id, status: result.status });
       } catch (error) {
@@ -915,9 +968,11 @@ export class PhotoAgentService {
     taskId: string,
     suggestionId: string,
     includePrivate: boolean,
+    beforePublish?: BeforePublish,
   ) {
     if (!this.transfer) throw new ConflictException('发送服务未就绪。');
     const approved = await this.prisma.$transaction(async (tx) => {
+      await beforePublish?.(tx);
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} FOR UPDATE`;
       const { task, assets } = await this.task(tx, ownerId, taskId, includePrivate);
@@ -992,8 +1047,10 @@ export class PhotoAgentService {
             { mediaRevision: approved.assetRevision, rowVersion: approved.assetRowVersion },
           ],
         ]),
+        beforePublish ? { beforePublish } : undefined,
       );
       return await this.prisma.$transaction(async (tx) => {
+        await beforePublish?.(tx);
         await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} FOR UPDATE`;
         const current = await tx.eaglePhotoAgentSuggestion.findUniqueOrThrow({
           where: { id: suggestionId },
@@ -1021,6 +1078,7 @@ export class PhotoAgentService {
     } catch (error) {
       // No automatic retry. Another manual approval resumes the same durable send plan.
       await this.prisma.$transaction(async (tx) => {
+        await beforePublish?.(tx);
         const changed = await tx.eaglePhotoAgentSuggestion.updateMany({
           where: { id: suggestionId, ownerId, status: 'APPLYING' },
           data: {
@@ -1049,9 +1107,15 @@ export class PhotoAgentService {
       throw error;
     }
   }
-  async undo(ownerId: string, taskId: string, suggestionId: string, includePrivate: boolean) {
+  async undo(
+    ownerId: string,
+    taskId: string,
+    suggestionId: string,
+    includePrivate: boolean,
+    beforePublish?: BeforePublish,
+  ) {
     try {
-      return await this.undoDecision(ownerId, taskId, suggestionId, includePrivate);
+      return await this.undoDecision(ownerId, taskId, suggestionId, includePrivate, beforePublish);
     } catch (error) {
       await this.recordFailure(
         ownerId,
@@ -1061,6 +1125,7 @@ export class PhotoAgentService {
         'UNDO',
         includePrivate,
         error,
+        beforePublish,
       );
       throw error;
     }
@@ -1070,8 +1135,10 @@ export class PhotoAgentService {
     taskId: string,
     suggestionId: string,
     includePrivate: boolean,
+    beforePublish?: BeforePublish,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      await beforePublish?.(tx);
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} FOR UPDATE`;
       await this.task(tx, ownerId, taskId, includePrivate);

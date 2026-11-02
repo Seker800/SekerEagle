@@ -142,6 +142,7 @@ test('agent previews use the same safe media disposition as browser previews', a
         mimeType: 'image/svg+xml',
       }),
     } as never,
+    {} as never,
   );
   const file = await controller.preview({ sub: 'owner', canViewPrivate: false } as never, 'asset', {
     setHeader: (name: string, value: string) => headers.set(name, value),

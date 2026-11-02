@@ -1,6 +1,7 @@
 import { safeMediaResponse } from '../common/media-response';
 import {
   Body,
+  HttpCode,
   Controller,
   Get,
   Param,
@@ -24,6 +25,8 @@ import { RequirePatScopes } from '../auth/required-scopes';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { EagleMediaService } from '../eagle/eagle-media.service';
+import { EagleAssetOperationService } from '../eagle/eagle-asset-operations.service';
+import { libraryCommandPayload } from '../eagle/eagle-library-command';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoAgentService } from './photo-agent.service';
 import {
@@ -47,6 +50,7 @@ export class PhotoAgentController {
   constructor(
     private readonly agent: PhotoAgentService,
     private readonly media: EagleMediaService,
+    private readonly operations: EagleAssetOperationService,
   ) {}
   @Get('instructions') instructions(@CurrentPrincipal() p: AuthPrincipal) {
     return this.agent.instructions(p.sub);
@@ -86,21 +90,32 @@ export class PhotoAgentController {
   ) {
     return this.agent.submitRequest(p.sub, dto, p.canViewPrivate);
   }
-  @Post('tasks/:id/review') @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard) reviewRequest(
+  @Post('tasks/:id/review')
+  @HttpCode(202)
+  @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
+  reviewRequest(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: ReviewPhotoRequestDto,
   ) {
-    return this.agent.reviewBatch(p.sub, id, dto, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_AGENT_REVIEW_BATCH',
+      payload: libraryCommandPayload({ taskId: id, ...dto }),
+    });
   }
   @Post('tasks/:id/manual-action')
+  @HttpCode(202)
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   manualAction(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Body() dto: ManualPhotoActionDto,
   ) {
-    return this.agent.manualAction(p.sub, id, dto, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      operationId: dto.operationId,
+      type: 'PHOTO_AGENT_MANUAL',
+      payload: libraryCommandPayload({ taskId: id, ...dto }),
+    });
   }
   @Get('tasks/by-number/:number') detailByNumber(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -149,6 +164,7 @@ export class PhotoAgentController {
     return this.agent.cancel(p.sub, id, p.canViewPrivate);
   }
   @Post('tasks/:id/suggestions/:suggestionId/review')
+  @HttpCode(202)
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   review(
     @CurrentPrincipal() p: AuthPrincipal,
@@ -156,15 +172,22 @@ export class PhotoAgentController {
     @Param('suggestionId', new ParseUUIDPipe({ version: '4' })) suggestionId: string,
     @Body() dto: ReviewPhotoSuggestionDto,
   ) {
-    return this.agent.review(p.sub, id, suggestionId, dto, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_AGENT_REVIEW',
+      payload: libraryCommandPayload({ taskId: id, suggestionId, ...dto }),
+    });
   }
   @Post('tasks/:id/suggestions/:suggestionId/undo')
+  @HttpCode(202)
   @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
   undo(
     @CurrentPrincipal() p: AuthPrincipal,
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Param('suggestionId', new ParseUUIDPipe({ version: '4' })) suggestionId: string,
   ) {
-    return this.agent.undo(p.sub, id, suggestionId, p.canViewPrivate);
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_AGENT_UNDO',
+      payload: { taskId: id, suggestionId },
+    });
   }
 }

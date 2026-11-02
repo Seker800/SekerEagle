@@ -1,3 +1,4 @@
+import { runLibraryTransaction } from '../eagle/eagle-library-command';
 import { readMemoryPhotoFacets } from './photo-memory-client';
 import { readPeopleCountPage } from './photo-person-count-page';
 import { representativePhotoFace } from '@sekereagle/library-core';
@@ -20,6 +21,7 @@ import { facePreviewSelect, previewSelect, serializePreview } from './photo-prev
 import { suggestPhotoGroups } from './photo-grouping';
 import {
   visiblePhotoAssets,
+  visiblePhotoPeople,
   requireVisiblePerson,
   personPreviewSelect,
   serializePersonPreview,
@@ -31,6 +33,102 @@ const visible = visiblePhotoAssets;
 @Injectable()
 export class PhotoManagementService {
   constructor(private readonly prisma: PrismaService) {}
+  /** Unlocked authorization only; all mutable rules are rechecked during publication. */
+  async admitCommand(
+    ownerId: string,
+    includePrivate: boolean,
+    type: string,
+    payload: Prisma.InputJsonObject,
+  ) {
+    const p = payload as Record<string, unknown>;
+    const people =
+      type === 'PHOTO_PEOPLE_REVIEW'
+        ? [p.firstId, p.secondId]
+        : type === 'PHOTO_PEOPLE_MERGE_SELECTED'
+          ? (p.people as Array<{ id: string }>).map((person) => person.id)
+          : type === 'PHOTO_PEOPLE_MERGE'
+            ? [p.id, p.targetId]
+            : type.startsWith('PHOTO_PERSON_')
+              ? [p.id]
+              : type === 'PHOTO_FACE_REASSIGN' && p.personId
+                ? [p.personId]
+                : [];
+    const personIds = [...new Set(people as string[])];
+    if (
+      personIds.length &&
+      (await this.prisma.eaglePhotoPerson.count({
+        where: { ...visiblePhotoPeople(ownerId, includePrivate), id: { in: personIds } },
+      })) !== personIds.length
+    )
+      throw new NotFoundException('人物不存在。');
+    if (
+      type === 'PHOTO_FACE_REASSIGN' &&
+      !(await this.prisma.eaglePhotoFace.findFirst({
+        where: {
+          id: p.id as string,
+          ownerId,
+          libraryMode: 'PHOTO',
+          isCurrent: true,
+          asset: visible(ownerId, includePrivate),
+        },
+        select: { id: true },
+      }))
+    )
+      throw new NotFoundException('人脸不存在。');
+    const groupIds =
+      type === 'PHOTO_GROUP_MERGE'
+        ? [p.id, p.targetId]
+        : ['PHOTO_GROUP_UPDATE', 'PHOTO_GROUP_REMOVE_MEMBERS'].includes(type)
+          ? [p.id]
+          : [];
+    if (
+      groupIds.length &&
+      (await this.prisma.eaglePhotoGroup.count({
+        where: {
+          id: { in: groupIds as string[] },
+          ownerId,
+          libraryMode: 'PHOTO',
+          members: { some: {}, every: { asset: visible(ownerId, includePrivate) } },
+        },
+      })) !== new Set(groupIds).size
+    )
+      throw new NotFoundException('照片组不存在。');
+    const assetIds = p.assetIds as string[] | undefined;
+    if (
+      assetIds?.length &&
+      (await this.prisma.eagleAsset.count({
+        where: { ...visible(ownerId, includePrivate), id: { in: [...new Set(assetIds)] } },
+      })) !== new Set(assetIds).size
+    )
+      throw new NotFoundException('照片不存在。');
+    if (
+      type === 'PHOTO_GROUP_REMOVE_MEMBERS' &&
+      assetIds?.length &&
+      (await this.prisma.eaglePhotoGroupMember.count({
+        where: {
+          groupId: p.id as string,
+          ownerId,
+          libraryMode: 'PHOTO',
+          assetId: { in: [...new Set(assetIds)] },
+        },
+      })) !== new Set(assetIds).size
+    )
+      throw new NotFoundException('组内照片不存在。');
+    if (
+      p.bestAssetId &&
+      !(await this.prisma.eaglePhotoGroupMember.findFirst({
+        where: {
+          ownerId,
+          libraryMode: 'PHOTO',
+          groupId: p.id as string,
+          assetId: p.bestAssetId as string,
+          asset: visible(ownerId, includePrivate),
+        },
+        select: { assetId: true },
+      }))
+    )
+      throw new NotFoundException('组内照片不存在。');
+  }
   async timeline(ownerId: string, includePrivate: boolean) {
     const rows = await this.prisma.$queryRaw<Array<{ month: Date; count: bigint }>>(Prisma.sql`
       SELECT date_trunc('month', "chronologicalAt") AS month, count(*) AS count
@@ -291,10 +389,14 @@ export class PhotoManagementService {
       })),
     };
   }
-  async scanFaces(ownerId: string, includePrivate: boolean) {
+  async scanFaces(
+    ownerId: string,
+    includePrivate: boolean,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
     if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
       throw new BadRequestException('本地人物模型尚未配置，请按照片功能文档安装模型运行环境。');
-    return queuePhotoFaceScan(this.prisma, ownerId, includePrivate);
+    return queuePhotoFaceScan(this.prisma, ownerId, includePrivate, beforePublish);
   }
   private async requirePerson(
     tx: Pick<Prisma.TransactionClient, 'eaglePhotoPerson'>,
@@ -311,8 +413,9 @@ export class PhotoManagementService {
     marksAssetsPrivate: boolean,
     rowVersion: number,
     includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       const person = await this.requirePerson(tx, ownerId, id, includePrivate);
@@ -327,8 +430,14 @@ export class PhotoManagementService {
       return { ...updated, changed };
     });
   }
-  async renamePerson(ownerId: string, id: string, name: string, includePrivate: boolean) {
-    return this.prisma.$transaction(async (tx) => {
+  async renamePerson(
+    ownerId: string,
+    id: string,
+    name: string,
+    includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    return runLibraryTransaction(db, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       await this.requirePerson(tx, ownerId, id, includePrivate);
       return tx.eaglePhotoPerson.update({
@@ -344,9 +453,10 @@ export class PhotoManagementService {
     targetId: string,
     includePrivate: boolean,
     versions?: { source: number; target: number },
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
     if (sourceId === targetId) throw new BadRequestException('请选择另一个人物。');
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       return mergeSelectedPeople(tx, ownerId, includePrivate, targetId, [
@@ -360,8 +470,9 @@ export class PhotoManagementService {
     includePrivate: boolean,
     targetId: string,
     people: readonly { id: string; rowVersion: number }[],
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       return mergeSelectedPeople(tx, ownerId, includePrivate, targetId, people);
@@ -372,8 +483,9 @@ export class PhotoManagementService {
     faceId: string,
     targetId: string | null,
     includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       const face = await tx.eaglePhotoFace.findFirst({
@@ -431,14 +543,18 @@ export class PhotoManagementService {
       members: group.members.map((member) => ({ asset: serializePreview(member.asset) })),
     }));
   }
-  async scanGroups(ownerId: string, includePrivate: boolean) {
+  async scanGroups(
+    ownerId: string,
+    includePrivate: boolean,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
     const rows = await this.prisma.eaglePhotoMetadata.findMany({
       where: { ownerId, libraryMode: 'PHOTO', asset: visible(ownerId, includePrivate) },
       orderBy: [{ capturedAt: 'desc' }, { assetId: 'asc' }],
-      take: 2000,
     });
     const suggestions = suggestPhotoGroups(rows.map((row) => ({ ...row, id: row.assetId })));
     return this.prisma.$transaction(async (tx) => {
+      await beforePublish?.(tx);
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
       const manualMembers = await tx.eaglePhotoGroupMember.findMany({
         where: { ownerId, libraryMode: 'PHOTO', group: {} },
@@ -481,14 +597,19 @@ export class PhotoManagementService {
         });
         created++;
       }
-      return { created, scanned: rows.length, limit: 2000 };
+      return { created, scanned: rows.length };
     });
   }
-  async createGroup(ownerId: string, assetIds: string[], includePrivate: boolean) {
+  async createGroup(
+    ownerId: string,
+    assetIds: string[],
+    includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
     const unique = [...new Set(assetIds)];
     if (unique.length < 2 || unique.length > 500)
       throw new BadRequestException('请选择 2 到 500 张照片。');
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
       const found = await tx.eagleAsset.count({
         where: { ...visible(ownerId, includePrivate), id: { in: unique } },
@@ -518,8 +639,9 @@ export class PhotoManagementService {
     id: string,
     assetIds: string[],
     includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
       const group = await tx.eaglePhotoGroup.findFirst({
         where: {
@@ -551,9 +673,15 @@ export class PhotoManagementService {
       return { removed: removed.count };
     });
   }
-  async mergeGroups(ownerId: string, sourceId: string, targetId: string, includePrivate: boolean) {
+  async mergeGroups(
+    ownerId: string,
+    sourceId: string,
+    targetId: string,
+    includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
     if (sourceId === targetId) throw new BadRequestException('请选择另一个照片组。');
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
       const groups = await tx.eaglePhotoGroup.findMany({
         where: {
@@ -586,8 +714,9 @@ export class PhotoManagementService {
     id: string,
     input: { dismissed?: boolean; bestAssetId?: string },
     includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return runLibraryTransaction(db, async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
       const group = await tx.eaglePhotoGroup.findFirst({
         where: {

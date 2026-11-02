@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+import { runLibraryTransaction } from '../eagle/eagle-library-command';
 import { ConflictException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
@@ -151,14 +153,22 @@ export class PhotoPersonReviewService {
       secondVersion: number;
       decision: 'SAME' | 'DIFFERENT';
     },
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
     if (input.firstId === input.secondId) throw new ConflictException('请选择两个人物。');
     if (input.decision === 'SAME')
-      return this.photos.mergePeople(ownerId, input.firstId, input.secondId, includePrivate, {
-        source: input.firstVersion,
-        target: input.secondVersion,
-      });
-    return this.prisma.$transaction(async (tx) => {
+      return this.photos.mergePeople(
+        ownerId,
+        input.firstId,
+        input.secondId,
+        includePrivate,
+        {
+          source: input.firstVersion,
+          target: input.secondVersion,
+        },
+        db,
+      );
+    return runLibraryTransaction(db, async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       const first = await requireVisiblePerson(tx, ownerId, input.firstId, includePrivate),

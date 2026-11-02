@@ -44,6 +44,7 @@ export async function performManualPhotoAction(
   input: ManualPhotoActionDto,
   includePrivate: boolean,
   load: (tx: Prisma.TransactionClient) => Promise<Context>,
+  beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<Receipt> {
   const canonical = {
     operationId: input.operationId,
@@ -65,6 +66,7 @@ export async function performManualPhotoAction(
     details: { path: ['operationId'], equals: input.operationId },
   };
   async function lock(tx: Prisma.TransactionClient) {
+    await beforePublish?.(tx);
     await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
     await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} AND "libraryMode"='PHOTO' FOR UPDATE`;
     return load(tx);
@@ -199,6 +201,7 @@ export async function performManualPhotoAction(
           { mediaRevision: t.mediaRevision, rowVersion: t.rowVersion },
         ]),
       ),
+      beforePublish ? { beforePublish } : undefined,
     );
     return await db.$transaction(
       async (tx) => {
