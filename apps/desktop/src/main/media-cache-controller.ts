@@ -90,7 +90,11 @@ export function emptyCacheRequestStats(): CacheRequestStats {
   };
 }
 
-type CanReadLocal = (media: DesktopMediaIdentity, identity: AuthenticatedIdentity, file: ReadyCacheEntry) => boolean;
+type CanReadLocal = (
+  media: DesktopMediaIdentity,
+  identity: AuthenticatedIdentity,
+  file: ReadyCacheEntry,
+) => boolean;
 
 export class MediaCacheController {
   private readonly serverUrl: string;
@@ -188,7 +192,8 @@ export class MediaCacheController {
       };
     }
     try {
-      if (existing && this.canReadLocal(media, identity, existing)) return cacheResolution(existing);
+      if (existing && this.canReadLocal(media, identity, existing))
+        return cacheResolution(existing);
       if (existing) {
         await this.cache.release(existing.leaseId);
         return await this.revalidate(media, keyHash, namespaceId, existing, signal);

@@ -46,30 +46,44 @@ async function refreshBrowserSession(): Promise<void> {
 }
 interface DesktopLibraryReader {
   canReadLibrary?(path: string): boolean;
-  readLibrary?(path: string, requestId: string): Promise<{ status: number; body: string; contentType: string }>;
+  readLibrary?(
+    path: string,
+    requestId: string,
+  ): Promise<{ status: number; body: string; contentType: string }>;
   cancelLibraryRead?(requestId: string): void;
   resetMediaSnapshot?(): Promise<void>;
 }
 const libraryReader = () => (globalThis as { sekerDesktop?: DesktopLibraryReader }).sekerDesktop;
 async function fetchSessionResource(path: string, init: RequestInit): Promise<Response> {
   const desktop = libraryReader();
-  if ((init.method ?? 'GET').toUpperCase() !== 'GET' || !desktop?.canReadLibrary?.(path) || !desktop.readLibrary)
+  if (
+    (init.method ?? 'GET').toUpperCase() !== 'GET' ||
+    !desktop?.canReadLibrary?.(path) ||
+    !desktop.readLibrary
+  )
     return fetch(path, init);
   const requestId = crypto.randomUUID();
   const signal = init.signal;
   signal?.throwIfAborted();
   let abort!: () => void;
   const cancelled = new Promise<never>((_resolve, reject) => {
-    abort = () => { desktop.cancelLibraryRead?.(requestId); reject(signal?.reason ?? new DOMException('Aborted', 'AbortError')); };
+    abort = () => {
+      desktop.cancelLibraryRead?.(requestId);
+      const reason: unknown = signal?.reason;
+      reject(reason instanceof Error ? reason : new DOMException('Aborted', 'AbortError'));
+    };
     signal?.addEventListener('abort', abort, { once: true });
   });
   try {
     const result = await Promise.race([desktop.readLibrary(path, requestId), cancelled]);
     signal?.throwIfAborted();
     return new Response(result.status === 204 || result.status === 304 ? null : result.body, {
-      status: result.status, headers: { 'content-type': result.contentType },
+      status: result.status,
+      headers: { 'content-type': result.contentType },
     });
-  } finally { signal?.removeEventListener('abort', abort); }
+  } finally {
+    signal?.removeEventListener('abort', abort);
+  }
 }
 
 export async function fetchWithBrowserSession(

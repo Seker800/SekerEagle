@@ -1,3 +1,4 @@
+import { registerLibraryReadIpc } from './library-read-ipc';
 import { LibraryMediaSnapshot } from './library-media-snapshot';
 import { createReadStream } from 'node:fs';
 import { copyFile, readFile } from 'node:fs/promises';
@@ -238,7 +239,7 @@ if (hasSingleInstanceLock)
             : null,
       };
     });
-    registerLibraryReadIpc();
+    registerLibraryReadIpc({ ipcMain, assertTrustedIpcSender, snapshot: () => librarySnapshot });
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
@@ -385,31 +386,6 @@ function cacheBackend() {
     invalidate: (...args: Parameters<CacheRpcClient['invalidate']>) =>
       currentCache().invalidate(...args),
   };
-}
-
-function registerLibraryReadIpc(): void {
-  const pending = new Map<string, AbortController>();
-  const validRequestId = (value: unknown): value is string =>
-    typeof value === 'string' && /^[a-zA-Z0-9-]{1,64}$/u.test(value);
-  ipcMain.handle('desktop:read-library', async (event, path: unknown, requestId: unknown) => {
-    assertTrustedIpcSender(event);
-    if (typeof path !== 'string' || !validRequestId(requestId) || pending.has(requestId))
-      throw new Error('Invalid library read');
-    const snapshot = librarySnapshot;
-    if (!snapshot) throw new Error('Library is unavailable');
-    const controller = new AbortController();
-    pending.set(requestId, controller);
-    try { return await snapshot.read(path, controller.signal); }
-    finally { pending.delete(requestId); }
-  });
-  ipcMain.on('desktop:cancel-library-read', (event, requestId: unknown) => {
-    try { assertTrustedIpcSender(event); } catch { return; }
-    if (validRequestId(requestId)) pending.get(requestId)?.abort();
-  });
-  ipcMain.handle('desktop:reset-media-snapshot', (event) => {
-    assertTrustedIpcSender(event);
-    librarySnapshot?.reset();
-  });
 }
 
 function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsStore): void {

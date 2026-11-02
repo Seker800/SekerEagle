@@ -147,9 +147,14 @@ describe('server list authority for desktop media', () => {
   it('drops old evidence when a changes check is cancelled or times out', async () => {
     const { snapshot, fetch } = setup();
     await snapshot.read('/api/photos/assets');
-    fetch.mockImplementationOnce((_path, init) => new Promise((_resolve, reject) => {
-      init.signal?.addEventListener('abort', () => reject(new Error('check aborted')), { once: true });
-    }));
+    fetch.mockImplementationOnce(
+      (_path, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(new Error('check aborted')), {
+            once: true,
+          });
+        }),
+    );
     const controller = new AbortController();
     const pending = snapshot.read('/api/library/changes', controller.signal);
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));

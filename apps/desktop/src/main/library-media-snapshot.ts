@@ -91,7 +91,11 @@ export class LibraryMediaSnapshot {
       } else this.reset();
       return { status: response.status, body, contentType };
     } catch (error) {
-      if (generation === this.generation && (!signal?.aborted || path.startsWith('/api/library/changes'))) this.reset();
+      if (
+        generation === this.generation &&
+        (!signal?.aborted || path.startsWith('/api/library/changes'))
+      )
+        this.reset();
       throw error;
     }
   }

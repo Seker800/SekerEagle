@@ -36,9 +36,35 @@ describe('MediaCacheController', () => {
     const fetchUpstream = vi.fn(async () => eligibleResponse('image'));
     const snapshot = new LibraryMediaSnapshot({
       authenticatedOwner: async () => identity,
-      fetch: async () => Response.json({ items: [{ id: assetId, libraryMode: 'MATERIAL', isPrivate: false, deletedAt: null, mediaRevision: 1, renditions: [{ id: renditionId, kind: 'THUMBNAIL', revision: 1, byteSize: 5, mimeType: 'image/webp' }] }] }),
+      fetch: async () =>
+        Response.json({
+          items: [
+            {
+              id: assetId,
+              libraryMode: 'MATERIAL',
+              isPrivate: false,
+              deletedAt: null,
+              mediaRevision: 1,
+              renditions: [
+                {
+                  id: renditionId,
+                  kind: 'THUMBNAIL',
+                  revision: 1,
+                  byteSize: 5,
+                  mimeType: 'image/webp',
+                },
+              ],
+            },
+          ],
+        }),
     });
-    const controller = new MediaCacheController({ serverUrl: 'https://example.com', cache: engine, authenticatedOwner: async () => identity, fetchUpstream, canReadLocal: (media, owner, file) => snapshot.allows(media, owner, file) });
+    const controller = new MediaCacheController({
+      serverUrl: 'https://example.com',
+      cache: engine,
+      authenticatedOwner: async () => identity,
+      fetchUpstream,
+      canReadLocal: (media, owner, file) => snapshot.allows(media, owner, file),
+    });
     const first = await controller.resolve(mediaUrl);
     if (first.source === 'cache') await engine.release(first.leaseId);
     await snapshot.read('/api/eagle/assets');

@@ -86,6 +86,7 @@
     "test:server-edits": "npm run db:generate && npm run build && PHOTO_WORKBENCH_BASIC=1 PHOTO_WORKBENCH_SERVER_EDITS=1 node scripts/testing/photo-workbench.mjs",
     "performance:web:delivery": "npm run build --workspace @sekereagle/web && node ./scripts/performance/verify-web-delivery.mjs",
     "test:color-search": "npm run db:generate && npm run pretest --workspace @sekereagle/api && npm run build --workspace @sekereagle/api && node scripts/testing/color-search.mjs",
+    "test:desktop-cache:list": "npm run build --workspace @sekereagle/desktop && node scripts/testing/client-cache-list-benchmark.mjs",
     "test:desktop-cache:electron": "npm run build --workspace @sekereagle/desktop && node scripts/testing/client-cache-electron.mjs"
   },
   "devDependencies": {
