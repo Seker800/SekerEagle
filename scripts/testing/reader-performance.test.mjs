@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
@@ -189,7 +190,8 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
       peopleCounts: residentPersonCounts,
       semanticQuery: (index, ids, read) =>
         withResidentSemanticGraph(index, ids, (graph, view) => read(graph.context, view)),
-      smartFolderPage: readResidentSmartFolderPage,
+      smartFolderPage: (index, options, signal) =>
+        readResidentSmartFolderPage(index, options, undefined, signal),
     });
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
@@ -257,7 +259,10 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
       ['statistics', '/api/photos/photography/statistics?grain=month&groupBy=camera'],
       ['facets', '/api/photos/photography/facets'],
       ['people', '/api/photos/photography/people?view=ALL&projection=cards'],
-      ['semantic', `/api/photos/assets?limit=40&smartFolderId=${folderId}`],
+      [
+        'semantic',
+        `/api/photos/assets?limit=40&smartFolderOrder=RELEVANCE&smartFolderId=${folderId}`,
+      ],
       ['color', '/api/photos/assets?limit=40&color=%23ffffff'],
     ];
     const invoke = async (path, body) => {
@@ -273,25 +278,59 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
       });
       const data = await response.json();
       assert.equal(response.status, body ? 201 : 200, JSON.stringify(data));
-      return { ms: performance.now() - start, data };
+      const ms = performance.now() - start;
+      // Cursor JSON property order is not protocol semantics; compare the complete decoded value.
+      for (const key of ['nextCursor', 'previousCursor'])
+        if (typeof data[key] === 'string' && data[key].startsWith('image:'))
+          data[key] = JSON.parse(Buffer.from(data[key].slice(6), 'base64url').toString());
+      return { ms, data };
     };
     const percentile = (values, fraction) =>
       [...values].sort((a, b) => a - b)[Math.ceil(values.length * fraction) - 1];
     for (const [label, path, body] of cases) {
       const samples = { sql: [], reader: [], selected: [] };
       let baseline;
+      const decisions = { sql: {}, reader: {}, selected: {} };
       for (let n = 0; n < 12; n++)
         for (const mode of n % 2 ? ['selected', 'reader', 'sql'] : ['sql', 'reader', 'selected']) {
           process.env.EAGLE_READER_ACTIONS =
             mode === 'sql' ? '' : mode === 'reader' ? allActions : DEFAULT_LIBRARY_READ_ACTIONS;
+          const before = libraryReadObserver.snapshot().actions;
           const result = await invoke(path, body);
+          const after = libraryReadObserver.snapshot().actions;
+          for (const action of Object.keys(after)) {
+            const delta = (decisions[mode][action] ??= { attempts: 0, hits: 0, fallbacks: 0 });
+            for (const key of Object.keys(delta))
+              delta[key] += after[action][key] - before[action][key];
+          }
           if (!baseline) baseline = result.data;
           else assert.deepEqual(result.data, baseline, `${label} SQL/reader must agree`);
           if (n >= 2) samples[mode].push(result.ms);
         }
+      const expectedAction = {
+        'photo-page': 'page',
+        'material-page': 'page',
+        'count-all': 'count',
+        'count-rating': 'count',
+        statistics: 'statistics',
+        facets: 'facets',
+        people: 'peopleCounts',
+        semantic: 'smartFolderPage',
+        color: 'colorPage',
+      }[label];
+      assert.equal(decisions.sql[expectedAction].attempts, 0);
+      assert.ok(
+        decisions.reader[expectedAction].hits > 0,
+        `${label} must exercise its intended reader action: ${JSON.stringify(libraryReadObserver.snapshot().actions[expectedAction])}`,
+      );
+      assert.equal(
+        decisions.selected[expectedAction].attempts,
+        DEFAULT_LIBRARY_READ_ACTIONS.split(',').includes(expectedAction) ? 12 : 0,
+      );
       log(
         JSON.stringify({
           fixture: 'authenticated HTTP reader A/B',
+          decisions,
           label,
           resourcesPerMode: rowCount,
           samples: 10,

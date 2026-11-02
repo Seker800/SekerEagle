@@ -963,6 +963,7 @@ test('color pages preserve SQL scores, mixed-engine cursors, reverse pages and O
           { OR: [{ colorMatch: color }, { rating: 4 }] },
         ],
       };
+      const seen = new Set();
       let cursor;
       do {
         const query = { limit: 3, ...(cursor ? { cursor } : {}) };
@@ -976,6 +977,7 @@ test('color pages preserve SQL scores, mixed-engine cursors, reverse pages and O
           false,
           false,
         );
+        for (const row of expected.rows) seen.add(row.id);
         const hits = libraryReadMetrics.hits;
         const actual = await readColorAssetPage(db, scope, query, where, color, false, false);
         assert.deepEqual(actual, expected);
@@ -989,6 +991,11 @@ test('color pages preserve SQL scores, mixed-engine cursors, reverse pages and O
         }
         cursor = expected.nextCursor;
       } while (cursor);
+      assert.equal(
+        seen.size,
+        (await store.read(scope)).count(where),
+        'SQL and memory retain all color OR members across pages',
+      );
     }
   } finally {
     if (oldUrl === undefined) delete process.env.EAGLE_READER_URL;
