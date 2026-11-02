@@ -250,6 +250,19 @@ it('chains a rapid metadata edit to its own accepted rating receipt without inve
     predecessorOperationIds: ['command-1'],
   });
   expect(view.result.current.metadataMutation.isPending).toBe(false);
+  await act(async () => {
+    await view.result.current.ratingMutation.mutateAsync({
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      rating: 4,
+    });
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(JSON.parse(fetchMock.mock.calls[2][1]?.body as string)).toEqual({
+    rating: 4,
+    rowVersion: 1,
+    predecessorOperationIds: ['command-2'],
+  });
+
   view.unmount();
   client.clear();
 });

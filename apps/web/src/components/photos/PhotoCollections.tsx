@@ -226,7 +226,9 @@ export function PhotoCollections({
                   ownerId={ownerId}
                   includePrivate={includePrivate}
                   scopeRevision={scopeRevision}
-                  selected={Object.values(directorySelection)}
+                  selected={Object.values(directorySelection).filter((person) =>
+                    people.data?.people.some((visible) => visible.id === person.id),
+                  )}
                   onClear={clearDirectorySelection}
                   onPendingChange={setPending}
                   onConflict={() =>

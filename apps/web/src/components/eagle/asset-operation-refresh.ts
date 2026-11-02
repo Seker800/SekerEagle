@@ -8,6 +8,7 @@ import {
   isEagleQuery,
   isEagleTaskCenterKey,
   isEagleAssetDetailKey,
+  isPhotoPrivacyProjection,
   isEagleOperationKey,
   isEagleAssetListKey,
 } from './eagle-query-keys';
@@ -21,6 +22,21 @@ import type { LibraryMode } from '../../lib/library-api-scope';
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
+
+const PRIVACY_COMMAND_TYPES = new Set([
+  'ASSET_TAGS',
+  'ASSET_TAGS_REPLACE',
+  'TAG_UPDATE',
+  'TAG_DELETE',
+  'TAG_GROUP_DELETE',
+  'PRIVACY_SETTINGS',
+  'VECTOR_REVIEW',
+  'PHOTO_PERSON_PRIVACY',
+  'PHOTO_PEOPLE_MERGE',
+  'PHOTO_PEOPLE_MERGE_SELECTED',
+  'PHOTO_PEOPLE_REVIEW',
+  'PHOTO_FACE_REASSIGN',
+]);
 
 type AssetListView = 'ACTIVE' | 'PRIVATE' | 'TRASH';
 
@@ -182,6 +198,10 @@ export class AssetOperationRefresher {
         cursor = result.nextCursor ?? undefined;
       } while (cursor !== undefined);
       if (actual.kind === 'METADATA_COMMAND' || actual.kind === 'BACKGROUND_COMMAND') {
+        const privacyChanged =
+          !!actual.commandType && PRIVACY_COMMAND_TYPES.has(actual.commandType);
+        if (privacyChanged && mode === 'PHOTO') await this.clearPhotoPrivacyProjections(epoch);
+
         if (actual.commandType !== 'DUPLICATE_IGNORE') await this.refreshLoadedFacts(mode, epoch);
         if (
           mode === 'PHOTO' &&
@@ -189,24 +209,7 @@ export class AssetOperationRefresher {
             actual.commandType === 'BATCH_EDIT_RENDER')
         )
           await this.refreshPhotoStacks(mode, epoch, actual.commandType === 'BATCH_EDIT_RENDER');
-        if (
-          actual.commandType &&
-          [
-            'ASSET_TAGS',
-            'ASSET_TAGS_REPLACE',
-            'TAG_UPDATE',
-            'TAG_DELETE',
-            'TAG_GROUP_DELETE',
-            'PRIVACY_SETTINGS',
-            'VECTOR_REVIEW',
-            'PHOTO_PERSON_PRIVACY',
-            'PHOTO_PEOPLE_MERGE',
-            'PHOTO_PEOPLE_MERGE_SELECTED',
-            'PHOTO_PEOPLE_REVIEW',
-            'PHOTO_FACE_REASSIGN',
-          ].includes(actual.commandType)
-        )
-          await getDesktopCacheBridge()?.clearCache();
+        if (privacyChanged) await getDesktopCacheBridge()?.clearCache();
         if (changes.epoch !== epoch || this.disposed) return;
       }
       changes.finish(
@@ -254,20 +257,34 @@ export class AssetOperationRefresher {
       await this.flush().catch(() => undefined);
     }
   }
+  private async clearPhotoPrivacyProjections(epoch: number) {
+    const cache = getEagleWorkspaceCache(this.client, this.ownerId, 'PHOTO');
+    const queries = this.client
+      .getQueryCache()
+      .findAll({ predicate: (query) => isPhotoPrivacyProjection(query.queryKey, this.ownerId) });
+    await this.client.cancelQueries({
+      predicate: (query) => isPhotoPrivacyProjection(query.queryKey, this.ownerId),
+    });
+    if (this.disposed || cache.operations.epoch !== epoch) return;
+    for (const query of queries) {
+      if (this.client.getQueryCache().get(query.queryHash) !== query) continue;
+      // A denied or offline refetch must not retain a previously visible face,
+      // task photo, location or statistic. Keep the scoped observer to refetch.
+      this.client.setQueryData(query.queryKey, null);
+    }
+  }
   private async refreshPhotoStacks(
     mode: LibraryMode,
     epoch: number,
     existingCollectionsOnly = false,
   ) {
     const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
-    const queries = this.client
-      .getQueryCache()
-      .findAll({
-        predicate: (query) =>
-          query.isActive() &&
-          isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
-          !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
-      });
+    const queries = this.client.getQueryCache().findAll({
+      predicate: (query) =>
+        query.isActive() &&
+        isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
+        !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
+    });
     for (const query of queries) {
       const data = query.state.data as InfiniteData<NormalizedEagleAssetPage, string> | undefined;
       const fn = query.options.queryFn;

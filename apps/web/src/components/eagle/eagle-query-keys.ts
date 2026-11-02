@@ -82,6 +82,28 @@ export function photoQueryVisibility(
   const visibility = key[3] === 'people' && key[4] === 'options' ? key[5] : key[4];
   return typeof visibility === 'boolean' ? visibility : undefined;
 }
+const photoPrivacyProjections = new Set([
+  'people',
+  'people-merge-targets',
+  'people-summary',
+  'person-review',
+  'person-faces',
+  'agent',
+  'map',
+  'map-photos',
+  'statistics',
+  'photography-facets',
+  'timeline',
+]);
+/** Only data projections with an explicit visibility scope; instruction drafts are excluded. */
+export function isPhotoPrivacyProjection(key: readonly unknown[], ownerId: string) {
+  return (
+    isEagleQuery(key, ownerId, 'PHOTO') &&
+    photoPrivacyProjections.has(String(key[3])) &&
+    photoQueryVisibility(key, ownerId) !== undefined
+  );
+}
+
 export function isPhotoPeopleProjection(key: readonly unknown[], ownerId: string | null) {
   return (
     key[0] === 'eagle' &&

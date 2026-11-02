@@ -699,25 +699,62 @@ it('evicts newly inaccessible details opened outside loaded list pages and clear
 });
 
 it('clears scoped photo privacy projections before a denied refetch while preserving unrelated pages and instruction drafts', async () => {
- const f=fixture();
- const key=createEagleQueryKeys('owner','PHOTO').photoAgentTask(false,'task');
- const secret={assets:[{id:'private-photo',displayName:'private name'}],suggestions:[]};
- const {ApiError}=await import('../../lib/api-error');
- const observer=new QueryObserver(f.client,{queryKey:key,queryFn:async()=>{throw new ApiError('not found',404,null);},initialData:secret,staleTime:Infinity,retry:false});
- const stop=observer.subscribe(()=>{});
- const instructionKey=createEagleQueryKeys('owner','PHOTO').photoAgentInstructions;
- const otherKey=createEagleQueryKeys('other','PHOTO').photoAgentTask(false,'task');
- const materialKey=createEagleQueryKeys('owner','MATERIAL').photoAgentTask(false,'task');
- f.client.setQueryData(instructionKey,{content:'unsaved instructions'});f.client.setQueryData(otherKey,secret);f.client.setQueryData(materialKey,secret);
- const {createEagleApi}=await import('../../lib/eagle-api');
- vi.spyOn(await import('../../lib/eagle-api'),'createEagleApi').mockReturnValue({...createEagleApi('PHOTO'),listEagleAssetFacts:vi.fn(async(_token,ids:string[])=>ids.map(id=>({id,updatedAt:'2026-11-02',rowVersion:2,mediaRevision:1})))} as never);
- const completed={...summary('METADATA_COMMAND'),commandType:'ASSET_TAGS',completed:1,failed:0,errors:[],state:'COMPLETED' as const};
- mocks.results.mockResolvedValue({operation:completed,revision:'v1',membership:[],receipts:[],nextCursor:null});
- try{
-  await f.refresher.reconcile('PHOTO',completed);
-  expect(observer.getCurrentResult().data).toBeNull();expect(observer.getCurrentResult().error).toBeInstanceOf(ApiError);
-  expect(f.client.getQueryData(f.key)).toEqual(f.data);
-  expect(f.client.getQueryData(instructionKey)).toEqual({content:'unsaved instructions'});
-  expect(f.client.getQueryData(otherKey)).toEqual(secret);expect(f.client.getQueryData(materialKey)).toEqual(secret);
- }finally{vi.restoreAllMocks();stop();f.close();}
+  const f = fixture();
+  const key = createEagleQueryKeys('owner', 'PHOTO').photoAgentTask(false, 'task');
+  const secret = {
+    assets: [{ id: 'private-photo', displayName: 'private name' }],
+    suggestions: [],
+  };
+  const { ApiError } = await import('../../lib/api-error');
+  const observer = new QueryObserver(f.client, {
+    queryKey: key,
+    queryFn: async () => {
+      throw new ApiError('not found', 404, null);
+    },
+    initialData: secret,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const stop = observer.subscribe(() => {});
+  const instructionKey = createEagleQueryKeys('owner', 'PHOTO').photoAgentInstructions;
+  const otherKey = createEagleQueryKeys('other', 'PHOTO').photoAgentTask(false, 'task');
+  const materialKey = createEagleQueryKeys('owner', 'MATERIAL').photoAgentTask(false, 'task');
+  f.client.setQueryData(instructionKey, { content: 'unsaved instructions' });
+  f.client.setQueryData(otherKey, secret);
+  f.client.setQueryData(materialKey, secret);
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+      ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
+    ),
+  } as never);
+  const completed = {
+    ...summary('METADATA_COMMAND'),
+    commandType: 'ASSET_TAGS',
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(observer.getCurrentResult().data).toBeNull();
+    expect(observer.getCurrentResult().error).toBeInstanceOf(ApiError);
+    expect(f.client.getQueryData(f.key)).toEqual(f.data);
+    expect(f.client.getQueryData(instructionKey)).toEqual({ content: 'unsaved instructions' });
+    expect(f.client.getQueryData(otherKey)).toEqual(secret);
+    expect(f.client.getQueryData(materialKey)).toEqual(secret);
+  } finally {
+    vi.restoreAllMocks();
+    stop();
+    f.close();
+  }
 });
