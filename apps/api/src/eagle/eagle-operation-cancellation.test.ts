@@ -108,3 +108,16 @@ test('cancel between rollback and conflict splitting records CANCELLED without e
   assert.equal(splits, 1);
   assert.deepEqual(terminal, [{ status: 'CANCELLED', errorCode: null, leaseUntil: null }]);
 });
+
+test('stopping a SEND preserves publication of already claimed copies while retaining actor and lease checks', async () => {
+  let leaseChecks = 0;
+  const tx = {
+    $queryRaw: async () => [{ cancelled: true }],
+    user: { findUnique: async () => ({ authVersion: 0, disabledAt: null }) },
+    eagleAssetOperationItem: { updateMany: async () => { leaseChecks++; return { count: 1 }; } },
+  };
+  const service = new EagleAssetOperationService({} as never, undefined as never, undefined as never, 'PHOTO');
+  const executor = service as unknown as { assertActor: (db: unknown, operation: unknown, items: unknown[]) => Promise<void> };
+  await executor.assertActor(tx, { id: 'operation', ownerId: 'owner', kind: 'SEND', authVersion: 0, isPrivate: false }, [{ id: 'copying', operationId: 'operation', leaseVersion: 1 }]);
+  assert.equal(leaseChecks, 1);
+});
