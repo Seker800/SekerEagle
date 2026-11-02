@@ -22,7 +22,8 @@ export type EagleFilterField =
   | 'DESCRIPTION'
   | 'SOURCE_URL'
   | 'ADDED_AT'
-  | 'MODIFIED_AT';
+  | 'MODIFIED_AT'
+  | 'CAPTURED_AT';
 
 export type EagleFilterOperator =
   | 'CONTAINS'
@@ -263,6 +264,14 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
     operators: TEXT_OPERATORS,
     defaultOperator: 'CONTAINS',
     defaultValue: '',
+  },
+  {
+    field: 'CAPTURED_AT',
+    kind: 'DATE',
+    operators: DATE_OPERATORS,
+    defaultOperator: 'AFTER',
+    defaultValue: '',
+    libraryModes: ['PHOTO'],
   },
   {
     field: 'ADDED_AT',

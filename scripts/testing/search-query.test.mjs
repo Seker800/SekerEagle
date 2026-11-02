@@ -163,6 +163,7 @@ before(async () => {
             libraryMode,
             assetRevision: 1,
             processorVersion: 'synthetic',
+            capturedAt: i % 4 ? new Date(Date.UTC(2018, 0, (i % 10) + 1, 23, 59, 59, 999)) : null,
             cameraModel: i % 2 ? 'Sony Camera' : null,
             lensModel: i % 2 ? 'Lens 35' : '',
             latitude: i % 5 ? 10 : null,
@@ -349,6 +350,12 @@ const cases = {
     ['WITHIN_DAYS', 5],
   ],
   MODIFIED_AT: [['BEFORE', '2020-01-01']],
+  CAPTURED_AT: [
+    ['BETWEEN', ['2018-01-01', '2018-01-05']],
+    ['BEFORE', '2018-01-05'],
+    ['AFTER', '2018-01-05'],
+    ['WITHIN_DAYS', 5],
+  ],
   CITY: [
     ['CONTAINS', '北京'],
     ['EMPTY', ''],
@@ -430,7 +437,7 @@ test('every ordinary shared filter field/operator preserves Prisma membership, n
     { OR: [{ rating: null }, { width: { gt: 1200 } }] },
   ])
     await parity({ ownerId, libraryMode: 'PHOTO', ...special });
-  assert.equal(comparisons, 134);
+  assert.equal(comparisons, 142);
 });
 test('semantic folder readiness and nested owner/mode relations stay inside the same scoped SQL', async () => {
   const membership = smartFolderMatchWhere({ ownerId, libraryMode: 'PHOTO' }, ids.folder);

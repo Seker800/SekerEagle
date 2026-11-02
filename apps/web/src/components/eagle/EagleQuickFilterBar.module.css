@@ -557,3 +557,12 @@
   border: 1px solid var(--eagle-line);
   border-radius: 12px;
 }
+
+.dateHint {
+  grid-column: 1 / -1;
+  margin: 0;
+  max-width: 290px;
+  color: #a6adb7;
+  font-size: 11px;
+  line-height: 1.5;
+}

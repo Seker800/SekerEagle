@@ -323,3 +323,30 @@ it('offers missing camera parameters in the photo quick filter and clears the se
   fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));
   expect(screen.getByRole('button', { name: '相机筛选' })).toBeVisible();
 });
+
+it('lets photo users add capture date, enter an old date range, and clear it', () => {
+  function PhotoBar() {
+    const [value, onChange] = useState(createEmptyEagleQuickFilterState);
+    return (
+      <LibraryWorkspaceProvider ownerId="date-test" libraryMode="PHOTO">
+        <EagleQuickFilterBar value={value} onChange={onChange} manualTags={[]} aiTags={[]} />
+      </LibraryWorkspaceProvider>
+    );
+  }
+  render(<PhotoBar />);
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  fireEvent.click(screen.getByRole('button', { name: '固定 拍摄日期' }));
+  fireEvent.click(screen.getByRole('button', { name: '关闭筛选器管理' }));
+  fireEvent.click(screen.getByRole('button', { name: /拍摄日期筛选/ }));
+  expect(screen.getByText('按拍摄时间筛选，拍摄日期未知的照片不匹配。')).toBeVisible();
+  fireEvent.change(screen.getByLabelText('拍摄日期开始'), { target: { value: '2016-01-01' } });
+  fireEvent.change(screen.getByLabelText('拍摄日期结束'), { target: { value: '2026-06-02' } });
+  expect(screen.getByRole('button', { name: '拍摄日期筛选，2016-01-01–2026-06-02' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '清除此项' }));
+  expect(screen.getByRole('button', { name: '拍摄日期筛选' })).toBeVisible();
+});
+it('does not offer capture-date rules in material mode', () => {
+  renderBar();
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  expect(screen.queryByText('拍摄日期')).not.toBeInTheDocument();
+});

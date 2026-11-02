@@ -22,6 +22,7 @@ export const fields: Record<EagleFilterField, MessageId> = {
   SOURCE_URL: '链接',
   ADDED_AT: '添加日期',
   MODIFIED_AT: '修改日期',
+  CAPTURED_AT: '拍摄日期',
 };
 export const operators: Record<EagleFilterOperator, MessageId> = {
   CONTAINS: '包含',

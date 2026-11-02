@@ -542,3 +542,92 @@ test('relevance search fills concurrent candidate losses and keeps every remaini
     await db.eagleAsset.update({ where: { id: removed }, data: { rating: 5 } });
   }
 });
+
+test('capture-date smart folders and quick filters include old photographs and the end day without leaking unknown dates or scope', async () => {
+  const service = new EagleService(db, undefined, 'PHOTO');
+  const name = `${prefix}capture-date`;
+  const cases = [
+    ['old', '2018-01-01T12:00:00Z', {}],
+    ['end', '2026-06-02T23:59:59.999Z', {}],
+    ['next', '2026-06-03T00:00:00Z', {}],
+    ['unknown', null, {}],
+    ['private', '2018-01-01T12:00:00Z', { isPrivate: true }],
+    ['trash', '2018-01-01T12:00:00Z', { deletedAt: new Date() }],
+    ['material', '2018-01-01T12:00:00Z', { libraryMode: 'MATERIAL' }],
+  ];
+  const ids = [];
+  for (const [suffix, capturedAt, extra] of cases) {
+    const id = `${name}-${suffix}`;
+    ids.push(id);
+    await db.eagleAsset.create({
+      data: {
+        id,
+        ownerId,
+        libraryMode: 'PHOTO',
+        originalName: name,
+        displayName: name,
+        normalizedDisplayName: name,
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 42,
+        originalObjectKey: id,
+        ...extra,
+        ...(extra.libraryMode === 'MATERIAL'
+          ? {}
+          : {
+              photoMetadata: {
+                create: {
+                  assetRevision: 0,
+                  processorVersion: 'capture-date-test',
+                  capturedAt: capturedAt ? new Date(capturedAt) : null,
+                },
+              },
+            }),
+      },
+    });
+  }
+  const condition = (field, operator, value) => ({
+    id: field,
+    match: 'ALL',
+    result: 'MATCH',
+    rules: [{ id: field, field, operator, value }],
+  });
+  const ordinary = { version: 2, conditions: [condition('NAME', 'EQUALS', name)] };
+  const capture = {
+    version: 2,
+    conditions: [condition('CAPTURED_AT', 'BETWEEN', ['2016-01-01', '2026-06-02'])],
+  };
+  const combined = { ...ordinary, conditions: [...ordinary.conditions, ...capture.conditions] };
+  const folder = await service.createSmartFolder(ownerId, { name, query: ordinary });
+  try {
+    const page = await service.listAssets(ownerId, {
+      smartFolderId: folder.id,
+      rules: JSON.stringify(capture),
+      limit: 40,
+    });
+    assert.deepEqual(new Set(page.items.map((a) => a.id)), new Set([`${name}-old`, `${name}-end`]));
+    assert.deepEqual(await service.countAssets(ownerId, combined), { count: 2 });
+    assert.deepEqual(await service.countAssets(ownerId, combined, true), { count: 3 });
+    const saved = await service.createSmartFolder(ownerId, {
+      name: `${name}-saved`,
+      query: combined,
+    });
+    const savedPage = await service.listAssets(ownerId, { smartFolderId: saved.id, limit: 40 });
+    assert.deepEqual(
+      new Set(savedPage.items.map((a) => a.id)),
+      new Set(page.items.map((a) => a.id)),
+    );
+    await assert.rejects(
+      () => new EagleService(db, undefined, 'MATERIAL').countAssets(ownerId, combined),
+      /摄影筛选/,
+    );
+    await assert.rejects(
+      () => service.listAssets(randomUUID(), { smartFolderId: folder.id, limit: 40 }),
+      /智能文件夹不存在/,
+    );
+    await db.eagleSmartFolder.delete({ where: { id: saved.id } });
+  } finally {
+    await db.eagleSmartFolder.delete({ where: { id: folder.id } });
+    await db.eagleAsset.deleteMany({ where: { id: { in: ids } } });
+  }
+});

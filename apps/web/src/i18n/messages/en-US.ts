@@ -631,6 +631,13 @@ export const enUS = {
   应用日期: 'Apply dates',
   '开始日期不能晚于结束日期。': 'Start date must not be later than end date.',
   当前条件下没有照片: 'No photos match these filters',
+  拍摄日期: 'Capture Date',
+  '按拍摄时间筛选，拍摄日期未知的照片不匹配。':
+    'Filters by capture time. Photos with an unknown capture date do not match.',
+  '按在 SekerEagle 中的更新时间筛选，不是拍摄时间。':
+    'Filters by the time updated in SekerEagle, rather than capture time.',
+  '按加入 SekerEagle 的时间筛选，不是拍摄时间。':
+    'Filters by the time added to SekerEagle, rather than capture time.',
   拍摄日期未知: 'Unknown capture date',
   拍摄量: 'Photos taken',
   拍摄量折线图: 'Photos over time',
