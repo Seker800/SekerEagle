@@ -81,3 +81,32 @@ test('worker resolves a preserved target filter independently of the clipboard f
     'portable-preserved',
   );
 });
+
+test('worker fails closed when the preserved bank omits the exact target filter or has nonnumeric-table content type', async () => {
+  for (const preservedLuts of [{ 'lut:other': 'portable' }, { 'lut:browser-upload': 8 }]) {
+    const db = {
+      eagleAssetOperation: {
+        findFirst: async () => ({
+          commandPayload: { recipe: { version: 1, edits: DEFAULT_PHOTO_EDITS }, preservedLuts },
+        }),
+      },
+    };
+    await assert.rejects(resolveEditRenderLut(db as never, row, 'lut:browser-upload'));
+  }
+});
+
+test('unselected filter always uses preserved target table even when clipboard has the same filter ID', async () => {
+  const db = {
+    eagleAssetOperation: {
+      findFirst: async () => ({
+        commandPayload: {
+          recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:target' } },
+          parts: { filter: false },
+          lut: 'must-ignore-clipboard',
+          preservedLuts: { 'lut:target': 'preserved-target' },
+        },
+      }),
+    },
+  };
+  assert.equal(await resolveEditRenderLut(db as never, row, 'lut:target'), 'preserved-target');
+});
