@@ -58,6 +58,7 @@ export class LibraryMediaSnapshot {
     const sequence = ++this.sequence;
     try {
       const identity = await this.options.authenticatedOwner();
+      if (generation !== this.generation) throw new Error('Library snapshot changed during identity read');
       if (!identity) { this.reset(); return { status: 401, body: '', contentType: 'application/json' }; }
       const response = await this.options.fetch(path, { signal, credentials: 'include', redirect: 'error', headers: { accept: 'application/json', 'cache-control': 'no-store' } });
       const body = await response.text();

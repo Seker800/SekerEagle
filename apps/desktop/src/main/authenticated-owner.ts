@@ -4,6 +4,7 @@ export class AuthenticatedOwner {
   private readonly fetchMe: () => Promise<Response>;
   private readonly now: () => number;
   private cached: { identity: AuthenticatedIdentity; validUntil: number } | null = null;
+  private generation = 0;
   private inFlight: Promise<AuthenticatedIdentity | null> | null = null;
 
   constructor(fetchMe: () => Promise<Response>, now: () => number = Date.now) {
@@ -15,26 +16,31 @@ export class AuthenticatedOwner {
     const now = this.now();
     if (this.cached && this.cached.validUntil >= now) return this.cached.identity;
     if (this.inFlight) return this.inFlight;
-    this.inFlight = this.refresh();
+    const inFlight = this.refresh(this.generation);
+    this.inFlight = inFlight;
     try {
-      return await this.inFlight;
+      return await inFlight;
     } finally {
-      this.inFlight = null;
+      if (this.inFlight === inFlight) this.inFlight = null;
     }
   }
 
   invalidate(): void {
+    this.generation++;
+    this.inFlight = null;
     this.cached = null;
   }
 
-  private async refresh(): Promise<AuthenticatedIdentity | null> {
+  private async refresh(generation: number): Promise<AuthenticatedIdentity | null> {
     try {
       const response = await this.fetchMe();
+      if (generation !== this.generation) return null;
       if (!response.ok) {
         this.cached = null;
         return null;
       }
       const body = await response.json();
+      if (generation !== this.generation) return null;
       const identity = readIdentity(body);
       if (!identity) {
         this.cached = null;
@@ -43,7 +49,7 @@ export class AuthenticatedOwner {
       this.cached = { identity, validUntil: this.now() + OWNER_LEASE_MS };
       return identity;
     } catch {
-      this.cached = null;
+      if (generation === this.generation) this.cached = null;
       return null;
     }
   }
