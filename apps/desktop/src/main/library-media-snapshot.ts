@@ -8,7 +8,8 @@ type CachedFile = { logicalBytes: number; contentType: string };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const record = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown> : null;
+    ? (value as Record<string, unknown>)
+    : null;
 
 /** Transient evidence from real authenticated server reads, never renderer-provided DTOs.
  * Same freshness as the list, no per-file timer or persisted authorization lease. */
@@ -18,13 +19,16 @@ export class LibraryMediaSnapshot {
   private changes: string | null = null;
   private readonly assets = new Map<string, Projection>();
   private readonly maxEntries: number;
-  constructor(private readonly options: {
-    fetch: (path: string, init: RequestInit) => Promise<Response>;
-    authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
-    maxEntries?: number;
-  }) {
+  constructor(
+    private readonly options: {
+      fetch: (path: string, init: RequestInit) => Promise<Response>;
+      authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
+      maxEntries?: number;
+    },
+  ) {
     const budget = options.maxEntries ?? 12_000;
-    if (!Number.isSafeInteger(budget) || budget < 1) throw new Error('Invalid media snapshot budget');
+    if (!Number.isSafeInteger(budget) || budget < 1)
+      throw new Error('Invalid media snapshot budget');
     this.maxEntries = budget;
   }
 
@@ -45,7 +49,13 @@ export class LibraryMediaSnapshot {
     const key = this.key(identity, media.libraryMode ?? 'MATERIAL', media.assetId);
     const projection = this.assets.get(key);
     const rendition = projection?.renditions.get(media.renditionId);
-    if (!rendition || rendition.kind !== media.renditionKind || rendition.bytes !== file.logicalBytes || rendition.contentType !== file.contentType) return false;
+    if (
+      !rendition ||
+      rendition.kind !== media.renditionKind ||
+      rendition.bytes !== file.logicalBytes ||
+      rendition.contentType !== file.contentType
+    )
+      return false;
     this.assets.delete(key);
     this.assets.set(key, projection!);
     return true;
@@ -58,9 +68,18 @@ export class LibraryMediaSnapshot {
     const sequence = ++this.sequence;
     try {
       const identity = await this.options.authenticatedOwner();
-      if (generation !== this.generation) throw new Error('Library snapshot changed during identity read');
-      if (!identity) { this.reset(); return { status: 401, body: '', contentType: 'application/json' }; }
-      const response = await this.options.fetch(path, { signal, credentials: 'include', redirect: 'error', headers: { accept: 'application/json', 'cache-control': 'no-store' } });
+      if (generation !== this.generation)
+        throw new Error('Library snapshot changed during identity read');
+      if (!identity) {
+        this.reset();
+        return { status: 401, body: '', contentType: 'application/json' };
+      }
+      const response = await this.options.fetch(path, {
+        signal,
+        credentials: 'include',
+        redirect: 'error',
+        headers: { accept: 'application/json', 'cache-control': 'no-store' },
+      });
       const body = await response.text();
       signal?.throwIfAborted();
       if (generation !== this.generation) throw new Error('Library snapshot changed during read');
@@ -72,49 +91,88 @@ export class LibraryMediaSnapshot {
       } else this.reset();
       return { status: response.status, body, contentType };
     } catch (error) {
-      if (!signal?.aborted && generation === this.generation) this.reset();
+      if (generation === this.generation && (!signal?.aborted || path.startsWith('/api/library/changes'))) this.reset();
       throw error;
     }
   }
 
   private observeChanges(value: unknown): void {
-    const body = record(value), scopes = record(body?.scopes);
+    const body = record(value),
+      scopes = record(body?.scopes);
     const revisions: unknown[] = [body?.epoch];
-    if (typeof body?.epoch !== 'string') { this.reset(); return; }
+    if (typeof body?.epoch !== 'string') {
+      this.reset();
+      return;
+    }
     for (const mode of ['MATERIAL', 'PHOTO']) {
       const scope = record(scopes?.[mode]);
       for (const kind of ['ASSETS', 'LABELS', 'PEOPLE']) {
-        if (typeof scope?.[kind] !== 'string') { this.reset(); return; }
+        if (typeof scope?.[kind] !== 'string') {
+          this.reset();
+          return;
+        }
         revisions.push(scope[kind]);
       }
     }
     const next = JSON.stringify(revisions);
-    if (next !== this.changes) { this.generation++; this.assets.clear(); }
+    if (next !== this.changes) {
+      this.generation++;
+      this.assets.clear();
+    }
     this.changes = next;
   }
 
-  private observeAssets(path: string, value: unknown, identity: AuthenticatedIdentity, sequence: number): void {
+  private observeAssets(
+    path: string,
+    value: unknown,
+    identity: AuthenticatedIdentity,
+    sequence: number,
+  ): void {
     const mode = path.startsWith('/api/photos/') ? 'PHOTO' : 'MATERIAL';
     const body = record(value);
-    if (!body) { this.reset(); return; }
-    const items = Array.isArray(body.items) ? body.items : [body];
-    const covers = Array.isArray(body.photoStacks) ? body.photoStacks.map(stack => record(stack)?.cover) : [];
+    if (!body) {
+      this.reset();
+      return;
+    }
+    const items: unknown[] = Array.isArray(body.items) ? body.items : [body];
+    const covers: unknown[] = Array.isArray(body.photoStacks)
+      ? body.photoStacks.map((stack) => record(stack)?.cover)
+      : [];
     for (const value of [...items, ...covers]) {
       const asset = record(value);
       if (typeof asset?.id !== 'string' || !UUID.test(asset.id)) continue;
       const key = this.key(identity, mode, asset.id);
       if ((this.assets.get(key)?.sequence ?? 0) > sequence) continue;
       const renditions = new Map<string, Rendition>();
-      if (asset.isPrivate === false && asset.deletedAt === null && asset.libraryMode === mode && Number.isSafeInteger(asset.mediaRevision) && Array.isArray(asset.renditions)) {
+      if (
+        asset.isPrivate === false &&
+        asset.deletedAt === null &&
+        asset.libraryMode === mode &&
+        Number.isSafeInteger(asset.mediaRevision) &&
+        Array.isArray(asset.renditions)
+      ) {
         for (const value of asset.renditions) {
           const r = record(value);
-          if (typeof r?.id === 'string' && UUID.test(r.id) && ['THUMBNAIL', 'PREVIEW', 'POSTER'].includes(String(r.kind)) && r.revision === asset.mediaRevision && r.mimeType === 'image/webp' && Number.isSafeInteger(r.byteSize) && Number(r.byteSize) > 0)
-            renditions.set(r.id, { kind: String(r.kind), bytes: Number(r.byteSize), contentType: 'image/webp' });
+          if (
+            typeof r?.id === 'string' &&
+            UUID.test(r.id) &&
+            ['THUMBNAIL', 'PREVIEW', 'POSTER'].includes(String(r.kind)) &&
+            r.revision === asset.mediaRevision &&
+            r.mimeType === 'image/webp' &&
+            Number.isSafeInteger(r.byteSize) &&
+            Number(r.byteSize) > 0
+          )
+            renditions.set(r.id, {
+              kind: String(r.kind),
+              bytes: Number(r.byteSize),
+              contentType: 'image/webp',
+            });
         }
       }
       this.assets.delete(key);
       this.assets.set(key, { sequence, renditions });
-      while (this.assets.size > this.maxEntries) this.assets.delete(this.assets.keys().next().value!);
+      while (this.assets.size > this.maxEntries)
+        this.assets.delete(this.assets.keys().next().value!);
     }
   }
   private key(identity: AuthenticatedIdentity, mode: string, assetId: string): string {
