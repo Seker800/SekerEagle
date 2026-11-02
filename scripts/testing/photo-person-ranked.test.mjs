@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import console from 'node:console';
@@ -18,7 +19,10 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 let queryCount = 0,
   transactionCount = 0;
-const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const db = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 db.$on('query', (event) => {
   queryCount++;
   if (event.query === 'BEGIN') transactionCount++;

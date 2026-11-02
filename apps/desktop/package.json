@@ -9,7 +9,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "node ../../node_modules/typescript-native/bin/tsc -p tsconfig.json --noEmit --moduleResolution bundler --module preserve",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "start": "npm run build && electron .",
@@ -23,7 +23,7 @@
     "electron-builder": "26.15.3",
     "esbuild": "^0.25.12",
     "jsdom": "^27.4.0",
-    "typescript": "^7.0.2",
+    "typescript": "5.9.3",
     "vitest": "^5.0.5"
   },
   "build": {

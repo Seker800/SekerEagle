@@ -1,3 +1,5 @@
+import { requireApi } from './api-dependencies.mjs';
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import console from 'node:console';
@@ -16,7 +18,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
-import { ConfigService } from '@nestjs/config';
+const { ConfigService } = requireApi('@nestjs/config');
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { EagleLibraryTransferService } from '../../apps/api/dist/eagle/eagle-library-transfer.service.js';
 import { ObjectStorageService } from '../../apps/api/dist/storage/object-storage.service.js';
@@ -52,7 +54,7 @@ const s3 = new S3Client({
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
   },
 });
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 const bucket = process.env.S3_BUCKET;
 const ownerId = randomUUID();
 let worker;
@@ -240,10 +242,11 @@ try {
     await material.tick();
     clearProgress = (await material.list(ownerId)).find((row) => row.id === empty.id);
     assert.equal(clearProgress.failed, 0, 'real-storage clear must not fail');
-    if (clearProgress.completed === 1) break;
-    assert.ok(performance.now() < clearDeadline, 'real-storage clear must drain its cutoff');
-    await delay(10);
-  } while (true);
+    if (clearProgress.completed !== 1) {
+      assert.ok(performance.now() < clearDeadline, 'real-storage clear must drain its cutoff');
+      await delay(10);
+    }
+  } while (clearProgress.completed !== 1);
   assert.equal(clearProgress.completed, 1);
   // Exercise the actual worker's wake path, not a test loop that calls drain
   // repeatedly and could conceal a missing production self-wakeup.

@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { log } from 'node:console';
 import { performance } from 'node:perf_hooks';
@@ -79,7 +80,8 @@ try {
     { env },
   );
   prisma = new PrismaClient({
-    datasources: { db: { url: env.DATABASE_URL } },
+    adapter: createPrismaAdapter(env.DATABASE_URL),
+
     log: [{ emit: 'event', level: 'query' }],
   });
   prisma.$on('query', (event) => observedQueries.push(event.query));

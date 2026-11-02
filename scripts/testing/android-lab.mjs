@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 /* global console, setTimeout */
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -153,7 +154,7 @@ async function migrate(env) {
   });
 }
 async function bootstrap(config, env) {
-  const db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  const db = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
   try {
     const existing = await db.user.findUnique({ where: { email: config.email } });
     const owner =

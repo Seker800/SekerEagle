@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
 import { performance } from 'node:perf_hooks';
@@ -87,7 +88,7 @@ try {
     ],
     { env },
   );
-  client = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  client = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
   const ownerId = randomUUID(),
     otherOwner = randomUUID();
   await client.user.createMany({

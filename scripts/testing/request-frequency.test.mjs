@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +14,7 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const origin = process.env.REQUEST_FREQUENCY_TEST_ORIGIN;
 assert(['127.0.0.1', 'localhost'].includes(new URL(origin).hostname));
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 const otherOwnerId = randomUUID();
 const ownerId = randomUUID(),
   email = `frequency-${ownerId}@example.invalid`,

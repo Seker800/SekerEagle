@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '@sekereagle/library-persistence';
 import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -37,7 +38,7 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
       mediaRevision,
     })),
   );
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
   const storage = new S3Client({
     endpoint: process.env.S3_ENDPOINT,
     region: process.env.S3_REGION ?? 'us-east-1',

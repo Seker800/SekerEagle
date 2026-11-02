@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import console from 'node:console';
@@ -34,7 +35,7 @@ for (const [configuredPath, fallback] of [
   [process.env.FFPROBE_PATH, 'ffprobe'],
 ])
   await promisify(execFile)(configuredPath?.trim() || fallback, ['-version'], { timeout: 3000 });
-const db = new PrismaClient(),
+const db = new PrismaClient({ adapter: createPrismaAdapter() }),
   ownerId = randomUUID(),
   directory = await mkdtemp(join(tmpdir(), 'eagle-compute-worker-'));
 const servers = [];

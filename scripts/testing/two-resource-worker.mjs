@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 import { log } from 'node:console';
@@ -17,7 +18,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 const ownerId = randomUUID();
 const pixels = await sharp({
   create: { width: 128, height: 96, channels: 3, background: '#a87850' },

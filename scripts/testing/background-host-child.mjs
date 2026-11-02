@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import sharp from 'sharp';
@@ -21,7 +22,7 @@ if (
   !/^[a-f0-9-]{36}$/.test(ownerId)
 )
   throw Error('Invalid synthetic host scope');
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 const bytes = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#88aa33' } })
   .jpeg()
   .toBuffer();

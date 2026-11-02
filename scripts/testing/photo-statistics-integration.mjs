@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { log } from 'node:console';
 import { spawnSync } from 'node:child_process';
@@ -75,7 +76,7 @@ try {
     ],
     { env },
   );
-  prisma = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  prisma = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
   const owner = randomUUID(),
     other = randomUUID();
   await prisma.user.createMany({

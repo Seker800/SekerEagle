@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { EAGLE_FILTER_FIELDS } from '../../packages/eagle-filter-core/dist/index.js';
 import { sampleImageSearch } from '../../apps/api/dist/eagle/eagle-search-preview.js';
 import assert from 'node:assert/strict';
@@ -25,7 +26,10 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const db = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 let measuring = false;
 const measuredQueries = [];
 db.$on('query', ({ query }) => {

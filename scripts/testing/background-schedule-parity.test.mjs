@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -10,7 +11,7 @@ assertSafeRuntimeTarget({
   s3Endpoint: process.env.S3_ENDPOINT,
   s3Bucket: process.env.S3_BUCKET,
 });
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 after(() => prisma.$disconnect());
 
 test('SQL rejects malformed equal windows just as the shared rule does', async () => {

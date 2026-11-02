@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '@sekereagle/library-persistence';
 import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { mediaMemoryMiB, WORKER_INFLIGHT_MEMORY_MIB } from './media-resource-budget';
 import { computePolicySignature } from './compute-runtime';
@@ -109,7 +110,7 @@ process.stdout.write(
 
 const workerId = `worker-${randomUUID()}`;
 const workerVersion = 'v1';
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 const storage = new S3Client({
   endpoint: s3Endpoint,
   region: process.env.S3_REGION ?? 'us-east-1',

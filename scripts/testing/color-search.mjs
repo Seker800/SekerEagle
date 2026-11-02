@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
 import { readFileSync } from 'node:fs';
@@ -85,6 +86,7 @@ try {
     { env },
   );
   db = new PrismaClient({
+    adapter: createPrismaAdapter(),
     datasourceUrl: env.DATABASE_URL,
     log: [{ emit: 'event', level: 'query' }],
   });

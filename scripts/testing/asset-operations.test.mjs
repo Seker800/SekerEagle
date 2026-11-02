@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { publishStoredEmbedding } from '../../apps/worker/dist/embedding-publication.js';
 import { EAGLE_EMBEDDING_MODEL } from '../../packages/vector-core/dist/index.js';
 import { AssetOperationWakeup } from '../../apps/api/dist/asset-operation-wakeup.js';
@@ -21,7 +22,10 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const prisma = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 let queryCount = 0;
 let transactionCount = 0;
 let deletionClaimQuery = '';

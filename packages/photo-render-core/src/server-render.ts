@@ -69,7 +69,7 @@ export async function renderServerPhoto(
     });
     worker.once('error', (reason) => {
       clearTimeout(timer);
-      reject(reason);
+      reject(reason instanceof Error ? reason : new Error(String(reason)));
     });
     worker.once('exit', (code) => {
       clearTimeout(timer);

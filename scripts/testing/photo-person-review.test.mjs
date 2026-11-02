@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
@@ -16,7 +17,10 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const profile = [];
 let profiling = false;
-const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const db = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 db.$on('query', (e) => {
   if (profiling) profile.push({ sql: e.query.slice(0, 100), ms: e.duration });
 });

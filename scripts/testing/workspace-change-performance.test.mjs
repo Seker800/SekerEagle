@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +14,7 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 
 test('existing SQL batches in a 60k library publish one hint without per-resource writes', async () => {
-  const db = new PrismaClient();
+  const db = new PrismaClient({ adapter: createPrismaAdapter() });
   const owner = randomUUID();
   try {
     await db.user.create({

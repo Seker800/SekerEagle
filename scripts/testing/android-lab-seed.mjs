@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 /* global console, setTimeout */
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -140,7 +141,7 @@ async function seed(config) {
   const api = await labClient(config);
   const me = await api('/api/auth/me');
   const ownerId = me.user.id;
-  const db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  const db = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
   const tagIds = {},
     folderIds = {};
   try {

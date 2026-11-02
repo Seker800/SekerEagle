@@ -1,3 +1,5 @@
+import { requireApi } from './api-dependencies.mjs';
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { verifyUploadPublication } from './upload-publication-probe.mjs';
 import { verifyServerEdits } from './server-edits-acceptance.mjs';
 import { URLSearchParams } from 'node:url';
@@ -21,7 +23,7 @@ import {
   GetObjectCommand,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
-import { JwtService } from '@nestjs/jwt';
+const { JwtService } = requireApi('@nestjs/jwt');
 import sharp from 'sharp';
 import bcrypt from 'bcrypt';
 import { createLivePhotoFixtures } from './live-photo-fixtures.mjs';
@@ -306,7 +308,7 @@ try {
     ],
     env,
   );
-  db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  db = new PrismaClient({ adapter: createPrismaAdapter(env.DATABASE_URL) });
   const testPassword = process.env.PHOTO_WORKBENCH_TEST_PASSWORD || randomBytes(24).toString('hex');
   const owner = await db.user.create({
     data: {

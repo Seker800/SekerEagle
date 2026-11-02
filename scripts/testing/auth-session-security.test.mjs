@@ -1,10 +1,12 @@
+import { requireApi } from './api-dependencies.mjs';
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import { test, after } from 'node:test';
 import { PrismaClient } from '@prisma/client';
-import { JwtService } from '@nestjs/jwt';
+const { JwtService } = requireApi('@nestjs/jwt');
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { SessionTokenService } from '../../apps/api/dist/auth/session-token.service.js';
 import { PasswordService } from '../../apps/api/dist/auth/password.service.js';
@@ -16,7 +18,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 after(() => prisma.$disconnect());
 const jwt = new JwtService({
   secret: 'synthetic-integration-signing-secret-32-bytes',
@@ -25,7 +27,10 @@ const jwt = new JwtService({
 const config = { getOrThrow: () => 3600 };
 
 test('one SQL per access verification preserves immediate account, family, expiry and role checks', async () => {
-  const measured = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+  const measured = new PrismaClient({
+    adapter: createPrismaAdapter(),
+    log: [{ emit: 'event', level: 'query' }],
+  });
   let nextAccountRead;
   measured.$on('query', ({ query }) => {
     // Query events are asynchronous; a completed Prisma promise is not an

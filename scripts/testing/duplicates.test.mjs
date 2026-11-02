@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { setImmediate as flushQueryEvents } from 'node:timers/promises';
 import { Buffer } from 'node:buffer';
 import console from 'node:console';
@@ -19,7 +20,10 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] }),
+const db = new PrismaClient({
+    adapter: createPrismaAdapter(),
+    log: [{ emit: 'event', level: 'query' }],
+  }),
   owners = [];
 let queries = 0,
   transactions = 0,

@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '@sekereagle/library-persistence';
 import { randomUUID } from 'node:crypto';
 
 import { Prisma, PrismaClient } from '@prisma/client';
@@ -224,7 +225,7 @@ async function run() {
     s3Bucket: process.env.S3_BUCKET ?? '',
   });
   const options = parseReclassificationArgs(process.argv.slice(2));
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
   try {
     const owner = await prisma.user.findUnique({
       where: { email: options.ownerEmail },

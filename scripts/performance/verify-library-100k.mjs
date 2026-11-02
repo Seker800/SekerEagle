@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { createRequire } from 'node:module';
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
@@ -27,7 +28,7 @@ assertSafeRuntimeTarget(runtimeTarget);
 assertDedicatedScaleTarget(DATABASE_URL);
 process.stdout.write(`Scale target accepted: ${describeRuntimeTarget(runtimeTarget)}\n`);
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 const service = new EagleService(prisma, undefined, 'MATERIAL');
 const shouldSeed = process.argv.includes('--seed');
 const shouldVerify = process.argv.includes('--verify') || !shouldSeed;

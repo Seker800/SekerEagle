@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { randomUUID } from 'node:crypto';
@@ -12,7 +13,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient(),
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() }),
   ownerId = randomUUID();
 try {
   await prisma.user.create({

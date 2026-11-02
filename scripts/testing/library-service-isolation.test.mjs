@@ -1,3 +1,5 @@
+import { requireApi } from './api-dependencies.mjs';
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
 import {
   readEagleEditRecipe,
@@ -19,7 +21,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 after(() => prisma.$disconnect());
 
 // Persist the pre-handoff journal shape to exercise in-flight historical copy plans.
@@ -1905,7 +1907,7 @@ test('dependent jobs converge from pending to failed instead of remaining perman
 
 test('logout revokes the entire refresh family including a concurrently rotated token and its access JWT', async () => {
   const { SessionTokenService } = await import('../../apps/api/dist/auth/session-token.service.js');
-  const { JwtService } = await import('@nestjs/jwt');
+  const { JwtService } = requireApi('@nestjs/jwt');
   const f = await fixtures();
   const user = await prisma.user.findUnique({ where: { id: f.ownerId } });
   const service = new SessionTokenService(
@@ -2272,7 +2274,7 @@ test('abandoned transfer plans expire without deleting completed targets and rem
 
 test('replaying an old refresh token commits family revocation and rejects its new access JWT', async () => {
   const { SessionTokenService } = await import('../../apps/api/dist/auth/session-token.service.js');
-  const { JwtService } = await import('@nestjs/jwt');
+  const { JwtService } = requireApi('@nestjs/jwt');
   const f = await fixtures();
   const user = await prisma.user.findUniqueOrThrow({ where: { id: f.ownerId } });
   const service = new SessionTokenService(

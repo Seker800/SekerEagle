@@ -6,13 +6,13 @@
   "type": "module",
   "types": "src/index.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "typecheck": "node ../../node_modules/typescript-native/bin/tsc -p tsconfig.json --noEmit --moduleResolution bundler --module preserve",
     "test": "node --test",
     "generate": "openapi-typescript openapi.json -o src/generated/openapi.ts"
   },
   "devDependencies": {
     "openapi-typescript": "^7.10.1",
-    "typescript": "^7.0.2"
+    "typescript": "5.9.3"
   }
 }

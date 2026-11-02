@@ -88,8 +88,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "typecheck": "node ../../node_modules/typescript-native/bin/tsc -p tsconfig.json --noEmit --moduleResolution bundler --module preserve",
     "test": "node --require ts-node/register --test src/*.test.ts",
     "pretest": "npm run build --workspace @sekereagle/library-core"
   },
@@ -100,7 +100,7 @@
     "sharp": "^0.35.5"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
+    "typescript": "5.9.3",
     "ts-node": "^10.9.2",
     "@types/node": "^26.6.5"
   },

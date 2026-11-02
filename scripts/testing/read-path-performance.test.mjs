@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import { randomUUID } from 'node:crypto';
@@ -15,7 +16,10 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const db = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 const ownerId = randomUUID();
 const prefix = `${ownerId}-`;
 const assetId = (n) => `${prefix}asset-${String(n).padStart(5, '0')}`;

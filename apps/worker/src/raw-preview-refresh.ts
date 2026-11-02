@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '@sekereagle/library-persistence';
 import { PrismaClient, type EagleAsset } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
 import { isCameraRawMime } from '@sekereagle/library-core';
@@ -32,7 +33,7 @@ async function refreshRawPreviews(manifest: RefreshItem[], apply: boolean) {
     s3Endpoint: process.env.S3_ENDPOINT ?? '',
     s3Bucket: process.env.S3_BUCKET ?? '',
   });
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
   const where = { id: { in: manifest.map((item) => item.assetId) }, libraryMode: 'PHOTO' as const };
   try {
     const assets = await prisma.eagleAsset.findMany({ where, include: { photoMetadata: true } });

@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +14,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 after(() => prisma.$disconnect());
 // Persist the pre-handoff journal shape to exercise in-flight historical copy plans.
 const legacyTransferDb = prisma.$extends({
@@ -145,7 +146,10 @@ test('fifty photo tasks use three list queries and still disappear when a frozen
   const tasks = [];
   for (let index = 0; index < 50; index++) tasks.push(await f.task());
   await f.proposal(tasks[0]);
-  const measured = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+  const measured = new PrismaClient({
+    adapter: createPrismaAdapter(),
+    log: [{ emit: 'event', level: 'query' }],
+  });
   let queries = 0;
   measured.$on('query', () => queries++);
   try {

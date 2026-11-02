@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -19,7 +20,10 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const db = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 const events = [];
 db.$on('query', ({ query, params }) =>
   events.push({ query, parameters: JSON.parse(params).length }),
@@ -88,7 +92,8 @@ async function unknownKindDatabase() {
   const url = new URL(process.env.DATABASE_URL);
   url.searchParams.set('schema', schema);
   const scoped = new PrismaClient({
-    datasources: { db: { url: url.toString() } },
+    adapter: createPrismaAdapter(url.toString()),
+
     log: [{ emit: 'event', level: 'query' }],
   });
   scoped.$on('query', ({ query, params }) =>

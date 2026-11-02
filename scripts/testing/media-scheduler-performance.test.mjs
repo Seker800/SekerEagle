@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 /* global console, setTimeout */
 import { performance } from 'node:perf_hooks';
 import assert from 'node:assert/strict';
@@ -20,7 +21,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 after(() => db.$disconnect());
 const input = { where: { lane: 'BACKGROUND', kind: { in: ['GENERATE_EMBEDDING'] } }, take: 50 };
 test('recent uploads use a time-leading covering index instead of probing every historical object key', async () => {

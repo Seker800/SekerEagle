@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setTimeout, clearTimeout } from 'node:timers';
@@ -16,7 +17,7 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 
 test('committed changes are discovered without scanning resources and private writes stay private', async () => {
-  const db = new PrismaClient();
+  const db = new PrismaClient({ adapter: createPrismaAdapter() });
   let listener;
   const service = new WorkspaceChangesService(() => {
     listener = new Client({ connectionString: process.env.DATABASE_URL });

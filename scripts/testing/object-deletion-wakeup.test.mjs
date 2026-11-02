@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { setTimeout, clearTimeout } from 'node:timers';
@@ -16,7 +17,7 @@ test('due outbox changes coalesce in a transaction without waking for future wor
   const url = new URL(process.env.DATABASE_URL);
   url.searchParams.delete('schema');
   const listener = new Client({ connectionString: url.toString() });
-  const db = new PrismaClient();
+  const db = new PrismaClient({ adapter: createPrismaAdapter() });
   const ownerId = randomUUID();
   const channel = 'sekereagle_object_deletion_wakeup',
     barrierChannel = 'sekereagle_test_barrier';

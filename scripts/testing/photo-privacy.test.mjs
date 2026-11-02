@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
@@ -22,7 +23,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
 after(() => prisma.$disconnect());
 const embedding = [1, ...Array(127).fill(0)];
 async function fixture() {

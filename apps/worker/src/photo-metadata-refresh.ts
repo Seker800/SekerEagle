@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '@sekereagle/library-persistence';
 import { PrismaClient } from '@prisma/client';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
@@ -29,7 +30,7 @@ async function refreshPhotoMetadata(manifest: RefreshItem[], apply: boolean) {
     s3Endpoint: process.env.S3_ENDPOINT ?? '',
     s3Bucket: process.env.S3_BUCKET ?? '',
   });
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: createPrismaAdapter() });
   const storage = new S3Client({
     endpoint: process.env.S3_ENDPOINT,
     region: process.env.S3_REGION ?? 'us-east-1',

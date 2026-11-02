@@ -46,7 +46,9 @@ it('imports raw RGB even with alpha, validates dimensions and rejects corrupted 
   const data = new Uint8Array(64 * 64 * 4);
   for (let p = 0; p < data.length; p += 4) data.set([97, 125, 183, 230], p);
   const png = encode({ width: 64, height: 64, data, channels: 4, depth: 8 });
-  const entry = await importPhotoLut(new NodeFile([png], 'Table.png') as unknown as File);
+  const entry = await importPhotoLut(
+    new NodeFile([new Uint8Array(png)], 'Table.png') as unknown as File,
+  );
   const table = await loadPhotoLut(entry.id);
   expect(entry.size).toBe(16);
   expect(table.data[0]).toBeCloseTo(97 / 255, 7);

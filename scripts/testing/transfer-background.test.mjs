@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { fork } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -24,7 +25,10 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+const prisma = new PrismaClient({
+  adapter: createPrismaAdapter(),
+  log: [{ emit: 'event', level: 'query' }],
+});
 let queries = [];
 prisma.$on('query', (event) => queries.push(event));
 after(() => prisma.$disconnect());

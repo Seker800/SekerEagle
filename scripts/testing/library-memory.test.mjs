@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { photoStatisticsFactFieldsSql } from '../../apps/api/dist/photos/photo-statistics-query.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -37,7 +38,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 const ownerId = randomUUID(),
   other = randomUUID();
 const personId = randomUUID(),

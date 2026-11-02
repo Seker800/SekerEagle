@@ -1,3 +1,4 @@
+import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -17,7 +18,7 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const db = new PrismaClient();
+const db = new PrismaClient({ adapter: createPrismaAdapter() });
 test('full scan is durable, idempotent, scoped, versioned and governed by existing pause rules', async () => {
   const owner = randomUUID(),
     other = randomUUID();
@@ -133,7 +134,7 @@ test('full scan is durable, idempotent, scoped, versioned and governed by existi
     assert.equal((await coverage()).failed, 1);
     assert.deepEqual(await service.retry(owner, 'FACES'), { retried: 1 });
     assert.equal((await queuePhotoFaceScan(db, owner, true)).queued, 1);
-    const newConnection = new PrismaClient();
+    const newConnection = new PrismaClient({ adapter: createPrismaAdapter() });
     try {
       assert.equal(
         await newConnection.eagleAssetProcessingJob.count({

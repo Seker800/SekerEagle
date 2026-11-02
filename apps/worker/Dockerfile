@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /sekereagle
-COPY package.json package-lock.json tsconfig.base.json ./
+COPY package.json package-lock.json tsconfig.base.json prisma.config.ts ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
@@ -15,6 +15,7 @@ COPY packages/eagle-filter-core/package.json packages/eagle-filter-core/package.
 COPY packages/vector-core/package.json packages/vector-core/package.json
 RUN npm install --global npm@10.9.4 && npm ci
 COPY apps/api/prisma apps/api/prisma
+COPY apps/api/prisma.config.ts apps/api/prisma.config.ts
 COPY apps/worker apps/worker
 COPY scripts/compute scripts/compute
 COPY packages/library-core packages/library-core

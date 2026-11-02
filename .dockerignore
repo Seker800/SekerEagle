@@ -4,6 +4,7 @@
 !package.json
 !package-lock.json
 !tsconfig.base.json
+!prisma.config.ts
 !apps/
 !apps/compute-coordinator/
 !apps/compute-coordinator/**
