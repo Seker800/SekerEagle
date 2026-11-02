@@ -236,11 +236,7 @@ async function execute(f, operationId, total, kind) {
   assert.equal(completed, total);
   const idle = await measure(() => f.operations.tick());
   assert.equal(idle.cost.transactions, 0);
-  assert.equal(
-    idle.cost.sql,
-    3,
-    'idle lanes use three unlocked probes, without claim transactions',
-  );
+  assert.equal(idle.cost.sql, 4, 'idle lanes use four unlocked probes, without claim transactions');
   const drain = await measure(() => f.operations.drain());
   assert.equal(drain.cost.sql, 0);
   const execution = combine(batches);
@@ -326,11 +322,35 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       }),
     );
     assert.ok(
-      admitted.cost.sql <= 64,
-      'thousand-group admission must amortize across database batches',
+      admitted.cost.sql <= 10,
+      'cleanup admission persists one intent independent of group count',
     );
     assert.equal(admitted.cost.transactions, 1);
     assert.equal(admitted.cost.s3, 0);
+    assert.equal(
+      await db.eagleAssetOperationItem.count({
+        where: { operationId: admitted.value.operationId },
+      }),
+      1,
+    );
+    const preparation = await measure(() => f.operations.tick());
+    assert.equal(
+      preparation.cost.transactions,
+      2,
+      'one claim plus one atomic preparation publication',
+    );
+    assert.equal(preparation.cost.s3, 0);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      0,
+      'preparation does not clean resources',
+    );
+    assert.equal(
+      await db.eagleAssetOperationItem.count({
+        where: { operationId: admitted.value.operationId, status: 'PENDING', weight: { gt: 0 } },
+      }),
+      1000,
+    );
     const execution = await execute(f, admitted.value.operationId, 1000, 'DUPLICATE_CLEANUP');
     assert.equal(execution.batchCount, 32);
     assert.equal(execution.execution.transactions, 64);
@@ -364,7 +384,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     );
     assert.equal(
       await db.eagleAssetOperationItem.count({
-        where: { operationId: admitted.value.operationId, status: 'COMPLETED' },
+        where: { operationId: admitted.value.operationId, status: 'COMPLETED', weight: { gt: 0 } },
       }),
       1000,
     );
@@ -375,10 +395,12 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       groups: 1000,
       review: review.cost,
       admission: admitted.cost,
+      preparation: preparation.cost,
       ...execution,
       domainTotalIncludingReviewProgressAndIdle: combine([
         review.cost,
         admitted.cost,
+        preparation.cost,
         execution.fullDrainIncludingProgressAndIdle,
       ]),
     });

@@ -166,6 +166,40 @@ async function fixture(mode) {
     reads: () => reads,
   };
 }
+/** Explicit background validation: accepted intent must fail without touching any source row. */
+async function assertCleanupFailure(f, accept) {
+  const read = () =>
+    db.eagleAsset.findMany({
+      where: { ownerId: f.ownerId },
+      orderBy: { id: 'asc' },
+      select: { id: true, rowVersion: true, deletedAt: true },
+    });
+  const before = await read();
+  const result = await accept();
+  assert.ok(
+    result.operationId,
+    'validly shaped requests durably record their rejected business intent',
+  );
+  const operation = await db.eagleAssetOperation.findUniqueOrThrow({
+    where: { id: result.operationId },
+  });
+  let summary;
+  for (let turn = 0; turn < 1000; turn++) {
+    await f.executor.tick();
+    summary = (await f.executor.list(operation.ownerId, true)).find(
+      (row) => row.id === result.operationId,
+    );
+    if (!summary.queued && !summary.running) break;
+  }
+  assert.equal(summary.state, 'STOPPED');
+  assert.equal(summary.failed, 1);
+  assert.deepEqual(
+    await read(),
+    before,
+    'failed preparation cannot change source metadata or trash membership',
+  );
+}
+
 for (const mode of ['MATERIAL', 'PHOTO']) {
   test(`${mode}: cleanup batch rejects mixed scope and rolls back on final authorization failure`, async () => {
     const f = await fixture(mode);
@@ -179,12 +213,13 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       revision: page.exactRevision,
       allExact: true,
     });
+    await f.executor.tick(); // independently prepare the frozen plans, without deleting resources
     await db.eagleAssetOperationItem.updateMany({
-      where: { operationId: admitted.operationId },
+      where: { operationId: admitted.operationId, weight: { gt: 0 } },
       data: { status: 'RUNNING', leaseUntil: new Date(Date.now() + 120000), leaseVersion: 1 },
     });
     const items = await db.eagleAssetOperationItem.findMany({
-      where: { operationId: admitted.operationId },
+      where: { operationId: admitted.operationId, weight: { gt: 0 } },
       include: { operation: true },
       orderBy: { ordinal: 'asc' },
     });
@@ -214,7 +249,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     );
     assert.equal(
       await db.eagleAssetOperationItem.count({
-        where: { operationId: admitted.operationId, status: 'COMPLETED' },
+        where: { operationId: admitted.operationId, status: 'COMPLETED', weight: { gt: 0 } },
       }),
       0,
     );
@@ -302,6 +337,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       revision: page.exactRevision,
       allExact: true,
     });
+    await f.executor.tick(); // independently prepare the frozen plans, without deleting resources
     await flushQueryEvents();
     queries = 0;
     transactions = 0;
@@ -311,7 +347,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const measured = { transactions, queries, elapsedMs: performance.now() - started };
     const state = await db.eagleAssetOperationItem.groupBy({
       by: ['status'],
-      where: { operationId: admitted.operationId },
+      where: { operationId: admitted.operationId, weight: { gt: 0 } },
       _count: true,
     });
     assert.equal(
@@ -343,6 +379,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       revision: page.exactRevision,
       allExact: true,
     });
+    await f.executor.tick(); // independently prepare the frozen plans, without deleting resources
     await db.eagleAsset.update({
       where: { id: keepers[1].id },
       data: { rowVersion: { increment: 1 } },
@@ -441,13 +478,13 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal(page.coverage.total, 2);
     assert.equal((await f.duplicate.list(randomUUID(), false, {})).totalGroups, 0);
     const group = page.groups[0];
-    await assert.rejects(
+    await assertCleanupFailure(f, () =>
       f.duplicate.cleanup(f.principal, {
         operationId: randomUUID(),
         groups: [{ signature: group.signature, keepIds: [hidden.id] }],
       }),
     );
-    await assert.rejects(
+    await assertCleanupFailure(f, () =>
       f.duplicate.cleanup(f.principal, {
         operationId: randomUUID(),
         revision: '0'.repeat(64),
@@ -460,6 +497,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       operationId: randomUUID(),
       groups: [{ signature: group.signature, keepIds: [keep] }],
     });
+    await f.executor.tick(); // freeze the reviewed keeper before the concurrent deletion
     await db.eagleAsset.update({
       where: { id: keep },
       data: { deletedAt: new Date(), rowVersion: { increment: 1 } },
@@ -591,7 +629,11 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     assert.equal((await db.eagleAsset.findUnique({ where: { id: b.id } })).deletedAt, null);
     const scan = await f.duplicate.scan(principal, randomUUID());
     await f.executor.cancel(principal, scan.operationId);
-    assert.equal((await f.drain(scan.operationId)).cancelled, 3);
+    assert.equal(
+      (await f.drain(scan.operationId)).cancelled,
+      1,
+      'cancellation stops the discovery intent before enumeration',
+    );
     assert.equal(f.reads(), 0);
   });
 }
@@ -641,6 +683,13 @@ test('60k library read, group pagination beyond the first page, and batch admiss
   const scanStart = performance.now();
   const scan = await f.duplicate.scan(f.principal, randomUUID());
   const scanMs = performance.now() - scanStart;
+  assert.equal(
+    (await db.eagleAssetOperationItem.findMany({ where: { operationId: scan.operationId } }))
+      .length,
+    1,
+    'HTTP accepts one discovery sentinel',
+  );
+  await f.executor.tick(); // discover the full library in the independent scan lane
   const planned = await db.eagleAssetOperationItem.aggregate({
     where: { operationId: scan.operationId },
     _sum: { weight: true },
@@ -655,6 +704,7 @@ test('60k library read, group pagination beyond the first page, and batch admiss
     FROM "EagleAsset" WHERE "ownerId"=${f.ownerId} AND "libraryMode"='MATERIAL'`;
   await db.$executeRaw`ANALYZE "EagleDuplicateFingerprint"`;
   const indexed = await f.duplicate.scan(f.principal, randomUUID());
+  await f.executor.tick(); // discover current evidence before checking the derived work count
   assert.equal(
     (
       await db.eagleAssetOperationItem.aggregate({
@@ -899,7 +949,7 @@ test('visual review includes compressed backups and near-identical frames, witho
   await assert.rejects(
     f.duplicate.cleanup(f.principal, { operationId: randomUUID(), allVerified: true }),
   );
-  await assert.rejects(
+  await assertCleanupFailure(f, () =>
     f.duplicate.cleanup(f.principal, {
       operationId: randomUUID(),
       allVerified: true,
@@ -1061,16 +1111,15 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const otherKind = await f.duplicate.list(f.ownerId, false, { ...filters, sameVisual: 'true' });
     assert.equal(otherKind.totalGroups, 0);
     assert.equal(otherKind.exactGroups, 29, 'exact files are independent of conditional matching');
-    assert.deepEqual(
-      await f.duplicate.cleanup(f.principal, {
-        operationId: randomUUID(),
-        allVerified: true,
-        filters: { ...filters, sameVisual: 'true' },
-        revision: otherKind.revision,
-      }),
-      { operationId: null },
-      'an empty selected category cannot clean another category',
-    );
+    const empty = await f.duplicate.cleanup(f.principal, {
+      operationId: randomUUID(),
+      allVerified: true,
+      filters: { ...filters, sameVisual: 'true' },
+      revision: otherKind.revision,
+    });
+    const emptyState = await f.drain(empty.operationId);
+    assert.equal(emptyState.completed, 0);
+    assert.equal(emptyState.failed, 0);
     assert.equal(page.filteredItems, 26);
     assert.equal(page.groups.length, 24);
     const next = await f.duplicate.list(f.ownerId, false, {
@@ -1085,23 +1134,21 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       0,
       'missing EXIF is not equal capture time',
     );
-    await assert.rejects(
+    await assertCleanupFailure(f, () =>
       f.duplicate.cleanup(f.principal, {
         operationId: randomUUID(),
         allVerified: true,
         revision: page.revision,
         filters: { ...filters, sameName: 'false' },
       }),
-      /变化/,
     );
-    await assert.rejects(
+    await assertCleanupFailure(f, () =>
       f.duplicate.cleanup(outside.principal, {
         operationId: randomUUID(),
         allVerified: true,
         revision: page.revision,
         filters,
       }),
-      /变化/,
     );
     await f.duplicate.ignore(f.ownerId, false, {
       allFiltered: true,
@@ -1121,7 +1168,7 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const current = await f.duplicate.list(f.ownerId, false, filters);
     const group = current.groups[0],
       manualKeeper = group.previews.find((a) => a.id !== group.recommendedId).id;
-    await assert.rejects(
+    await assertCleanupFailure(f, () =>
       f.duplicate.cleanup(f.principal, {
         operationId: randomUUID(),
         allVerified: true,
@@ -1129,7 +1176,6 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
         filters,
         keepOverrides: [{ signature: group.signature, keepIds: [edited.id] }],
       }),
-      /本组/,
     );
     await flushQueryEvents();
     const admissionBefore = queries,
@@ -1276,6 +1322,7 @@ test('already-queued original verification remains resumable across the visual-r
   await db.eagleAsset.update({ where: { id: rows[1].id }, data: { format: 'nef' } });
   async function legacyRun() {
     const op = await f.duplicate.scan(f.principal, randomUUID());
+    await f.executor.tick(); // execute discovery before replacing the legacy build checkpoint
     const items = await db.eagleAssetOperationItem.findMany({
       where: { operationId: op.operationId },
       orderBy: { ordinal: 'asc' },
@@ -1379,14 +1426,13 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
       new Set([b.id, c.id]),
     );
     await assert.rejects(f.duplicate.members(f.ownerId, false, sig, 0, filters), /变化/);
-    await assert.rejects(
+    await assertCleanupFailure(f, () =>
       f.duplicate.cleanup(f.principal, {
         operationId: randomUUID(),
         allVerified: true,
         revision: subgroup.revision,
         filters,
       }),
-      /变化/,
     );
     await f.duplicate.ignore(f.ownerId, false, { signature: sig, ignored: true, filters: narrow });
     assert.equal((await f.duplicate.list(f.ownerId, false, narrow)).totalGroups, 0);
@@ -1445,3 +1491,138 @@ test('metadata time grouping normalizes known fractional precision and keeps unk
   assert.equal(result.groups[0].count, 2);
   assert.equal(f.reads(), 0);
 });
+
+for (const mode of ['MATERIAL', 'PHOTO']) {
+  test(`${mode}: duplicate scan and cleanup accept under the publication lock and cancel undiscovered intent`, async () => {
+    const f = await fixture(mode);
+    await f.add({ sha256: hash('locked-acceptance'), rating: 5 });
+    await f.add({ sha256: hash('locked-acceptance'), rating: 1 });
+    const page = await f.duplicate.list(f.ownerId, false, {});
+    let release;
+    let notify;
+    const ready = new Promise((resolve) => {
+      notify = resolve;
+    });
+    const hold = new Promise((resolve) => {
+      release = resolve;
+    });
+    const locked = db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-privacy:${f.ownerId}:${mode}`},0))`;
+        // Use the original shared lock primitive as well, so this test follows future key changes.
+        const { lockOwnerPrivacyProjection } =
+          await import('../../packages/library-persistence/dist/privacy-lock.js');
+        await lockOwnerPrivacyProjection(tx, f.ownerId, mode);
+        notify();
+        await hold;
+      },
+      { timeout: 10000 },
+    );
+    await ready;
+    let scan;
+    let cleanup;
+    try {
+      scan = await f.duplicate.scan(f.principal, randomUUID());
+      cleanup = await f.duplicate.cleanup(f.principal, {
+        operationId: randomUUID(),
+        allExact: true,
+        revision: page.exactRevision,
+      });
+      const items = await db.eagleAssetOperationItem.findMany({
+        where: { operationId: { in: [scan.operationId, cleanup.operationId] } },
+      });
+      assert.deepEqual(
+        new Set(items.map((item) => item.snapshots.kind)),
+        new Set(['discover', 'prepare-cleanup']),
+      );
+      assert.equal(items.length, 2);
+      assert.ok(
+        items.every(
+          (item) => item.weight === 1 && item.assetIds.length === 0 && item.status === 'PENDING',
+        ),
+      );
+      assert.equal(
+        await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+        0,
+      );
+      assert.equal(f.reads(), 0);
+    } finally {
+      release();
+      await locked;
+    }
+    await f.executor.cancel(f.principal, scan.operationId);
+    await f.executor.cancel(f.principal, cleanup.operationId);
+    assert.equal((await f.drain(scan.operationId)).cancelled, 1);
+    assert.equal((await f.drain(cleanup.operationId)).cancelled, 1);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      0,
+    );
+  });
+  test(`${mode}: cleanup preparation resumes once after failure and never duplicates child plans`, async () => {
+    const f = await fixture(mode);
+    for (let i = 0; i < 2; i++) {
+      await f.add({ sha256: hash(`resume-${i}`), rating: 5 });
+      await f.add({ sha256: hash(`resume-${i}`), rating: 1 });
+    }
+    const page = await f.duplicate.list(f.ownerId, false, {});
+    const input = { operationId: randomUUID(), allExact: true, revision: page.exactRevision };
+    const op = await f.duplicate.cleanup(f.principal, input);
+    const apply = f.duplicate.applyCleanupBatch.bind(f.duplicate);
+    let failed = false;
+    f.duplicate.applyCleanupBatch = async (tx, items) => {
+      await apply(tx, items);
+      if (!failed && items.some((item) => item.snapshots.kind === 'prepare-cleanup')) {
+        failed = true;
+        throw new Error('synthetic preparation transaction failure');
+      }
+    };
+    await f.executor.tick();
+    const rollback = await db.eagleAssetOperationItem.findMany({
+      where: { operationId: op.operationId },
+    });
+    assert.equal(rollback.length, 1, 'failed preparation rolls back all child plans');
+    assert.equal(rollback[0].weight, 1);
+    assert.equal(rollback[0].status, 'FAILED');
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      0,
+    );
+    f.duplicate.applyCleanupBatch = apply;
+    await f.executor.retry(f.principal, op.operationId);
+    await f.executor.tick();
+    const prepared = await db.eagleAssetOperationItem.findMany({
+      where: { operationId: op.operationId },
+    });
+    assert.equal(prepared.length, 3);
+    assert.equal(prepared.filter((item) => item.weight > 0).length, 2);
+    assert.equal(prepared.find((item) => item.snapshots.kind === 'prepare-cleanup').weight, 0);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      0,
+      'preparation publishes plans, not deletions',
+    );
+    assert.equal((await f.duplicate.cleanup(f.principal, input)).operationId, op.operationId);
+    assert.equal(
+      await db.eagleAssetOperationItem.count({ where: { operationId: op.operationId } }),
+      3,
+      'repeated acceptance cannot recreate child plans',
+    );
+    const resumed = new EagleAssetOperationService(
+      db,
+      new EagleLibraryTransferService(db, {}, mode),
+      new EagleService(db, undefined, mode),
+      mode,
+      f.duplicate,
+    );
+    await resumed.tick();
+    const terminal = await f.drain(op.operationId);
+    assert.equal(terminal.failed, 0);
+    assert.equal(terminal.completed, 2);
+    assert.equal(
+      await db.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+      2,
+    );
+    assert.equal(f.reads(), 0);
+  });
+}
