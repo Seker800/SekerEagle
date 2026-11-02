@@ -29,7 +29,12 @@ import {
   type MediaResolution,
 } from './media-cache-controller';
 import { MediaRequestLimiter } from './media-request-limiter';
-import { isAllowedAppNavigation, desktopContentSecurityPolicy } from './navigation-policy';
+import {
+  isAllowedAppNavigation,
+  desktopContentSecurityPolicy,
+  isAllowedMediaOrigin,
+  mediaCorsHeaders,
+} from './navigation-policy';
 import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
 import {
   DEFAULT_CACHE_LIMIT_BYTES,
@@ -79,7 +84,7 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       stream: true,
-      corsEnabled: false,
+      corsEnabled: true,
     },
   },
   {
@@ -261,7 +266,7 @@ if (hasSingleInstanceLock)
 
     mediaController = createMediaController(owner);
     protocol.handle('sekereagle-media', (request) =>
-      handleMediaRequest(request.url, request.signal),
+      handleMediaRequest(request.url, request.signal, request.headers.get('origin')),
     );
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
     createWindow(initialConnection.active ? serverUrl : connectionPageUrl(desktopLocale), owner);
@@ -876,14 +881,30 @@ function lockDownSession(currentSession: Electron.Session): void {
   );
 }
 
-async function handleMediaRequest(requestUrl: string, signal: AbortSignal): Promise<Response> {
+async function handleMediaRequest(
+  requestUrl: string,
+  signal: AbortSignal,
+  origin: string | null,
+): Promise<Response> {
+  const requestServer = serverUrl;
+  if (!isAllowedMediaOrigin(requestServer, origin)) return new Response(null, { status: 403 });
+  const respond = (response: Response) => {
+    const headers = new Headers(response.headers);
+    for (const [name, value] of Object.entries(mediaCorsHeaders(requestServer)))
+      headers.set(name, value);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
   try {
     if (!mediaController) throw new Error('媒体控制器不可用。');
     const resolution = await mediaController.resolve(requestUrl, signal);
-    return resolutionToResponse(resolution);
+    return respond(resolutionToResponse(resolution));
   } catch {
-    if (signal.aborted) return new Response(null, { status: 499 });
-    return new Response('媒体缓存暂时不可用。', { status: 502 });
+    if (signal.aborted) return respond(new Response(null, { status: 499 }));
+    return respond(new Response('媒体缓存暂时不可用。', { status: 502 }));
   }
 }
 
