@@ -1,5 +1,7 @@
 # 多机计算与 Agent 控制
 
+> **2026-11-02晚主分支发布核验**：唯一Mac业务执行器已正常排空并切到不可变`worker-51f8bc804222`，现场PID85162、心跳新鲜；NAS业务worker保持停止。两媒体节点、MLX环境、模型、驱动及容量未改，三节点READY、在途0，计算修订仍66，原并发和Metal交互预留保持，未改用户暂停／时段或恢复暂停巡检。配套API／operations／reader、85项迁移、回退及核验限制见[本轮发布记录](main-production-release-2026-11-02-evening.md)和[现用运行状态](current-runtime.md)。本段是现场快照，不代表全部图库任务已完成。
+
 > **2026-11-02 依赖整合发布核验**：唯一 Mac 业务执行器更新为不可变 `worker-b0423ca614f3`，现场 PID31292、心跳新鲜，旧执行器正常退出；NAS worker继续停止。MLX更新固定依赖环境，原Qwen修订、1024维、模型位置及LaunchAgent保持，隔离新旧五个真实推理样本最差余弦1.0，生产切换后真实推理通过。Windows／Mac正式媒体包、驱动及模型保持，CUDA仍未注册。三节点READY，修订66及原容量／交互预留、用户暂停时段保持，未恢复暂停巡检。部署和回退路径见[现用运行状态](current-runtime.md)及[整合发布记录](all-branches-release-2026-11-02.md)；本段不表示全库后台任务已完成。
 
 > **2026-11-01 配套颜色版本发布核验**：Mac／Windows 正式媒体节点均升级为 SHA-256 `cd6a46bf1a81326362fe2a13befbc3f046aa93a62b170723e45dc3753dd299e9`，正式端口各四次双模式颜色请求通过，`color-v4-eagle-basic` 版本和调色板结果一致。业务执行仍仅 Mac，不可变 `worker-648e05434fa8`，现场 PID 57244、新鲜心跳；NAS worker 保持停止。后续 API 编辑保存修复不改变这 117 个 worker JS。三节点 READY，修订 66 与原容量、Metal 交互预留、模型、驱动、处理暂停／时段均保持；不恢复已暂停巡检。历史颜色任务仍补算，动态进度从检查点读取，不能用本段快照推断已经全库完成。应用最终版本、备份、保护回退和验收见[整合发布记录](production-integrated-release-2026-11-01.md)，实时运行以 [current-runtime](current-runtime.md) 为准。

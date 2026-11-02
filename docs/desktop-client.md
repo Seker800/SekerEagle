@@ -1,5 +1,11 @@
 # SekerEagle desktop client
 
+## 2026-11-02 paired production release: client 0.1.9
+
+The web/API/independent executors are now deployed, and Windows x64 portable plus macOS arm64/x64 DMGs are available at `/downloads/desktop/`. The client combines the scoped PHOTO drag bridge, complete version display, WASM compatibility, native Windows frame and both-mode cache/list reuse. Existing installed apps are not automatically replaced; quit Windows and replace the executable while preserving `SekerEagleData`.
+
+Production acceptance also found that cached preview images could display while tainting editor canvases. Preview and full export now share the credentialed CORS image loader, using the client's existing exact-origin policy. Full CI and actual editor pixels in both modes passed locally and against production Chrome/Electron, along with real IPC/HTTP original export hashes. Physical Windows/DPI and OS drop-target acceptance remain unavailable on this Mac host. Deployment versions, rollback and validation are recorded in [the release report](main-production-release-2026-11-02-evening.md). The older candidate sections below describe their original local checkpoints.
+
 The desktop client is a macOS and Windows wrapper around the same UI served by SekerEagle. It requires a reachable, authenticated SekerEagle server and accelerates repeated derived-image reads with a local, rebuildable cache. macOS remains the complete deployment-validation path; Windows x64 has a native internal single-file portable package and desktop-specific automated coverage.
 
 By default it connects to `http://localhost:8180`, matching the local deployment's canonical browser origin. The home-page connection pill opens an offline-capable manager with Local, LAN, and Public slots. Automatic mode keeps a healthy current connection to avoid login and cache churn; after failure it probes configured slots concurrently and chooses Local, then LAN, then Public. A manual mode never falls back silently.
