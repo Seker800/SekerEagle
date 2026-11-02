@@ -301,3 +301,24 @@ it('shows an actionable transaction timeout instead of an undiagnosed operation 
   fireEvent.click(await screen.findByText('查看失败原因'));
   expect(await screen.findByText(/数据库事务等待超时，未提交的项目可以重试。/)).toBeVisible();
 });
+
+it('can stop a claimed discovery or preparation command even before it has queued child items', async () => {
+  mocks.list.mockImplementation(async (mode) =>
+    mode === 'PHOTO'
+      ? [
+          job({
+            id: 'discover',
+            kind: 'DUPLICATE_SCAN',
+            total: 1,
+            completed: 0,
+            queued: 0,
+            running: 1,
+          }),
+        ]
+      : [],
+  );
+  const client = show('PHOTO');
+  fireEvent.click(await screen.findByRole('button', { name: '停止排队' }));
+  await waitFor(() => expect(mocks.cancel).toHaveBeenCalledExactlyOnceWith('PHOTO', 'discover'));
+  client.clear();
+});
