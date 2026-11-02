@@ -1,3 +1,4 @@
+import { readBatchEditRenderContext } from '../../apps/api/dist/eagle/eagle-batch-edit.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -30,6 +31,12 @@ const lut = writePortableLut({
   domainMin: [0, 0, 0],
   domainMax: [1, 1, 1],
   data: new Float32Array(24),
+});
+const unusedLut = writePortableLut({
+  size: 33,
+  domainMin: [0, 0, 0],
+  domainMax: [1, 1, 1],
+  data: new Float32Array(33 ** 3 * 3),
 });
 for (const mode of ['MATERIAL', 'PHOTO'])
   test(`${mode}: historical browser-upload recipe without render journal preserves its LUT during partial background paste`, async () => {
@@ -70,6 +77,31 @@ for (const mode of ['MATERIAL', 'PHOTO'])
       },
     });
     assert.equal(await db.eagleEditRender.count({ where: { ownerId } }), 0);
+    // A saved draft uses the same recipe table but has no immutable-copy base.
+    await db.eagleAssetEditRecipe.create({
+      data: {
+        ownerId,
+        libraryMode: mode,
+        assetId: base.id,
+        assetRevision: base.mediaRevision,
+        baseMediaRevision: base.mediaRevision,
+        recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:browser-upload' } },
+      },
+    });
+    assert.deepEqual(
+      await readBatchEditRenderContext(db, ownerId, mode, [target.id, base.id], false),
+      { preservedFilterIds: ['lut:browser-upload'] },
+    );
+    const hidden = await add();
+    await db.eagleAsset.update({ where: { id: hidden.id }, data: { isPrivate: true } });
+    await assert.rejects(
+      readBatchEditRenderContext(db, ownerId, mode, [target.id, hidden.id], false),
+      (error) => error.getStatus?.() === 404,
+    );
+    await assert.rejects(
+      readBatchEditRenderContext(db, randomUUID(), mode, [target.id], false),
+      (error) => error.getStatus?.() === 404,
+    );
     const service = createAssetOperationExecutors(
       db,
       new Proxy(
@@ -93,17 +125,27 @@ for (const mode of ['MATERIAL', 'PHOTO'])
     };
     const op = await service.enqueueCommand(principal, {
       type: 'BATCH_EDIT_RENDER',
-      assetIds: [target.id],
+      assetIds: [target.id, base.id],
       payload: {
-        recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, exposure: 0.5 } },
+        recipe: {
+          version: 1,
+          edits: { ...DEFAULT_PHOTO_EDITS, exposure: 0.5, filter: 'lut:browser-upload' },
+        },
+        lut: unusedLut,
         parts: { adjustments: true, filter: false, watermark: false, crop: false },
-        preservedLuts: { 'lut:browser-upload': lut },
+        preservedLuts: { 'lut:browser-upload': lut, 'lut:unused-table': unusedLut },
       },
     });
     await service.tick(false);
     const state = (await service.list(ownerId, true)).find((row) => row.id === op.id);
     assert.equal(state.state, 'COMPLETED');
     assert.equal(state.failed, 0);
+    const allRenders = await db.eagleEditRender.findMany({ where: { ownerId } });
+    assert.equal(allRenders.length, 2);
+    assert.ok(
+      allRenders.every((row) => row.lut === null && row.commandOperationId === op.id),
+      'each target references one shared operation table, including a historical draft',
+    );
     const render = await db.eagleEditRender.findFirstOrThrow({
       where: { ownerId },
       include: { job: true },
@@ -113,7 +155,37 @@ for (const mode of ['MATERIAL', 'PHOTO'])
     assert.equal(render.lut, null);
     assert.equal(render.recipe.edits.filter, 'lut:browser-upload');
     assert.equal(render.recipe.edits.exposure, 0.5);
-    assert.equal(await resolveEditRenderLut(db, render, 'lut:browser-upload'), lut);
+    const projectedDb = {
+      $queryRaw: async (query) => {
+        const rows = await db.$queryRaw(query);
+        assert.ok(
+          JSON.stringify(rows).length < 5000,
+          'unrelated multi-MB bank data must stay inside PostgreSQL',
+        );
+        return rows;
+      },
+    };
+    assert.equal(
+      await resolveEditRenderLut(projectedDb, render, 'lut:browser-upload'),
+      lut,
+      'unselected filter must ignore same-ID clipboard bytes',
+    );
+    await assert.rejects(
+      resolveEditRenderLut(db, { ...render, ownerId: randomUUID() }, 'lut:browser-upload'),
+      /EDIT_LUT_REFERENCE_MISSING/,
+    );
+    await assert.rejects(
+      resolveEditRenderLut(
+        db,
+        { ...render, libraryMode: mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO' },
+        'lut:browser-upload',
+      ),
+      /EDIT_LUT_REFERENCE_MISSING/,
+    );
+    await assert.rejects(
+      resolveEditRenderLut(db, render, 'lut:absent'),
+      /EDIT_LUT_REFERENCE_MISMATCH/,
+    );
     assert.equal(
       (await db.eagleAssetOperation.findUniqueOrThrow({ where: { id: op.id } })).commandPayload
         .preservedLuts['lut:browser-upload'],

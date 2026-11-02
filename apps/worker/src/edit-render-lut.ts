@@ -1,9 +1,8 @@
-import type { LibraryMode, PrismaClient } from '@prisma/client';
-import { readPhotoEditRecipe } from '@sekereagle/library-core';
+import { Prisma, type LibraryMode, type PrismaClient } from '@prisma/client';
 
 /** Only immutable, scoped operation facts may supply a shared portable numeric table. */
 export async function resolveEditRenderLut(
-  db: Pick<PrismaClient, 'eagleAssetOperation'>,
+  db: Pick<PrismaClient, '$queryRaw'>,
   row: {
     ownerId: string;
     libraryMode: LibraryMode;
@@ -17,24 +16,31 @@ export async function resolveEditRenderLut(
     return row.lut;
   }
   if (row.lut || !filter.startsWith('lut:')) throw new Error('EDIT_LUT_REFERENCE_INVALID');
-  const operation = await db.eagleAssetOperation.findFirst({
-    where: {
-      id: row.commandOperationId,
-      ownerId: row.ownerId,
-      libraryMode: row.libraryMode,
-      kind: 'METADATA_COMMAND',
-    },
-    select: { commandPayload: true },
-  });
-  const payload = operation?.commandPayload;
-  if (
-    !payload ||
-    typeof payload !== 'object' ||
-    Array.isArray(payload) ||
-    typeof payload.lut !== 'string'
-  )
-    throw new Error('EDIT_LUT_REFERENCE_MISSING');
-  const recipe = readPhotoEditRecipe(payload.recipe);
-  if (recipe.edits.filter !== filter) throw new Error('EDIT_LUT_REFERENCE_MISMATCH');
-  return payload.lut;
+  // A bank may contain many multi-MB tables. PostgreSQL returns only this job's
+  // selected table; unrelated LUTs and the command recipe never enter worker memory.
+  const [projection] = await db.$queryRaw<
+    Array<{
+      lut: string | null;
+      payloadExists: boolean | null;
+      recipeMatches: boolean | null;
+    }>
+  >(Prisma.sql`
+    SELECT CASE
+      WHEN ("commandPayload"#>'{parts,filter}') IS DISTINCT FROM 'false'::jsonb
+        AND "commandPayload"#>>'{recipe,edits,filter}'=${filter}
+        AND jsonb_typeof("commandPayload"->'lut')='string'
+        THEN "commandPayload"->>'lut'
+      WHEN jsonb_typeof("commandPayload"->'preservedLuts'->(${filter}::text))='string'
+        THEN "commandPayload"->'preservedLuts'->>(${filter}::text)
+      ELSE NULL END AS lut,
+      jsonb_typeof("commandPayload")='object' AS "payloadExists",
+      "commandPayload"#>>'{recipe,edits,filter}'=${filter} AS "recipeMatches"
+    FROM "EagleAssetOperation"
+    WHERE id=${row.commandOperationId} AND "ownerId"=${row.ownerId}
+      AND "libraryMode"=${row.libraryMode}::"LibraryMode" AND kind='METADATA_COMMAND'
+  `);
+  if (!projection?.payloadExists) throw new Error('EDIT_LUT_REFERENCE_MISSING');
+  if (typeof projection.lut === 'string') return projection.lut;
+  if (!projection.recipeMatches) throw new Error('EDIT_LUT_REFERENCE_MISMATCH');
+  throw new Error('EDIT_LUT_REFERENCE_MISSING');
 }

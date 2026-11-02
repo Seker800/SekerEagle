@@ -1,3 +1,5 @@
+import type { LibraryMode } from '@prisma/client';
+import { databaseBatches, DATABASE_STATEMENTS } from './eagle-database-batches';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -42,7 +44,90 @@ export class BatchEditRendersDto {
   @Type(() => BatchEditPartsDto)
   parts!: BatchEditPartsDto;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(4500000) lut?: string;
+  @ApiPropertyOptional({ type: Object, additionalProperties: { type: 'string' } })
+  @IsOptional()
+  @IsObject()
+  preservedLuts?: Record<string, string>;
 }
+export class BatchEditRenderContextDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  assetIds!: string[];
+}
+export class BatchEditRenderContextResponseDto {
+  @ApiProperty({ type: [String] }) preservedFilterIds!: string[];
+}
+
+/** Read only the required local-table IDs; image data and saved recipes never leave this scope. */
+export async function readBatchEditRenderContext(
+  db: PrismaService,
+  ownerId: string,
+  libraryMode: LibraryMode,
+  assetIds: string[],
+  includePrivate: boolean,
+): Promise<BatchEditRenderContextResponseDto> {
+  const missing = new Set<string>();
+  for (const { rows: ids } of databaseBatches(
+    [...new Set(assetIds)],
+    DATABASE_STATEMENTS.operationAssetLookup,
+  )) {
+    const assets = await db.eagleAsset.findMany({
+      where: {
+        ownerId,
+        libraryMode,
+        id: { in: ids },
+        deletedAt: null,
+        purgeAfter: null,
+        ...(!includePrivate ? { isPrivate: false } : {}),
+      },
+      select: { id: true, mediaRevision: true },
+    });
+    if (assets.length !== ids.length) throw new NotFoundException('照片不存在。');
+    const revisions = new Map(assets.map((asset) => [asset.id, asset.mediaRevision]));
+    const stored = await db.eagleAssetEditRecipe.findMany({
+      where: { ownerId, libraryMode, assetId: { in: ids } },
+      select: { assetId: true, assetRevision: true, recipe: true },
+    });
+    const filters = new Map<string, string>();
+    for (const row of stored) {
+      if (row.assetRevision !== revisions.get(row.assetId)) continue;
+      const filter = validatedEditRecipe(row.recipe).edits.filter;
+      if (filter.startsWith('lut:')) filters.set(row.assetId, filter);
+    }
+    if (!filters.size) continue;
+    const renders = await db.eagleEditRender.findMany({
+      where: {
+        ownerId,
+        libraryMode,
+        resultAssetId: { in: [...filters.keys()] },
+        job: { status: 'COMPLETED' },
+        OR: [{ lut: { not: null } }, { commandOperationId: { not: null } }],
+      },
+      select: { resultAssetId: true, recipe: true },
+    });
+    const durable = new Set(
+      renders
+        .filter(
+          (row) =>
+            row.resultAssetId &&
+            validatedEditRecipe(row.recipe).edits.filter === filters.get(row.resultAssetId),
+        )
+        .map((row) => row.resultAssetId),
+    );
+    for (const [assetId, filter] of filters) if (!durable.has(assetId)) missing.add(filter);
+  }
+  return { preservedFilterIds: [...missing].sort() };
+}
+
+function preservedLut(payload: Record<string, unknown>, filter: string): string | undefined {
+  const bank = payload.preservedLuts;
+  if (!bank || typeof bank !== 'object' || Array.isArray(bank)) return undefined;
+  const value = (bank as Record<string, unknown>)[filter];
+  return typeof value === 'string' ? value : undefined;
+}
+
 function renderRequestId(operationId: string, assetId: string) {
   const bytes = createHash('sha256')
     .update(JSON.stringify([operationId, assetId]))
@@ -66,6 +151,20 @@ export function registerBatchEditCommands(registry: LibraryCommandRegistry, db: 
           readPortableLut(payload.lut as string);
         } catch {
           throw new BadRequestException('自定义滤镜数据无效。');
+        }
+      }
+      const bank = payload.preservedLuts;
+      if (bank !== undefined) {
+        if (!bank || typeof bank !== 'object' || Array.isArray(bank))
+          throw new BadRequestException('保留滤镜数据无效。');
+        for (const [filter, data] of Object.entries(bank)) {
+          if (!filter.startsWith('lut:') || typeof data !== 'string')
+            throw new BadRequestException('保留滤镜数据无效。');
+          try {
+            readPortableLut(data);
+          } catch {
+            throw new BadRequestException('保留滤镜数据无效。');
+          }
         }
       }
       const parts = payload.parts as unknown as PhotoEditParts;
@@ -123,6 +222,8 @@ export function registerBatchEditCommands(registry: LibraryCommandRegistry, db: 
             });
             lut = originalRender?.lut ?? undefined;
             lutOperationId = originalRender?.commandOperationId ?? undefined;
+            if (!lut && !lutOperationId && preservedLut(payload, edits.filter))
+              lutOperationId = context.operationId;
           }
         }
         await createEditRender(

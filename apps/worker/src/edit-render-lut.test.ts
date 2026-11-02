@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEFAULT_PHOTO_EDITS } from '@sekereagle/library-core';
 import { resolveEditRenderLut } from './edit-render-lut';
 const row = {
   ownerId: 'owner',
@@ -9,48 +8,52 @@ const row = {
   commandOperationId: 'operation',
 };
 
-test('worker resolves the immutable shared LUT through owner and mode scoped operation facts', async () => {
-  const reads: unknown[] = [];
+test('worker projects only the exact table with scoped parameterized SQL and clipboard selection rules', async () => {
+  const queries: Array<{ sql: string; values: unknown[] }> = [];
   const db = {
+    $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+      queries.push(query);
+      return [{ lut: 'selected-table', payloadExists: true, recipeMatches: false }];
+    },
     eagleAssetOperation: {
-      findFirst: async (input: unknown) => {
-        reads.push(input);
-        return {
-          commandPayload: {
-            lut: 'portable',
-            recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:shared' } },
-          },
-        };
+      findFirst: () => {
+        throw new Error('whole bank must not cross the database boundary');
       },
     },
   };
-  assert.equal(await resolveEditRenderLut(db as never, row, 'lut:shared'), 'portable');
-  assert.deepEqual(reads, [
-    {
-      where: { id: 'operation', ownerId: 'owner', libraryMode: 'PHOTO', kind: 'METADATA_COMMAND' },
-      select: { commandPayload: true },
-    },
-  ]);
+  assert.equal(await resolveEditRenderLut(db as never, row, 'lut:target'), 'selected-table');
+  assert.equal(queries.length, 1);
+  const query = queries[0]!;
+  assert.match(query.sql, /CASE/);
+  assert.match(query.sql, /jsonb_typeof/);
+  assert.match(query.sql, /IS DISTINCT FROM 'false'/);
+  assert.match(query.sql, /"ownerId"=/);
+  assert.match(query.sql, /"libraryMode"=/);
+  assert.match(query.sql, /kind='METADATA_COMMAND'/);
+  assert.ok(
+    query.values.includes('operation') &&
+      query.values.includes('owner') &&
+      query.values.includes('PHOTO') &&
+      query.values.includes('lut:target'),
+  );
+  assert.doesNotMatch(query.sql, /SELECT\s+"commandPayload"/);
 });
-
-test('worker fails closed for inaccessible shared LUT, mismatched recipe and ambiguous inline data', async () => {
-  for (const commandPayload of [
-    null,
-    {
-      lut: 'portable',
-      recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:other' } },
-    },
+test('worker fails closed for missing operation, unavailable table, nonstring projection and wrong target filter', async () => {
+  for (const records of [
+    [],
+    [{ lut: null, payloadExists: false, recipeMatches: null }],
+    [{ lut: 8, payloadExists: true, recipeMatches: true }],
+    [{ lut: null, payloadExists: true, recipeMatches: false }],
   ]) {
-    const db = { eagleAssetOperation: { findFirst: async () => ({ commandPayload }) } };
-    await assert.rejects(resolveEditRenderLut(db as never, row, 'lut:shared'));
+    const db = { $queryRaw: async () => records };
+    await assert.rejects(resolveEditRenderLut(db as never, row, 'lut:target'));
   }
   await assert.rejects(
-    resolveEditRenderLut({} as never, { ...row, lut: 'inline' }, 'lut:shared'),
+    resolveEditRenderLut({} as never, { ...row, lut: 'inline' }, 'lut:target'),
     /EDIT_LUT_REFERENCE_INVALID/,
   );
 });
-
-test('worker retains pre-migration inline LUT compatibility and rejects missing custom LUT', async () => {
+test('worker retains inline LUT compatibility without querying the bank and rejects missing custom LUT', async () => {
   assert.equal(
     await resolveEditRenderLut(
       {} as never,
@@ -63,67 +66,4 @@ test('worker retains pre-migration inline LUT compatibility and rejects missing 
     resolveEditRenderLut({} as never, { ...row, commandOperationId: null }, 'lut:legacy'),
     /EDIT_LUT_MISSING/,
   );
-});
-
-test('worker resolves a preserved target filter independently of the clipboard filter', async () => {
-  const db = {
-    eagleAssetOperation: {
-      findFirst: async () => ({
-        commandPayload: {
-          recipe: { version: 1, edits: DEFAULT_PHOTO_EDITS },
-          preservedLuts: { 'lut:browser-upload': 'portable-preserved' },
-        },
-      }),
-    },
-  };
-  assert.equal(
-    await resolveEditRenderLut(db as never, row, 'lut:browser-upload'),
-    'portable-preserved',
-  );
-});
-
-test('worker fails closed when the preserved bank omits the exact target filter or has nonnumeric-table content type', async () => {
-  for (const preservedLuts of [{ 'lut:other': 'portable' }, { 'lut:browser-upload': 8 }]) {
-    const db = {
-      eagleAssetOperation: {
-        findFirst: async () => ({
-          commandPayload: { recipe: { version: 1, edits: DEFAULT_PHOTO_EDITS }, preservedLuts },
-        }),
-      },
-    };
-    await assert.rejects(resolveEditRenderLut(db as never, row, 'lut:browser-upload'));
-  }
-});
-
-test('unselected filter always uses preserved target table even when clipboard has the same filter ID', async () => {
-  const db = {
-    eagleAssetOperation: {
-      findFirst: async () => ({
-        commandPayload: {
-          recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, filter: 'lut:target' } },
-          parts: { filter: false },
-          lut: 'must-ignore-clipboard',
-          preservedLuts: { 'lut:target': 'preserved-target' },
-        },
-      }),
-    },
-  };
-  assert.equal(await resolveEditRenderLut(db as never, row, 'lut:target'), 'preserved-target');
-});
-
-test('worker projects one selected numeric table instead of transferring the operation bank', async () => {
-  let projected = false;
-  const db = {
-    eagleAssetOperation: {
-      findFirst: async () => {
-        throw new Error('whole bank must not cross the database boundary');
-      },
-    },
-    $queryRaw: async () => {
-      projected = true;
-      return [{ lut: 'selected-table', payloadExists: true, recipeMatches: false }];
-    },
-  };
-  assert.equal(await resolveEditRenderLut(db as never, row, 'lut:target'), 'selected-table');
-  assert.equal(projected, true);
 });
