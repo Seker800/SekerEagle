@@ -536,8 +536,10 @@ export class EagleService {
     const ranked: Array<{ row: AssetListRecord; position: ImageSearchPosition }> = [];
     let after = startPosition;
     let exhausted = false;
-    const candidateBatchSize = 250;
     while (ranked.length <= query.limit && !exhausted) {
+      // Ranking already applies the full predicate. Hydrate only this page and
+      // one continuation row; concurrent invalidations can still request more.
+      const candidateBatchSize = query.limit + 1 - ranked.length;
       const candidates = await this.imageSearch!.rankPage(
         ownerId,
         search,

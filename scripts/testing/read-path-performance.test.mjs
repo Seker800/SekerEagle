@@ -26,6 +26,7 @@ const ownerId = randomUUID();
 const prefix = `${ownerId}-`;
 const assetId = (n) => `${prefix}asset-${String(n).padStart(5, '0')}`;
 let queries = [];
+const searchSpaces = [];
 
 before(async () => {
   await db.user.create({
@@ -59,6 +60,7 @@ after(async () => {
   await db.eaglePhotoPerson.deleteMany({ where: { ownerId } });
   await db.eagleSmartFolder.deleteMany({ where: { ownerId } });
   await db.user.delete({ where: { id: ownerId } });
+  await db.eagleEmbeddingSpace.deleteMany({ where: { id: { in: searchSpaces } } });
   await db.$disconnect();
 });
 function nodes(plan) {
@@ -413,4 +415,130 @@ test('sparse smart-folder filters do not repeatedly hydrate rejected candidate b
     }),
     /不存在/,
   );
+});
+
+async function prepareRelevanceFixture() {
+  let space = await db.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } });
+  if (!space) {
+    space = await db.eagleEmbeddingSpace.create({
+      data: {
+        id: randomUUID(),
+        model: 'Qwen/Qwen3-VL-Embedding-2B',
+        revision: randomUUID(),
+        dimensions: 1024,
+        normalized: true,
+        instructionVersion: 'synthetic',
+        preprocessingVersion: 'synthetic',
+        isCurrent: true,
+      },
+    });
+    searchSpaces.push(space.id);
+  }
+  const vector = `[1,${Array(1023).fill(0).join(',')}]`;
+  await db.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt")
+    SELECT ${space.id}||'-'||id,${ownerId},'PHOTO',id,"mediaRevision",${space.id},'READY',true,${vector}::vector,1,now() FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND rating=5
+    ON CONFLICT ("assetId","assetRevision","spaceId") DO UPDATE SET embedding=EXCLUDED.embedding,"l2Norm"=1`;
+  const ranker = new EagleImageSearchService(db, {}, 'PHOTO');
+  const context = { status: 'READY', spaceId: space.id, vector };
+  return { ranker, context };
+}
+function observeHydration(hydrated, beforeRead = async () => {}) {
+  return new Proxy(db, {
+    get(target, key) {
+      if (key === 'eagleAsset')
+        return new Proxy(target.eagleAsset, {
+          get(model, method) {
+            if (method === 'findMany')
+              return async (args) => {
+                await beforeRead(args);
+                const rows = await model.findMany(args);
+                hydrated.push(rows.length);
+                return rows;
+              };
+            return Reflect.get(model, method);
+          },
+        });
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+test('interactive relevance search hydrates only the requested page plus its continuation sentinel', async () => {
+  const { ranker, context } = await prepareRelevanceFixture();
+  const hydrated = [];
+  const traced = observeHydration(hydrated);
+  const service = new EagleService(
+    traced,
+    { prepare: async () => context, rankPage: ranker.rankPage.bind(ranker) },
+    'PHOTO',
+  );
+  const first = await service.listAssets(ownerId, {
+    search: 'unmatched-text',
+    rating: 5,
+    limit: 40,
+  });
+  assert.equal(first.items.length, 40);
+  assert.ok(first.nextCursor);
+  console.log('relevance page hydration', JSON.stringify({ requested: 40, hydrated }));
+  assert.deepEqual(
+    hydrated,
+    [41],
+    'filtered ranking must not hydrate 250 full cards for a 40-card page',
+  );
+});
+
+test('relevance search fills concurrent candidate losses and keeps every remaining page complete', async () => {
+  const { ranker, context } = await prepareRelevanceFixture();
+  const expected = await db.eagleAsset.findMany({
+    where: { ownerId, libraryMode: 'PHOTO', rating: 5, deletedAt: null, isPrivate: false },
+    orderBy: [{ libraryAddedAt: 'desc' }, { id: 'desc' }],
+    select: { id: true },
+  });
+  const removed = expected[0].id,
+    hydrated = [];
+  let changed = false;
+  const traced = observeHydration(hydrated, async () => {
+    if (!changed) {
+      changed = true;
+      await db.eagleAsset.update({ where: { id: removed }, data: { rating: 1 } });
+    }
+  });
+  const service = new EagleService(
+    traced,
+    { prepare: async () => context, rankPage: ranker.rankPage.bind(ranker) },
+    'PHOTO',
+  );
+  try {
+    const first = await service.listAssets(ownerId, {
+      search: 'unmatched-text',
+      rating: 5,
+      limit: 40,
+    });
+    assert.equal(first.items.length, 40);
+    assert.deepEqual(
+      hydrated,
+      [40, 1],
+      'a stale candidate should refill only the missing sentinel',
+    );
+    const seen = first.items.map((row) => row.id);
+    let cursor = first.nextCursor;
+    while (cursor) {
+      const page = await service.listAssets(ownerId, {
+        search: 'unmatched-text',
+        rating: 5,
+        limit: 40,
+        cursor,
+      });
+      seen.push(...page.items.map((row) => row.id));
+      assert.ok(seen.length < expected.length);
+      cursor = page.nextCursor;
+    }
+    assert.deepEqual(
+      seen,
+      expected.slice(1).map((row) => row.id),
+    );
+    assert.ok(hydrated.every((count) => count <= 41));
+  } finally {
+    await db.eagleAsset.update({ where: { id: removed }, data: { rating: 5 } });
+  }
 });
