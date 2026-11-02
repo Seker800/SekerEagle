@@ -88,6 +88,20 @@ try {
       height: 32px; z-index: 2147483647; background: #1b1c1f; -webkit-app-region: drag; }`;
   const verifyLayout = async (dialog, label) => {
     await dialog.waitFor();
+    if (label.endsWith('-editor')) {
+      await page.waitForFunction(() => {
+        const canvas = globalThis.document.querySelector('canvas[aria-label="照片编辑预览"]');
+        if (!canvas?.width || !canvas.height) return false;
+        try {
+          return canvas
+            .getContext('2d')
+            ?.getImageData(0, 0, canvas.width, canvas.height)
+            .data.some((value) => value > 0);
+        } catch {
+          return false;
+        }
+      });
+    }
     assert.equal((await checkHeader(dialog)).visible, true, `${label}: header must receive hits`);
     const key = await desktop.evaluate(
       ({ BrowserWindow }, css) => BrowserWindow.getAllWindows()[0].webContents.insertCSS(css),
@@ -243,6 +257,7 @@ try {
     originalHashesPreserved: true,
     oldCspReproduced: true,
     currentCspPixelsVerified: true,
+    actualEditorPixelsInBothModes: true,
     limitation:
       'Actual Electron/IPC/HTTP/temporary original files; OS drop intercepted to avoid writing to a user application. Native Windows UI was not available.',
   };
