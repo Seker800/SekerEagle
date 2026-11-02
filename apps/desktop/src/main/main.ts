@@ -23,7 +23,11 @@ import {
 } from 'electron';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from './app-config';
 import { AuthenticatedOwner } from './authenticated-owner';
-import { MediaCacheController, type MediaResolution } from './media-cache-controller';
+import {
+  MediaCacheController,
+  emptyCacheRequestStats,
+  type MediaResolution,
+} from './media-cache-controller';
 import { MediaRequestLimiter } from './media-request-limiter';
 import { isAllowedAppNavigation } from './navigation-policy';
 import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
@@ -32,6 +36,11 @@ import {
   PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
 } from '../utility/cache/cache-policy';
 import { buildNamespaceId } from '../shared/media-identity';
+import {
+  accountCacheNamespaces,
+  readAccountCacheStats,
+  removeAccountCache,
+} from './account-media-cache';
 import { DesktopSettingsStore } from './desktop-settings';
 import { DesktopConnectionSettingsStore } from './connection-settings';
 import { connectionSettingsForServerUrl } from './connection-config';
@@ -368,20 +377,24 @@ function cacheBackend() {
 }
 
 function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsStore): void {
-  const namespace = async (
+  const namespaces = async (
     event: IpcMainInvokeEvent,
     allowConnectionPage = false,
-  ): Promise<string> => {
+  ): Promise<string[]> => {
     if (allowConnectionPage) assertTrustedConnectionSender(event);
     else assertTrustedIpcSender(event);
     const identity = await owner.get();
     if (!identity) throw new Error('需要重新登录。');
-    return buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId);
+    return accountCacheNamespaces(serverUrl, identity);
   };
   ipcMain.handle('desktop:cache-status', async (event) => {
-    const namespaceId = await namespace(event);
+    const namespaceIds = await namespaces(event);
     const [namespaceStats, globalStats, currentSettings] = await Promise.all([
-      currentCache().getNamespaceStats(namespaceId),
+      readAccountCacheStats(
+        currentCache(),
+        namespaceIds,
+        (namespace) => mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
+      ),
       currentCache().getStats(),
       settings.load(),
     ]);
@@ -402,8 +415,10 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
       owner.get(),
     ]);
     const currentAccountStats = identity
-      ? await currentCache().getNamespaceStats(
-          buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId),
+      ? await readAccountCacheStats(
+          currentCache(),
+          accountCacheNamespaces(serverUrl, identity),
+          (namespace) => mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
         )
       : null;
     return {
@@ -423,7 +438,7 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
     await currentCache().setLimitBytes(updated.cacheLimitBytes);
   });
   ipcMain.handle('desktop:clear-cache', async (event) =>
-    currentCache().clearNamespace(await namespace(event, true)),
+    removeAccountCache(currentCache(), await namespaces(event, true)),
   );
   ipcMain.handle('desktop:open-cache-folder', async (event) => {
     assertConnectionPageSender(event);
@@ -434,7 +449,7 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   });
   ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
     if (typeof assetId !== 'string') throw new Error('资源标识无效。');
-    return currentCache().invalidateAsset(await namespace(event), assetId);
+    return removeAccountCache(currentCache(), await namespaces(event), assetId);
   });
 }
 
@@ -967,6 +982,7 @@ function resolutionToResponse(resolution: MediaResolution): Response {
       'content-type': resolution.contentType,
       'content-length': String(resolution.logicalBytes),
       'cache-control': 'private, no-store',
+      'x-sekereagle-cache-result': resolution.cacheResult,
       ...(resolution.etag ? { etag: resolution.etag } : {}),
       ...(resolution.lastModified ? { 'last-modified': resolution.lastModified } : {}),
     },
