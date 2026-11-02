@@ -1,3 +1,4 @@
+import { isAcceptedOperation } from '../../lib/accepted-operation';
 import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
 import { backgroundScheduleAllows, nextBackgroundTime } from '@sekereagle/library-core';
 import {
@@ -178,7 +179,11 @@ export function EagleProcessingPage({
     setNotice('');
     setError('');
     try {
-      await action();
+      const result = await action();
+      if (isAcceptedOperation(result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
       setNotice(success);
       await reload(true);
     } catch (cause) {

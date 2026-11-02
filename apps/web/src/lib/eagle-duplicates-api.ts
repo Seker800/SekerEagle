@@ -1,3 +1,4 @@
+import type { OperationResponse } from './accepted-operation';
 import type { EagleAssetListItem } from './eagle-api';
 import { request } from './api-client';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
@@ -105,12 +106,12 @@ export function createDuplicatesApi(mode: LibraryMode) {
         body: JSON.stringify(input),
       }),
     ignoreFiltered: (revision: string, filters: DuplicateFilters, ignored: boolean) =>
-      request<{ ignored: boolean }>(`${base}/ignore`, {
+      request<OperationResponse<{ ignored: boolean }>>(`${base}/ignore`, {
         method: 'POST',
         body: JSON.stringify({ allFiltered: true, revision, filters, ignored }),
       }),
     ignore: (signature: string, ignored: boolean, filters?: DuplicateFilters) =>
-      request<{ ignored: boolean }>(`${base}/ignore`, {
+      request<OperationResponse<{ ignored: boolean }>>(`${base}/ignore`, {
         method: 'POST',
         body: JSON.stringify({ signature, ignored, filters }),
       }),

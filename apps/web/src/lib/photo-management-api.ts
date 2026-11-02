@@ -1,3 +1,5 @@
+import type { OperationResponse } from './accepted-operation';
+import type { AssetOperationSummary } from '@sekereagle/library-core';
 import { request } from './api-client';
 import type { EagleAssetListItem } from './eagle-api';
 export interface PhotoFace {
@@ -63,21 +65,21 @@ export const listPhotoPersonFaces = (personId: string, after?: string, signal?: 
     { signal },
   );
 export const scanPhotoPeople = () =>
-  request<{ queued: number; scanned: number; limit: number | null }>(
+  request<OperationResponse<{ queued: number; scanned: number; limit: number | null }>>(
     `${base}/people/scan`,
     {
       method: 'POST',
       body: '{}',
     },
-    690_000,
+    30_000,
   );
 export const renamePhotoPerson = (id: string, name: string) =>
-  request(`${base}/people/${encodeURIComponent(id)}`, {
+  request<AssetOperationSummary>(`${base}/people/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
 export const mergePhotoPeople = (id: string, targetId: string) =>
-  request(`${base}/people/${encodeURIComponent(id)}/merge`, {
+  request<AssetOperationSummary>(`${base}/people/${encodeURIComponent(id)}/merge`, {
     method: 'POST',
     body: JSON.stringify({ targetId }),
   });
@@ -92,39 +94,45 @@ export const mergeSelectedPhotoPeople = (input: {
   targetId: string;
   people: Array<{ id: string; rowVersion: number }>;
 }) =>
-  request<PhotoPersonMergeResult>(`${base}/people/merge-selected`, {
+  request<OperationResponse<PhotoPersonMergeResult>>(`${base}/people/merge-selected`, {
     method: 'POST',
     body: JSON.stringify(input),
   });
 export const splitPhotoFace = (id: string) =>
-  request(`${base}/faces/${encodeURIComponent(id)}/person`, {
+  request<AssetOperationSummary>(`${base}/faces/${encodeURIComponent(id)}/person`, {
     method: 'PATCH',
     body: JSON.stringify({ personId: null }),
   });
 export const listPhotoGroups = () => request<PhotoGroup[]>(`${base}/groups`);
 export const scanPhotoGroups = () =>
-  request<{ created: number; scanned: number; limit: number }>(`${base}/groups/scan`, {
-    method: 'POST',
-    body: '{}',
-  });
+  request<OperationResponse<{ created: number; scanned: number; limit: number }>>(
+    `${base}/groups/scan`,
+    {
+      method: 'POST',
+      body: '{}',
+    },
+  );
 export const updatePhotoGroup = (
   id: string,
   input: { bestAssetId?: string; dismissed?: boolean },
 ) =>
-  request(`${base}/groups/${encodeURIComponent(id)}`, {
+  request<AssetOperationSummary>(`${base}/groups/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
 
 export const createPhotoGroup = (assetIds: readonly string[]) =>
-  request(`${base}/groups/manual`, { method: 'POST', body: JSON.stringify({ assetIds }) });
+  request<AssetOperationSummary>(`${base}/groups/manual`, {
+    method: 'POST',
+    body: JSON.stringify({ assetIds }),
+  });
 export const removePhotoGroupMembers = (id: string, assetIds: string[]) =>
-  request(`${base}/groups/${encodeURIComponent(id)}/members`, {
+  request<AssetOperationSummary>(`${base}/groups/${encodeURIComponent(id)}/members`, {
     method: 'PATCH',
     body: JSON.stringify({ assetIds }),
   });
 export const mergePhotoGroups = (id: string, targetId: string) =>
-  request(`${base}/groups/${encodeURIComponent(id)}/merge`, {
+  request<AssetOperationSummary>(`${base}/groups/${encodeURIComponent(id)}/merge`, {
     method: 'POST',
     body: JSON.stringify({ targetId }),
   });
@@ -141,13 +149,17 @@ export const updatePhotoPersonPrivacy = (
   person: Pick<PhotoPerson, 'id' | 'rowVersion'>,
   marksAssetsPrivate: boolean,
 ) =>
-  request<{ id: string; rowVersion: number; marksAssetsPrivate: boolean; changed: number }>(
-    `${base}/people/${encodeURIComponent(person.id)}/privacy`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({ marksAssetsPrivate, rowVersion: person.rowVersion }),
-    },
-  );
+  request<
+    OperationResponse<{
+      id: string;
+      rowVersion: number;
+      marksAssetsPrivate: boolean;
+      changed: number;
+    }>
+  >(`${base}/people/${encodeURIComponent(person.id)}/privacy`, {
+    method: 'PATCH',
+    body: JSON.stringify({ marksAssetsPrivate, rowVersion: person.rowVersion }),
+  });
 
 export interface PhotoMapViewport {
   west: number;
@@ -214,7 +226,7 @@ export const decidePhotoPeople = (input: {
   secondVersion: number;
   decision: 'SAME' | 'DIFFERENT';
 }) =>
-  request<{ saved: true; people: Array<{ id: string; rowVersion: number }> }>(
+  request<OperationResponse<{ saved: true; people: Array<{ id: string; rowVersion: number }> }>>(
     `${base}/people/review`,
     { method: 'POST', body: JSON.stringify(input) },
   );

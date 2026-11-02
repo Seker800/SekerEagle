@@ -1,3 +1,5 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
 import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { TaskTransitionHistory } from './TaskTransitionHistory';
 import { TaskQueueBrowser } from './TaskQueueBrowser';
@@ -75,7 +77,11 @@ export function EagleTaskCenter({
   };
   const queries = useQueries({
     queries: modes.map((mode) => ({
-      queryKey: [...key, mode, includePrivate, showHistory ? 'HISTORY' : 'ACTIVE'],
+      queryKey: [
+        ...createEagleQueryKeys(ownerId, mode).taskCenter,
+        includePrivate,
+        showHistory ? 'HISTORY' : 'ACTIVE',
+      ],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         showHistory
           ? apiFor(mode).fetchEagleTaskHistory(signal)
@@ -137,7 +143,11 @@ export function EagleTaskCenter({
   const retry = useMutation({
     mutationFn: ({ mode, family }: { mode: LibraryMode; family: TaskFamily }) =>
       apiFor(mode).retryEagleTaskFamily(family),
-    onSuccess: async () => {
+    onSuccess: async (result, { mode }) => {
+      if (observeAcceptedOperation(client, ownerId, mode, result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
       setNotice(t('失败任务已重新排队'));
       await client.invalidateQueries({ queryKey: key });
     },
@@ -145,7 +155,11 @@ export function EagleTaskCenter({
   const start = useMutation({
     mutationFn: ({ mode, family }: { mode: LibraryMode; family: TaskFamily }) =>
       apiFor(mode).startEagleTaskFamily(family),
-    onSuccess: async (result) => {
+    onSuccess: async (result, { mode }) => {
+      if (observeAcceptedOperation(client, ownerId, mode, result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
       setNotice(t('已加入 {{value1}} 个本地人脸分析任务', { value1: result.queued }));
       await client.invalidateQueries({ queryKey: key });
     },

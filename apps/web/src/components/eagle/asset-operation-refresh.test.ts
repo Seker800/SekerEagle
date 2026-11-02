@@ -563,14 +563,41 @@ it('merges newly rendered copies from one destination window while retaining eve
 });
 
 it('refreshes the scoped task-center family counts after command execution', async () => {
-  const f=fixture();
-  const read=vi.fn(async()=>({groups:[]}));
-  const observer=new QueryObserver(f.client,{queryKey:['task-center','owner','PHOTO',false,'ACTIVE'],queryFn:read,initialData:{groups:[]},staleTime:Infinity});
-  const stop=observer.subscribe(()=>{});
-  const completed={...summary('BACKGROUND_COMMAND'),commandType:'TASK_FAMILY_RETRY',completed:1,failed:0,errors:[],state:'COMPLETED' as const};
-  mocks.results.mockResolvedValue({operation:completed,revision:'v1',membership:[],receipts:[],nextCursor:null});
-  const {createEagleApi}=await import('../../lib/eagle-api');
-  vi.spyOn(await import('../../lib/eagle-api'),'createEagleApi').mockReturnValue({...createEagleApi('PHOTO'),listEagleAssetFacts:vi.fn(async()=>[])} as never);
-  try{await f.refresher.reconcile('PHOTO',completed);expect(read).toHaveBeenCalledOnce();}
-  finally{vi.restoreAllMocks();stop();f.close();}
+  const f = fixture();
+  const read = vi.fn(async () => ({ groups: [] }));
+  const observer = new QueryObserver(f.client, {
+    queryKey: ['task-center', 'owner', 'PHOTO', false, 'ACTIVE'],
+    queryFn: read,
+    initialData: { groups: [] },
+    staleTime: Infinity,
+  });
+  const stop = observer.subscribe(() => {});
+  const completed = {
+    ...summary('BACKGROUND_COMMAND'),
+    commandType: 'TASK_FAMILY_RETRY',
+    completed: 1,
+    failed: 0,
+    errors: [],
+    state: 'COMPLETED' as const,
+  };
+  mocks.results.mockResolvedValue({
+    operation: completed,
+    revision: 'v1',
+    membership: [],
+    receipts: [],
+    nextCursor: null,
+  });
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
+    ...createEagleApi('PHOTO'),
+    listEagleAssetFacts: vi.fn(async () => []),
+  } as never);
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(read).toHaveBeenCalledOnce();
+  } finally {
+    vi.restoreAllMocks();
+    stop();
+    f.close();
+  }
 });

@@ -1,6 +1,11 @@
+import { isAcceptedOperation, type OperationResponse } from './accepted-operation';
 import { EAGLE_OPERATION_REQUEST_TIMEOUT_MS } from './eagle-operation-request';
 import { getBrowserSessionSignal } from './api-client';
-import type { AssetOperationSummary, PhotoEditRecipe } from '@sekereagle/library-core';
+import type {
+  AssetOperationSummary,
+  PhotoEditRecipe,
+  PhotoEditParts,
+} from '@sekereagle/library-core';
 import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
@@ -275,6 +280,19 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
+  async function listEagleAssetFacts(
+    _token: string,
+    assetIds: readonly string[],
+    signal?: AbortSignal,
+  ) {
+    const result = await api<EagleAssetListItem[]>('/eagle/assets/facts', {
+      method: 'POST',
+      body: JSON.stringify({ assetIds }),
+      signal,
+    });
+    return result.map(normalizeAsset);
+  }
+
   async function listEagleAssetUpdates(
     _token: string,
     ids: readonly string[],
@@ -335,17 +353,17 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       rowVersion: number;
     },
   ) {
-    return normalizeTag(
-      await api<Parameters<typeof normalizeTag>[0]>(`/eagle/tags/${id}`, {
+    const result = await api<OperationResponse<Parameters<typeof normalizeTag>[0]>>(
+      `/eagle/tags/${id}`,
+      {
         method: 'PATCH',
         body: JSON.stringify(input),
-      }),
+      },
     );
+    return isAcceptedOperation(result) ? result : normalizeTag(result);
   }
-
   async function deleteEagleManualTag(_token: string, id: string) {
-    await api(`/eagle/tags/${id}`, { method: 'DELETE' });
-    return { deletedId: id };
+    return api<OperationResponse<{ deletedId: string }>>(`/eagle/tags/${id}`, { method: 'DELETE' });
   }
 
   async function listEagleManualTagGroups(_token: string) {
@@ -383,8 +401,9 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   async function deleteEagleManualTagGroup(_token: string, id: string) {
-    await api(`/eagle/tag-groups/${id}`, { method: 'DELETE' });
-    return { deletedId: id };
+    return api<OperationResponse<{ deletedId: string }>>(`/eagle/tag-groups/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   async function listEagleAiTags(_token: string) {
@@ -463,10 +482,12 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   async function replaceEagleAssetManualTags(_token: string, id: string, tagIds: string[]) {
-    return api<{
-      affectedAssetCount: number;
-      privacyChangedAssetCount: number;
-    }>(`/eagle/assets/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds }) });
+    return api<
+      OperationResponse<{
+        affectedAssetCount: number;
+        privacyChangedAssetCount: number;
+      }>
+    >(`/eagle/assets/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds }) });
   }
 
   async function batchChangeEagleManualTags(
@@ -478,10 +499,12 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       clearAll?: boolean;
     },
   ) {
-    return api<{
-      affectedAssetCount: number;
-      privacyChangedAssetCount: number;
-    }>('/eagle/assets/batch/manual-tags', {
+    return api<
+      OperationResponse<{
+        affectedAssetCount: number;
+        privacyChangedAssetCount: number;
+      }>
+    >('/eagle/assets/batch/manual-tags', {
       method: 'POST',
       body: JSON.stringify(input),
     });
@@ -518,12 +541,11 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       rowVersion: number;
     },
   ) {
-    return normalizeAsset(
-      await api<EagleAsset>(`/eagle/assets/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(input),
-      }),
-    );
+    const result = await api<OperationResponse<EagleAsset>>(`/eagle/assets/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+    return isAcceptedOperation(result) ? result : normalizeAsset(result);
   }
 
   async function batchUpdateEagleAssets(
@@ -532,11 +554,29 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       assets: EagleAssetVersion[];
     },
   ) {
-    return api<{
-      affectedAssetCount: number;
-      assets: EagleAssetVersion[];
-    }>('/eagle/assets/batch', {
+    return api<
+      OperationResponse<{
+        affectedAssetCount: number;
+        assets: EagleAssetVersion[];
+      }>
+    >('/eagle/assets/batch', {
       method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  function batchEditEaglePhotos(
+    _token: string,
+    input: {
+      operationId?: string;
+      assetIds: string[];
+      recipe: PhotoEditRecipe;
+      parts: PhotoEditParts;
+      lut?: string;
+    },
+  ) {
+    return api<AssetOperationSummary>('/eagle/assets/batch/edit-renders', {
+      method: 'POST',
       body: JSON.stringify(input),
     });
   }
@@ -698,6 +738,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     sendEagleAssets,
     getEagleTrashAsset,
     listEagleAssetUpdates,
+    listEagleAssetFacts,
     listEagleManualTags,
     createEagleManualTag,
     updateEagleManualTag,
@@ -719,6 +760,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     emptyEagleTrash,
     updateEagleAsset,
     batchUpdateEagleAssets,
+    batchEditEaglePhotos,
     uploadEagleAsset,
     getEagleAssetContentUrl,
     getEaglePyramidDescriptor,
@@ -736,6 +778,7 @@ export const {
   sendEagleAssets,
   getEagleTrashAsset,
   listEagleAssetUpdates,
+  listEagleAssetFacts,
   listEagleManualTags,
   createEagleManualTag,
   updateEagleManualTag,
@@ -757,6 +800,7 @@ export const {
   emptyEagleTrash,
   updateEagleAsset,
   batchUpdateEagleAssets,
+  batchEditEaglePhotos,
   uploadEagleAsset,
   getEagleAssetContentUrl,
   getEaglePyramidDescriptor,

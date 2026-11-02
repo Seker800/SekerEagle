@@ -1,3 +1,4 @@
+import { isAcceptedOperation, type OperationResponse } from '../../lib/accepted-operation';
 import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
 import { backgroundScheduleAllows, nextBackgroundTime } from '@sekereagle/library-core';
 import {
@@ -80,7 +81,7 @@ export function EagleVectorProcessingPanel({
       : null,
   );
   const runAction = async <T,>(
-    action: () => Promise<T>,
+    action: () => Promise<OperationResponse<T>>,
     message: string | ((result: T) => string),
   ) => {
     setBusy(true);
@@ -88,6 +89,10 @@ export function EagleVectorProcessingPanel({
     setNotice('');
     try {
       const result = await action();
+      if (isAcceptedOperation(result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return true;
+      }
       setNotice(typeof message === 'function' ? message(result) : message);
       await reload(true);
     } catch (cause) {

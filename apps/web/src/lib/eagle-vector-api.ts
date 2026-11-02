@@ -1,3 +1,4 @@
+import type { OperationResponse } from './accepted-operation';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { request as requestJson } from './api-client';
 
@@ -188,14 +189,16 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   function reviewEagleVectorSuggestions(suggestionIds: string[], action: 'ACCEPT' | 'REJECT') {
-    return request<{
-      items: Array<{
-        id: string;
-        status: string;
-        assetId: string;
-        privacyChanged: boolean;
-      }>;
-    }>('suggestions/review-batch', {
+    return request<
+      OperationResponse<{
+        items: Array<{
+          id: string;
+          status: string;
+          assetId: string;
+          privacyChanged: boolean;
+        }>;
+      }>
+    >('suggestions/review-batch', {
       method: 'POST',
       body: JSON.stringify({ suggestionIds, action }),
     });
@@ -211,27 +214,33 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   function retryFailedEagleEmbeddings() {
-    return request<{
-      retried: number;
-    }>('embeddings/retry-failed', { method: 'POST', body: '{}' });
+    return request<
+      OperationResponse<{
+        retried: number;
+      }>
+    >('embeddings/retry-failed', { method: 'POST', body: '{}' });
   }
 
   function scanMissingEagleEmbeddings() {
-    return request<{
-      scanned: number;
-      created: number;
-      repaired: number;
-    }>('embeddings/scan-missing', {
+    return request<
+      OperationResponse<{
+        scanned: number;
+        created: number;
+        repaired: number;
+      }>
+    >('embeddings/scan-missing', {
       method: 'POST',
       body: '{}',
     });
   }
 
   function scanUnclassifiedEagleSuggestions() {
-    return request<{
-      scanned: number;
-      matched: number;
-    }>('suggestions/scan-unclassified', {
+    return request<
+      OperationResponse<{
+        scanned: number;
+        matched: number;
+      }>
+    >('suggestions/scan-unclassified', {
       method: 'POST',
       body: '{}',
     });

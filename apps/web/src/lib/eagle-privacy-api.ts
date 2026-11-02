@@ -1,4 +1,5 @@
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
+import type { OperationResponse } from './accepted-operation';
 import { request } from './api-client';
 
 export interface EaglePrivacySettings {
@@ -24,7 +25,7 @@ export function createEaglePrivacyApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   function updateEaglePrivacySettings(tagIds: string[], expectedTagIds: string[]) {
-    return request<EaglePrivacySettings>(
+    return request<OperationResponse<EaglePrivacySettings>>(
       libraryApiPath('/api/eagle/privacy-settings', libraryMode),
       {
         method: 'PUT',

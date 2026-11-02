@@ -1,3 +1,4 @@
+import type { OperationResponse } from './accepted-operation';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { request as requestJson } from './api-client';
 
@@ -107,18 +108,22 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
   }
 
   function retryAllFailedEagleProcessingJobs(_token: string) {
-    return request<{
-      retried: number;
-    }>('retry-failed', { method: 'POST', body: '{}' });
+    return request<
+      OperationResponse<{
+        retried: number;
+      }>
+    >('retry-failed', { method: 'POST', body: '{}' });
   }
 
   function reconcileEagleProcessingJobs(_token: string) {
-    return request<{
-      scanned: number;
-      created: number;
-      skipped: number;
-      remaining: number;
-    }>('reconcile', { method: 'POST', body: '{}' });
+    return request<
+      OperationResponse<{
+        scanned: number;
+        created: number;
+        skipped: number;
+        remaining: number;
+      }>
+    >('reconcile', { method: 'POST', body: '{}' });
   }
 
   function updateEagleProcessingSettings(

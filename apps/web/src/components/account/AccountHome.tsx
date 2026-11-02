@@ -1,3 +1,6 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
+import { isAcceptedOperation } from '../../lib/accepted-operation';
 import { useMobileBack } from '../../lib/mobile-back';
 import { BackupPanel } from './BackupPanel';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -111,6 +114,8 @@ export function AccountHome({
   privacyExtras?: ReactNode;
 }) {
   const {
+    ownerId,
+    libraryMode,
     api: {
       getPrivacyVisibility,
       updatePrivacyVisibility,
@@ -144,6 +149,7 @@ export function AccountHome({
   const [localPrivacyVisibility, setLocalPrivacyVisibility] = useState(DEFAULT_PRIVACY_VISIBILITY);
   const [privacyLoading, setPrivacyLoading] = useState(providedPrivacyVisibility === undefined);
   const [privacyError, setPrivacyError] = useState('');
+  const [privacyNotice, setPrivacyNotice] = useState('');
   const [privacyTagEditorOpen, setPrivacyTagEditorOpen] = useState(false);
   const [privacyTagOptions, setPrivacyTagOptions] = useState<EaglePrivacyTagOption[]>([]);
   const [privateTagIds, setPrivateTagIds] = useState<string[]>([]);
@@ -152,6 +158,32 @@ export function AccountHome({
   const [privacyTagsLoading, setPrivacyTagsLoading] = useState(false);
   const [privacyTagsSaving, setPrivacyTagsSaving] = useState(false);
   const [privacyTagsLoaded, setPrivacyTagsLoaded] = useState(false);
+  const client = useQueryClient();
+  const privacySettingsKey = [
+    ...createEagleQueryKeys(ownerId, libraryMode).root,
+    'privacy-settings',
+  ];
+  const previousPrivateTags = useRef<string[]>([]);
+  const privacySettings = useQuery({
+    queryKey: privacySettingsKey,
+    queryFn: getEaglePrivacySettings,
+    enabled: privacyTagsLoaded,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (!privacySettings.data) return;
+    const ids = privacySettings.data.tagIds;
+    const previous = previousPrivateTags.current;
+    setDraftPrivateTagIds((draft) =>
+      JSON.stringify(draft) === JSON.stringify(previous) ||
+      JSON.stringify(draft) === JSON.stringify(ids)
+        ? ids
+        : draft,
+    );
+    setPrivateTagIds(ids);
+    previousPrivateTags.current = ids;
+  }, [privacySettings.data]);
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
   useEffect(() => {
@@ -224,6 +256,7 @@ export function AccountHome({
         getEaglePrivacySettings(),
         listEaglePrivacyTagOptions(),
       ]);
+      client.setQueryData(privacySettingsKey, settings);
       setPrivateTagIds(settings.tagIds);
       setDraftPrivateTagIds(settings.tagIds);
       setPrivacyTagOptions(tags);
@@ -238,8 +271,14 @@ export function AccountHome({
     event.preventDefault();
     setPrivacyTagsSaving(true);
     setPrivacyError('');
+    setPrivacyNotice('');
     try {
       const settings = await updateEaglePrivacySettings(draftPrivateTagIds, privateTagIds);
+      if (isAcceptedOperation(settings)) {
+        setPrivacyNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
+      client.setQueryData(privacySettingsKey, settings);
       setPrivateTagIds(settings.tagIds);
       setDraftPrivateTagIds(settings.tagIds);
       onPrivacyRulesChange?.();
@@ -523,6 +562,7 @@ export function AccountHome({
                 </div>
               </form>
             ) : null}
+            {privacyNotice && <p role="status">{privacyNotice}</p>}
             {privacyError ? <p className="auth-error">{privacyError}</p> : null}
           </section>
         ) : null}

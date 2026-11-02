@@ -20,7 +20,26 @@ export function useEagleMetadataDraft(scopeKey: string) {
     (asset: Pick<EagleAsset, 'id' | 'displayName' | 'annotation'>) => {
       setDraft((previous) => {
         const same = previous?.scope === scopeKey && previous.assetId === asset.id;
-        if (same && previous.dirtyFields.size) return previous;
+        if (same && previous.dirtyFields.size) {
+          const values: Values = {
+            displayName: asset.displayName,
+            description: asset.annotation?.description ?? '',
+            sourceUrl: asset.annotation?.sourceUrl ?? '',
+          };
+          const dirtyFields = new Set(
+            [...previous.dirtyFields].filter(
+              (field) =>
+                (field === 'displayName'
+                  ? previous.values[field]
+                  : previous.values[field].trim()) !== values[field],
+            ),
+          );
+          // Durable acceptance is not completion. Only matching committed facts
+          // acknowledge submitted fields; newer input remains owned by the draft.
+          return dirtyFields.size === previous.dirtyFields.size
+            ? previous
+            : { ...previous, dirtyFields };
+        }
         return {
           scope: scopeKey,
           assetId: asset.id,

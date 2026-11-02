@@ -5,6 +5,7 @@ export function createEagleQueryKeys(
   const root = ['eagle', ownerId, libraryMode] as const;
   return {
     owner: ['eagle', ownerId] as const,
+    taskCenter: ['task-center', ownerId, libraryMode] as const,
     root,
     vectorSummary: [...root, 'vector-summary'] as const,
     pyramid: (assetId: string) => [...root, 'pyramid', assetId] as const,
@@ -60,6 +61,10 @@ export function createEagleQueryKeys(
 /** Classify keys beside their constructors so receipt refreshes cannot guess tuple positions. */
 export function isEagleQuery(key: readonly unknown[], ownerId: string, mode: string) {
   return key[0] === 'eagle' && key[1] === ownerId && key[2] === mode;
+}
+
+export function isEagleTaskCenterKey(key: readonly unknown[], ownerId: string, mode: string) {
+  return key[0] === 'task-center' && key[1] === ownerId && key[2] === mode;
 }
 
 /** Privacy position belongs to each resource's key protocol, never its consumers. */

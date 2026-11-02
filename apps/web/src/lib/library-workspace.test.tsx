@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import type { ReactNode } from 'react';
@@ -9,9 +10,11 @@ it('exposes the same explicit API in both modes without module factory exports',
   const workspace = (mode: 'MATERIAL' | 'PHOTO') =>
     renderHook(() => useLibraryWorkspace(), {
       wrapper: ({ children }: { children: ReactNode }) => (
-        <LibraryWorkspaceProvider ownerId="owner" libraryMode={mode}>
-          {children}
-        </LibraryWorkspaceProvider>
+        <QueryClientProvider client={new QueryClient()}>
+          <LibraryWorkspaceProvider ownerId="owner" libraryMode={mode}>
+            {children}
+          </LibraryWorkspaceProvider>
+        </QueryClientProvider>
       ),
     });
   const material = workspace('MATERIAL'),

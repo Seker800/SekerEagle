@@ -1,3 +1,4 @@
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
 import { useProgressQueryInterval } from '../../lib/useRefreshPolicy';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useRef, useState } from 'react';
@@ -214,6 +215,8 @@ function RequestDetail({
   refresh: () => Promise<void>;
   includePrivate: boolean;
 }) {
+  const { ownerId } = useLibraryWorkspace();
+  const client = useQueryClient();
   const closed =
     task.status !== 'OPEN' || Boolean(task.expiresAt && Date.parse(task.expiresAt) <= Date.now());
   const eligible = task.suggestions.filter((item) =>
@@ -280,36 +283,31 @@ function RequestDetail({
     setResult(null);
     setBatchTotal(0);
     setManualMessage('');
-    let affected = 0;
     try {
-      for (let offset = 0; offset < items.length; offset += 100) {
-        const chunk = items.slice(offset, offset + 100),
-          key = JSON.stringify({ action, items: chunk });
-        let operationId = manualIds.current.get(key);
-        if (!operationId) {
-          operationId = crypto.randomUUID();
-          manualIds.current.set(key, operationId);
-        }
-        const receipt = await manualPhotoRequestAction(task.id, {
-          operationId,
-          action,
-          items: chunk,
-        });
-        affected += receipt.affectedAssetCount;
-        manualIds.current.delete(key);
-        setSelected(
-          (current) =>
-            new Set([...current].filter((id) => !chunk.some((i) => i.suggestionId === id))),
-        );
-        setManualMessage(t('已手动处理 {{value1}} 张照片', { value1: affected }));
+      const key = JSON.stringify({ action, items });
+      const operationId = manualIds.current.get(key) ?? crypto.randomUUID();
+      manualIds.current.set(key, operationId);
+      const receipt = await manualPhotoRequestAction(task.id, { operationId, action, items });
+      manualIds.current.delete(key);
+      setSelected(
+        (current) =>
+          new Set([...current].filter((id) => !items.some((item) => item.suggestionId === id))),
+      );
+      if (observeAcceptedOperation(client, ownerId, 'PHOTO', receipt)) {
+        setManualMessage(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
       }
+      setManualMessage(t('已手动处理 {{value1}} 张照片', { value1: receipt.affectedAssetCount }));
+      void refresh().catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : t('操作失败')),
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
-      await refresh();
       setBusy(false);
     }
   }
+
   async function review(action: 'ACCEPT' | 'REJECT') {
     const ids = chosen
       .filter((item) => action === 'ACCEPT' || item.status === 'PENDING')
@@ -321,6 +319,11 @@ function RequestDetail({
     setResult(null);
     try {
       const outcome = await reviewPhotoRequest(task.id, ids, action);
+      if (observeAcceptedOperation(client, ownerId, 'PHOTO', outcome)) {
+        setSelected((current) => new Set([...current].filter((id) => !ids.includes(id))));
+        setManualMessage(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
       setResult(outcome);
       setSelected(
         (current) =>
@@ -330,10 +333,10 @@ function RequestDetail({
             ),
           ),
       );
+      void refresh().catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
-      await refresh();
       setBusy(false);
     }
   }
@@ -342,11 +345,15 @@ function RequestDetail({
     setError('');
     setResult(null);
     try {
-      await undoPhotoAgentSuggestion(task.id, id);
+      const outcome = await undoPhotoAgentSuggestion(task.id, id);
+      if (observeAcceptedOperation(client, ownerId, 'PHOTO', outcome)) {
+        setManualMessage(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
+      void refresh().catch(() => undefined);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
-      await refresh();
       setBusy(false);
     }
   }

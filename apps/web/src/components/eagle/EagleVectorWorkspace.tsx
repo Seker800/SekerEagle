@@ -1,3 +1,4 @@
+import { isAcceptedOperation, type OperationResponse } from '../../lib/accepted-operation';
 import { useRefreshOnWorkspaceChanges, usePageVisible } from '../../lib/useRefreshPolicy';
 import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -276,7 +277,7 @@ export function EagleVectorWorkspace({
     return () => window.removeEventListener('keydown', navigate);
   }, [imagePreview.previewImage, openPreview, previewAssets]);
   const act = async <T,>(
-    action: () => Promise<T>,
+    action: () => Promise<OperationResponse<T>>,
     message: string | ((result: T) => string),
     afterCommit?: (result: T) => Promise<void>,
   ) => {
@@ -285,6 +286,10 @@ export function EagleVectorWorkspace({
     setNotice('');
     try {
       const result = await action();
+      if (isAcceptedOperation(result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return true;
+      }
       setNotice(typeof message === 'function' ? message(result) : message);
       // A cache/host failure must not hide a committed write or prevent its list refresh.
       const outcomes = await Promise.allSettled([reload(true), afterCommit?.(result)]);

@@ -1,3 +1,5 @@
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePhotoPeople } from './use-photo-people';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useState } from 'react';
@@ -13,14 +15,21 @@ export function PhotoPrivatePeopleSettings({
   onRulesChange: () => void;
 }) {
   const { ownerId } = useLibraryWorkspace();
+  const client = useQueryClient();
   const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState('');
   const [error, setError] = useState<string | null>(null);
   const people = usePhotoPeople(ownerId, includePrivate, includePrivate);
   async function unmark(person: PhotoPerson) {
     setPending(true);
     setError(null);
+    setNotice('');
     try {
-      await updatePhotoPersonPrivacy(person, false);
+      const result = await updatePhotoPersonPrivacy(person, false);
+      if (observeAcceptedOperation(client, ownerId, 'PHOTO', result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
       onRulesChange();
       try {
         await getDesktopCacheBridge()?.clearCache();
@@ -69,6 +78,7 @@ export function PhotoPrivatePeopleSettings({
             {t('加载更多人物')}
           </button>
         )}
+        {notice && <p role="status">{notice}</p>}
         {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
       </div>
     </div>

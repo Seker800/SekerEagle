@@ -129,3 +129,61 @@ it('partial tag failures drain writes, refresh committed results, and retry only
   view.unmount();
   client.clear();
 });
+
+it('releases a queued batch tag mutation without waiting for list reads or desktop cache and tracks its receipt', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  const summary = {
+    id: 'metadata-command',
+    kind: 'METADATA_COMMAND',
+    libraryMode: 'MATERIAL',
+    total: 2,
+    completed: 0,
+    failed: 0,
+    cancelled: 0,
+    running: 0,
+    queued: 2,
+    state: 'QUEUED',
+    errors: [],
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json(summary)),
+  );
+  const invalidate = vi
+    .spyOn(client, 'invalidateQueries')
+    .mockReturnValue(new Promise(() => undefined));
+  const applied = vi.fn();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="A" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const view = renderHook(
+    () =>
+      useEagleMutations('', keys, {
+        onMetadataSaved: vi.fn(),
+        onBatchTagsApplied: applied,
+        onAssetPrivacyChanged: vi.fn(),
+        onOperationStarted: vi.fn(),
+        onSmartFolderCreated: vi.fn(),
+        onSmartFolderUpdated: vi.fn(),
+      }),
+    { wrapper },
+  );
+  await act(async () => {
+    expect(
+      await view.result.current.batchTagMutation.mutateAsync({
+        assetIds: ['a', 'b'],
+        addTagIds: ['tag'],
+      }),
+    ).toEqual(summary);
+  });
+  expect(view.result.current.batchTagMutation.isPending).toBe(false);
+  expect(applied).toHaveBeenCalledOnce();
+  expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: keys.operations });
+  view.unmount();
+  client.clear();
+});

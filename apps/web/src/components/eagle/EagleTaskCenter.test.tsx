@@ -521,6 +521,61 @@ it('shows unscanned photo coverage and starts a durable scan in the photo scope'
   expect(await screen.findByText('已加入 1201 个本地人脸分析任务')).toBeVisible();
   expect(api.updateEagleTaskPolicy).not.toHaveBeenCalled();
 });
+it('accepts a queued photo scan without claiming that face jobs have already been created', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [] });
+  const start = vi
+    .fn()
+    .mockResolvedValue({
+      id: 'face-command',
+      kind: 'BACKGROUND_COMMAND',
+      commandType: 'PHOTO_PEOPLE_SCAN',
+      libraryMode: 'PHOTO',
+      total: 1,
+      completed: 0,
+      running: 0,
+      queued: 1,
+      failed: 0,
+      cancelled: 0,
+      state: 'QUEUED',
+      errors: [],
+    });
+  const photoApi = {
+    ...api.createEagleTaskCenterApi('PHOTO'),
+    startEagleTaskFamily: start,
+    fetchEagleTaskCenter: vi.fn().mockResolvedValue({
+      ...summary,
+      groups: [
+        {
+          id: 'FACES',
+          background: true,
+          unscanned: 1201,
+          availability: 'ENABLED',
+          queued: 0,
+          running: 0,
+          failed: 0,
+          completed: 0,
+          approval: 0,
+          waiting: [],
+          steps: [],
+        },
+      ],
+    }),
+  };
+  vi.mocked(api.createEagleTaskCenterApi).mockImplementation((mode) =>
+    mode === 'PHOTO' ? photoApi : { ...photoApi, fetchEagleTaskCenter: api.fetchEagleTaskCenter },
+  );
+  mount();
+  const heading = await screen.findByRole('heading', { name: '人物识别' });
+  const card = within(heading.closest('article')!);
+  expect(card.getByText('尚未扫描')).toBeVisible();
+  expect(card.getByText('未扫描 1201 张')).toBeVisible();
+  expect(card.queryByText('已完成')).not.toBeInTheDocument();
+  fireEvent.click(card.getByRole('button', { name: '扫描未分析照片' }));
+  await waitFor(() => expect(start).toHaveBeenCalledWith('FACES'));
+  expect(await screen.findByText('任务已加入后台队列，可在任务中心查看进度。')).toBeVisible();
+  expect(card.getByRole('button', { name: '扫描未分析照片' })).toBeEnabled();
+  expect(api.updateEagleTaskPolicy).not.toHaveBeenCalled();
+});
 it.each(['DISABLED', 'ENABLED'] as const)(
   'keeps disabled models and empty coverage honest: %s',
   async (availability) => {

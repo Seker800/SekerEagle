@@ -1,6 +1,7 @@
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
 import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useEffect, useRef, useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { ApiError } from '../../lib/api-error';
 import {
@@ -30,6 +31,7 @@ export function PhotoPersonMergeSelection({
   onConflict: () => Promise<unknown>;
   onMerged: (result: PhotoPersonMergeResult, privacy: boolean) => void;
 }) {
+  const client = useQueryClient();
   const [targetId, setTargetId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +76,12 @@ export function PhotoPersonMergeSelection({
         targetId: target.id,
         people: members.map((p) => ({ id: p.id, rowVersion: p.rowVersion })),
       });
+      if (ownerId && observeAcceptedOperation(client, ownerId, 'PHOTO', result)) {
+        if (active.current) onClear();
+        return;
+      }
       if (!active.current) return;
+      if ('kind' in result) return;
       onMerged(result, result.marksAssetsPrivate && members.some((p) => !p.marksAssetsPrivate));
     } catch (reason) {
       if (!active.current) return;

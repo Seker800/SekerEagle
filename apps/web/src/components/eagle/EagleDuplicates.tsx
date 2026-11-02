@@ -1,3 +1,4 @@
+import { observeAcceptedOperation } from '../../lib/accepted-operation';
 import { EagleConfirmationDialog } from './EagleConfirmationDialog';
 import { EagleDuplicatePreview } from './EagleDuplicatePreview';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -372,9 +373,13 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const invalidKeeper = [...keepers.values()].some((choice) => choice.keepIds?.length === 0);
   const preserve = useMutation({
     mutationFn: () => api.ignoreFiltered(data!.revision, { ...filters, kind }, !showIgnored),
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setSelected(new Map());
       setKeepers(new Map());
+      if (observeAcceptedOperation(client, ownerId, libraryMode, result)) {
+        setNotice(t('任务已加入后台队列，可在任务中心查看进度。'));
+        return;
+      }
       await client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'duplicates'] });
       setNotice(
         showIgnored ? t('已恢复检查这些分组。') : t('这些照片全部保留，已移入已保留分组。'),
@@ -1040,9 +1045,13 @@ function DuplicateComparison({
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     retry: false,
   });
+  const client = useQueryClient();
   const ignore = useMutation({
     mutationFn: () => api.ignore(group.signature, !ignored, filters),
-    onSuccess: onIgnored,
+    onSuccess: (result) => {
+      if (observeAcceptedOperation(client, ownerId, libraryMode, result)) return;
+      onIgnored();
+    },
   });
   useEffect(() => {
     if (members.isPending) return;

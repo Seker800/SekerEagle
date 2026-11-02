@@ -1,7 +1,11 @@
+import { getDesktopCacheBridge } from '../../lib/media-resolver';
+import { createEagleApi } from '../../lib/eagle-api';
+import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 import { assetOperationProtocol } from '@sekereagle/library-core';
 import {
   createEagleQueryKeys,
   isEagleQuery,
+  isEagleTaskCenterKey,
   isEagleOperationKey,
   isEagleAssetListKey,
 } from './eagle-query-keys';
@@ -102,7 +106,8 @@ export class AssetOperationRefresher {
     await this.client.invalidateQueries(
       {
         predicate: (query) =>
-          isEagleQuery(query.queryKey, this.ownerId, mode) &&
+          (isEagleQuery(query.queryKey, this.ownerId, mode) ||
+            isEagleTaskCenterKey(query.queryKey, this.ownerId, mode)) &&
           !isEagleOperationKey(query.queryKey, this.ownerId, mode) &&
           !(
             isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
@@ -174,6 +179,28 @@ export class AssetOperationRefresher {
         revision = result.revision;
         cursor = result.nextCursor ?? undefined;
       } while (cursor !== undefined);
+      if (actual.kind === 'METADATA_COMMAND' || actual.kind === 'BACKGROUND_COMMAND') {
+        if (actual.commandType !== 'DUPLICATE_IGNORE') await this.refreshLoadedFacts(mode, epoch);
+        if (
+          actual.commandType &&
+          [
+            'ASSET_TAGS',
+            'ASSET_TAGS_REPLACE',
+            'TAG_UPDATE',
+            'TAG_DELETE',
+            'TAG_GROUP_DELETE',
+            'PRIVACY_SETTINGS',
+            'VECTOR_REVIEW',
+            'PHOTO_PERSON_PRIVACY',
+            'PHOTO_PEOPLE_MERGE',
+            'PHOTO_PEOPLE_MERGE_SELECTED',
+            'PHOTO_PEOPLE_REVIEW',
+            'PHOTO_FACE_REASSIGN',
+          ].includes(actual.commandType)
+        )
+          await getDesktopCacheBridge()?.clearCache();
+        if (changes.epoch !== epoch || this.disposed) return;
+      }
       changes.finish(
         actual.id,
         actual.kind,
@@ -200,6 +227,8 @@ export class AssetOperationRefresher {
         this.addDestination(mode, ['TRASH']);
       if (actual.completed > 0 && membershipChange === 'ACTIVE')
         this.addDestination(mode, ['ACTIVE', 'PRIVATE']);
+      if (actual.commandType === 'BATCH_EDIT_RENDER' && actual.completed > 0)
+        this.addDestination(mode, ['ACTIVE', 'PRIVATE']);
       if (actual.kind === 'SEND') {
         const target = mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
         this.dirtyMetadata.add(target);
@@ -213,6 +242,59 @@ export class AssetOperationRefresher {
     } finally {
       this.reading.delete(key);
       await this.flush().catch(() => undefined);
+    }
+  }
+  private async refreshLoadedFacts(mode: LibraryMode, epoch: number) {
+    const cache = getEagleWorkspaceCache(this.client, this.ownerId, mode);
+    const queries = this.client.getQueryCache().findAll({
+      predicate: (query) =>
+        isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
+        !isEagleAssetListKey(query.queryKey, this.ownerId, mode, 'TRASH'),
+    });
+    const ids = [
+      ...new Set(
+        queries.flatMap((query) => {
+          const data = query.state.data as InfiniteData<NormalizedEagleAssetPage> | undefined;
+          return data?.pages.flatMap((page) => page.assetIds) ?? [];
+        }),
+      ),
+    ];
+    const api = createEagleApi(mode);
+    // Bound response memory by page-sized transport batches; the user selection
+    // remains one durable command, with no manual splitting or pagination reset.
+    for (let offset = 0; offset < ids.length; offset += 100) {
+      const batch = ids.slice(offset, offset + 100);
+      const facts = await api.listEagleAssetFacts('', batch);
+      if (this.disposed || cache.operations.epoch !== epoch) return;
+      cache.store.upsertMany(facts);
+      const visible = new Set(facts.map((asset) => asset.id));
+      const missing = new Set(batch.filter((id) => !visible.has(id)));
+      if (missing.size) {
+        cache.store.removeMany(missing);
+        cache.thumbnails.dispose();
+        for (const id of missing)
+          this.client.removeQueries({
+            queryKey: createEagleQueryKeys(this.ownerId, mode).assetDetailPrefix(id),
+          });
+        for (const query of queries)
+          this.client.setQueryData<InfiniteData<NormalizedEagleAssetPage>>(
+            query.queryKey,
+            (data) =>
+              data
+                ? {
+                    ...data,
+                    pages: data.pages.map((page) => ({
+                      ...page,
+                      assetIds: page.assetIds.filter((id) => !missing.has(id)),
+                      photoStacks: page.photoStacks?.filter(
+                        (stack) => !stack.assetIds.some((id) => missing.has(id)),
+                      ),
+                    })),
+                  }
+                : data,
+          );
+      }
+      await invalidateDesktopAssets(batch);
     }
   }
   private addDestination(mode: LibraryMode, views: readonly AssetListView[]) {

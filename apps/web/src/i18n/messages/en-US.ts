@@ -1,4 +1,8 @@
 export const enUS = {
+  '提交后将在后台处理，可在任务中心查看进度。': 'After submission, processing continues in the background. View progress in the task center.',
+  '更新信息': 'Update information',
+  '后台任务': 'Background task',
+  '任务已加入后台队列，可在任务中心查看进度。': 'Task queued in the background. View progress in the task center.',
   最近观测: 'Last observed',
   检查模型连接: 'Check model connection',
 

@@ -20,7 +20,7 @@ describe('browser session recovery', () => {
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
   });
 
-  it('keeps normal requests short while both full-library face admission entry points wait', async () => {
+  it('keeps full-library face admission entry points short without waiting for execution', async () => {
     const deadlines = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
@@ -28,7 +28,7 @@ describe('browser session recovery', () => {
     await request('/api/auth/me');
     await createEagleTaskCenterApi('PHOTO').startEagleTaskFamily('FACES');
     await scanPhotoPeople();
-    expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([30_000, 690_000, 690_000]);
+    expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([30_000, 30_000, 30_000]);
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       '/api/auth/me',
       '/api/photos/tasks/start',
@@ -37,7 +37,7 @@ describe('browser session recovery', () => {
     for (const [, init] of fetchMock.mock.calls) expect(init?.credentials).toBe('include');
   });
 
-  it('keeps the same authenticated refresh and overall deadline for a long scan', async () => {
+  it('keeps authenticated refresh within the same admission deadline', async () => {
     const deadlines = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
@@ -52,7 +52,7 @@ describe('browser session recovery', () => {
       '/api/auth/refresh',
       '/api/photos/tasks/start',
     ]);
-    expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([690_000, 30_000]);
+    expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([30_000, 30_000]);
     expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(fetchMock.mock.calls[2]?.[1]?.signal);
   });
 
