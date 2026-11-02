@@ -1,3 +1,4 @@
+import { LibraryMediaSnapshot } from './library-media-snapshot';
 import { createReadStream } from 'node:fs';
 import { copyFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -163,6 +164,7 @@ let cacheRestartTimer: NodeJS.Timeout | null = null;
 let cacheRestartHistory: number[] = [];
 let shuttingDown = false;
 let connectionService: DesktopConnectionService | null = null;
+let librarySnapshot: LibraryMediaSnapshot | null = null;
 let mediaController: MediaCacheController | null = null;
 let connectionRecovery: Promise<void> | null = null;
 let browserSession: DesktopBrowserSession | null = null;
@@ -212,10 +214,12 @@ if (hasSingleInstanceLock)
       }),
     );
     currentSession.cookies.on('changed', () => {
+      librarySnapshot?.reset();
       owner.invalidate();
       clearPreparedOriginalDrags();
     });
     powerMonitor.on('resume', () => {
+      librarySnapshot?.reset();
       owner.invalidate();
       clearPreparedOriginalDrags();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
@@ -234,6 +238,7 @@ if (hasSingleInstanceLock)
             : null,
       };
     });
+    registerLibraryReadIpc();
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
@@ -259,6 +264,7 @@ if (hasSingleInstanceLock)
       } catch {
         return;
       }
+      librarySnapshot?.reset();
       owner.invalidate();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
       void recoverConnection(owner);
@@ -381,6 +387,31 @@ function cacheBackend() {
   };
 }
 
+function registerLibraryReadIpc(): void {
+  const pending = new Map<string, AbortController>();
+  const validRequestId = (value: unknown): value is string =>
+    typeof value === 'string' && /^[a-zA-Z0-9-]{1,64}$/u.test(value);
+  ipcMain.handle('desktop:read-library', async (event, path: unknown, requestId: unknown) => {
+    assertTrustedIpcSender(event);
+    if (typeof path !== 'string' || !validRequestId(requestId) || pending.has(requestId))
+      throw new Error('Invalid library read');
+    const snapshot = librarySnapshot;
+    if (!snapshot) throw new Error('Library is unavailable');
+    const controller = new AbortController();
+    pending.set(requestId, controller);
+    try { return await snapshot.read(path, controller.signal); }
+    finally { pending.delete(requestId); }
+  });
+  ipcMain.on('desktop:cancel-library-read', (event, requestId: unknown) => {
+    try { assertTrustedIpcSender(event); } catch { return; }
+    if (validRequestId(requestId)) pending.get(requestId)?.abort();
+  });
+  ipcMain.handle('desktop:reset-media-snapshot', (event) => {
+    assertTrustedIpcSender(event);
+    librarySnapshot?.reset();
+  });
+}
+
 function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsStore): void {
   const namespaces = async (
     event: IpcMainInvokeEvent,
@@ -454,7 +485,9 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   });
   ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
     if (typeof assetId !== 'string') throw new Error('资源标识无效。');
-    return removeAccountCache(currentCache(), await namespaces(event), assetId);
+    const scope = await namespaces(event);
+    librarySnapshot?.invalidateAsset(assetId);
+    return removeAccountCache(currentCache(), scope, assetId);
   });
 }
 
@@ -839,7 +872,11 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
     });
   }
   window.once('ready-to-show', () => window.show());
+  window.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) librarySnapshot?.reset();
+  });
   window.on('closed', () => {
+    librarySnapshot?.reset();
     if (mainWindow === window) mainWindow = null;
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -926,11 +963,19 @@ async function handleAppRequest(requestUrl: string): Promise<Response> {
 }
 
 function createMediaController(owner: AuthenticatedOwner): MediaCacheController {
+  librarySnapshot?.reset();
+  const snapshot = new LibraryMediaSnapshot({
+    fetch: (path, init) => currentBrowserSession().fetch(path, init),
+    authenticatedOwner: () => owner.get(),
+    maxEntries: Number(process.env.SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES ?? 12_000),
+  });
+  librarySnapshot = snapshot;
   const limiter = new MediaRequestLimiter(6, 64);
   return new MediaCacheController({
     serverUrl,
     cache: cacheBackend(),
     authenticatedOwner: () => owner.get(),
+    canReadLocal: (media, identity, file) => snapshot.allows(media, identity, file),
     fetchUpstream: (mediaPath, options) =>
       limiter.fetch(
         (signal) =>

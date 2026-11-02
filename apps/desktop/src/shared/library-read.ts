@@ -4,7 +4,7 @@ const LIBRARY_READ = new RegExp(`^/api/(eagle|photos)/(?:assets(?:/${UUID})?|tra
 /** Shared by preload and main. No arbitrary fetch, credentials, headers or writes. */
 export function isLibraryReadPath(value: unknown): value is string {
   if (typeof value !== 'string' || value.includes('#') || /[\\\u0000-\u0020]/u.test(value)) return false;
-  const pathname = value.split('?', 1)[0];
+  const pathname = value.split('?', 1)[0]!;
   return pathname === '/api/library/changes' || LIBRARY_READ.test(pathname);
 }
 export interface LibraryReadResponse {

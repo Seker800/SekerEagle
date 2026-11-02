@@ -90,6 +90,8 @@ export function emptyCacheRequestStats(): CacheRequestStats {
   };
 }
 
+type CanReadLocal = (media: DesktopMediaIdentity, identity: AuthenticatedIdentity, file: ReadyCacheEntry) => boolean;
+
 export class MediaCacheController {
   private readonly serverUrl: string;
   private readonly cache: CacheBackend;
@@ -99,6 +101,7 @@ export class MediaCacheController {
     options: { ifNoneMatch?: string; signal?: AbortSignal },
   ) => Promise<Response>;
   private readonly now: () => number;
+  private readonly canReadLocal: CanReadLocal;
   private readonly populating = new Map<string, Promise<void>>();
   private readonly requestStats = new Map<string, CacheRequestStats>();
 
@@ -111,12 +114,14 @@ export class MediaCacheController {
       options: { ifNoneMatch?: string; signal?: AbortSignal },
     ) => Promise<Response>;
     now?: () => number;
+    canReadLocal?: CanReadLocal;
   }) {
     this.serverUrl = options.serverUrl;
     this.cache = options.cache;
     this.authenticatedOwner = options.authenticatedOwner;
     this.fetchUpstream = options.fetchUpstream;
     this.now = options.now ?? Date.now;
+    this.canReadLocal = options.canReadLocal ?? (() => false);
   }
 
   /** Per media request, for this connection. SQLite acquisitions are internal IO,
@@ -141,7 +146,7 @@ export class MediaCacheController {
       buildCacheIdentity(this.serverUrl, ownerId, deploymentId, media),
     );
     try {
-      const result = await this.resolveAuthorized(media, keyHash, namespaceId, signal);
+      const result = await this.resolveAuthorized(media, keyHash, namespaceId, identity, signal);
       this.recordResult(namespaceId, result);
       return result;
     } catch (error) {
@@ -169,6 +174,7 @@ export class MediaCacheController {
     media: DesktopMediaIdentity,
     keyHash: Buffer,
     namespaceId: string,
+    identity: AuthenticatedIdentity,
     signal?: AbortSignal,
   ): Promise<MediaResolution> {
     const now = this.now();
@@ -182,7 +188,7 @@ export class MediaCacheController {
       };
     }
     try {
-      if (existing && existing.authorizationLeaseUntil > now) return cacheResolution(existing);
+      if (existing && this.canReadLocal(media, identity, existing)) return cacheResolution(existing);
       if (existing) {
         await this.cache.release(existing.leaseId);
         return await this.revalidate(media, keyHash, namespaceId, existing, signal);
