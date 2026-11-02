@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { setTimeout, clearTimeout } from 'node:timers';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';

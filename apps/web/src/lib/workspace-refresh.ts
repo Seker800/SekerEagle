@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import type { QueryClient, Query } from '@tanstack/react-query';
+import { hashKey, type QueryClient, type Query } from '@tanstack/react-query';
 import {
   WORKSPACE_CHANGE_KINDS,
   type WorkspaceChanges,
@@ -13,7 +13,30 @@ export const workspaceRefreshKey = (ownerId: string, includePrivate: boolean) =>
   ['workspace-changes', ownerId, includePrivate] as const;
 export type WorkspaceRefreshObservation = { snapshot?: WorkspaceChanges; error?: string };
 type Load = (signal: AbortSignal) => Promise<WorkspaceChanges>;
-const registries = new WeakMap<QueryClient, Map<string, { refs: number; stop: () => void }>>();
+type Registration = {
+  refs: number;
+  stop: () => void;
+  waitForBaseline: (queryKey: readonly unknown[], signal: AbortSignal) => Promise<void>;
+};
+const registries = new WeakMap<QueryClient, Map<string, Registration>>();
+
+/** Start the first list after the existing lightweight check. Slow or failed
+ * checks retain the original read + reconciliation, never a permission grant. */
+export function awaitWorkspaceRefreshBaseline(
+  client: QueryClient,
+  ownerId: string,
+  includePrivate: boolean,
+  queryKey: readonly unknown[],
+  signal: AbortSignal,
+): Promise<void> {
+  signal.throwIfAborted();
+  return (
+    registries
+      .get(client)
+      ?.get(JSON.stringify([ownerId, includePrivate]))
+      ?.waitForBaseline(queryKey, signal) ?? Promise.resolve()
+  );
+}
 
 const resources: Record<WorkspaceChangeKind, readonly string[]> = {
   ASSETS: [
@@ -89,6 +112,16 @@ export function acquireWorkspaceRefresh(
   let previous: WorkspaceChanges | undefined;
   const controller = new AbortController();
   const key = workspaceRefreshKey(ownerId, includePrivate);
+  let initialSettled = false;
+  let settleInitial!: () => void;
+  const initial = new Promise<void>((resolve) => {
+    settleInitial = resolve;
+  });
+  const waitingForBaseline = new Set<string>();
+  const finishInitial = () => {
+    initialSettled = true;
+    settleInitial();
+  };
   const queued = new Map<string, { query: Query; running: boolean; again: boolean }>();
   const visible = () => document.visibilityState === 'visible';
   const reconcile = (query: Query) => {
@@ -143,7 +176,11 @@ export function acquireWorkspaceRefresh(
       const next = await load(controller.signal);
       if (stopped || !visible()) return;
       failures = 0;
+      // These reads have not started their HTTP request yet. Other existing
+      // queries still need the original conservative initial reconciliation.
+      const startsAfterBaseline = new Set(waitingForBaseline);
       client.setQueryData<WorkspaceRefreshObservation>(key, { snapshot: next });
+      finishInitial();
       for (const mode of ['MATERIAL', 'PHOTO'] as const) {
         const kinds = new Set(
           WORKSPACE_CHANGE_KINDS.filter(
@@ -157,7 +194,11 @@ export function acquireWorkspaceRefresh(
           kinds.add('TASKS');
         if (kinds.size)
           for (const query of client.getQueryCache().getAll())
-            if (affected(query, ownerId, mode, kinds)) reconcile(query);
+            if (
+              affected(query, ownerId, mode, kinds) &&
+              (previous || !startsAfterBaseline.has(query.queryHash))
+            )
+              reconcile(query);
       }
       previous = next;
     } catch (error) {
@@ -166,6 +207,7 @@ export function acquireWorkspaceRefresh(
         ...value,
         error: error instanceof Error ? error.message : t('自动更新暂时不可用，现有结果已保留。'),
       }));
+      finishInitial();
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
         revoked = true;
         return;
@@ -191,8 +233,33 @@ export function acquireWorkspaceRefresh(
   schedule(0);
   const entry = {
     refs: 1,
+    waitForBaseline(queryKey: readonly unknown[], signal: AbortSignal): Promise<void> {
+      if (initialSettled || !visible()) return Promise.resolve();
+      const hash = hashKey(queryKey);
+      const configured = Number(import.meta.env.VITE_WORKSPACE_STARTUP_CHECK_MS ?? 250);
+      const budget = Number.isFinite(configured) && configured >= 0 ? configured : 250;
+      return new Promise<void>((resolve, reject) => {
+        let finished = false;
+        const finish = (aborted = false) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(deadline);
+          signal.removeEventListener('abort', abort);
+          waitingForBaseline.delete(hash);
+          if (aborted) reject(signal.reason);
+          else resolve();
+        };
+        const abort = () => finish(true);
+        const deadline = setTimeout(() => finish(), budget);
+        waitingForBaseline.add(hash);
+        signal.addEventListener('abort', abort, { once: true });
+        void initial.then(() => finish());
+        if (signal.aborted) abort();
+      });
+    },
     stop: () => {
       stopped = true;
+      finishInitial();
       controller.abort();
       if (timer) clearTimeout(timer);
       queued.clear();
