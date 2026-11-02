@@ -214,16 +214,22 @@ test('long vector publication revalidates queued grant before committing its dom
   let committed = false;
   let guards = 0;
   const transaction = { $executeRaw: async () => 1 };
-  const service = new EagleVectorService({
-    $transaction: async (work: (tx: typeof transaction) => Promise<unknown>) => {
-      const value = await work(transaction);
-      committed = true;
-      return value;
-    },
-  } as never, 'PHOTO');
-  await assert.rejects(service.scanMissingEmbeddings('owner', false, async () => {
-    if (++guards === 2) throw new NotFoundException('grant expired during publication');
-  }), NotFoundException);
+  const service = new EagleVectorService(
+    {
+      $transaction: async (work: (tx: typeof transaction) => Promise<unknown>) => {
+        const value = await work(transaction);
+        committed = true;
+        return value;
+      },
+    } as never,
+    'PHOTO',
+  );
+  await assert.rejects(
+    service.scanMissingEmbeddings('owner', false, async () => {
+      if (++guards === 2) throw new NotFoundException('grant expired during publication');
+    }),
+    NotFoundException,
+  );
   assert.equal(guards, 2);
   assert.equal(committed, false);
 });

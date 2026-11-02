@@ -239,6 +239,7 @@ export class EagleVectorService {
         },
         data: mediaRequeueData(),
       });
+      await beforePublish?.(transaction);
       return { retried: result.count };
     });
   }
@@ -251,11 +252,13 @@ export class EagleVectorService {
     return this.prisma.$transaction(
       async (transaction) => {
         await beforePublish?.(transaction);
-        return refreshUnclassifiedSuggestions(transaction, {
+        const result = await refreshUnclassifiedSuggestions(transaction, {
           libraryMode: this.libraryMode,
           ownerId,
           includePrivate,
         });
+        await beforePublish?.(transaction);
+        return result;
       },
       { timeout: 60_000 },
     );
@@ -345,6 +348,7 @@ export class EagleVectorService {
           )
         ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
       `);
+        await beforePublish?.(transaction);
         return [repairedCount, createdCount] as const;
       },
       { timeout: 60_000 },

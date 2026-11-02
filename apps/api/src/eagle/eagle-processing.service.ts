@@ -242,6 +242,7 @@ export class EagleProcessingService {
         )
         SELECT COUNT(*)::bigint AS retried FROM retried
       `);
+      await beforePublish?.(transaction);
       return Number(rows[0]?.retried ?? 0n);
     });
     return { retried };
@@ -361,6 +362,7 @@ export class EagleProcessingService {
           });
           created += result.count;
         }
+        await beforePublish?.(transaction);
       });
       cursor = assets.at(-1)?.id;
       if (assets.length < pageSize) break;
