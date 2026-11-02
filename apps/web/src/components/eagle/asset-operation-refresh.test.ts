@@ -31,7 +31,7 @@ function fixture(view = 'ACTIVE') {
     })),
     pageParams: Array.from({ length: 12 }, (_, i) => String(i)),
   };
-  const queryFn = vi.fn(async () => ({ assetIds: ['new'], nextCursor: 'next' }));
+  const queryFn = vi.fn(async (_context?: unknown) => ({ assetIds: ['new'], nextCursor: 'next' }));
   const observer = new InfiniteQueryObserver(client, {
     queryKey: key,
     queryFn,
@@ -600,4 +600,24 @@ it('refreshes the scoped task-center family counts after command execution', asy
     stop();
     f.close();
   }
+});
+
+
+it('refreshes photo-stack topology on every loaded page while retaining IDs and cursor history', async () => {
+ const f=fixture();
+ const freshStack={id:'fresh-stack',assetIds:['a-11','b-11']};
+ f.queryFn.mockResolvedValue({assetIds:['moved'],nextCursor:'different',photoStacks:[freshStack]} as never);
+ const {createEagleApi}=await import('../../lib/eagle-api');
+ vi.spyOn(await import('../../lib/eagle-api'),'createEagleApi').mockReturnValue({...createEagleApi('PHOTO'),listEagleAssetFacts:vi.fn(async(_token,ids:string[])=>ids.map(id=>({id,updatedAt:'2026-11-02',rowVersion:2,mediaRevision:1})))} as never);
+ const completed={...summary('METADATA_COMMAND'),commandType:'PHOTO_GROUP_UPDATE',completed:1,failed:0,errors:[],state:'COMPLETED' as const};
+ mocks.results.mockResolvedValue({operation:completed,revision:'v1',membership:[],receipts:[],nextCursor:null});
+ try{
+  await f.refresher.reconcile('PHOTO',completed);
+  expect(f.queryFn).toHaveBeenCalledTimes(12);
+  expect(f.queryFn.mock.calls.map(([context])=>(context as {pageParam:string}).pageParam)).toEqual(f.data.pageParams);
+  const data=f.client.getQueryData<typeof f.data>(f.key)!;
+  expect(data.pages).toHaveLength(12);expect(data.pageParams).toEqual(f.data.pageParams);
+  expect(data.pages.map(page=>page.assetIds)).toEqual(f.data.pages.map(page=>page.assetIds));
+  expect(data.pages[11]).toEqual({...f.data.pages[11],photoStacks:[freshStack]});
+ }finally{vi.restoreAllMocks();f.close();}
 });
