@@ -5,11 +5,14 @@ import { installClientCacheProbe } from './client-cache-probe.mjs';
 
 test('probe records end-to-end fetch completion without retaining URLs, headers or credentials', async () => {
   const dom = new JSDOM('<main></main>', { url: 'https://example.com' });
-  const originalFetch = async () => new Response('image', { headers: { 'x-sekereagle-cache-result': 'REVALIDATED' } });
+  const originalFetch = async () =>
+    new Response('image', { headers: { 'x-sekereagle-cache-result': 'REVALIDATED' } });
   dom.window.fetch = originalFetch;
   const probe = installClientCacheProbe(dom.window);
   probe.begin('folder-open');
-  const response = await dom.window.fetch('/api/photos/assets/secret-id/renditions/secret-id?token=secret');
+  const response = await dom.window.fetch(
+    '/api/photos/assets/secret-id/renditions/secret-id?token=secret',
+  );
   assert.equal(await response.text(), 'image');
   const result = probe.report();
   assert.equal(result.scenarios[0].requests[0].kind, 'photo-image');
@@ -22,7 +25,10 @@ test('probe records end-to-end fetch completion without retaining URLs, headers 
 
 test('probe separates scenarios, ignores unrelated traffic, and preserves network errors', async () => {
   const dom = new JSDOM('', { url: 'https://example.com' });
-  dom.window.fetch = async (url) => { if (url.includes('fail')) throw new Error('private error'); return new Response('ok'); };
+  dom.window.fetch = async (url) => {
+    if (url.includes('fail')) throw new Error('private error');
+    return new Response('ok');
+  };
   const probe = installClientCacheProbe(dom.window);
   probe.begin('folder-open');
   await dom.window.fetch('/api/photos/assets?limit=120');
@@ -35,5 +41,6 @@ test('probe separates scenarios, ignores unrelated traffic, and preserves networ
   assert.equal(report.scenarios[1].requests[0].kind, 'material-list');
   assert(!JSON.stringify(report).includes('private error'));
   assert.throws(() => probe.begin('an arbitrary photo name'));
-  probe.stop(); dom.window.close();
+  probe.stop();
+  dom.window.close();
 });

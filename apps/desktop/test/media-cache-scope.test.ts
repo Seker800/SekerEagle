@@ -62,7 +62,7 @@ describe('mode-scoped desktop media cache', () => {
     for (const [mode, bytes] of [
       ['material', 'material'],
       ['photo', 'photo'],
-    ]) {
+    ] as const) {
       const result = await controller.resolve(scopedUrl(mode));
       expect(result.source).toBe('cache');
       if (result.source !== 'cache') throw new Error('Expected cached media');
