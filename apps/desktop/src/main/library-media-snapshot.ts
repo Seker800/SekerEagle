@@ -68,7 +68,7 @@ export class LibraryMediaSnapshot {
         const value: unknown = JSON.parse(body);
         if (path.split('?', 1)[0] === '/api/library/changes') this.observeChanges(value);
         else this.observeAssets(path, value, identity, sequence);
-      } else if (response.status === 401 || response.status === 403 || path.startsWith('/api/library/changes')) this.reset();
+      } else this.reset();
       return { status: response.status, body, contentType };
     } catch (error) {
       if (!signal?.aborted && generation === this.generation) this.reset();
