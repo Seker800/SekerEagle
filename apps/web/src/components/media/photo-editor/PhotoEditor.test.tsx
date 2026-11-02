@@ -1113,3 +1113,34 @@ it('identifies a missing local LUT on a second device without discarding the sav
   );
   expect(screen.getByRole('button', { name: '保存到相册' })).toBeDisabled();
 });
+
+it('loads desktop preview images with credentialed CORS before reading their pixels', async () => {
+  const requests: Array<{ source: string; crossOrigin: string }> = [];
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 80;
+      naturalHeight = 64;
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(source: string) {
+        if (!source) return;
+        requests.push({ source, crossOrigin: this.crossOrigin });
+        queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  const preview = 'sekereagle-media://rendition/photo/preview/image/preview';
+  render(
+    <PhotoEditor
+      source="/api/photos/assets/image/original"
+      previewSource={preview}
+      name="Preview.png"
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+    />,
+  );
+  await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+  expect(requests).toEqual([{ source: preview, crossOrigin: 'use-credentials' }]);
+});
