@@ -20,8 +20,9 @@ afterEach(() => {
 
 describe('media resolver', () => {
   it('uses mode-scoped URLs only when the installed client advertises support', () => {
-    const createMediaUrl = vi.fn((media: DesktopMediaRequest & { libraryMode?: string }) =>
-      `sekereagle-media://rendition/${media.libraryMode?.toLowerCase()}/${'renditionKind' in media ? media.renditionKind.toLowerCase() : ''}/${media.assetId}/${'renditionId' in media ? media.renditionId : ''}`,
+    const createMediaUrl = vi.fn(
+      (media: DesktopMediaRequest & { libraryMode?: string }) =>
+        `sekereagle-media://rendition/${media.libraryMode?.toLowerCase()}/${'renditionKind' in media ? media.renditionKind.toLowerCase() : ''}/${media.assetId}/${'renditionId' in media ? media.renditionId : ''}`,
     );
     const bridge = { version: 1 as const, mediaCacheVersion: 2, createMediaUrl };
     (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = bridge;
@@ -40,9 +41,11 @@ describe('media resolver', () => {
   });
 
   it('copies scoped photo previews using the photo API', () => {
-    expect(resolveClipboardImageUrl(`sekereagle-media://rendition/photo/preview/${assetId}/${renditionId}`)).toBe(
-      `/api/photos/assets/${assetId}/renditions/${renditionId}`,
-    );
+    expect(
+      resolveClipboardImageUrl(
+        `sekereagle-media://rendition/photo/preview/${assetId}/${renditionId}`,
+      ),
+    ).toBe(`/api/photos/assets/${assetId}/renditions/${renditionId}`);
   });
 
   it('keeps ordinary web URLs unchanged when no desktop capability exists', () => {

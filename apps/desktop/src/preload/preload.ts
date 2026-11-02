@@ -10,6 +10,7 @@ import { parseAssetDragInput, parsePreparedDragToken } from '../main/original-dr
 
 contextBridge.exposeInMainWorld('sekerDesktop', {
   version: 1,
+  mediaCacheVersion: 2,
   refreshSession(): Promise<{ status: number; code: string | null }> {
     return ipcRenderer.invoke('desktop:refresh-session');
   },
