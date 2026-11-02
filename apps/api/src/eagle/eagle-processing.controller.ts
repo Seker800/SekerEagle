@@ -1,6 +1,9 @@
+import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { libraryReadObserver } from './eagle-memory-observability';
 import {
   Body,
+  HttpCode,
+  Optional,
   Controller,
   Get,
   Param,
@@ -25,7 +28,10 @@ import {
 @Controller('admin/eagle-processing')
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard, AdminGuard)
 export class EagleProcessingController {
-  constructor(private readonly processing: EagleProcessingService) {}
+  constructor(
+    private readonly processing: EagleProcessingService,
+    @Optional() private readonly operations?: EagleAssetOperationService,
+  ) {}
 
   @Get('reader-metrics') readerMetrics() {
     return libraryReadObserver.snapshot();
@@ -55,14 +61,22 @@ export class EagleProcessingController {
 
   @Post('retry-failed')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   retryFailed(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.processing.retryFailed(principal.sub, principal.canViewPrivate);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'PROCESSING_RETRY_FAILED',
+      payload: {},
+    });
   }
 
   @Post('reconcile')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   reconcile(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.processing.reconcile(principal.sub, principal.canViewPrivate);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'PROCESSING_RECONCILE',
+      payload: {},
+    });
   }
 
   @Patch('settings')

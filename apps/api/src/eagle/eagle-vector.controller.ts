@@ -1,5 +1,8 @@
+import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import {
   Body,
+  HttpCode,
+  Optional,
   Controller,
   Get,
   Param,
@@ -28,7 +31,10 @@ import { EagleVectorService } from './eagle-vector.service';
 @Controller('eagle/vector')
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
 export class EagleVectorController {
-  constructor(private readonly vectors: EagleVectorService) {}
+  constructor(
+    private readonly vectors: EagleVectorService,
+    @Optional() private readonly operations?: EagleAssetOperationService,
+  ) {}
 
   @Get('summary')
   summary(@CurrentPrincipal() principal: AuthPrincipal) {
@@ -106,48 +112,52 @@ export class EagleVectorController {
 
   @Post('embeddings/retry-failed')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   retryFailedEmbeddings(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.vectors.retryFailedEmbeddings(principal.sub);
+    return this.operations!.enqueueCommand(principal, { type: 'VECTOR_RETRY_FAILED', payload: {} });
   }
 
   @Post('embeddings/scan-missing')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   scanMissingEmbeddings(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.vectors.scanMissingEmbeddings(principal.sub);
+    return this.operations!.enqueueCommand(principal, { type: 'VECTOR_SCAN_MISSING', payload: {} });
   }
 
   @Post('suggestions/scan-unclassified')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   scanUnclassifiedSuggestions(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.vectors.scanUnclassifiedSuggestions(principal.sub, principal.canViewPrivate);
+    return this.operations!.enqueueCommand(principal, {
+      type: 'VECTOR_SCAN_UNCLASSIFIED',
+      payload: {},
+    });
   }
 
   @Post('suggestions/:suggestionId/review')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   review(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('suggestionId', new ParseUUIDPipe({ version: '4' })) suggestionId: string,
     @Body() input: ReviewVectorSuggestionDto,
   ) {
-    return this.vectors.reviewSuggestion(
-      principal.sub,
-      suggestionId,
-      input.action,
-      principal.canViewPrivate,
-    );
+    return this.operations!.enqueueCommand(principal, {
+      type: 'VECTOR_REVIEW',
+      payload: { suggestionIds: [suggestionId], action: input.action },
+    });
   }
 
   @Post('suggestions/review-batch')
   @UseGuards(BrowserOriginGuard)
+  @HttpCode(202)
   reviewBatch(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchReviewVectorSuggestionsDto,
   ) {
-    return this.vectors.reviewSuggestions(
-      principal.sub,
-      input.suggestionIds,
-      input.action,
-      principal.canViewPrivate,
-    );
+    return this.operations!.enqueueCommand(principal, {
+      type: 'VECTOR_REVIEW',
+      payload: { suggestionIds: input.suggestionIds, action: input.action },
+    });
   }
 }

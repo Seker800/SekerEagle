@@ -507,6 +507,9 @@ test('unclassified suggestion scan reuses ready embeddings without enqueueing em
   const statements: unknown[] = [];
   const service = new EagleVectorService(
     {
+      async $transaction(work: (tx: never) => Promise<unknown>) {
+        return work(this as never);
+      },
       $queryRaw: async (statement: unknown) => {
         statements.push(statement);
         return [{ scanned: 42, matched: 9 }];

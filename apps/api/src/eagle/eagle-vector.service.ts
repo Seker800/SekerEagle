@@ -1,3 +1,4 @@
+import { runLibraryTransaction } from './eagle-library-command';
 import {
   mediaRequeueData,
   sanitizeComputeRuntime,
@@ -216,30 +217,58 @@ export class EagleVectorService {
     };
   }
 
-  async retryFailedEmbeddings(ownerId: string) {
-    const result = await this.prisma.eagleAssetProcessingJob.updateMany({
-      where: {
-        ownerId,
-        kind: 'GENERATE_EMBEDDING',
-        status: 'FAILED',
-        libraryMode: this.libraryMode,
+  async retryFailedEmbeddings(
+    ownerId: string,
+    includePrivate = false,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
+    return this.prisma.$transaction(async (transaction) => {
+      await beforePublish?.(transaction);
+      const result = await transaction.eagleAssetProcessingJob.updateMany({
+        where: {
+          ownerId,
+          kind: 'GENERATE_EMBEDDING',
+          status: 'FAILED',
+          asset: {
+            ownerId,
+            libraryMode: this.libraryMode,
+            deletedAt: null,
+            ...(includePrivate ? {} : { isPrivate: false }),
+          },
+          libraryMode: this.libraryMode,
+        },
+        data: mediaRequeueData(),
+      });
+      return { retried: result.count };
+    });
+  }
+
+  scanUnclassifiedSuggestions(
+    ownerId: string,
+    includePrivate = false,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
+    return this.prisma.$transaction(
+      async (transaction) => {
+        await beforePublish?.(transaction);
+        return refreshUnclassifiedSuggestions(transaction, {
+          libraryMode: this.libraryMode,
+          ownerId,
+          includePrivate,
+        });
       },
-      data: mediaRequeueData(),
-    });
-    return { retried: result.count };
+      { timeout: 60_000 },
+    );
   }
 
-  scanUnclassifiedSuggestions(ownerId: string, includePrivate = false) {
-    return refreshUnclassifiedSuggestions(this.prisma, {
-      libraryMode: this.libraryMode,
-      ownerId,
-      includePrivate,
-    });
-  }
-
-  async scanMissingEmbeddings(ownerId: string) {
+  async scanMissingEmbeddings(
+    ownerId: string,
+    includePrivate = false,
+    beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
     const [repaired, created] = await this.prisma.$transaction(
       async (transaction) => {
+        await beforePublish?.(transaction);
         const repairedCount = await transaction.$executeRaw(Prisma.sql`
         UPDATE "EagleMediaJob" AS job
         SET status = 'PENDING', attempts = 0, "recoveryCount" = 0,
@@ -251,6 +280,7 @@ export class EagleVectorService {
           AND asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND asset.id = job."assetId"
           AND asset."deletedAt" IS NULL
+          ${includePrivate ? Prisma.empty : Prisma.sql`AND asset."isPrivate" = false`}
           AND asset."mimeType" LIKE 'image/%'
           AND asset."mediaRevision" = job."assetRevision"
           AND job.kind = 'GENERATE_EMBEDDING'
@@ -291,6 +321,7 @@ export class EagleVectorService {
         ) AS dependency ON true
         WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND asset."deletedAt" IS NULL
+          ${includePrivate ? Prisma.empty : Prisma.sql`AND asset."isPrivate" = false`}
           AND asset."mimeType" LIKE 'image/%'
           AND EXISTS (
             SELECT 1 FROM "EagleAssetRendition" AS preview
@@ -654,13 +685,36 @@ export class EagleVectorService {
     return result.items[0]!;
   }
 
+  async assertCommandSuggestions(
+    ownerId: string,
+    suggestionIds: string[],
+    includePrivate: boolean,
+  ) {
+    const count = await this.prisma.eagleVectorTagSuggestion.count({
+      where: {
+        ownerId,
+        libraryMode: this.libraryMode,
+        id: { in: suggestionIds },
+        asset: {
+          ownerId,
+          libraryMode: this.libraryMode,
+          deletedAt: null,
+          storageTransferredOut: false,
+          ...(includePrivate ? {} : { isPrivate: false }),
+        },
+      },
+    });
+    if (count !== suggestionIds.length) throw new NotFoundException('待审核建议不存在。');
+  }
+
   async reviewSuggestions(
     ownerId: string,
     suggestionIds: string[],
     action: 'ACCEPT' | 'REJECT',
     includePrivate = false,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
   ) {
-    return this.prisma.$transaction((transaction) =>
+    return runLibraryTransaction(db, (transaction) =>
       reviewSavedSuggestions(
         transaction,
         ownerId,

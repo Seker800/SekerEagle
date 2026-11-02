@@ -297,7 +297,6 @@ export class EagleAssetVersionDto {
 export class BatchUpdateEagleAssetsDto {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(100)
   @ArrayUnique((asset: EagleAssetVersionDto) => asset.assetId)
   @ValidateNested({ each: true })
   @Type(() => EagleAssetVersionDto)
@@ -336,10 +335,9 @@ export class UpdateEaglePrivacySettingsDto extends EaglePrivacySettingsDto {
 }
 
 export class BatchChangeEagleManualTagsDto {
-  @ApiProperty({ type: [String], minItems: 1, maxItems: 1000 })
+  @ApiProperty({ type: [String], minItems: 1 })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(1000)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   assetIds!: string[];
