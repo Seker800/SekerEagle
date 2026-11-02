@@ -462,3 +462,21 @@ it('updates metadata cards across loaded pages once without replaying pages or c
     expect(facts).toHaveBeenCalledOnce();
   } finally { vi.restoreAllMocks(); f.close(); }
 });
+
+it('removes inaccessible metadata command cards and details without discarding unrelated pages', async () => {
+  const f = fixture();
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({ ...createEagleApi('PHOTO'), listEagleAssetFacts: vi.fn(async () => []) } as never);
+  const detailKey = createEagleQueryKeys('owner','PHOTO').assetDetail('a-0','ACTIVE');
+  f.client.setQueryData(detailKey,{id:'a-0'});
+  const completed = {...summary('METADATA_COMMAND'),completed:2,failed:0,errors:[],state:'COMPLETED' as const};
+  mocks.results.mockResolvedValue({operation:completed,revision:'v1',membership:[],receipts:[],nextCursor:null});
+  try {
+    await f.refresher.reconcile('PHOTO',completed);
+    expect(f.client.getQueryData(detailKey)).toBeUndefined();
+    const current=f.client.getQueryData<typeof f.data>(f.key)!;
+    expect(current.pages).toHaveLength(12);
+    expect(current.pageParams).toEqual(f.data.pageParams);
+    expect(current.pages.flatMap((page)=>page.assetIds)).toEqual([]);
+  } finally {vi.restoreAllMocks();f.close();}
+});
