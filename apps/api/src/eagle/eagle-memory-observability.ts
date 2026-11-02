@@ -79,6 +79,7 @@ export class LibraryReadObserver {
   record(action: LibraryReadAction, outcome: Outcome, durationMs = 0) {
     const row = this.actions[action];
     row.requests++;
+    if (outcome === 'circuitOpen') row.fallbacks++;
     if (skipped.has(outcome)) row.bypassed++;
     else {
       row.attempts++;
@@ -111,13 +112,14 @@ export class LibraryReadObserver {
       actions: Object.fromEntries(
         LIBRARY_READ_ACTIONS.map((action) => {
           const { histogram, ...row } = this.actions[action];
+          const eligible = row.attempts + row.reasons.circuitOpen;
           return [
             action,
             {
               ...row,
               reasons: { ...row.reasons },
-              hitRate: row.attempts ? row.hits / row.attempts : null,
-              fallbackRate: row.attempts ? row.fallbacks / row.attempts : null,
+              hitRate: eligible ? row.hits / eligible : null,
+              fallbackRate: eligible ? row.fallbacks / eligible : null,
               p50UpperBoundMs: quantile(histogram, row.attempts, 0.5),
               p95UpperBoundMs: quantile(histogram, row.attempts, 0.95),
               latencyBucketsMs: buckets.map((upper, index) => ({
