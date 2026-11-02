@@ -29,6 +29,7 @@ import {
 import {
   EagleOperationResultsResponseDto,
   EagleOperationSummaryResponseDto,
+  EagleDuplicateAdmissionResponseDto,
 } from './eagle-operation-response.dto';
 import { Optional } from '@nestjs/common';
 import { SendEagleAssetsDto } from './eagle.dto';
@@ -129,11 +130,15 @@ export class EagleController {
     );
   }
   @Post('duplicates/scan')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleDuplicateAdmissionResponseDto })
   @UseGuards(BrowserOriginGuard)
   scanDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: DuplicateScanDto) {
     return this.duplicates!.scan(principal, input.operationId, input.onlyIfUnattempted);
   }
   @Post('duplicates/cleanup')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleDuplicateAdmissionResponseDto })
   @UseGuards(BrowserOriginGuard)
   cleanupDuplicates(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -142,7 +147,6 @@ export class EagleController {
     return this.duplicates!.cleanup(principal, input);
   }
   @HttpCode(202)
-  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('duplicates/ignore')
   @UseGuards(BrowserOriginGuard)
@@ -221,7 +225,6 @@ export class EagleController {
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('assets/batch/send')
   @HttpCode(202)
-  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   sendAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: SendEagleAssetsDto) {
     if (!this.operations) throw new Error('Asset operation service is unavailable');
@@ -236,7 +239,6 @@ export class EagleController {
 
   @Post('assets/batch/edit-renders')
   @HttpCode(202)
-  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @UseGuards(BrowserOriginGuard)
   batchEditRenders(
@@ -676,7 +678,6 @@ export class EagleController {
 
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @HttpCode(202)
-  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Delete('trash')
   @UseGuards(BrowserOriginGuard)
   emptyTrash(@CurrentPrincipal() principal: AuthPrincipal) {
@@ -689,7 +690,6 @@ export class EagleController {
 
   @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @HttpCode(202)
-  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
   @Post('trash/empty')
   @UseGuards(BrowserOriginGuard)
   emptyTrashCompat(@CurrentPrincipal() principal: AuthPrincipal) {

@@ -49,3 +49,10 @@ export class EagleOperationResultsResponseDto implements AssetOperationResults {
   receipts!: EagleOperationReceiptResponseDto[];
   @ApiProperty({ type: Number, nullable: true }) nextCursor!: number | null;
 }
+
+/** Legacy duplicate endpoints return a queue reference rather than a summary. */
+export class EagleDuplicateAdmissionResponseDto {
+  @ApiProperty({ type: String, nullable: true }) operationId!: string | null;
+  @ApiPropertyOptional({ type: [String] }) assetIds?: string[];
+  @ApiPropertyOptional() alreadyAttempted?: boolean;
+}

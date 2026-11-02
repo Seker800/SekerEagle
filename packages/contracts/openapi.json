@@ -576,8 +576,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleDuplicateAdmissionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -603,8 +610,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleDuplicateAdmissionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4913,8 +4927,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleDuplicateAdmissionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4940,8 +4961,15 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleDuplicateAdmissionResponseDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -9860,6 +9888,25 @@
             "type": "string"
           },
           "onlyIfUnattempted": {
+            "type": "boolean"
+          }
+        },
+        "required": ["operationId"]
+      },
+      "EagleDuplicateAdmissionResponseDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "assetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "alreadyAttempted": {
             "type": "boolean"
           }
         },

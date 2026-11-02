@@ -4065,6 +4065,11 @@ export interface components {
       operationId: string;
       onlyIfUnattempted?: boolean;
     };
+    EagleDuplicateAdmissionResponseDto: {
+      operationId: string | null;
+      assetIds?: string[];
+      alreadyAttempted?: boolean;
+    };
     DuplicateListDto: {
       /** @enum {string} */
       sameVisual?: 'true' | 'false';
@@ -5182,11 +5187,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -5203,11 +5210,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -7865,11 +7874,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
@@ -7886,11 +7897,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleDuplicateAdmissionResponseDto'];
+        };
       };
     };
   };
