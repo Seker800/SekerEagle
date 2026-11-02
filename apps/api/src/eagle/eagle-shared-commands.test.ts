@@ -209,3 +209,21 @@ test('background vector publication stops before writes when the queued actor ha
   );
   assert.equal(writes, 0);
 });
+
+test('long vector publication revalidates queued grant before committing its domain transaction', async () => {
+  let committed = false;
+  let guards = 0;
+  const transaction = { $executeRaw: async () => 1 };
+  const service = new EagleVectorService({
+    $transaction: async (work: (tx: typeof transaction) => Promise<unknown>) => {
+      const value = await work(transaction);
+      committed = true;
+      return value;
+    },
+  } as never, 'PHOTO');
+  await assert.rejects(service.scanMissingEmbeddings('owner', false, async () => {
+    if (++guards === 2) throw new NotFoundException('grant expired during publication');
+  }), NotFoundException);
+  assert.equal(guards, 2);
+  assert.equal(committed, false);
+});
