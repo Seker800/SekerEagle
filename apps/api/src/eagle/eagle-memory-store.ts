@@ -5,7 +5,10 @@ import { Pool, type PoolClient } from 'pg';
 import { LibraryMemoryIndex } from './eagle-memory-index';
 import type { MemoryAsset } from './eagle-memory-predicate';
 import type { LibraryIdentity } from './library-mode';
-import { loadResidentSemanticFolders, SemanticMemoryBudgetError } from './eagle-memory-semantic-store';
+import {
+  loadResidentSemanticFolders,
+  SemanticMemoryBudgetError,
+} from './eagle-memory-semantic-store';
 
 async function execute<T extends MemoryAsset>(
   connection: Pick<PoolClient, 'query'>,
@@ -35,15 +38,20 @@ export async function readMemoryAssets(
   scope: LibraryIdentity,
   ids?: string[],
   metadataFactFields?: Prisma.Sql,
+  update?: { tables: ReadonlySet<string>; rows: MemoryAsset[] },
 ): Promise<MemoryAsset[]> {
   if (ids?.length === 0) return [];
-  const scopedFor = (alias: string, key: string) => Prisma.sql`${Prisma.raw(alias)}."ownerId"=${scope.ownerId}
+  const scopedFor = (
+    alias: string,
+    key: string,
+  ) => Prisma.sql`${Prisma.raw(alias)}."ownerId"=${scope.ownerId}
     AND ${Prisma.raw(alias)}."libraryMode"=${scope.libraryMode}::"LibraryMode"
     ${ids ? Prisma.sql`AND ${Prisma.raw(alias)}.${Prisma.raw('"' + key + '"')} IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))` : Prisma.empty}`;
   const scoped = scopedFor('a', 'id');
   const relationScope = Prisma.sql`${scoped} AND ${scopedFor('c', 'assetId')}`;
   const metadataScope = Prisma.sql`${scoped} AND ${scopedFor('m', 'assetId')}`;
-  const assets = await execute<MemoryAsset>(
+  const needs = (...tables: string[]) => !update || tables.some(table => update.tables.has(table));
+  const assets = update ? update.rows.map(row => ({ ...row })) : await execute<MemoryAsset>(
     tx,
     Prisma.sql`
     SELECT a.id,a."ownerId",a."libraryMode",a."normalizedDisplayName",a."originalName",a.format,a."mimeType",
@@ -53,17 +61,15 @@ export async function readMemoryAssets(
     FROM "EagleAsset" a WHERE ${scoped}`,
   );
   const byId = new Map(assets.map((row) => [row.id, row]));
-  for (const row of assets)
-    Object.assign(row, {
-      annotation: null,
-      photoMetadata: null,
-      statisticsFact: null,
-      photoLocation: null,
-      manualTagLinks: [],
-      aiTagLinks: [],
-      photoFaces: [],
-      colorAnalyses: [],
-    });
+  for (const row of assets) {
+    if (needs('EagleAssetAnnotation')) row.annotation = null;
+    if (needs('EaglePhotoMetadata')) { row.photoMetadata = null; row.statisticsFact = null; }
+    if (needs('EaglePhotoLocation')) row.photoLocation = null;
+    if (needs('EagleAssetManualTag', 'EagleManualTag')) row.manualTagLinks = [];
+    if (needs('EagleAssetAiTag')) row.aiTagLinks = [];
+    if (needs('EaglePhotoFace')) row.photoFaces = [];
+    if (needs('EagleAssetColorAnalysis', 'EagleAssetColorSwatch')) row.colorAnalyses = [];
+  }
   const attach = async (sql: Prisma.Sql, field: string, many: boolean) => {
     const rows = await execute<MemoryAsset>(tx, sql);
     for (const { assetId, ...child } of rows) {
@@ -80,38 +86,39 @@ export async function readMemoryAssets(
     }
   };
   // Set-based reads avoid Prisma's full-library relation parameter expansion.
-  await attach(
+  if (needs('EagleAssetAnnotation')) await attach(
     Prisma.sql`SELECT c."assetId",c.description,c."sourceUrl" FROM "EagleAssetAnnotation" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope}`,
     'annotation',
     false,
   );
-  await attach(
+  if (needs('EaglePhotoMetadata')) await attach(
     Prisma.sql`SELECT m."assetId",m."cameraModel",m."lensModel",m."capturedAt" AT TIME ZONE 'UTC' "capturedAt",m.latitude,m.longitude,
       ${metadataFactFields ? Prisma.sql`CASE WHEN m."assetRevision"=a."mediaRevision" THEN (SELECT row_to_json(fact) FROM (SELECT ${metadataFactFields}) fact) ELSE NULL END` : Prisma.sql`NULL`} AS "statisticsFact"
       FROM "EaglePhotoMetadata" m JOIN "EagleAsset" a ON a.id=m."assetId" WHERE ${metadataScope}`,
     'photoMetadata',
     false,
   );
-  await attach(
+  if (needs('EaglePhotoLocation')) await attach(
     Prisma.sql`SELECT c."assetId",c.name FROM "EaglePhotoLocation" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope}`,
     'photoLocation',
     false,
   );
-  await attach(
+  if (needs('EagleAssetManualTag', 'EagleManualTag')) await attach(
     Prisma.sql`SELECT c."assetId",c."tagId",jsonb_build_object('normalizedName',t."normalizedName") tag FROM "EagleAssetManualTag" c JOIN "EagleAsset" a ON a.id=c."assetId" JOIN "EagleManualTag" t ON t.id=c."tagId" WHERE ${relationScope}`,
     'manualTagLinks',
     true,
   );
-  await attach(
+  if (needs('EagleAssetAiTag')) await attach(
     Prisma.sql`SELECT c."assetId",c."aiTagId",c.status FROM "EagleAssetAiTag" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope} AND c.status='ACTIVE'`,
     'aiTagLinks',
     true,
   );
-  await attach(
+  if (needs('EaglePhotoFace')) await attach(
     Prisma.sql`SELECT c."assetId",c."personId",c."isCurrent",c."assetRevision" FROM "EaglePhotoFace" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope} AND c."isCurrent"`,
     'photoFaces',
     true,
   );
+  if (!needs('EagleAssetColorAnalysis', 'EagleAssetColorSwatch')) return assets;
   const colors = await execute<MemoryAsset>(
     tx,
     Prisma.sql`
@@ -151,11 +158,17 @@ async function readMemorySnapshot(
   const revision = String(state.revision);
   const cached = latest();
   if (cached?.revision === revision) return cached;
-  const current = cached && BigInt(cached.revision) < BigInt(revision) ? cached.snapshot() : undefined;
+  const current =
+    cached && BigInt(cached.revision) < BigInt(revision) ? cached.snapshot() : undefined;
   const changes = current
-    ? await execute<{ revision: string; rebuild: boolean; assetIds: string[]; folderIds: string[] }>(
+    ? await execute<{
+        revision: string;
+        rebuild: boolean;
+        assetIds: string[];
+        folderIds: string[]; sources: string[];
+      }>(
         connection,
-        Prisma.sql`SELECT revision,rebuild,"assetIds","folderIds" FROM "EagleLibraryReadChange" WHERE ${scoped}
+        Prisma.sql`SELECT revision,rebuild,"assetIds","folderIds","sources" FROM "EagleLibraryReadChange" WHERE ${scoped}
       AND revision>${BigInt(current.revision)} AND revision<=${BigInt(revision)} ORDER BY revision`,
       )
     : [];
@@ -170,11 +183,16 @@ async function readMemorySnapshot(
     );
   const rebuild = !complete || changes.some((change) => change.rebuild);
   const ids = rebuild ? undefined : [...new Set(changes.flatMap((change) => change.assetIds))];
-  const rows = await readMemoryAssets(connection, scope, ids, metadataFactFields);
+  const tables = new Set(changes.flatMap(change => change.sources));
+  const partial = current && ids && changes.every(change => change.sources?.length || !change.assetIds.length) && !tables.has('EagleAsset');
+  const update = partial ? { tables, rows: ids.flatMap(id => { const row = current.get(id); return row ? [row] : []; }) } : undefined;
+  const rows = await readMemoryAssets(connection, scope, ids, metadataFactFields, update);
   const view = rebuild ? new LibraryMemoryIndex(scope.ownerId, scope.libraryMode) : current;
   if (ids) view.update(revision, ids, rows);
   else view.replace(revision, rows);
-  const folderIds = rebuild ? undefined : [...new Set(changes.flatMap(change => change.folderIds))];
+  const folderIds = rebuild
+    ? undefined
+    : [...new Set(changes.flatMap((change) => change.folderIds))];
   if (folderIds === undefined || folderIds.length) {
     try {
       const prepared = await loadResidentSemanticFolders(connection, scope, folderIds);
@@ -223,8 +241,10 @@ export class LibraryReadStore {
       void this.synchronize(scope).catch(() => undefined);
       throw new Error('Library read snapshot is not ready');
     }
-    const [state] = await execute<{ revision: string; enabled: boolean }>(this.db,
-      Prisma.sql`SELECT revision,enabled FROM "EagleLibraryReadState" WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"`);
+    const [state] = await execute<{ revision: string; enabled: boolean }>(
+      this.db,
+      Prisma.sql`SELECT revision,enabled FROM "EagleLibraryReadState" WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"`,
+    );
     if (!state?.enabled) throw new Error('Library read state unavailable');
     const latest = this.indexes.get(key)!;
     if (BigInt(latest.revision) >= BigInt(state.revision)) return latest;
@@ -263,46 +283,45 @@ export class LibraryReadStore {
     const baseline = this.indexes.get(key);
     this.readers.set(key, (this.readers.get(key) ?? 0) + 1);
     try {
-    const connection = await this.db.connect();
-    let inTransaction = false;
-    let view: LibraryMemoryIndex;
-    let result: T;
-    try {
-      signal?.throwIfAborted();
-      await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      inTransaction = true;
-      const timeoutMs = readerBudget('EAGLE_READER_DATABASE_TIMEOUT_MS', 60000);
-      await connection.query(`SET LOCAL statement_timeout='${timeoutMs}ms'`);
-      view = await readMemorySnapshot(
-        connection,
-        scope,
-        () => baseline,
-        this.metadataFactFields,
-      );
-      signal?.throwIfAborted();
-      result = await read(connection, view);
-      await connection.query('COMMIT');
-      inTransaction = false;
-    } catch (error) {
-      if (inTransaction) await connection.query('ROLLBACK').catch(() => undefined);
-      throw error;
-    } finally {
-      connection.release();
-    }
-    const current = this.indexes.get(key);
-    if (!current || BigInt(current.revision) < BigInt(view.revision)) {
-      this.indexes.set(key, view);
-    }
-    return result;
+      const connection = await this.db.connect();
+      let inTransaction = false;
+      let view: LibraryMemoryIndex;
+      let result: T;
+      try {
+        signal?.throwIfAborted();
+        await connection.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        inTransaction = true;
+        const timeoutMs = readerBudget('EAGLE_READER_DATABASE_TIMEOUT_MS', 60000);
+        await connection.query(`SET LOCAL statement_timeout='${timeoutMs}ms'`);
+        view = await readMemorySnapshot(connection, scope, () => baseline, this.metadataFactFields);
+        signal?.throwIfAborted();
+        result = await read(connection, view);
+        await connection.query('COMMIT');
+        inTransaction = false;
+      } catch (error) {
+        if (inTransaction) await connection.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        connection.release();
+      }
+      const current = this.indexes.get(key);
+      if (!current || BigInt(current.revision) < BigInt(view.revision)) {
+        this.indexes.set(key, view);
+      }
+      return result;
     } finally {
       const remaining = this.readers.get(key)! - 1;
       if (remaining) this.readers.set(key, remaining);
       else {
         this.readers.delete(key);
         const published = this.indexes.get(key);
-        if (published) await execute(this.db, Prisma.sql`DELETE FROM "EagleLibraryReadChange"
+        if (published)
+          await execute(
+            this.db,
+            Prisma.sql`DELETE FROM "EagleLibraryReadChange"
           WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode"
-            AND revision<=${BigInt(published.revision)}`);
+            AND revision<=${BigInt(published.revision)}`,
+          );
       }
     }
   }

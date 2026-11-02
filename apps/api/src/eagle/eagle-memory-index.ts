@@ -89,6 +89,9 @@ export class LibraryMemoryIndex {
     this.revision = revision;
     if (reorder) this.ordered.clear();
   }
+  get(id: string): MemoryAsset | undefined {
+    return this.rows.get(id);
+  }
   get size() {
     return this.rows.size;
   }

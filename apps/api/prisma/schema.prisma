@@ -398,6 +398,7 @@ model EagleLibraryReadChange {
   revision BigInt
   assetIds String[]
   folderIds String[] @default([])
+  sources String[] @default([])
   rebuild Boolean @default(false)
   state EagleLibraryReadState @relation(fields: [ownerId, libraryMode], references: [ownerId, libraryMode], onDelete: Cascade)
   @@id([ownerId, libraryMode, revision])

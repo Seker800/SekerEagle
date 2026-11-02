@@ -26,7 +26,7 @@ function database() {
   const query = async (sql: string) => {
     reads++;
     statements.push(sql);
-    if (sql.startsWith('SELECT revision'))
+    if (sql.startsWith('SELECT revision,enabled'))
       return { rows: [{ revision: String(revision), enabled: true }] };
     if (sql.includes('SELECT revision,rebuild'))
       return { rows: [{ revision: '2', rebuild: false, assetIds: ['a'], folderIds: [], sources }] };
