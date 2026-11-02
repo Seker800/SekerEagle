@@ -1,3 +1,4 @@
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import { requireApi } from './api-dependencies.mjs';
 import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
@@ -28,19 +29,19 @@ const config = { getOrThrow: () => 3600 };
 
 test('one SQL per access verification preserves immediate account, family, expiry and role checks', async () => {
   const measured = new PrismaClient({
-    adapter: createPrismaAdapter(),
+    adapter: observePrismaAdapter(({ query }) => {
+      // Query events are asynchronous; a completed Prisma promise is not an
+      // event-delivery fence. Account locks/COMMITs from session creation are excluded.
+      if (
+        /^SELECT\b/u.test(query.trimStart()) &&
+        (query.includes('"User"."email"') || /FROM\s+"User"\s+u\b/u.test(query))
+      )
+        nextAccountRead?.(query);
+    }),
     log: [{ emit: 'event', level: 'query' }],
   });
   let nextAccountRead;
-  measured.$on('query', ({ query }) => {
-    // Query events are asynchronous; a completed Prisma promise is not an
-    // event-delivery fence. Account locks/COMMITs from session creation are excluded.
-    if (
-      /^SELECT\b/u.test(query.trimStart()) &&
-      (query.includes('"User"."email"') || /FROM\s+"User"\s+u\b/u.test(query))
-    )
-      nextAccountRead?.(query);
-  });
+
   const sessions = new SessionTokenService(measured, jwt, config);
   const users = [];
   async function verify(token, accepted) {

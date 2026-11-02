@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
@@ -18,12 +18,12 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const profile = [];
 let profiling = false;
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter((e) => {
+    if (profiling) profile.push({ sql: e.query.slice(0, 100), ms: e.duration });
+  }),
   log: [{ emit: 'event', level: 'query' }],
 });
-db.$on('query', (e) => {
-  if (profiling) profile.push({ sql: e.query.slice(0, 100), ms: e.duration });
-});
+
 after(() => db.$disconnect());
 const vector = (x, y) => [x, y, ...Array(126).fill(0)];
 test('similarity reviews are global, private-scoped, persistent, versioned and survive merges', async () => {

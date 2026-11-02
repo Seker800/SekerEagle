@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import { performance } from 'node:perf_hooks';
@@ -18,11 +18,11 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 
 test('review score pages use ordered pending indexes with 30k synthetic suggestion rows', async () => {
   const db = new PrismaClient({
-    adapter: createPrismaAdapter(),
+    adapter: observePrismaAdapter((event) => queries.push(event)),
     log: [{ emit: 'event', level: 'query' }],
   });
   const queries = [];
-  db.$on('query', (event) => queries.push(event));
+
   const ownerId = randomUUID(),
     spaceId = randomUUID();
   try {
@@ -150,11 +150,11 @@ test('saved review stays model-independent and publishes forty items atomically 
     throw new Error('model offline');
   });
   const db = new PrismaClient({
-    adapter: createPrismaAdapter(),
+    adapter: observePrismaAdapter((event) => queries.push(event.query)),
     log: [{ emit: 'event', level: 'query' }],
   });
   const queries = [];
-  db.$on('query', (event) => queries.push(event.query));
+
   const ownerId = randomUUID(),
     spaceId = randomUUID();
   try {

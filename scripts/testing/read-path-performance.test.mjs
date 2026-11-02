@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import { randomUUID } from 'node:crypto';
@@ -17,14 +17,14 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter((e) => queries.push(e.query)),
   log: [{ emit: 'event', level: 'query' }],
 });
 const ownerId = randomUUID();
 const prefix = `${ownerId}-`;
 const assetId = (n) => `${prefix}asset-${String(n).padStart(5, '0')}`;
 let queries = [];
-db.$on('query', (e) => queries.push(e.query));
+
 before(async () => {
   await db.user.create({
     data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'synthetic-only' },

@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import { EAGLE_FILTER_FIELDS } from '../../packages/eagle-filter-core/dist/index.js';
 import { sampleImageSearch } from '../../apps/api/dist/eagle/eagle-search-preview.js';
 import assert from 'node:assert/strict';
@@ -27,14 +27,14 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter(({ query }) => {
+    if (measuring) measuredQueries.push(query);
+  }),
   log: [{ emit: 'event', level: 'query' }],
 });
 let measuring = false;
 const measuredQueries = [];
-db.$on('query', ({ query }) => {
-  if (measuring) measuredQueries.push(query);
-});
+
 const ownerId = randomUUID(),
   otherOwner = randomUUID();
 const ids = {

@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
 import { readFileSync } from 'node:fs';
@@ -86,13 +86,13 @@ try {
     { env },
   );
   db = new PrismaClient({
-    adapter: createPrismaAdapter(),
+    adapter: observePrismaAdapter(() => {
+      if (measuring) sqlCount++;
+    }),
     datasourceUrl: env.DATABASE_URL,
     log: [{ emit: 'event', level: 'query' }],
   });
-  db.$on('query', () => {
-    if (measuring) sqlCount++;
-  });
+
   let seed = 123456;
   const random = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;

@@ -1,4 +1,5 @@
 import { EAGLE_EMBEDDING_MODEL } from '@sekereagle/vector-core';
+import { ConflictException } from '@nestjs/common';
 import {
   Prisma,
   type LibraryMode,
@@ -24,6 +25,78 @@ export const transferFactIncludes = {
   colorAnalyses: { where: { status: 'COMPLETED', isCurrent: true }, include: { swatches: true } },
 } satisfies Prisma.EagleAssetInclude;
 type Source = Prisma.EagleAssetGetPayload<{ include: typeof transferFactIncludes }>;
+
+/** Load child facts only when their parent links exist; empty relations need no child queries. */
+export async function readTransferSources(
+  tx: Prisma.TransactionClient,
+  scope: { ownerId: string; libraryMode: LibraryMode },
+  where: Prisma.EagleAssetWhereInput,
+): Promise<Source[]> {
+  const rows = await tx.eagleAsset.findMany({
+    where: { AND: [scope, where] },
+    include: {
+      ...transferFactIncludes,
+      manualTagLinks: true,
+      aiTagLinks: true,
+      colorAnalyses: { where: transferFactIncludes.colorAnalyses.where },
+    },
+  });
+  const tagIds = [...new Set(rows.flatMap((row) => row.manualTagLinks.map((link) => link.tagId)))];
+  const aiIds = [...new Set(rows.flatMap((row) => row.aiTagLinks.map((link) => link.aiTagId)))];
+  const runIds = [
+    ...new Set(rows.flatMap((row) => row.aiTagLinks.map((link) => link.analysisRunId))),
+  ];
+  const analysisIds = rows.flatMap((row) => row.colorAnalyses.map((analysis) => analysis.id));
+  const [tags, aiTags, runs, swatches] = await Promise.all([
+    tagIds.length
+      ? tx.eagleManualTag.findMany({
+          where: { ...scope, id: { in: tagIds } },
+          include: transferFactIncludes.manualTagLinks.include.tag.include,
+        })
+      : [],
+    aiIds.length ? tx.eagleAiTag.findMany({ where: { ...scope, id: { in: aiIds } } }) : [],
+    runIds.length
+      ? tx.eagleAiAnalysisRun.findMany({ where: { ...scope, id: { in: runIds } } })
+      : [],
+    analysisIds.length
+      ? tx.eagleAssetColorSwatch.findMany({
+          where: { ...scope, analysisId: { in: analysisIds } },
+        })
+      : [],
+  ]);
+  const byId = <T extends { id: string }>(values: readonly T[]) =>
+    new Map(values.map((value) => [value.id, value]));
+  const tagsById = byId(tags),
+    aiTagsById = byId(aiTags),
+    runsById = byId(runs);
+  const swatchesByAnalysis = new Map<string, typeof swatches>();
+  for (const swatch of swatches) {
+    const group = swatchesByAnalysis.get(swatch.analysisId) ?? [];
+    group.push(swatch);
+    swatchesByAnalysis.set(swatch.analysisId, group);
+  }
+  function required<T>(values: ReadonlyMap<string, T>, id: string): T {
+    const value = values.get(id);
+    if (!value) throw new ConflictException('资源关联已变化，请重试。');
+    return value;
+  }
+  return rows.map((row) => ({
+    ...row,
+    manualTagLinks: row.manualTagLinks.map((link) => ({
+      ...link,
+      tag: required(tagsById, link.tagId),
+    })),
+    aiTagLinks: row.aiTagLinks.map((link) => ({
+      ...link,
+      aiTag: required(aiTagsById, link.aiTagId),
+      analysisRun: required(runsById, link.analysisRunId),
+    })),
+    colorAnalyses: row.colorAnalyses.map((analysis) => ({
+      ...analysis,
+      swatches: swatchesByAnalysis.get(analysis.id) ?? [],
+    })),
+  }));
+}
 const metadataKeys = [
   'processorVersion',
   'capturedAt',

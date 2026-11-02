@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -21,13 +21,13 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter(({ query, params }) =>
+    events.push({ query, parameters: JSON.parse(params).length }),
+  ),
   log: [{ emit: 'event', level: 'query' }],
 });
 const events = [];
-db.$on('query', ({ query, params }) =>
-  events.push({ query, parameters: JSON.parse(params).length }),
-);
+
 const owners = [];
 const schemas = [];
 const evidence = { statementBudgets: [], unknownKinds: [] };
@@ -92,13 +92,14 @@ async function unknownKindDatabase() {
   const url = new URL(process.env.DATABASE_URL);
   url.searchParams.set('schema', schema);
   const scoped = new PrismaClient({
-    adapter: createPrismaAdapter(url.toString()),
+    adapter: observePrismaAdapter(
+      ({ query, params }) => events.push({ query, parameters: JSON.parse(params).length }),
+      url.toString(),
+    ),
 
     log: [{ emit: 'event', level: 'query' }],
   });
-  scoped.$on('query', ({ query, params }) =>
-    events.push({ query, parameters: JSON.parse(params).length }),
-  );
+
   return scoped;
 }
 for (const mode of ['MATERIAL', 'PHOTO'])

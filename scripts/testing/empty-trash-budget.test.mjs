@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import console from 'node:console';
 import { setImmediate as flushQueries } from 'node:timers/promises';
 import assert from 'node:assert/strict';
@@ -17,11 +17,11 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter((event) => observed.push(event)),
   log: [{ emit: 'event', level: 'query' }],
 });
 let observed = [];
-db.$on('query', (event) => observed.push(event));
+
 after(() => db.$disconnect());
 async function fixture(mode) {
   const ownerId = randomUUID(),

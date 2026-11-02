@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import { publishStoredEmbedding } from '../../apps/worker/dist/embedding-publication.js';
 import { EAGLE_EMBEDDING_MODEL } from '../../packages/vector-core/dist/index.js';
 import { AssetOperationWakeup } from '../../apps/api/dist/asset-operation-wakeup.js';
@@ -23,17 +23,17 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter(({ query }) => {
+    queryCount++;
+    if (query.trim().startsWith('BEGIN')) transactionCount++;
+    if (query.includes('UPDATE "EagleObjectDeletion" d')) deletionClaimQuery = query;
+  }),
   log: [{ emit: 'event', level: 'query' }],
 });
 let queryCount = 0;
 let transactionCount = 0;
 let deletionClaimQuery = '';
-prisma.$on('query', ({ query }) => {
-  queryCount++;
-  if (query.trim().startsWith('BEGIN')) transactionCount++;
-  if (query.includes('UPDATE "EagleObjectDeletion" d')) deletionClaimQuery = query;
-});
+
 const owners = [];
 afterEach(async () => {
   const ownerIds = owners.splice(0);

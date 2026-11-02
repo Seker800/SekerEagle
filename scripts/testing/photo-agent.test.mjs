@@ -1,3 +1,4 @@
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
@@ -147,11 +148,11 @@ test('fifty photo tasks use three list queries and still disappear when a frozen
   for (let index = 0; index < 50; index++) tasks.push(await f.task());
   await f.proposal(tasks[0]);
   const measured = new PrismaClient({
-    adapter: createPrismaAdapter(),
+    adapter: observePrismaAdapter(() => queries++),
     log: [{ emit: 'event', level: 'query' }],
   });
   let queries = 0;
-  measured.$on('query', () => queries++);
+
   try {
     const service = new PhotoAgentService(measured, {});
     const result = await service.tasks(f.ownerId, { limit: 50 }, false);

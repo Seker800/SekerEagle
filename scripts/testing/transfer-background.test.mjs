@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { fork } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -26,11 +26,11 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter((event) => queries.push(event)),
   log: [{ emit: 'event', level: 'query' }],
 });
 let queries = [];
-prisma.$on('query', (event) => queries.push(event));
+
 after(() => prisma.$disconnect());
 async function owner() {
   const id = randomUUID();

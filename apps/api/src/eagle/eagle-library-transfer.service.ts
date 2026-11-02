@@ -9,7 +9,7 @@ import {
 import { isCameraRawMime } from '@sekereagle/library-core';
 import {
   copyTransferFacts,
-  transferFactIncludes,
+  readTransferSources,
   resolveTransferTagMappings,
   flushTransferTagAssignments,
   type TransferTagMappings,
@@ -430,10 +430,11 @@ export class EagleLibraryTransferService {
       }
       const sourceIds = items.map((item) => item.sourceId).sort();
       await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${sourceIds}::text[]) ORDER BY id FOR UPDATE`;
-      const sources = await tx.eagleAsset.findMany({
-        where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-        include: transferFactIncludes,
-      });
+      const sources = await readTransferSources(
+        tx,
+        { ownerId, libraryMode: this.sourceMode },
+        this.libraryModeWhere(ownerId, sourceIds, includePrivate),
+      );
       if (sources.length !== items.length)
         throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
       checkExpected(sources);

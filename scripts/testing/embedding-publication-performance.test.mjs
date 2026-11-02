@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import console from 'node:console';
 import { Buffer } from 'node:buffer';
@@ -24,11 +24,11 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter((event) => events.push(event)),
   log: [{ emit: 'event', level: 'query' }],
 });
 let events = [];
-prisma.$on('query', (event) => events.push(event));
+
 const ownerId = randomUUID();
 const scope = { ownerId, libraryMode: 'PHOTO' };
 const vector = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0));

@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -25,15 +25,15 @@ assert.equal(
   'cost fixture measures the default metadata work target',
 );
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter(({ query, params }) => {
+    events.push({ query, parameters: JSON.parse(params).length });
+  }),
   log: [{ emit: 'event', level: 'query' }],
 });
 const events = [];
 const owners = [];
 const objectCalls = [];
-db.$on('query', ({ query, params }) => {
-  events.push({ query, parameters: JSON.parse(params).length });
-});
+
 const report = {
   measuredAt: new Date().toISOString(),
   scope:

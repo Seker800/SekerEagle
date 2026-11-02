@@ -142,6 +142,9 @@ for (const sourceMode of ['PHOTO', 'MATERIAL'] as const)
         targetKey: `users/${ownerId}/assets/${targetId}/${r.id}.webp`,
       }));
       const source = {
+        manualTagLinks: [],
+        aiTagLinks: [],
+        colorAnalyses: [],
         id: sourceId,
         ownerId,
         libraryMode: sourceMode,

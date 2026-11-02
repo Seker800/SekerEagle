@@ -138,7 +138,7 @@ export async function executeDuplicateIndex(
         INSERT INTO "EagleDuplicateFingerprint" AS f
           ("assetId","ownerId","libraryMode","mediaRevision","processorVersion",hash,colors,contrast,"updatedAt")
         SELECT i.id,${item.ownerId},${libraryMode}::"LibraryMode",i.revision,${DUPLICATE_FINGERPRINT_VERSION},i.hash,i.colors,i.contrast,CURRENT_TIMESTAMP
-        FROM (VALUES ${Prisma.join(results.map((result) => Prisma.sql`(${result.id},${result.mediaRevision},${result.fingerprint.hash},${JSON.stringify(result.fingerprint.colors)}::jsonb,${result.fingerprint.contrast}::float8)`))}) AS i(id,revision,hash,colors,contrast)
+        FROM (VALUES ${Prisma.join(results.map((result) => Prisma.sql`(${result.id}::text,${result.mediaRevision}::int,${result.fingerprint.hash}::text,${JSON.stringify(result.fingerprint.colors)}::jsonb,${result.fingerprint.contrast}::float8)`))}) AS i(id,revision,hash,colors,contrast)
         JOIN "EagleAsset" a ON a.id=i.id AND a."ownerId"=${item.ownerId} AND a."libraryMode"=${libraryMode}::"LibraryMode"
           AND a."mediaRevision"=i.revision AND a."deletedAt" IS NULL AND a."purgeAfter" IS NULL AND NOT a."storageTransferredOut"
           AND (${item.operation.isPrivate} OR NOT a."isPrivate")

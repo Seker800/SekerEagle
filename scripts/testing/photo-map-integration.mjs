@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 import { log } from 'node:console';
 import { performance } from 'node:perf_hooks';
@@ -80,11 +80,11 @@ try {
     { env },
   );
   prisma = new PrismaClient({
-    adapter: createPrismaAdapter(env.DATABASE_URL),
+    adapter: observePrismaAdapter((event) => observedQueries.push(event.query), env.DATABASE_URL),
 
     log: [{ emit: 'event', level: 'query' }],
   });
-  prisma.$on('query', (event) => observedQueries.push(event.query));
+
   const owner = randomUUID(),
     other = randomUUID();
   await prisma.user.createMany({

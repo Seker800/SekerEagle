@@ -1,4 +1,4 @@
-import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
+import { observePrismaAdapter } from './database-query-probe.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -18,11 +18,11 @@ assertSafeRuntimeTarget({
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient({
-  adapter: createPrismaAdapter(),
+  adapter: observePrismaAdapter((event) => events.push(event)),
   log: [{ emit: 'event', level: 'query' }],
 });
 let events = [];
-db.$on('query', (event) => events.push(event));
+
 after(() => db.$disconnect());
 
 test('media job transition batches amortize triggers and preserve scoped evidence, rollback and wakeups', async () => {
