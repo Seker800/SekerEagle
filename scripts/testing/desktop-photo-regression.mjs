@@ -50,7 +50,10 @@ try {
   const page = await desktop.firstWindow();
   await page.goto(w.loginUrl);
   await page.getByRole('button', { name: '照片', exact: true }).waitFor({ timeout: 30000 });
-  assert.equal((await page.evaluate(() => globalThis.sekerDesktop.getAppInfo())).version, '0.1.8');
+  assert.equal(
+    (await page.evaluate(() => globalThis.sekerDesktop.getAppInfo())).version,
+    manifest.version,
+  );
   await desktop.evaluate(({ BrowserWindow }) => {
     globalThis.testDrags = [];
     for (const window of BrowserWindow.getAllWindows())
