@@ -442,3 +442,23 @@ it('retains a second destination intent arriving while the first window is in fl
     f.close();
   }
 });
+
+it('updates metadata cards across loaded pages once without replaying pages or changing their cursors', async () => {
+  const f = fixture();
+  const facts = vi.fn(async (_token: string, ids: readonly string[]) => ids.map((id) => ({ id, displayName: 'updated', rowVersion: 2, updatedAt: '2026-11-02T00:00:00Z', mediaRevision: 1 })));
+  const { createEagleApi } = await import('../../lib/eagle-api');
+  vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({ ...createEagleApi('PHOTO'), listEagleAssetFacts: facts } as never);
+  const completed = { ...summary('METADATA_COMMAND'), failed:0, errors: [], completed:2, state: 'COMPLETED' as const };
+  f.cache.beginOperation(completed.id, completed.kind, []);
+  mocks.results.mockResolvedValue({ operation:completed, revision:'v1', membership:[], receipts:[], nextCursor:null });
+  try {
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(facts).toHaveBeenCalledOnce();
+    expect(facts.mock.calls[0][1]).toContain('a-11');
+    expect(f.cache.store.get('a-11')?.displayName).toBe('updated');
+    expect(f.client.getQueryData(f.key)).toEqual(f.data);
+    expect(f.queryFn).not.toHaveBeenCalled();
+    await f.refresher.reconcile('PHOTO', completed);
+    expect(facts).toHaveBeenCalledOnce();
+  } finally { vi.restoreAllMocks(); f.close(); }
+});
