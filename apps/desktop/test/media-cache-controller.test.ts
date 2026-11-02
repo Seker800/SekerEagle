@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LibraryMediaSnapshot } from '../src/main/library-media-snapshot';
 import { MediaCacheController } from '../src/main/media-cache-controller';
 import { CacheEngine } from '../src/utility/cache/cache-engine';
 
@@ -28,6 +29,27 @@ describe('MediaCacheController', () => {
   afterEach(async () => {
     await engine.close();
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('reads cached files with current server-list evidence without a media round trip, and falls back after reset', async () => {
+    const identity = { ownerId: 'owner', deploymentId: 'd'.repeat(64) };
+    const fetchUpstream = vi.fn(async () => eligibleResponse('image'));
+    const snapshot = new LibraryMediaSnapshot({
+      authenticatedOwner: async () => identity,
+      fetch: async () => Response.json({ items: [{ id: assetId, libraryMode: 'MATERIAL', isPrivate: false, deletedAt: null, mediaRevision: 1, renditions: [{ id: renditionId, kind: 'THUMBNAIL', revision: 1, byteSize: 5, mimeType: 'image/webp' }] }] }),
+    });
+    const controller = new MediaCacheController({ serverUrl: 'https://example.com', cache: engine, authenticatedOwner: async () => identity, fetchUpstream, canReadLocal: (media, owner, file) => snapshot.allows(media, owner, file) });
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'cache') await engine.release(first.leaseId);
+    await snapshot.read('/api/eagle/assets');
+    const second = await controller.resolve(mediaUrl);
+    expect(second).toMatchObject({ source: 'cache', cacheResult: 'LOCAL' });
+    if (second.source === 'cache') await engine.release(second.leaseId);
+    expect(fetchUpstream).toHaveBeenCalledTimes(1);
+    snapshot.reset();
+    const third = await controller.resolve(mediaUrl);
+    if (third.source === 'cache') await engine.release(third.leaseId);
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
   });
 
   it('revalidates cached media authorization before every local-file hit', async () => {

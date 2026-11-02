@@ -20,6 +20,19 @@ describe('browser session recovery', () => {
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
   });
 
+  it('reads a desktop list exactly once through main, while mutations invalidate list evidence before fetch', async () => {
+    const events: string[] = [];
+    const readLibrary = vi.fn(async () => ({ status: 200, body: '{"items":[]}', contentType: 'application/json' }));
+    const resetMediaSnapshot = vi.fn(async () => { events.push('reset'); });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = { canReadLibrary: (p: string) => p === '/api/photos/assets', readLibrary, resetMediaSnapshot };
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => { events.push('fetch'); return jsonResponse({ ok: true }); });
+    await expect(request('/api/photos/assets')).resolves.toEqual({ items: [] });
+    expect(readLibrary).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+    await request('/api/photos/assets/batch/trash', { method: 'POST', body: '{}' });
+    expect(events).toEqual(['reset', 'fetch']);
+  });
+
   it('keeps normal requests short while both full-library face admission entry points wait', async () => {
     const deadlines = vi.spyOn(AbortSignal, 'timeout');
     const fetchMock = vi
