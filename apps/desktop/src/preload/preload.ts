@@ -21,11 +21,14 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
     assetIds: unknown;
     libraryMode: unknown;
   }): Promise<{ token: string }> {
-    const result = await ipcRenderer.invoke(
+    const result: unknown = await ipcRenderer.invoke(
       'desktop:prepare-library-asset-drag',
       parseLibraryDragRequest(input),
     );
-    return { token: parsePreparedDragToken(result?.token) };
+    if (!result || typeof result !== 'object' || !('token' in result)) {
+      throw new Error('原文件拖拽凭据无效。');
+    }
+    return { token: parsePreparedDragToken(result.token) };
   },
   refreshSession(): Promise<{ status: number; code: string | null }> {
     return ipcRenderer.invoke('desktop:refresh-session');

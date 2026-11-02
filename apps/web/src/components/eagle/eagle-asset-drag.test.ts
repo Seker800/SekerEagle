@@ -44,3 +44,13 @@ describe('getDesktopAssetDragBridge', () => {
     vi.unstubAllGlobals();
   });
 });
+
+it('never falls back to a legacy MATERIAL-only bridge for PHOTO originals', () => {
+  vi.stubGlobal('sekerDesktop', {
+    version: 1,
+    prepareAssetDrag: vi.fn(),
+    startPreparedAssetDrag: vi.fn(),
+  });
+  expect(getDesktopAssetDragBridge('PHOTO')).toBeNull();
+  vi.unstubAllGlobals();
+});

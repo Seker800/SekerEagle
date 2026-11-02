@@ -1094,9 +1094,22 @@ it('explains that blocked desktop WASM needs a client update instead of a blind 
 it('identifies a missing local LUT on a second device without discarding the saved edits', async () => {
   const module = await import('./photo-editor-render');
   vi.spyOn(module, 'createPhotoRenderer').mockReturnValue({
-    render: async () => { throw new Error('LUT_NOT_FOUND'); }, dispose: vi.fn(),
+    render: async () => {
+      throw new Error('LUT_NOT_FOUND');
+    },
+    dispose: vi.fn(),
   });
-  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} initialEdits={{ ...DEFAULT_PHOTO_EDITS, filter: 'lut:missing-on-windows' }} />);
-  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('当前设备缺少这张照片使用的自定义滤镜'));
+  render(
+    <PhotoEditor
+      source="/photo.png"
+      name="Photo.png"
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      initialEdits={{ ...DEFAULT_PHOTO_EDITS, filter: 'lut:missing-on-windows' }}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('当前设备缺少这张照片使用的自定义滤镜'),
+  );
   expect(screen.getByRole('button', { name: '保存到相册' })).toBeDisabled();
 });

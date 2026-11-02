@@ -266,6 +266,8 @@ it('accepts only the closed library drag request and rejects owner, URL and mode
     assetIds: [firstAssetId],
     libraryMode: 'PHOTO',
   });
+  for (const malformed of [null, [], { assetIds: [firstAssetId] }, { libraryMode: 'PHOTO' }])
+    expect(() => parse(malformed)).toThrow();
   for (const extra of [{ libraryMode: 'OTHER' }, { ownerId: 'other' }, { url: 'file:///private' }])
     expect(() => parse({ assetIds: [firstAssetId], libraryMode: 'PHOTO', ...extra })).toThrow();
 });

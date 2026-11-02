@@ -50,7 +50,7 @@ try {
   const page = await desktop.firstWindow();
   await page.goto(w.loginUrl);
   await page.getByRole('button', { name: '照片', exact: true }).waitFor({ timeout: 30000 });
-  assert.equal((await page.evaluate(() => window.sekerDesktop.getAppInfo())).version, '0.1.8');
+  assert.equal((await page.evaluate(() => globalThis.sekerDesktop.getAppInfo())).version, '0.1.8');
   await desktop.evaluate(({ BrowserWindow }) => {
     globalThis.testDrags = [];
     for (const window of BrowserWindow.getAllWindows())
@@ -68,6 +68,67 @@ try {
       };
   });
   const modes = [];
+  const layoutChecks = [];
+  const checkHeader = (dialog) =>
+    dialog
+      .locator('header')
+      .first()
+      .evaluate((header) => {
+        const rect = header.getBoundingClientRect();
+        const hit = globalThis.document.elementFromPoint(rect.left + rect.width / 2, rect.top + 12);
+        return { visible: header.contains(hit), top: rect.top, bottom: rect.bottom };
+      });
+  // Reproduce the old Windows title bar in Chromium, including its viewport overlay.
+  // The fixed overlays ignored body margin and rendered behind this drag region.
+  const oldWindowsCss = `body { height: calc(100vh - 32px) !important; margin-top: 32px !important; }
+    body::before { content: ''; position: fixed; inset: 0 138px auto 0;
+      height: 32px; z-index: 2147483647; background: #1b1c1f; -webkit-app-region: drag; }`;
+  const verifyLayout = async (dialog, label) => {
+    await dialog.waitFor();
+    assert.equal((await checkHeader(dialog)).visible, true, `${label}: header must receive hits`);
+    const key = await desktop.evaluate(
+      ({ BrowserWindow }, css) => BrowserWindow.getAllWindows()[0].webContents.insertCSS(css),
+      oldWindowsCss,
+    );
+    try {
+      assert.equal(
+        (await checkHeader(dialog)).visible,
+        false,
+        `${label}: reproduce old Windows overlap`,
+      );
+    } finally {
+      await desktop.evaluate(
+        ({ BrowserWindow }, key) =>
+          BrowserWindow.getAllWindows()[0].webContents.removeInsertedCSS(key),
+        key,
+      );
+    }
+    for (const [width, height] of [
+      [1000, 700],
+      [1440, 960],
+    ]) {
+      await desktop.evaluate(
+        ({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size),
+        [width, height],
+      );
+      await page.waitForFunction(
+        ({ width, height }) => globalThis.innerWidth === width && globalThis.innerHeight === height,
+        { width, height },
+      );
+      assert.equal(
+        (await checkHeader(dialog)).visible,
+        true,
+        `${label}: resized header must receive hits`,
+      );
+      const bounds = await dialog.boundingBox();
+      assert.ok(
+        bounds.y >= 0 && bounds.y + bounds.height <= height + 1,
+        `${label}: entire dialog fits`,
+      );
+    }
+    await page.screenshot({ path: join(out, `${label}.png`) });
+    layoutChecks.push(label);
+  };
   for (const [label, mode] of [
     ['照片', 'photos'],
     ['素材', 'eagle'],
@@ -94,9 +155,21 @@ try {
         break;
       }
       assert.ok(n < 100, 'actual original export must reach the OS drag boundary');
-      await new Promise((done) => setTimeout(done, 100));
+      await new Promise((done) => globalThis.setTimeout(done, 100));
     }
     await card.dispatchEvent('dragend');
+    await card.dblclick();
+    const viewer = page.getByRole('dialog');
+    await verifyLayout(viewer, `${mode}-viewer`);
+    await viewer.getByRole('button', { name: '编辑照片', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: '编辑照片', exact: true });
+    await verifyLayout(editor, `${mode}-editor`);
+    await editor.getByRole('button', { name: '关闭编辑器', exact: true }).click();
+    const remainingViewer = page
+      .getByRole('dialog')
+      .filter({ has: page.getByRole('button', { name: '关闭', exact: true }) });
+    if (await remainingViewer.count())
+      await remainingViewer.getByRole('button', { name: '关闭', exact: true }).click();
     modes.push(mode);
   }
   const worker = (await readdir('apps/web/dist/assets')).find((name) =>
@@ -112,18 +185,18 @@ try {
     page.evaluate(
       ({ url, edits }) =>
         new Promise((resolve, reject) => {
-          const worker = new Worker(url, { type: 'module' });
-          const timer = setTimeout(() => {
+          const worker = new globalThis.Worker(url, { type: 'module' });
+          const timer = globalThis.setTimeout(() => {
             worker.terminate();
             reject(new Error('Worker response timeout'));
           }, 15000);
           worker.onerror = () => {
-            clearTimeout(timer);
+            globalThis.clearTimeout(timer);
             worker.terminate();
             reject(new Error('Worker startup failure'));
           };
           worker.onmessage = ({ data }) => {
-            clearTimeout(timer);
+            globalThis.clearTimeout(timer);
             worker.terminate();
             resolve(data.error ? { error: data.error } : { pixels: Array.from(data.pixels) });
           };
@@ -162,6 +235,8 @@ try {
     passed: true,
     clientVersion: manifest.version,
     modes,
+    layoutChecks,
+    oldTitlebarOverlapReproduced: true,
     originalHashesPreserved: true,
     oldCspReproduced: true,
     currentCspPixelsVerified: true,
