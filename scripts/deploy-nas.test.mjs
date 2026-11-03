@@ -49,12 +49,16 @@ async function render(options = {}) {
 test('idle service health checks retain failure detection without constant NAS metadata flushes', async () => {
   const nas = await render();
   const reader = yaml.load(
-    await readFile(new URL('../deploy/mac/docker-compose.library-reader.yml', import.meta.url), 'utf8'),
+    await readFile(
+      new URL('../deploy/mac/docker-compose.library-reader.yml', import.meta.url),
+      'utf8',
+    ),
   );
   const checks = [
-    ...['postgres', 'minio', 'api', 'operations', 'worker', 'web'].map(
-      (name) => [name, nas.services[name].healthcheck],
-    ),
+    ...['postgres', 'minio', 'api', 'operations', 'worker', 'web'].map((name) => [
+      name,
+      nas.services[name].healthcheck,
+    ]),
     ['library-reader', reader.services['library-reader'].healthcheck],
   ];
   for (const [name, check] of checks) {

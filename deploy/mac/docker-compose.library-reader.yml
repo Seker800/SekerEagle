@@ -39,9 +39,9 @@ services:
         - node
         - -e
         - "fetch('http://127.0.0.1:3001/health',{headers:{authorization:'Bearer '+process.env.EAGLE_READER_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-      interval: 10s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 3s
-      retries: 6
+      retries: 3
     logging:
       driver: json-file
       options:

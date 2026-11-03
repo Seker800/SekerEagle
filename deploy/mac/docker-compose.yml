@@ -56,9 +56,9 @@ services:
       - sekereagle_postgres:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d sekereagle']
-      interval: 5s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 3s
-      retries: 20
+      retries: 3
     mem_limit: 2g
 
   minio:
@@ -80,9 +80,9 @@ services:
       - sekereagle_minio:/data
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
-      interval: 5s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 3s
-      retries: 20
+      retries: 3
     mem_limit: 2g
 
   minio-init:
@@ -144,9 +144,9 @@ services:
           '-e',
           "fetch('http://localhost:3000/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
-      interval: 10s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 5s
-      retries: 12
+      retries: 3
     mem_limit: 2g
 
   operations:
@@ -191,7 +191,7 @@ services:
           '-e',
           "process.kill(Number(require('node:fs').readFileSync('/tmp/sekereagle-asset-operations-ready','utf8')),0)",
         ]
-      interval: 10s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 5s
       retries: 3
     stop_grace_period: 90s
@@ -214,7 +214,7 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ['CMD', 'node', 'apps/worker/dist/worker-health.js', '--check']
-      interval: 15s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 5s
       retries: 3
       start_period: 60s
@@ -230,9 +230,9 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8080/']
-      interval: 10s
+      interval: ${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}
       timeout: 5s
-      retries: 6
+      retries: 3
     mem_limit: 256m
 
   gateway:
