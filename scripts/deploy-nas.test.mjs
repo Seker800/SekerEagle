@@ -61,12 +61,51 @@ test('idle service health checks retain failure detection without constant NAS m
     ]),
     ['library-reader', reader.services['library-reader'].healthcheck],
   ];
+  const probes = {
+    postgres: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d sekereagle_test'],
+    minio: ['CMD', 'wget', '-q', '--spider', 'http://localhost:9000/minio/health/live'],
+    api: [
+      'CMD',
+      'node',
+      '-e',
+      "fetch('http://localhost:3000/api/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+    ],
+    operations: [
+      'CMD',
+      'node',
+      '-e',
+      "process.kill(Number(require('node:fs').readFileSync('/tmp/sekereagle-asset-operations-ready','utf8')),0)",
+    ],
+    worker: ['CMD', 'node', 'apps/worker/dist/worker-health.js', '--check'],
+    web: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8080/'],
+    'library-reader': [
+      'CMD',
+      'node',
+      '-e',
+      "fetch('http://127.0.0.1:3001/health',{headers:{authorization:'Bearer '+process.env.EAGLE_READER_TOKEN}}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+    ],
+  };
+  const timeouts = {
+    postgres: '3s',
+    minio: '3s',
+    api: '5s',
+    operations: '5s',
+    worker: '5s',
+    web: '5s',
+    'library-reader': '3s',
+  };
   for (const [name, check] of checks) {
     assert.equal(check.interval, '${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}', name);
     assert.equal(check.retries, 3, `${name}: detect persistent failure within three probes`);
-    assert.ok(check.test.length > 0, `${name}: preserve the actual readiness check`);
+    assert.deepEqual(
+      check.test,
+      probes[name],
+      `${name}: probe must keep checking its real dependency`,
+    );
+    assert.equal(check.timeout, timeouts[name], `${name}: keep a bounded probe timeout`);
     assert.notEqual(check.disable, true, `${name}: health detection stays enabled`);
   }
+  assert.equal(checks.find(([name]) => name === 'worker')[1].start_period, '60s');
 });
 
 test('NAS staging isolates database, storage, network publishing and architecture', async () => {

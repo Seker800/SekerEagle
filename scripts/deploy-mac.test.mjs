@@ -6,6 +6,7 @@ import {
   assertGatewayBindings,
   composeArgs,
   expectedGatewayBindings,
+  healthWaitAttempts,
   isPrivateIpv4,
   parseEnv,
   selectComposeFiles,
@@ -27,6 +28,20 @@ JWT_ACCESS_SECRET=do-not-print
 
   assert.equal(env.get('SEKEREAGLE_GATEWAY_LAN_ADDRESS'), '192.168.31.139');
   assert.equal(env.get('JWT_ACCESS_SECRET'), 'do-not-print');
+});
+
+test('deployment health wait budget follows the configured probe interval', () => {
+  assert.equal(healthWaitAttempts('60s'), 105);
+  assert.equal(healthWaitAttempts('10s'), 30);
+  assert.equal(healthWaitAttempts('300s'), 465);
+  assert.equal(healthWaitAttempts('bogus'), 105);
+  for (const interval of ['10s', '60s', '90s', '300s']) {
+    const seconds = Number.parseInt(interval, 10);
+    assert.ok(
+      healthWaitAttempts(interval) * 2 >= seconds * 3,
+      `${interval}: must wait for three failed probes before reporting a deployment failure`,
+    );
+  }
 });
 
 test('automatically includes the LAN overlay when a LAN address is configured', () => {

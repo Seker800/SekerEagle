@@ -94,6 +94,18 @@ export function assertGatewayBindings(portBindings, lanAddress) {
   }
 }
 
+export function healthWaitAttempts(
+  interval = process.env.SEKEREAGLE_HEALTHCHECK_INTERVAL ?? '60s',
+  pollMs = 2_000,
+) {
+  const match = /^(\d+)s$/u.exec(String(interval).trim());
+  const seconds = match ? Number(match[1]) : 60;
+  // Three failed probes mark the service unhealthy; leave headroom so a slow first
+  // window is not reported as a deployment failure.
+  const budgetMs = Math.max(60_000, seconds * 3_000 + 30_000);
+  return Math.max(30, Math.ceil(budgetMs / pollMs));
+}
+
 function localIpv4Addresses() {
   return new Set(
     Object.values(networkInterfaces())
@@ -137,7 +149,7 @@ async function waitForReady(url, attempts = 30) {
 async function waitForServiceHealth(composeFiles, service) {
   const id = runDocker(composeArgs(composeFiles, ['ps', '-q', service]), { capture: true }).trim();
   if (!id) throw new Error(`${service} container was not created`);
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < healthWaitAttempts(); attempt++) {
     const state = runDocker(['inspect', '--format', '{{.State.Health.Status}}', id], {
       capture: true,
     }).trim();
