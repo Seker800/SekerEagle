@@ -268,6 +268,7 @@ try {
   for (const file of [
     'scripts/testing/read-path-performance.test.mjs',
     'scripts/testing/workspace-change-performance.test.mjs',
+    'scripts/testing/upload-recovery-performance.test.mjs',
     'scripts/testing/empty-trash-performance.test.mjs',
     'scripts/testing/empty-trash-budget.test.mjs',
     'scripts/testing/embedding-publication-performance.test.mjs',
