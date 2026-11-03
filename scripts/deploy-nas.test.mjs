@@ -46,6 +46,25 @@ async function render(options = {}) {
   return createNasStagingCompose(base, { revision: 'f8e4864739a9', ...options });
 }
 
+test('idle service health checks retain failure detection without constant NAS metadata flushes', async () => {
+  const nas = await render();
+  const reader = yaml.load(
+    await readFile(new URL('../deploy/mac/docker-compose.library-reader.yml', import.meta.url), 'utf8'),
+  );
+  const checks = [
+    ...['postgres', 'minio', 'api', 'operations', 'worker', 'web'].map(
+      (name) => [name, nas.services[name].healthcheck],
+    ),
+    ['library-reader', reader.services['library-reader'].healthcheck],
+  ];
+  for (const [name, check] of checks) {
+    assert.equal(check.interval, '${SEKEREAGLE_HEALTHCHECK_INTERVAL:-60s}', name);
+    assert.equal(check.retries, 3, `${name}: detect persistent failure within three probes`);
+    assert.ok(check.test.length > 0, `${name}: preserve the actual readiness check`);
+    assert.notEqual(check.disable, true, `${name}: health detection stays enabled`);
+  }
+});
+
 test('NAS staging isolates database, storage, network publishing and architecture', async () => {
   const original = JSON.stringify(base);
   const result = await render();
