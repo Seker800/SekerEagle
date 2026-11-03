@@ -35,9 +35,28 @@ test('empty replacement cleanup reads pending entries rather than 120k completed
       SELECT ${owner}||'-asset-'||n,${owner},CASE WHEN n%2=0 THEN 'MATERIAL'::"LibraryMode" ELSE 'PHOTO'::"LibraryMode" END,'history.jpg','history','history','image/jpeg','jpeg',1,'users/'||${owner}||'/assets/history/'||n,'READY',now() FROM generate_series(1,120000) n`;
     await db.$executeRawUnsafe('ANALYZE "EagleUploadSessionState"');
     await db.$executeRawUnsafe('ANALYZE "EagleAsset"');
+    // Exercise the production replacement query without recovering or deleting
+    // unfinished uploads belonging to other integration fixtures. The measured
+    // SQL stays global and unchanged; only this test's returned work is executed.
+    const recoveryDb = {
+      uploadSession: {
+        updateMany: async () => ({ count: 0 }),
+        findMany: async () => [],
+      },
+      eagleUploadSessionState: {
+        findMany: async (query) =>
+          (await db.eagleUploadSessionState.findMany(query)).filter((row) =>
+            row.uploadSessionId.startsWith(`${owner}-`),
+          ),
+        updateMany: async (query) => {
+          assert.ok(query.where.uploadSessionId.startsWith(`${owner}-`));
+          return db.eagleUploadSessionState.updateMany(query);
+        },
+      },
+    };
     for (const mode of ['MATERIAL', 'PHOTO']) {
       const recovery = new EagleUploadRecoveryService(
-        db,
+        recoveryDb,
         { recoverUploadSession: async () => assert.fail('completed history must not recover') },
         { finalizeUpload: async () => assert.fail('no unfinished uploads') },
         { deleteObject: async (key) => deleted.push(key) },
