@@ -11,7 +11,7 @@
     "build": "node --check main.mjs && node --check server.mjs && node --check credentials.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "zod": "^4.6.7"
   }
 }

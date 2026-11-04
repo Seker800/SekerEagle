@@ -15,12 +15,12 @@
     "@sekereagle/eagle-filter-core": "*",
     "@sekereagle/library-core": "*",
     "@silvia-odwyer/photon": "0.3.3",
-    "@tabler/icons-react": "^3.46.0",
-    "@tanstack/react-query": "^5.101.4",
+    "@tabler/icons-react": "^3.50.0",
+    "@tanstack/react-query": "^5.105.0",
     "@vitejs/plugin-react": "^4.4.1",
     "exifr": "7.1.3",
     "fast-png": "^8.0.0",
-    "i18next": "^26.4.0",
+    "i18next": "^26.6.0",
     "leaflet": "^1.9.4",
     "openseadragon": "^6.1.0",
     "protomaps-leaflet": "^5.1.0",
@@ -31,16 +31,16 @@
     "@sekereagle/photo-render-core": "*"
   },
   "devDependencies": {
-    "@napi-rs/canvas": "1.0.11",
+    "@napi-rs/canvas": "1.1.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.6",
     "@types/leaflet": "^1.9.21",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "fake-indexeddb": "^6.2.6",
+    "fake-indexeddb": "^6.2.7",
     "jsdom": "^27.0.1",
-    "react-router-dom": "^7.18.2",
+    "react-router-dom": "^7.18.5",
     "vitest": "^5.0.5"
   }
 }
