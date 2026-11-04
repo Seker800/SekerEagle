@@ -8,7 +8,7 @@ dependencies = [
   "huggingface-hub==2.2.0",
   "mlx-embeddings==0.1.0",
   "pillow==13.0.0",
-  "torch==2.14.1",
+  "torch==2.15.0",
   "torchvision==0.29.1",
   "uvicorn[standard]==0.52.4",
 ]
