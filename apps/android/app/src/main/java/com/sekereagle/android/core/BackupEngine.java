@@ -78,12 +78,13 @@ public final class BackupEngine {
     this.guard = guard;
   }
 
+  public static String fileKey(
+      String scope, String mode, String uri, long size, long modified) {
+    return scope + ":" + mode + ":" + BackupPolicy.digest(uri + "\n" + size + "\n" + modified);
+  }
+
   public static String fileKey(String scope, String mode, File file) {
-    return scope
-        + ":"
-        + mode
-        + ":"
-        + BackupPolicy.digest(file.uri + "\n" + file.size + "\n" + file.modified);
+    return fileKey(scope, mode, file.uri, file.size, file.modified);
   }
 
   public Result process(String scope, String mode, File file) throws Exception {

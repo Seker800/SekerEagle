@@ -11,6 +11,7 @@ import com.sekereagle.android.core.BackupEngine;
 import com.sekereagle.android.core.BackupExecutor;
 import com.sekereagle.android.core.BackupPermissionPolicy;
 import com.sekereagle.android.core.BackupRunPolicy;
+import com.sekereagle.android.core.BackupScanPolicy;
 import java.io.IOException;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -154,7 +155,6 @@ public final class BackupService extends Service {
       transferRows =
           resume ? new JSONArray(settings.value(scope, "transferRows", "[]")) : new JSONArray();
       guard();
-      journal.beginScan(scope, resume);
       settings.setFlag(scope, "scanOpen", true);
       refreshCounts(journal);
       String origin = settings.value(scope, "origin", "");
@@ -181,6 +181,13 @@ public final class BackupService extends Service {
       MediaCatalog catalog = new MediaCatalog(this);
       workers = new BackupExecutor(FILE_THREADS, FILES_IN_FLIGHT);
       final BackupExecutor fileWorkers = workers;
+      long scanStarted = System.currentTimeMillis() / 1000;
+      long[] state = store.scanState(scope);
+      String rulesHash = com.sekereagle.android.core.BackupPolicy.digest(rules.toString());
+      boolean rulesChanged = !rulesHash.equals(store.scanRulesHash(scope));
+      boolean full =
+          rulesChanged
+              || BackupScanPolicy.full(state[0], state[1], state[2], scanStarted, resume);
       update("正在扫描所选目录");
       catalog.scan(
           rules,
@@ -189,15 +196,39 @@ public final class BackupService extends Service {
             String fileKey =
                 mode
                     + ":"
-                    + com.sekereagle.android.core.BackupPolicy.digest(
-                        item.uri + "\n" + item.size + "\n" + item.modified);
-            if (item.modified > 0 && store.scanCompleted(scope, fileKey)) return;
-            fileWorkers.submit(() -> processItem(store, catalog, api, item, mode, fileKey));
+                    + com.sekereagle.android.core.BackupPolicy.digest(item.uri.toString());
+            String fingerprint = item.size + ":" + item.modified;
+            if (item.modified > 0) {
+              if (store.scanCompleted(scope, fileKey, fingerprint)) return;
+              String engineKey =
+                  BackupEngine.fileKey(
+                      scope, mode, item.uri.toString(), item.size, item.modified);
+              BackupEngine.Checkpoint checkpoint = store.load(engineKey);
+              if (checkpoint != null
+                  && checkpoint.confirmed
+                  && checkpoint.terminalError.isEmpty()) {
+                store.scanResult(scope, fileKey, fingerprint, "SKIPPED");
+                return;
+              }
+            }
+            fileWorkers.submit(
+                () -> processItem(store, catalog, api, item, mode, fileKey, fingerprint));
           },
-          this::guard);
+          this::guard,
+          full ? -1 : state[0],
+          full ? 0 : BackupScanPolicy.changedAfter(state[1]),
+          full ? -1 : state[0]);
       guard();
       fileWorkers.drain();
       guard();
+      long maxId = catalog.maxSeenId();
+      store.saveScanState(
+          scope,
+          maxId >= 0 ? maxId : state[0],
+          scanStarted,
+          BackupScanPolicy.nextFull(state[2], scanStarted, full),
+          rulesHash);
+      refreshCounts(journal);
       settings.setFlag(scope, "scanOpen", false);
       update(failed == 0 ? "备份完成" : "备份结束，有失败项可重试");
       settings.setValue(scope, "lastFinished", Long.toString(System.currentTimeMillis()));
@@ -250,10 +281,11 @@ public final class BackupService extends Service {
       ApiClient api,
       MediaCatalog.Item item,
       String mode,
-      String fileKey)
+      String fileKey,
+      String fingerprint)
       throws Exception {
     guard();
-    journal.scanResult(scope, fileKey, "CHECKING");
+    journal.scanResult(scope, fileKey, fingerprint, "CHECKING");
     refreshCounts(journal);
     update("正在检查：" + item.name);
     try {
@@ -270,7 +302,7 @@ public final class BackupService extends Service {
               () -> catalog.stable(item));
       BackupEngine.Result result = engine.process(scope, mode, source);
       guard();
-      journal.scanResult(scope, fileKey, result.name());
+      journal.scanResult(scope, fileKey, fingerprint, result.name());
       refreshCounts(journal);
       recordTransfer(item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
       update("正在扫描并备份");
@@ -279,19 +311,19 @@ public final class BackupService extends Service {
     } catch (ApiClient.Failure e) {
       if (e.status == 401 || e.status == 403) throw e;
       guard();
-      journal.scanResult(scope, fileKey, "FAILED");
+      journal.scanResult(scope, fileKey, fingerprint, "FAILED");
       refreshCounts(journal);
       failure(item.name, e);
       update("正在扫描并备份");
     } catch (SecurityException e) {
       guard();
-      journal.scanResult(scope, fileKey, "FAILED");
+      journal.scanResult(scope, fileKey, fingerprint, "FAILED");
       refreshCounts(journal);
       failure(item.name, new IOException("文件访问权限失效，请重新授权"));
       update("正在扫描并备份");
     } catch (Exception e) {
       guard();
-      journal.scanResult(scope, fileKey, "FAILED");
+      journal.scanResult(scope, fileKey, fingerprint, "FAILED");
       refreshCounts(journal);
       failure(item.name, e);
       update("正在扫描并备份");
@@ -422,7 +454,7 @@ public final class BackupService extends Service {
     settings.snapshot(
         scope,
         pendingMessage,
-        "扫描 " + seen + " · 已上传 " + uploaded + " · 已存在 " + skipped + " · 失败 " + failed,
+        "已记录 " + seen + " · 已上传 " + uploaded + " · 已存在 " + skipped + " · 失败 " + failed,
         errors.toString(),
         transferRows.toString());
     getSystemService(NotificationManager.class).notify(NOTICE, notification(pendingMessage));

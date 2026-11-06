@@ -14,7 +14,7 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
   }
 
   BackupJournal(Context context, String name) {
-    super(context, name, null, 3);
+    super(context, name, null, 4);
     setWriteAheadLoggingEnabled(true);
   }
 
@@ -26,6 +26,7 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
             + " NULL DEFAULT '')");
     db.execSQL("CREATE TABLE receipts (key TEXT PRIMARY KEY)");
     createProgress(db);
+    createScanState(db);
   }
 
   @Override
@@ -33,12 +34,29 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
     if (oldVersion < 2)
       db.execSQL("ALTER TABLE files ADD COLUMN terminal_error TEXT NOT NULL DEFAULT ''");
     if (oldVersion < 3) createProgress(db);
+    if (oldVersion < 4) {
+      // v3 created scan_progress without the fingerprint column.
+      if (oldVersion >= 3)
+        db.execSQL(
+            "ALTER TABLE scan_progress ADD COLUMN fingerprint TEXT NOT NULL DEFAULT ''");
+      createScanState(db);
+      // The old keys included size/modified; rebuild them once from the stable URI key.
+      db.execSQL("DELETE FROM scan_progress");
+      db.execSQL("DELETE FROM scan_runs");
+    }
+  }
+
+  private static void createScanState(SQLiteDatabase db) {
+    db.execSQL(
+        "CREATE TABLE IF NOT EXISTS scan_state (scope TEXT PRIMARY KEY, max_id INTEGER NOT NULL"
+            + " DEFAULT -1, scanned_at INTEGER NOT NULL DEFAULT 0, full_scanned_at INTEGER NOT"
+            + " NULL DEFAULT 0, rules_hash TEXT NOT NULL DEFAULT '')");
   }
 
   private static void createProgress(SQLiteDatabase db) {
     db.execSQL(
-        "CREATE TABLE scan_progress (scope TEXT NOT NULL, key TEXT NOT NULL, result TEXT NOT NULL,"
-            + " PRIMARY KEY(scope,key))");
+        "CREATE TABLE scan_progress (scope TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT"
+            + " NULL DEFAULT '', result TEXT NOT NULL, PRIMARY KEY(scope,key))");
     db.execSQL(
         "CREATE TABLE scan_runs (scope TEXT PRIMARY KEY, seen INTEGER NOT NULL, uploaded INTEGER"
             + " NOT NULL, skipped INTEGER NOT NULL, failed INTEGER NOT NULL)");
@@ -58,27 +76,55 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
             + " WHERE scope=old.scope; END");
   }
 
-  void beginScan(String scope, boolean resume) {
-    if (!resume) getWritableDatabase().delete("scan_progress", "scope=?", new String[] {scope});
-  }
-
-  boolean scanCompleted(String scope, String key) {
+  boolean scanCompleted(String scope, String key, String fingerprint) {
     try (Cursor cursor =
         getReadableDatabase()
             .rawQuery(
-                "SELECT 1 FROM scan_progress WHERE scope=? AND key=? AND result IN"
-                    + " ('UPLOADED','SKIPPED')",
-                new String[] {scope, key})) {
+                "SELECT 1 FROM scan_progress WHERE scope=? AND key=? AND fingerprint=? AND"
+                    + " result IN ('UPLOADED','SKIPPED')",
+                new String[] {scope, key, fingerprint})) {
       return cursor.moveToFirst();
     }
   }
 
-  void scanResult(String scope, String key, String result) {
+  void scanResult(String scope, String key, String fingerprint, String result) {
     getWritableDatabase()
         .execSQL(
-            "INSERT INTO scan_progress(scope,key,result) VALUES (?,?,?) ON CONFLICT(scope,key) DO"
-                + " UPDATE SET result=excluded.result",
-            new Object[] {scope, key, result});
+            "INSERT INTO scan_progress(scope,key,fingerprint,result) VALUES (?,?,?,?) ON"
+                + " CONFLICT(scope,key) DO UPDATE SET fingerprint=excluded.fingerprint,"
+                + " result=excluded.result",
+            new Object[] {scope, key, fingerprint, result});
+  }
+
+  long[] scanState(String scope) {
+    try (Cursor cursor =
+        getReadableDatabase()
+            .rawQuery(
+                "SELECT max_id,scanned_at,full_scanned_at FROM scan_state WHERE scope=?",
+                new String[] {scope})) {
+      if (!cursor.moveToFirst()) return new long[] {-1, 0, 0};
+      return new long[] {cursor.getLong(0), cursor.getLong(1), cursor.getLong(2)};
+    }
+  }
+
+  String scanRulesHash(String scope) {
+    try (Cursor cursor =
+        getReadableDatabase()
+            .rawQuery(
+                "SELECT rules_hash FROM scan_state WHERE scope=?", new String[] {scope})) {
+      return cursor.moveToFirst() ? cursor.getString(0) : "";
+    }
+  }
+
+  void saveScanState(
+      String scope, long maxId, long scannedAt, long fullScannedAt, String rulesHash) {
+    getWritableDatabase()
+        .execSQL(
+            "INSERT INTO scan_state(scope,max_id,scanned_at,full_scanned_at,rules_hash)"
+                + " VALUES (?,?,?,?,?) ON CONFLICT(scope) DO UPDATE SET"
+                + " max_id=excluded.max_id, scanned_at=excluded.scanned_at,"
+                + " full_scanned_at=excluded.full_scanned_at, rules_hash=excluded.rules_hash",
+            new Object[] {scope, maxId, scannedAt, fullScannedAt, rulesHash});
   }
 
   int[] scanCounts(String scope) {
@@ -144,13 +190,21 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
   }
 
   void retryFailures(String scope) {
-    getWritableDatabase()
-        .delete(
-            "files",
-            "key LIKE ? AND terminal_error <> ''",
-            new String[] {
-              scope + ":%",
-            });
+    SQLiteDatabase db = getWritableDatabase();
+    db.beginTransaction();
+    try {
+      db.delete(
+          "files",
+          "key LIKE ? AND terminal_error <> ''",
+          new String[] {
+            scope + ":%",
+          });
+      // Force the next scan to revisit failed files that are not new or changed.
+      db.delete("scan_state", "scope=?", new String[] {scope});
+      db.setTransactionSuccessful();
+    } finally {
+      db.endTransaction();
+    }
   }
 
   void forget(String scope) {
@@ -159,6 +213,7 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
     try {
       db.delete("scan_progress", "scope=?", new String[] {scope});
       db.delete("scan_runs", "scope=?", new String[] {scope});
+      db.delete("scan_state", "scope=?", new String[] {scope});
       db.delete("files", "key LIKE ?", new String[] {scope + ":%"});
       db.delete("receipts", "key LIKE ?", new String[] {scope + ":%"});
       db.setTransactionSuccessful();

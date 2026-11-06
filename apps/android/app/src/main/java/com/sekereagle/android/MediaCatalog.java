@@ -43,6 +43,7 @@ final class MediaCatalog {
   private final ContentResolver resolver;
   private final Map<String, JSONObject> formats = new HashMap<>();
   private final long maxImage, maxVideo;
+  private long maxSeenId = -1;
 
   MediaCatalog(Context context) throws Exception {
     resolver = context.getContentResolver();
@@ -79,20 +80,41 @@ final class MediaCatalog {
     void visit(Item item) throws Exception;
   }
 
+  long maxSeenId() {
+    return maxSeenId;
+  }
+
   private void media(MediaVisitor visitor) throws Exception {
+    media(-1, 0, -1, visitor);
+  }
+
+  private void media(
+      long afterId, long changedAfterSeconds, long maxIdBound, MediaVisitor visitor)
+      throws Exception {
+    if (afterId > maxSeenId) maxSeenId = afterId;
     Uri collection = MediaStore.Files.getContentUri("external");
     String[] projection = {
       "_id", "_display_name", "relative_path", "_size", "date_modified", "is_pending", "is_trashed"
     };
-    long after = -1;
+    long after = afterId;
     for (; ; ) {
       List<Item> batch = new ArrayList<>();
       int rows = 0;
+      StringBuilder selection = new StringBuilder("is_pending=0 AND is_trashed=0 AND _id>?");
+      List<String> args = new ArrayList<>();
+      args.add(Long.toString(after));
+      if (maxIdBound >= 0) {
+        selection.append(" AND _id<=?");
+        args.add(Long.toString(maxIdBound));
+      }
+      if (changedAfterSeconds > 0) {
+        selection.append(" AND date_modified>?");
+        args.add(Long.toString(changedAfterSeconds));
+      }
       android.os.Bundle arguments = new android.os.Bundle();
-      arguments.putString(
-          ContentResolver.QUERY_ARG_SQL_SELECTION, "is_pending=0 AND is_trashed=0 AND _id>?");
+      arguments.putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection.toString());
       arguments.putStringArray(
-          ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, new String[] {Long.toString(after)});
+          ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, args.toArray(new String[0]));
       arguments.putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, new String[] {"_id"});
       arguments.putInt(
           ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_ASCENDING);
@@ -102,6 +124,7 @@ final class MediaCatalog {
         while (rows < 256 && cursor.moveToNext()) {
           rows++;
           after = cursor.getLong(0);
+          if (after > maxSeenId) maxSeenId = after;
           String name = cursor.getString(1), path = cursor.getString(2);
           JSONObject entry = name == null ? null : format(name);
           if (entry == null || path == null || path.isEmpty()) continue;
@@ -123,11 +146,22 @@ final class MediaCatalog {
   }
 
   void scan(JSONArray rules, Visitor visitor, BackupEngine.Guard guard) throws Exception {
+    scan(rules, visitor, guard, -1, 0, -1);
+  }
+
+  void scan(
+      JSONArray rules,
+      Visitor visitor,
+      BackupEngine.Guard guard,
+      long afterId,
+      long changedAfterSeconds,
+      long maxIdBound)
+      throws Exception {
     boolean indexed = false;
     for (int i = 0; i < rules.length(); i++)
       if (rules.getJSONObject(i).getString("type").equals("media")) indexed = true;
-    if (indexed)
-      media(
+    if (indexed) {
+      MediaVisitor indexedVisitor =
           item -> {
             guard.check();
             JSONObject selected = null;
@@ -141,7 +175,15 @@ final class MediaCatalog {
                 selected = rule;
             }
             if (selected != null) visitor.visit(item, selected.getString("mode"));
-          });
+          };
+      if (afterId < 0) {
+        media(-1, 0, -1, indexedVisitor);
+      } else {
+        media(afterId, 0, -1, indexedVisitor);
+        if (changedAfterSeconds > 0 && maxIdBound >= 0)
+          media(-1, changedAfterSeconds, maxIdBound, indexedVisitor);
+      }
+    }
     for (int i = 0; i < rules.length(); i++) {
       guard.check();
       JSONObject rule = rules.getJSONObject(i);

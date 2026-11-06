@@ -220,4 +220,12 @@ public class BackupEngineTest {
     assertEquals(
         BackupEngine.Result.UPLOADED, engine(false).process("scope", "PHOTO", file("one", 13, 2)));
   }
+
+  @Test
+  public void stableFileKeyMatchesTheUriFingerprint() {
+    BackupEngine.File file = file("one", 12, 1);
+    assertEquals(
+        BackupEngine.fileKey("scope", "PHOTO", file),
+        BackupEngine.fileKey("scope", "PHOTO", "one", 12, 1));
+  }
 }

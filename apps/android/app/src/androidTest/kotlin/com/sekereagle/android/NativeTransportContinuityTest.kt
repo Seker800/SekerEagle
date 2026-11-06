@@ -229,19 +229,16 @@ class NativeTransportContinuityTest {
             }
             BackupJournal(context, name).use { journal ->
                 assertTrue(journal.contains("owner:PHOTO:old"))
-                journal.beginScan("owner", false)
-                journal.scanResult("owner", "PHOTO:a", "UPLOADED")
-                journal.scanResult("owner", "PHOTO:b", "CHECKING")
+                journal.scanResult("owner", "PHOTO:a", "1:1", "UPLOADED")
+                journal.scanResult("owner", "PHOTO:b", "1:1", "CHECKING")
                 assertArrayEquals(intArrayOf(2, 1, 0, 0), journal.scanCounts("owner"))
             }
             BackupJournal(context, name).use { journal ->
-                journal.beginScan("owner", true)
-                assertTrue(journal.scanCompleted("owner", "PHOTO:a"))
-                assertFalse(journal.scanCompleted("other", "PHOTO:a"))
-                journal.scanResult("owner", "PHOTO:b", "SKIPPED")
+                assertTrue(journal.scanCompleted("owner", "PHOTO:a", "1:1"))
+                assertFalse(journal.scanCompleted("other", "PHOTO:a", "1:1"))
+                assertFalse(journal.scanCompleted("owner", "PHOTO:a", "2:2"))
+                journal.scanResult("owner", "PHOTO:b", "1:1", "SKIPPED")
                 assertArrayEquals(intArrayOf(2, 1, 1, 0), journal.scanCounts("owner"))
-                journal.beginScan("owner", false)
-                assertArrayEquals(intArrayOf(0, 0, 0, 0), journal.scanCounts("owner"))
                 assertTrue(journal.contains("owner:PHOTO:old"))
             }
         } finally {
