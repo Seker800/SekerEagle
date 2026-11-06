@@ -8,6 +8,7 @@ import android.content.pm.ServiceInfo;
 import android.net.*;
 import android.os.*;
 import com.sekereagle.android.core.BackupEngine;
+import com.sekereagle.android.core.BackupExecutor;
 import com.sekereagle.android.core.BackupPermissionPolicy;
 import com.sekereagle.android.core.BackupRunPolicy;
 import java.io.IOException;
@@ -31,6 +32,9 @@ public final class BackupService extends Service {
   static final String CHANNEL = "mobile-backup";
   static final int NOTICE = 42;
   private static final ExecutorService executor = Executors.newSingleThreadExecutor();
+  // Two files overlap hashing/finalization with the other's upload while the shared part budget stays at three.
+  private static final int FILE_THREADS = 2;
+  private static final int FILES_IN_FLIGHT = 2;
   private final AtomicBoolean working = new AtomicBoolean();
   private volatile boolean cancelled;
   private volatile boolean retiring;
@@ -139,7 +143,11 @@ public final class BackupService extends Service {
 
   private void runBackup() {
     settings.setFlag(scope, "running", true);
-    try (BackupJournal journal = new BackupJournal(this)) {
+    BackupJournal journal = null;
+    BackupExecutor workers = null;
+    try {
+      journal = new BackupJournal(this);
+      final BackupJournal store = journal;
       boolean resume = settings.flag(scope, "scanOpen", false);
       refreshCounts(journal);
       errors = resume ? new JSONArray(settings.value(scope, "errors", "[]")) : new JSONArray();
@@ -171,6 +179,8 @@ public final class BackupService extends Service {
       if (BackupPermissionPolicy.requiresCompleteMediaAccess(mediaRuleCount(rules))
           && !hasMediaPermission()) throw new Hold("请授予完整的照片和视频访问权限，避免备份遗漏");
       MediaCatalog catalog = new MediaCatalog(this);
+      workers = new BackupExecutor(FILE_THREADS, FILES_IN_FLIGHT);
+      final BackupExecutor fileWorkers = workers;
       update("正在扫描所选目录");
       catalog.scan(
           rules,
@@ -181,52 +191,12 @@ public final class BackupService extends Service {
                     + ":"
                     + com.sekereagle.android.core.BackupPolicy.digest(
                         item.uri + "\n" + item.size + "\n" + item.modified);
-            if (item.modified > 0 && journal.scanCompleted(scope, fileKey)) return;
-            journal.scanResult(scope, fileKey, "CHECKING");
-            refreshCounts(journal);
-            update("正在检查：" + item.name);
-            try {
-              catalog.checkSize(item);
-              BackupEngine engine =
-                  new BackupEngine(
-                      journal, new MultipartTransport(api, mode, catalog, item), this::guard);
-              BackupEngine.File source =
-                  new BackupEngine.File(
-                      item.uri.toString(),
-                      item.size,
-                      item.modified,
-                      () -> catalog.hash(item, this::guard),
-                      () -> catalog.stable(item));
-              BackupEngine.Result result = engine.process(scope, mode, source);
-              guard();
-              journal.scanResult(scope, fileKey, result.name());
-              refreshCounts(journal);
-              recordTransfer(
-                  item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
-            } catch (Hold e) {
-              throw e;
-            } catch (ApiClient.Failure e) {
-              if (e.status == 401 || e.status == 403) {
-                throw e;
-              }
-              guard();
-              journal.scanResult(scope, fileKey, "FAILED");
-              refreshCounts(journal);
-              failure(item.name, e);
-            } catch (SecurityException e) {
-              guard();
-              journal.scanResult(scope, fileKey, "FAILED");
-              refreshCounts(journal);
-              failure(item.name, new IOException("文件访问权限失效，请重新授权"));
-            } catch (Exception e) {
-              guard();
-              journal.scanResult(scope, fileKey, "FAILED");
-              refreshCounts(journal);
-              failure(item.name, e);
-            }
-            update("正在扫描并备份");
+            if (item.modified > 0 && store.scanCompleted(scope, fileKey)) return;
+            fileWorkers.submit(() -> processItem(store, catalog, api, item, mode, fileKey));
           },
           this::guard);
+      guard();
+      fileWorkers.drain();
       guard();
       settings.setFlag(scope, "scanOpen", false);
       update(failed == 0 ? "备份完成" : "备份结束，有失败项可重试");
@@ -243,6 +213,8 @@ public final class BackupService extends Service {
       ApiClient api = activeApi;
       if (api != null) api.close();
       activeApi = null;
+      if (workers != null) workers.close();
+      if (journal != null) journal.close();
       if (wake != null && wake.isHeld()) wake.release();
       if (current == this) {
         retiring = true;
@@ -272,7 +244,61 @@ public final class BackupService extends Service {
     }
   }
 
-  private void refreshCounts(BackupJournal journal) {
+  private void processItem(
+      BackupJournal journal,
+      MediaCatalog catalog,
+      ApiClient api,
+      MediaCatalog.Item item,
+      String mode,
+      String fileKey)
+      throws Exception {
+    guard();
+    journal.scanResult(scope, fileKey, "CHECKING");
+    refreshCounts(journal);
+    update("正在检查：" + item.name);
+    try {
+      catalog.checkSize(item);
+      BackupEngine engine =
+          new BackupEngine(
+              journal, new MultipartTransport(api, mode, catalog, item), this::guard);
+      BackupEngine.File source =
+          new BackupEngine.File(
+              item.uri.toString(),
+              item.size,
+              item.modified,
+              () -> catalog.hash(item, this::guard),
+              () -> catalog.stable(item));
+      BackupEngine.Result result = engine.process(scope, mode, source);
+      guard();
+      journal.scanResult(scope, fileKey, result.name());
+      refreshCounts(journal);
+      recordTransfer(item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
+      update("正在扫描并备份");
+    } catch (Hold e) {
+      throw e;
+    } catch (ApiClient.Failure e) {
+      if (e.status == 401 || e.status == 403) throw e;
+      guard();
+      journal.scanResult(scope, fileKey, "FAILED");
+      refreshCounts(journal);
+      failure(item.name, e);
+      update("正在扫描并备份");
+    } catch (SecurityException e) {
+      guard();
+      journal.scanResult(scope, fileKey, "FAILED");
+      refreshCounts(journal);
+      failure(item.name, new IOException("文件访问权限失效，请重新授权"));
+      update("正在扫描并备份");
+    } catch (Exception e) {
+      guard();
+      journal.scanResult(scope, fileKey, "FAILED");
+      refreshCounts(journal);
+      failure(item.name, e);
+      update("正在扫描并备份");
+    }
+  }
+
+  private synchronized void refreshCounts(BackupJournal journal) {
     int[] counts = journal.scanCounts(scope);
     seen = counts[0];
     uploaded = counts[1];
@@ -280,12 +306,12 @@ public final class BackupService extends Service {
     failed = counts[3];
   }
 
-  private void failure(String name, Exception e) throws Exception {
+  private synchronized void failure(String name, Exception e) throws Exception {
     recordTransfer(name, "", "失败：" + safeMessage(e));
     if (errors.length() < 20) errors.put(name + "：" + safeMessage(e));
   }
 
-  private void recordTransfer(String name, String mode, String result) throws Exception {
+  private synchronized void recordTransfer(String name, String mode, String result) throws Exception {
     JSONArray recent = new JSONArray();
     for (int i = Math.max(0, transferRows.length() - 99); i < transferRows.length(); i++)
       recent.put(transferRows.get(i));
@@ -382,7 +408,7 @@ public final class BackupService extends Service {
     wakeUntil = now + 25 * 60 * 1000L;
   }
 
-  private void update(String message) {
+  private synchronized void update(String message) {
     if (current != this || cancelled) return;
     pendingMessage = message;
     long now = SystemClock.elapsedRealtime();
@@ -391,7 +417,7 @@ public final class BackupService extends Service {
     flushUpdate();
   }
 
-  private void flushUpdate() {
+  private synchronized void flushUpdate() {
     if (current != this) return;
     settings.snapshot(
         scope,
