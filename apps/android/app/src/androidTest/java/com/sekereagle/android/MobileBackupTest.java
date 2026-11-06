@@ -905,8 +905,8 @@ public final class MobileBackupTest {
     assertTrue(settings.value(scope, "counts", "").contains("已上传 1"));
     assertTrue(settings.value(scope, "counts", "").contains("已存在 1"));
     runScan();
+    assertTrue(settings.value(scope, "counts", "").contains("已记录 2"));
     assertTrue(settings.value(scope, "counts", "").contains("已上传 0"));
-    assertTrue(settings.value(scope, "counts", "").contains("已存在 2"));
     ContentValues renamed = new ContentValues();
     renamed.put(MediaStore.MediaColumns.DISPLAY_NAME, "renamed.png");
     context.getContentResolver().update(first, renamed, null, null);
@@ -1004,23 +1004,27 @@ public final class MobileBackupTest {
   @Test
   public void testRawAndVideoPreserveOriginalBytes() throws Exception {
     List<Uri> files = new ArrayList<>();
-    for (String[] format :
-        new String[][] {
-          {"synthetic.dng", "image/x-adobe-dng"},
-          {"synthetic.mp4", "video/mp4"},
-        }) {
-      byte[] bytes;
-      try (InputStream input = getInstrumentation().getContext().getAssets().open(format[0])) {
-        bytes = input.readAllBytes();
-      }
-      files.add(media(format[0], format[1], bytes, true));
+    String imagePath = path;
+    byte[] dng;
+    byte[] video;
+    try (InputStream input = getInstrumentation().getContext().getAssets().open("synthetic.dng")) {
+      dng = input.readAllBytes();
     }
-    BackupScreen.addRule(settings, scope, "media", path);
+    try (InputStream input = getInstrumentation().getContext().getAssets().open("synthetic.mp4")) {
+      video = input.readAllBytes();
+    }
+    files.add(media("synthetic.dng", "image/x-adobe-dng", dng, true));
+    String videoPath = "Movies/SekerEagleTest-" + UUID.randomUUID() + "/";
+    path = videoPath;
+    files.add(media("synthetic.mp4", "video/mp4", video, true));
+    path = imagePath;
+    BackupScreen.addRule(settings, scope, "media", imagePath);
+    BackupScreen.addRule(settings, scope, "media", videoPath);
     runScan();
     for (Uri uri : files) assertTrue(exists(uri, "photos"));
     runScan();
+    assertTrue(settings.value(scope, "counts", "").contains("已记录 2"));
     assertTrue(settings.value(scope, "counts", "").contains("已上传 0"));
-    assertTrue(settings.value(scope, "counts", "").contains("已存在 2"));
   }
 
   @Test
@@ -1035,7 +1039,7 @@ public final class MobileBackupTest {
     runScan();
     assertTrue(exists(downloaded, "photos"));
     assertFalse(exists(excluded, "photos"));
-    assertTrue(settings.value(scope, "counts", "").contains("扫描 1"));
+    assertTrue(settings.value(scope, "counts", "").contains("已记录 1"));
   }
 
   @Test

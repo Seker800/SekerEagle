@@ -4,6 +4,8 @@ import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 
 public class BackupEngineTest {
@@ -227,5 +229,71 @@ public class BackupEngineTest {
     assertEquals(
         BackupEngine.fileKey("scope", "PHOTO", file),
         BackupEngine.fileKey("scope", "PHOTO", "one", 12, 1));
+  }
+
+  @Test
+  public void identicalContentUploadsOnceUnderConcurrentWorkers() throws Exception {
+    Map<String, BackupEngine.Checkpoint> files = new ConcurrentHashMap<>();
+    Set<String> receipts = ConcurrentHashMap.newKeySet();
+    AtomicInteger uploads = new AtomicInteger();
+    CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1);
+    BackupEngine.Store concurrentStore =
+        new BackupEngine.Store() {
+          public BackupEngine.Checkpoint load(String key) {
+            return files.get(key);
+          }
+
+          public void save(String key, BackupEngine.Checkpoint value) {
+            files.put(key, value);
+          }
+
+          public boolean contains(String key) {
+            return receipts.contains(key);
+          }
+
+          public void confirm(String key, String content, BackupEngine.Checkpoint value) {
+            files.put(key, value);
+            receipts.add(content);
+          }
+        };
+    BackupEngine.Transport transport =
+        new BackupEngine.Transport() {
+          public boolean exists(String hash, long size) {
+            return false;
+          }
+
+          public void upload(
+              BackupEngine.File file,
+              BackupEngine.Checkpoint cp,
+              BackupEngine.Save save,
+              BackupEngine.Guard guard)
+              throws Exception {
+            uploads.incrementAndGet();
+            started.countDown();
+            release.await();
+          }
+        };
+    BackupEngine engine =
+        new BackupEngine(concurrentStore, transport, () -> {}, new BackupContentLock(8));
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      Future<BackupEngine.Result> first =
+          pool.submit(() -> engine.process("scope", "PHOTO", file("one", 12, 1)));
+      assertTrue(started.await(5, TimeUnit.SECONDS));
+      Future<BackupEngine.Result> second =
+          pool.submit(() -> engine.process("scope", "PHOTO", file("two", 12, 1)));
+      Thread.sleep(100);
+      release.countDown();
+      assertEquals(BackupEngine.Result.UPLOADED, first.get(5, TimeUnit.SECONDS));
+      assertEquals(BackupEngine.Result.SKIPPED, second.get(5, TimeUnit.SECONDS));
+      assertEquals(1, uploads.get());
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  public void contentLockRequiresAStripe() {
+    assertThrows(IllegalArgumentException.class, () -> new BackupContentLock(0));
   }
 }

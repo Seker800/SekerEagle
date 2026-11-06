@@ -1,5 +1,6 @@
 package com.sekereagle.android.core;
 
+import java.io.Closeable;
 import java.io.IOException;
 
 /** Platform-independent decisions. Android adapters own persistence, streams and HTTP. */
@@ -19,6 +20,10 @@ public final class BackupEngine {
 
   public interface Guard {
     void check() throws Exception;
+  }
+
+  public interface ContentLock {
+    Closeable lock(String content) throws Exception;
   }
 
   public interface Save {
@@ -71,11 +76,17 @@ public final class BackupEngine {
   private final Store store;
   private final Transport transport;
   private final Guard guard;
+  private final ContentLock contentLock;
 
   public BackupEngine(Store store, Transport transport, Guard guard) {
+    this(store, transport, guard, content -> () -> {});
+  }
+
+  public BackupEngine(Store store, Transport transport, Guard guard, ContentLock contentLock) {
     this.store = store;
     this.transport = transport;
     this.guard = guard;
+    this.contentLock = contentLock;
   }
 
   public static String fileKey(
@@ -106,13 +117,15 @@ public final class BackupEngine {
     guard.check();
     store.save(key, cp);
     String content = prefix + cp.hash + ":" + file.size;
-    boolean skipped = store.contains(content) || transport.exists(cp.hash, file.size);
-    if (!skipped) {
-      transport.upload(file, cp, value -> store.save(key, value), guard);
-      if (!file.stable.check()) throw new IOException("上传期间文件已变化，留待下次校验");
+    try (Closeable ignored = contentLock.lock(content)) {
+      boolean skipped = store.contains(content) || transport.exists(cp.hash, file.size);
+      if (!skipped) {
+        transport.upload(file, cp, value -> store.save(key, value), guard);
+        if (!file.stable.check()) throw new IOException("上传期间文件已变化，留待下次校验");
+      }
+      cp.confirmed = true;
+      store.confirm(key, content, cp);
+      return skipped ? Result.SKIPPED : Result.UPLOADED;
     }
-    cp.confirmed = true;
-    store.confirm(key, content, cp);
-    return skipped ? Result.SKIPPED : Result.UPLOADED;
   }
 }

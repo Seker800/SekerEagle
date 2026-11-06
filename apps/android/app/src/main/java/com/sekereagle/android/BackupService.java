@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.net.*;
 import android.os.*;
+import com.sekereagle.android.core.BackupContentLock;
 import com.sekereagle.android.core.BackupEngine;
 import com.sekereagle.android.core.BackupExecutor;
 import com.sekereagle.android.core.BackupPermissionPolicy;
@@ -36,6 +37,7 @@ public final class BackupService extends Service {
   // Two files overlap hashing/finalization with the other's upload while the shared part budget stays at three.
   private static final int FILE_THREADS = 2;
   private static final int FILES_IN_FLIGHT = 2;
+  private final BackupEngine.ContentLock contentLock = new BackupContentLock(64);
   private final AtomicBoolean working = new AtomicBoolean();
   private volatile boolean cancelled;
   private volatile boolean retiring;
@@ -79,6 +81,7 @@ public final class BackupService extends Service {
   private BackupSettings settings;
   private String scope = "";
   private int seen, uploaded, skipped, failed;
+  private int runSeen, runUploaded, runSkipped, runFailed;
   private JSONArray errors = new JSONArray();
   private JSONArray transferRows = new JSONArray();
   private PowerManager.WakeLock wake;
@@ -144,6 +147,7 @@ public final class BackupService extends Service {
 
   private void runBackup() {
     settings.setFlag(scope, "running", true);
+    resetRunCounts();
     BackupJournal journal = null;
     BackupExecutor workers = null;
     try {
@@ -198,8 +202,12 @@ public final class BackupService extends Service {
                     + ":"
                     + com.sekereagle.android.core.BackupPolicy.digest(item.uri.toString());
             String fingerprint = item.size + ":" + item.modified;
+            countRun(null);
             if (item.modified > 0) {
-              if (store.scanCompleted(scope, fileKey, fingerprint)) return;
+              if (store.scanCompleted(scope, fileKey, fingerprint)) {
+                countRun("SKIPPED");
+                return;
+              }
               String engineKey =
                   BackupEngine.fileKey(
                       scope, mode, item.uri.toString(), item.size, item.modified);
@@ -208,6 +216,7 @@ public final class BackupService extends Service {
                   && checkpoint.confirmed
                   && checkpoint.terminalError.isEmpty()) {
                 store.scanResult(scope, fileKey, fingerprint, "SKIPPED");
+                countRun("SKIPPED");
                 return;
               }
             }
@@ -230,7 +239,7 @@ public final class BackupService extends Service {
           rulesHash);
       refreshCounts(journal);
       settings.setFlag(scope, "scanOpen", false);
-      update(failed == 0 ? "备份完成" : "备份结束，有失败项可重试");
+      update(runFailed == 0 ? "备份完成" : "备份结束，有失败项可重试");
       settings.setValue(scope, "lastFinished", Long.toString(System.currentTimeMillis()));
     } catch (ApiClient.Failure e) {
       if (current == this && !cancelled && e.invalidatesCredential())
@@ -292,7 +301,7 @@ public final class BackupService extends Service {
       catalog.checkSize(item);
       BackupEngine engine =
           new BackupEngine(
-              journal, new MultipartTransport(api, mode, catalog, item), this::guard);
+              journal, new MultipartTransport(api, mode, catalog, item), this::guard, contentLock);
       BackupEngine.File source =
           new BackupEngine.File(
               item.uri.toString(),
@@ -305,6 +314,7 @@ public final class BackupService extends Service {
       journal.scanResult(scope, fileKey, fingerprint, result.name());
       refreshCounts(journal);
       recordTransfer(item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
+      countRun(result.name());
       update("正在扫描并备份");
     } catch (Hold e) {
       throw e;
@@ -314,20 +324,34 @@ public final class BackupService extends Service {
       journal.scanResult(scope, fileKey, fingerprint, "FAILED");
       refreshCounts(journal);
       failure(item.name, e);
+      countRun("FAILED");
       update("正在扫描并备份");
     } catch (SecurityException e) {
       guard();
       journal.scanResult(scope, fileKey, fingerprint, "FAILED");
       refreshCounts(journal);
       failure(item.name, new IOException("文件访问权限失效，请重新授权"));
+      countRun("FAILED");
       update("正在扫描并备份");
     } catch (Exception e) {
       guard();
       journal.scanResult(scope, fileKey, fingerprint, "FAILED");
       refreshCounts(journal);
       failure(item.name, e);
+      countRun("FAILED");
       update("正在扫描并备份");
     }
+  }
+
+  private synchronized void resetRunCounts() {
+    runSeen = runUploaded = runSkipped = runFailed = 0;
+  }
+
+  private synchronized void countRun(String result) {
+    runSeen++;
+    if ("UPLOADED".equals(result)) runUploaded++;
+    else if ("SKIPPED".equals(result)) runSkipped++;
+    else if ("FAILED".equals(result)) runFailed++;
   }
 
   private synchronized void refreshCounts(BackupJournal journal) {
@@ -454,7 +478,7 @@ public final class BackupService extends Service {
     settings.snapshot(
         scope,
         pendingMessage,
-        "已记录 " + seen + " · 已上传 " + uploaded + " · 已存在 " + skipped + " · 失败 " + failed,
+        "已记录 " + seen + " · 本次 " + runSeen + " · 已上传 " + runUploaded + " · 已存在 " + runSkipped + " · 失败 " + runFailed,
         errors.toString(),
         transferRows.toString());
     getSystemService(NotificationManager.class).notify(NOTICE, notification(pendingMessage));
