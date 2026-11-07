@@ -91,20 +91,21 @@
     "test:desktop-cache:electron": "npm run build --workspace @sekereagle/desktop && node scripts/testing/client-cache-electron.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1164.0",
     "@eslint/js": "^10.0.1",
+    "@nestjs/common": "12.3.2",
+    "@nestjs/core": "12.3.2",
+    "@nestjs/platform-express": "12.3.2",
+    "@prisma/client": "7.10.1",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.0.5",
     "deepmerge-ts": "^8.0.2",
     "eslint": "^10.14.0",
     "js-yaml": "^4.3.2",
     "prettier": "^3.6.2",
+    "prisma": "7.10.1",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.72.1",
-    "typescript-native": "npm:typescript@7.0.2",
-    "@prisma/client": "7.10.1",
-    "prisma": "7.10.1",
-    "@nestjs/common": "12.3.2",
-    "@nestjs/core": "12.3.2",
-    "@nestjs/platform-express": "12.3.2"
+    "typescript-native": "npm:typescript@7.0.2"
   }
 }
