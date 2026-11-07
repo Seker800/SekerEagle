@@ -50,8 +50,6 @@ test(
         network,
         '--network-alias',
         'minio',
-        '--publish',
-        '127.0.0.1::9000',
         '--tmpfs',
         '/data:rw,uid=1000,gid=1000',
         ...credentials.slice(0, 2).flatMap((value) => ['--env', value]),
@@ -60,16 +58,24 @@ test(
         '/data',
       ]);
       started = true;
-      const port = docker(['port', name, '9000']).stdout.trim().split(':').at(-1);
       let ready = false;
       for (let attempt = 0; attempt < 60; attempt++) {
-        try {
-          if ((await fetch(`http://127.0.0.1:${port}/minio/health/live`)).ok) {
-            ready = true;
-            break;
-          }
-        } catch {
-          // The container is still binding its listener.
+        if (
+          docker(
+            [
+              'exec',
+              name,
+              'wget',
+              '-q',
+              '-O',
+              '/dev/null',
+              'http://localhost:9000/minio/health/live',
+            ],
+            false,
+          ).status === 0
+        ) {
+          ready = true;
+          break;
         }
         await delay(500);
       }
