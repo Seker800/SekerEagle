@@ -26,6 +26,10 @@ jobs:
       - run: npm run ci:check
       - run: npm run test:worker-leases
       - run: npm run contracts:check
+      - name: Build pinned MinIO test images
+        run: |
+          docker build -f deploy/nas/minio.Dockerfile -t minio/minio:RELEASE.2025-04-22T22-12-26Z deploy/nas
+          docker build -f deploy/nas/mc.Dockerfile -t minio/mc:RELEASE.2025-04-16T18-13-26Z deploy/nas
       - name: Verify restricted storage credentials and private bucket
         run: SEKEREAGLE_TEST_STORAGE_POLICY=1 node --test scripts/testing/storage-policy.test.mjs
       - name: Install camera media test runtime
