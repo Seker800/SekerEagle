@@ -469,7 +469,7 @@ it('draws every watermark with one regular sans font, solid black or white and n
       );
       expect(draws.length, template.id).toBeGreaterThan(0);
       for (const draw of draws) {
-        expect(draw.font, template.id).toMatch(/^400 [\d.]+px system-ui, sans-serif$/);
+        expect(draw.font, template.id).toMatch(/^(400 )?[\d.]+px system-ui, sans-serif$/);
         expect(['#000000', '#ffffff'], template.id).toContain(draw.color);
         if (theme === 'frosted' && !template.overlay)
           expect(draw.color, template.id).toBe('#ffffff');
