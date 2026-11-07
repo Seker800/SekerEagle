@@ -96,13 +96,13 @@
   "dependencies": {
     "@sekereagle/library-core": "*",
     "@silvia-odwyer/photon": "0.3.3",
-    "@napi-rs/canvas": "1.0.11",
+    "@napi-rs/canvas": "1.1.0",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
     "typescript": "5.9.3",
     "ts-node": "^10.9.2",
-    "@types/node": "^26.6.5"
+    "@types/node": "^26.6.6"
   },
   "typesVersions": {
     "*": {
