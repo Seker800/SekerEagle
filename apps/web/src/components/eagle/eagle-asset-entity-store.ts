@@ -93,6 +93,18 @@ export class EagleAssetEntityStore {
     if (changed) this.#emit();
   }
 
+  /** Optimistic metadata patch; callers restore the previous entities on failure. */
+  patchMany(ids: readonly string[], patch: Partial<Pick<EagleAssetListItem, 'rating'>>) {
+    let changed = false;
+    for (const id of ids) {
+      const current = this.#entities.get(id);
+      if (!current) continue;
+      this.#entities.set(id, { ...current, ...patch });
+      changed = true;
+    }
+    if (changed) this.#emit();
+  }
+
   removeMany(ids: ReadonlySet<string>) {
     let changed = false;
     for (const id of ids) {

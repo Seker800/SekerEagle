@@ -18,6 +18,19 @@ test('renders original resolution rather than the phone preview, including crop 
   assert.equal(info.width, 800);
   assert.ok(info.height! > 800);
 });
+test('renders a straightened, inset crop without empty corners at server resolution', async () => {
+  const source = await sharp({
+    create: { width: 400, height: 200, channels: 4, background: '#4477aa' },
+  })
+    .png()
+    .toBuffer();
+  const output = await renderServerPhoto(source, { ...DEFAULT_PHOTO_EDITS, straighten: 10 }, {});
+  const info = await sharp(output).metadata();
+  assert.ok(info.width! >= 296 && info.width! <= 305, `width ${info.width}`);
+  assert.ok(info.height! >= 145 && info.height! <= 155, `height ${info.height}`);
+  const { channels } = await sharp(output).stats();
+  assert.equal(channels[3]!.min, 255);
+});
 test('rejects pixel budgets and missing personal LUTs rather than silently changing the edit', async () => {
   const source = await sharp({ create: { width: 64, height: 32, channels: 4, background: '#fff' } })
     .png()

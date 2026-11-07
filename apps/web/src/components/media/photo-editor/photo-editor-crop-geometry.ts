@@ -18,12 +18,12 @@ export function cropRectPatch(
     cropAspect: edits.cropRatio === 'free' ? cropAspect : edits.cropAspect,
     cropZoom: clamp(base.width / rect.width, 1, 16),
     cropX:
-      source.orientedWidth > rect.width
-        ? clamp(rect.x / (source.orientedWidth - rect.width), 0, 1)
+      source.areaWidth > rect.width
+        ? clamp((rect.x - source.areaX) / (source.areaWidth - rect.width), 0, 1)
         : 0.5,
     cropY:
-      source.orientedHeight > rect.height
-        ? clamp(rect.y / (source.orientedHeight - rect.height), 0, 1)
+      source.areaHeight > rect.height
+        ? clamp((rect.y - source.areaY) / (source.areaHeight - rect.height), 0, 1)
         : 0.5,
   };
 }
@@ -39,12 +39,19 @@ export function dragPhotoCrop(
   minimum = { width: 1, height: 1 },
 ): Partial<PhotoEdits> {
   const region = photoCrop(width, height, edits, false);
-  const { orientedWidth: w, orientedHeight: h } = region;
+  const {
+    areaX: leftBound,
+    areaY: topBound,
+    areaWidth: areaWidth,
+    areaHeight: areaHeight,
+  } = region;
+  const rightBound = leftBound + areaWidth,
+    bottomBound = topBound + areaHeight;
   let { x, y, width: cw, height: ch } = region;
   if (handle === 'move') {
     return {
-      cropX: w > cw ? clamp((x + dx) / (w - cw), 0, 1) : 0.5,
-      cropY: h > ch ? clamp((y + dy) / (h - ch), 0, 1) : 0.5,
+      cropX: areaWidth > cw ? clamp((x + dx - leftBound) / (areaWidth - cw), 0, 1) : 0.5,
+      cropY: areaHeight > ch ? clamp((y + dy - topBound) / (areaHeight - ch), 0, 1) : 0.5,
     };
   }
   const west = handle.includes('w'),
@@ -54,12 +61,12 @@ export function dragPhotoCrop(
   const right = x + cw,
     bottom = y + ch;
   if (edits.cropRatio === 'free') {
-    const minWidth = Math.min(cw, Math.max(w / 16, minimum.width));
-    const minHeight = Math.min(ch, Math.max(h / 16, minimum.height));
-    const left = west ? clamp(x + dx, 0, right - minWidth) : x;
-    const top = north ? clamp(y + dy, 0, bottom - minHeight) : y;
-    const r = east ? clamp(right + dx, left + minWidth, w) : right;
-    const b = south ? clamp(bottom + dy, top + minHeight, h) : bottom;
+    const minWidth = Math.min(cw, Math.max(areaWidth / 16, minimum.width));
+    const minHeight = Math.min(ch, Math.max(areaHeight / 16, minimum.height));
+    const left = west ? clamp(x + dx, leftBound, right - minWidth) : x;
+    const top = north ? clamp(y + dy, topBound, bottom - minHeight) : y;
+    const r = east ? clamp(right + dx, left + minWidth, rightBound) : right;
+    const b = south ? clamp(bottom + dy, top + minHeight, bottomBound) : bottom;
     return cropRectPatch(width, height, edits, {
       x: left,
       y: top,
@@ -73,8 +80,8 @@ export function dragPhotoCrop(
     const anchorX = west ? right : x,
       anchorY = north ? bottom : y;
     const maxWidth = Math.min(
-      west ? anchorX : w - anchorX,
-      (north ? anchorY : h - anchorY) * ratio,
+      west ? anchorX - leftBound : rightBound - anchorX,
+      (north ? anchorY - topBound : bottomBound - anchorY) * ratio,
     );
     const wanted =
       Math.abs(dx) / cw >= Math.abs(dy) / ch
@@ -92,8 +99,8 @@ export function dragPhotoCrop(
     const centerY = y + ch / 2,
       anchorX = west ? right : x;
     const maxWidth = Math.min(
-      west ? anchorX : w - anchorX,
-      2 * Math.min(centerY, h - centerY) * ratio,
+      west ? anchorX - leftBound : rightBound - anchorX,
+      2 * Math.min(centerY - topBound, bottomBound - centerY) * ratio,
     );
     cw = clamp(
       cw + (west ? -dx : dx),
@@ -107,8 +114,8 @@ export function dragPhotoCrop(
     const centerX = x + cw / 2,
       anchorY = north ? bottom : y;
     const maxHeight = Math.min(
-      north ? anchorY : h - anchorY,
-      (2 * Math.min(centerX, w - centerX)) / ratio,
+      north ? anchorY - topBound : bottomBound - anchorY,
+      (2 * Math.min(centerX - leftBound, rightBound - centerX)) / ratio,
     );
     ch = clamp(
       ch + (north ? -dy : dy),

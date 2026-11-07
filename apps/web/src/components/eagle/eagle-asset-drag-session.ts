@@ -94,8 +94,7 @@ export class DesktopAssetDragSession {
     this.gesture = null;
     this.outbound = false;
     this.nativeDragStarted = false;
-    if (this.safetyTimer) clearTimeout(this.safetyTimer);
-    this.safetyTimer = null;
+    this.clearSafetyTimer();
     this.onStatus(
       reason === 'cancelled' && pendingTotal > 0
         ? { phase: 'cancelled', total: pendingTotal }
@@ -160,6 +159,7 @@ export class DesktopAssetDragSession {
       this.bridge.startPreparedAssetDrag(this.prepared.token);
       this.prepared = null;
       this.nativeDragStarted = true;
+      this.clearSafetyTimer();
       this.onStatus(null);
       return true;
     } catch (error) {
@@ -169,8 +169,13 @@ export class DesktopAssetDragSession {
     }
   }
 
-  private armSafetyTimeout(): void {
+  private clearSafetyTimer(): void {
     if (this.safetyTimer) clearTimeout(this.safetyTimer);
+    this.safetyTimer = null;
+  }
+
+  private armSafetyTimeout(): void {
+    this.clearSafetyTimer();
     this.safetyTimer = setTimeout(() => {
       this.end();
       this.onError(new Error(t('原文件准备超时，请重新拖动。')));

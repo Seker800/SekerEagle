@@ -3,6 +3,7 @@ import { IconCrop, IconFlipHorizontal, IconRotateClockwise } from '@tabler/icons
 import { t } from '../../../i18n';
 import { CROP_RATIO_PAIRS, photoCrop, type CropRatio, type PhotoEdits } from './photo-editor-model';
 import { cropRectPatch } from './photo-editor-crop-geometry';
+import { PhotoAdjustmentControl } from './PhotoAdjustmentControl';
 import { PhotoToolPanel } from './PhotoToolPanel';
 import { ScrollableToolRow } from './ScrollableToolRow';
 import styles from './PhotoEditor.module.css';
@@ -18,13 +19,21 @@ export function PhotoCropPanel({
   compareControl,
   width,
   height,
+  disabled = false,
   onChange,
+  onSliderChange,
+  onStart,
+  onCommit,
 }: {
   edits: PhotoEdits;
   compareControl: ReactNode;
   width: number;
   height: number;
+  disabled?: boolean;
   onChange: (patch: Partial<PhotoEdits>) => void;
+  onSliderChange: (patch: Partial<PhotoEdits>) => void;
+  onStart: () => void;
+  onCommit: () => void;
 }) {
   const selectedRatioRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -80,12 +89,33 @@ export function PhotoCropPanel({
               <button
                 type="button"
                 onClick={() =>
-                  onChange({ ...CENTERED_CROP, cropRatio: 'free', rotation: 0, flip: false })
+                  onChange({
+                    ...CENTERED_CROP,
+                    cropRatio: 'free',
+                    rotation: 0,
+                    straighten: 0,
+                    flip: false,
+                  })
                 }
               >
                 {t('重置裁剪')}
               </button>
             </div>
+          </div>
+          <div className={styles.parameterRow}>
+            <PhotoAdjustmentControl
+              label={t('拉直')}
+              value={edits.straighten}
+              min={-45}
+              max={45}
+              step={0.1}
+              unit="°"
+              disabled={disabled}
+              onStart={onStart}
+              onCommit={onCommit}
+              onChange={(value) => onSliderChange({ straighten: value })}
+              onReset={() => onChange({ straighten: 0 })}
+            />
           </div>
           <p className={styles.parameterHint}>{t('拖动四角或边缘调整范围，拖动框内移动裁剪框')}</p>
         </>

@@ -185,7 +185,7 @@ export function PhotoWatermarkPanel({
   const navigation = useWatermarkNavigation(edits.watermark);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const selected = findWatermark(edits.watermark);
-  const { rotation, flip, cropRatio, cropZoom, cropAspect, cropX, cropY } = edits;
+  const { rotation, straighten, flip, cropRatio, cropZoom, cropAspect, cropX, cropY } = edits;
   const settingsButton = useRef<HTMLButtonElement>(null);
   const thumbnail = useMemo(() => {
     if (!source) return null;
@@ -193,6 +193,7 @@ export function PhotoWatermarkPanel({
     drawPhoto(oriented, source, {
       ...DEFAULT_PHOTO_EDITS,
       rotation,
+      straighten,
       flip,
       cropRatio,
       cropZoom,
@@ -206,7 +207,7 @@ export function PhotoWatermarkPanel({
     small.height = Math.max(1, Math.round(oriented.height * scale));
     small.getContext('2d')?.drawImage(oriented, 0, 0, small.width, small.height);
     return small;
-  }, [source, rotation, flip, cropRatio, cropZoom, cropAspect, cropX, cropY]);
+  }, [source, rotation, straighten, flip, cropRatio, cropZoom, cropAspect, cropX, cropY]);
   const closeSettings = () => {
     setSettingsOpen(false);
     settingsButton.current?.focus();

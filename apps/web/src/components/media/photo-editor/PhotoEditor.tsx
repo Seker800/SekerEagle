@@ -2,7 +2,7 @@ import { writePortableLut } from '@sekereagle/photo-render-core/portable-lut';
 import { loadPhotoLut } from './photo-lut-storage';
 import { useCompactLayout } from '../../../hooks/useCompactLayout';
 import { loadEditablePhoto, renderEditedPhotoFile } from './photo-editor-export';
-import type { PhotoEditRecipe } from '@sekereagle/library-core';
+import { photoEditRecipe, type PhotoEditRecipe } from '@sekereagle/library-core';
 import { ApiError } from '../../../lib/api-error';
 import { withinPhotoOutputBudget } from './photo-editor-limits';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -120,7 +120,7 @@ export function PhotoEditor({
       setDraftStatus(presentation === 'native' ? t('正在保存参数…') : t('正在自动保存…'));
       draftQueue.current = draftQueue.current
         .catch(() => undefined)
-        .then(() => latestDraft.current?.({ version: 1, edits }))
+        .then(() => latestDraft.current?.(photoEditRecipe(edits)))
         .then(
           () => {
             pendingDraftWrites.current--;
@@ -444,15 +444,12 @@ export function PhotoEditor({
     let savingToAlbum = false;
     try {
       if (onSaveRecipe) {
-        const recipe: PhotoEditRecipe = {
-          version: 1,
-          edits: {
-            ...edits,
-            watermarkCamera: edits.watermarkCamera ?? metadata.camera ?? null,
-            watermarkParameters: edits.watermarkParameters ?? metadata.parameters ?? null,
-            watermarkCapturedAt: edits.watermarkCapturedAt ?? metadata.capturedAt ?? null,
-          },
-        };
+        const recipe: PhotoEditRecipe = photoEditRecipe({
+          ...edits,
+          watermarkCamera: edits.watermarkCamera ?? metadata.camera ?? null,
+          watermarkParameters: edits.watermarkParameters ?? metadata.parameters ?? null,
+          watermarkCapturedAt: edits.watermarkCapturedAt ?? metadata.capturedAt ?? null,
+        });
         const lut = edits.filter.startsWith('lut:')
           ? writePortableLut(await loadPhotoLut(edits.filter.slice(4)))
           : undefined;
@@ -483,7 +480,7 @@ export function PhotoEditor({
         }
       }
       savingToAlbum = true;
-      const savedPhoto = await onSave(file, { version: 1, edits });
+      const savedPhoto = await onSave(file, photoEditRecipe(edits));
       pendingSaveRef.current = null;
       setSavedName(savedPhoto.name);
       setSavedId(savedPhoto.id);
@@ -598,16 +595,6 @@ export function PhotoEditor({
       onKeyDown={(event) => event.stopPropagation()}
     >
       <header className={styles.header} inert={confirmClose}>
-        <button
-          type="button"
-          className={styles.iconButton}
-          data-mobile-back
-          aria-label={t('关闭编辑器')}
-          disabled={busy}
-          onClick={requestClose}
-        >
-          <IconX size={20} />
-        </button>
         <div className={styles.history}>
           <button
             type="button"
@@ -638,7 +625,7 @@ export function PhotoEditor({
             title={t('复制编辑参数')}
             aria-label={t('复制编辑参数')}
             onClick={() => {
-              onCopyEdits({ version: 1, edits });
+              onCopyEdits(photoEditRecipe(edits));
               setCopied(true);
             }}
           >
@@ -673,6 +660,16 @@ export function PhotoEditor({
               : saved
                 ? t('已保存')
                 : t('保存到相册')}
+        </button>
+        <button
+          type="button"
+          className={styles.iconButton}
+          data-mobile-back
+          aria-label={t('关闭编辑器')}
+          disabled={busy}
+          onClick={requestClose}
+        >
+          <IconX size={21} />
         </button>
       </header>
       <main className={styles.stage} inert={confirmClose}>
@@ -873,7 +870,13 @@ export function PhotoEditor({
               edits={edits}
               width={imageWidth}
               height={imageHeight}
+              disabled={busy || !loaded}
               onChange={update}
+              onSliderChange={(patch) => update(patch, sliderStartRef.current === null)}
+              onStart={() => {
+                sliderStartRef.current ??= edits;
+              }}
+              onCommit={finishSlider}
             />
           )}
         </fieldset>
@@ -921,7 +924,7 @@ export function PhotoEditor({
                   if (onDraftChange) {
                     try {
                       await draftQueue.current;
-                      await onDraftChange({ version: 1, edits });
+                      await onDraftChange(photoEditRecipe(edits));
                     } catch {
                       setDraftStatus(t('草稿保存失败，请重试。'));
                       return;

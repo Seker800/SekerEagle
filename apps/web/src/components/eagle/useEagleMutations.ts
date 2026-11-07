@@ -1,5 +1,6 @@
 import { isAcceptedOperation, type OperationResponse } from '../../lib/accepted-operation';
 import { mergeEagleAssetFacts } from './eagle-asset-facts';
+import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { useEnqueueAssetOperation } from './useAssetOperations';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -45,6 +46,8 @@ export function useEagleMutations(
   callbacks: EagleMutationCallbacks,
 ) {
   const {
+    ownerId,
+    libraryMode,
     api: {
       batchChangeEagleManualTags,
       batchUpdateEagleAssets,
@@ -64,6 +67,7 @@ export function useEagleMutations(
 
   const enqueueOperation = useEnqueueAssetOperation();
   const queryClient = useQueryClient();
+  const assetStore = getEagleWorkspaceCache(queryClient, ownerId, libraryMode).store;
   const invalidate = (...queryKeysToInvalidate: QueryKey[]) =>
     Promise.all(
       queryKeysToInvalidate.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
@@ -96,6 +100,22 @@ export function useEagleMutations(
     assets.forEach(({ assetId, rowVersion }) => {
       latestVersions.set(assetId, Math.max(latestVersions.get(assetId) ?? 0, rowVersion));
     });
+  };
+
+  const patchRating = (assets: EagleAssetVersion[], rating: number | null) => {
+    const ids = assets.map((asset) => asset.assetId);
+    const entities = new Map(ids.map((id) => [id, assetStore.get(id)]));
+    const details = ids.flatMap((id) =>
+      queryClient.getQueriesData<EagleAsset>({ queryKey: queryKeys.assetDetailPrefix(id) }),
+    );
+    const nextRating = rating as EagleAsset['rating'];
+    assetStore.patchMany(ids, { rating: nextRating });
+    for (const id of ids)
+      queryClient.setQueriesData<EagleAsset>(
+        { queryKey: queryKeys.assetDetailPrefix(id) },
+        (current) => (current ? { ...current, rating: nextRating } : current),
+      );
+    return { entities, details };
   };
 
   const ratingMutation = useMutation({
@@ -132,16 +152,24 @@ export function useEagleMutations(
       }
       return { asset: null, versions: result.assets };
     },
-    onSuccess: async (result) => {
+    onMutate: ({ assets, rating }) => patchRating(assets, rating),
+    onError: (_error, _variables, context) => {
+      if (!context) return;
+      for (const entity of context.entities.values()) if (entity) assetStore.upsertMany([entity]);
+      for (const [queryKey, data] of context.details) queryClient.setQueryData(queryKey, data);
+    },
+    onSuccess: (result) => {
       if (isAcceptedOperation(result)) return;
       const { asset, versions } = result;
       rememberVersions(versions);
-      if (asset)
+      if (asset) {
+        assetStore.upsertMany([asset]);
         queryClient.setQueriesData<EagleAsset>(
           { queryKey: queryKeys.assetDetailPrefix(asset.id) },
           (current) => (current ? mergeEagleAssetFacts(current, asset).asset : current),
         );
-      await invalidate(queryKeys.assets, queryKeys.assetDetails);
+      }
+      void invalidate(queryKeys.assets, queryKeys.assetDetails);
     },
   });
   const metadataMutation = useMutation({

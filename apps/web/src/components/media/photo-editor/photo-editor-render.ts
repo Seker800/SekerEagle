@@ -160,6 +160,7 @@ export function createPhotoRenderer() {
                 'cropX',
                 'cropY',
                 'rotation',
+                'straighten',
                 'flip',
               ].includes(key)
             ),

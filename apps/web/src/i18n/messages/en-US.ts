@@ -2034,6 +2034,7 @@ export const enUS = {
   滤镜强度: 'Filter intensity',
   构图: 'Composition',
   旋转: 'Rotate',
+  拉直: 'Straighten',
   镜像: 'Mirror',
   裁剪比例: 'Crop ratio',
   原始比例: 'Original ratio',

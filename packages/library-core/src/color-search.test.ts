@@ -45,6 +45,19 @@ test('exact top-two matches retain Eagle exception and minimum dominant area', (
   assert.equal(paletteColorScore('#ffffff', []), null);
 });
 
+test('grain or texture regions below the dominant area floor never select a photo', () => {
+  const palette = [swatch('#803030', 0.8), swatch('#3288ad', 0.2)];
+  assert.equal(paletteColorScore('#2e86ab', palette), null);
+  assert.equal(
+    paletteColorScore('#2e86ab', [
+      swatch('#803030', 0.6),
+      swatch('#3288ad', 0.24),
+      swatch('#7fa7b8', 0.16),
+    ]),
+    null,
+  );
+});
+
 test('score is color distance rather than descending occupied area', () => {
   const lowArea = paletteColorScore('#ffffff', [swatch('#fcfcfc', 0.4), swatch('#aaaaaa', 0.35)]);
   const highArea = paletteColorScore('#ffffff', [swatch('#dddddd', 0.9), swatch('#040404', 0.1)]);

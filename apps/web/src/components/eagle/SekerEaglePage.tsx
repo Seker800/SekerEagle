@@ -77,6 +77,7 @@ import {
   IconDownload,
   IconLayoutGrid,
   IconLayoutSidebarRight,
+  IconLoader2,
   IconLock,
   IconPhoto,
   IconMapPin,
@@ -396,7 +397,10 @@ export function SekerEaglePage({
     () => !privateVisible && (workspaceCache.browse?.isInspectorVisible ?? false),
   );
   const [isDragging, setIsDragging] = useState(false);
-  const [originalFileError, setOriginalFileError] = useState<string | null>(null);
+  const [originalFileError, setOriginalFileError] = useState<{
+    message: string;
+    id: number;
+  } | null>(null);
   const [assetDragStatus, setAssetDragStatus] = useState<DesktopAssetDragStatus>(null);
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
@@ -427,6 +431,11 @@ export function SekerEaglePage({
     setAssetDragStatus(null);
     setAiTagReferenceRequested(false);
   }, [ownerId, libraryMode]);
+  useEffect(() => {
+    if (!originalFileError) return undefined;
+    const timer = window.setTimeout(() => setOriginalFileError(null), 6_000);
+    return () => window.clearTimeout(timer);
+  }, [originalFileError]);
   const workspaceSection = getWorkspaceSection(libraryView);
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
@@ -848,6 +857,7 @@ export function SekerEaglePage({
         : undefined,
     [selectedAssetIds, assetsById],
   );
+  const pendingRating = ratingMutation.isPending ? ratingMutation.variables?.rating : undefined;
   const manualTags = manualTagsQuery.data ?? [];
   const selectedManualTagSummaries = useMemo(() => {
     const tagsById = new Map<
@@ -1204,7 +1214,11 @@ export function SekerEaglePage({
             desktopAssetDragBridge,
             (error) => {
               setAssetDragStatus(null);
-              setOriginalFileError(error instanceof Error ? error.message : t('原文件拖出失败。'));
+              const message = error instanceof Error ? error.message : t('原文件拖出失败。');
+              setOriginalFileError((current) => ({
+                message,
+                id: (current?.id ?? 0) + 1,
+              }));
             },
             setAssetDragStatus,
           )
@@ -1317,7 +1331,10 @@ export function SekerEaglePage({
       () => {
         setAssetContextMenu(null);
         setIsBatchDownloading(false);
-        setOriginalFileError(t('批量下载原文件失败。'));
+        setOriginalFileError((current) => ({
+          message: t('批量下载原文件失败。'),
+          id: (current?.id ?? 0) + 1,
+        }));
       },
     );
   };
@@ -2145,8 +2162,20 @@ export function SekerEaglePage({
                 </div>
               )}
               {originalFileError && (
-                <div className={styles.errorBar} role="alert">
-                  {originalFileError}
+                <div
+                  className={`${styles.errorBar} ${styles.dismissibleError}`}
+                  role="alert"
+                  key={originalFileError.id}
+                >
+                  <span>{originalFileError.message}</span>
+                  <button
+                    type="button"
+                    aria-label={t('关闭')}
+                    title={t('关闭')}
+                    onClick={() => setOriginalFileError(null)}
+                  >
+                    <IconX size={14} />
+                  </button>
                 </div>
               )}
               {color && colorCoverage && colorCoverage.percentage < 100 ? (
@@ -2753,6 +2782,7 @@ export function SekerEaglePage({
                             value1: rating,
                           })}
                           disabled={isSelectedAssetReadOnly || ratingMutation.isPending}
+                          aria-busy={pendingRating === rating}
                           onClick={() =>
                             ratingMutation.mutate({
                               assets: selectedAssetVersions,
@@ -2764,6 +2794,9 @@ export function SekerEaglePage({
                             <IconStarFilled size={19} />
                           ) : (
                             <IconStar size={19} />
+                          )}
+                          {pendingRating === rating && (
+                            <IconLoader2 className={styles.ratingPending} size={10} />
                           )}
                         </button>
                       ))}

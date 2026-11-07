@@ -16,7 +16,7 @@ export function drawPhoto(
     (crop ? -region.y : 0) + region.orientedHeight / 2,
   );
   if (edits.flip) context.scale(-1, 1);
-  context.rotate((edits.rotation * Math.PI) / 180);
+  context.rotate(((edits.rotation + (edits.straighten ?? 0)) * Math.PI) / 180);
   context.drawImage(source, -source.width / 2, -source.height / 2);
   context.restore();
 }

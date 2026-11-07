@@ -46,6 +46,7 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   filter: PhotoFilter;
   filterStrength: number;
   rotation: number;
+  straighten: number;
   flip: boolean;
   cropRatio: CropRatio;
   cropZoom: number;
@@ -89,6 +90,7 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   filter: 'original',
   filterStrength: 100,
   rotation: 0,
+  straighten: 0,
   flip: false,
   cropRatio: 'free',
   cropZoom: 1,
@@ -100,6 +102,15 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
 export interface PhotoEditRecipe {
   version: 1;
   edits: PhotoEdits;
+}
+/** Omit straighten at its default so older clients can still read untouched recipes. */
+export function photoEditRecipe(edits: PhotoEdits): PhotoEditRecipe {
+  if (edits.straighten === 0) {
+    const compatible: Partial<PhotoEdits> = { ...edits };
+    delete compatible.straighten;
+    return { version: 1, edits: compatible as PhotoEdits };
+  }
+  return { version: 1, edits };
 }
 export interface PhotoEditParts {
   adjustments: boolean;
@@ -134,9 +145,11 @@ export function readPhotoEditRecipe(value: unknown): PhotoEditRecipe {
               ? [0, 1]
               : key === 'rotation'
                 ? [0, 270]
-                : key === 'filterStrength'
-                  ? [0, 100]
-                  : [-100, 100];
+                : key === 'straighten'
+                  ? [-45, 45]
+                  : key === 'filterStrength'
+                    ? [0, 100]
+                    : [-100, 100];
       if (
         typeof value !== 'number' ||
         !Number.isFinite(value) ||
@@ -166,6 +179,7 @@ export function readPhotoEditRecipe(value: unknown): PhotoEditRecipe {
 }
 const CROP_KEYS = new Set([
   'rotation',
+  'straighten',
   'flip',
   'cropRatio',
   'cropZoom',

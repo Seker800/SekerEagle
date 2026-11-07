@@ -11,33 +11,52 @@ export {
 /** Crop is measured in oriented source pixels; preview and export share this geometry. */
 export function photoCrop(width: number, height: number, edits: PhotoEdits, rasterize = true) {
   const rotated = edits.rotation % 180 !== 0;
-  const orientedWidth = rotated ? height : width;
-  const orientedHeight = rotated ? width : height;
+  const baseWidth = rotated ? height : width;
+  const baseHeight = rotated ? width : height;
+  const straighten = Number.isFinite(edits.straighten)
+    ? Math.max(-45, Math.min(45, edits.straighten))
+    : 0;
+  const radians = (Math.abs(straighten) * Math.PI) / 180;
+  const cos = Math.cos(radians),
+    sin = Math.sin(radians);
+  // Bounding box of the image after the optional straighten rotation.
+  const orientedWidth = baseWidth * cos + baseHeight * sin;
+  const orientedHeight = baseWidth * sin + baseHeight * cos;
   const ratio =
     edits.cropRatio === 'original'
-      ? orientedWidth / orientedHeight
+      ? baseWidth / baseHeight
       : edits.cropRatio === 'free'
         ? edits.cropAspect > 0
           ? edits.cropAspect
-          : orientedWidth / orientedHeight
+          : baseWidth / baseHeight
         : Number(edits.cropRatio.split(':')[0]) / Number(edits.cropRatio.split(':')[1]);
-  const baseWidth =
-    edits.cropRatio === 'original'
-      ? orientedWidth
-      : Math.min(orientedWidth, orientedHeight * ratio);
-  const baseHeight =
-    edits.cropRatio === 'original'
-      ? orientedHeight
-      : Math.min(orientedHeight, orientedWidth / ratio);
+  // Largest centered rectangle of the requested ratio that fits inside the rotated image.
+  // At straighten 0 this equals the legacy crop base and keeps free crop movement across
+  // the full oriented frame; a straightened image keeps every crop corner inside pixels.
+  const fitHeight = Math.min(
+    baseHeight,
+    baseWidth / ratio,
+    baseHeight / (ratio * sin + cos),
+    baseWidth / (ratio * cos + sin),
+  );
+  const fitWidth = fitHeight * ratio;
+  const movementX = straighten === 0 ? 0 : (orientedWidth - fitWidth) / 2;
+  const movementY = straighten === 0 ? 0 : (orientedHeight - fitHeight) / 2;
+  const movementWidth = straighten === 0 ? orientedWidth : fitWidth;
+  const movementHeight = straighten === 0 ? orientedHeight : fitHeight;
   const zoom = Number.isFinite(edits.cropZoom) ? Math.max(1, Math.min(16, edits.cropZoom)) : 1;
   const round = rasterize ? Math.round : (value: number) => value;
-  const cropWidth = Math.max(1, round(baseWidth / zoom));
-  const cropHeight = Math.max(1, round(baseHeight / zoom));
+  const cropWidth = Math.max(1, round(fitWidth / zoom));
+  const cropHeight = Math.max(1, round(fitHeight / zoom));
   return {
     orientedWidth,
     orientedHeight,
-    x: round((orientedWidth - cropWidth) * Math.max(0, Math.min(1, edits.cropX))),
-    y: round((orientedHeight - cropHeight) * Math.max(0, Math.min(1, edits.cropY))),
+    areaX: movementX,
+    areaY: movementY,
+    areaWidth: movementWidth,
+    areaHeight: movementHeight,
+    x: round(movementX + (movementWidth - cropWidth) * Math.max(0, Math.min(1, edits.cropX))),
+    y: round(movementY + (movementHeight - cropHeight) * Math.max(0, Math.min(1, edits.cropY))),
     width: Math.max(1, cropWidth),
     height: Math.max(1, cropHeight),
   };

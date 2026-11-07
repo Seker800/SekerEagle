@@ -106,6 +106,30 @@ function harness(
   return { definition, tx, jobs, queries, lutQueries, originalLut };
 }
 
+test('batch crop parts carry straighten while an unselected crop keeps the target angle', async () => {
+  const stored = { ...DEFAULT_PHOTO_EDITS, cropX: 0.25, straighten: 2.5 };
+  const cropRecipe = {
+    version: 1 as const,
+    edits: { ...DEFAULT_PHOTO_EDITS, rotation: 90, straighten: -7.4 },
+  };
+  for (const [crop, expected] of [
+    [true, -7.4],
+    [false, 2.5],
+  ] as const) {
+    const { definition, tx, jobs } = harness(stored);
+    await definition.apply(
+      tx as never,
+      context,
+      { recipe: cropRecipe, parts: { ...parts, crop } },
+      ['copy'],
+    );
+    const edit = jobs[0]!.data.editRender as {
+      create: { recipe: { edits: typeof DEFAULT_PHOTO_EDITS } };
+    };
+    assert.equal(edit.create.recipe.edits.straighten, expected);
+  }
+});
+
 test('batch edit renders from immutable base, preserves unselected parts, and resumes idempotently', async () => {
   const { definition, tx, jobs } = harness();
   const payload = { recipe, parts };

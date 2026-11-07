@@ -570,6 +570,30 @@ describe('photo editor interactions', () => {
     expect(exposure).toHaveValue('0');
     expect(screen.getByRole('button', { name: '撤销' })).toBeDisabled();
   });
+  it('straightens by fractional degrees with undo, redo and reset', async () => {
+    render(<PhotoEditor onSave={vi.fn()} source="/photo.png" name="Photo.png" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
+    const slider = screen.getByRole('slider', { name: '拉直' });
+    expect(slider).toHaveValue('0');
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, { target: { value: '3.4' } });
+    fireEvent.change(slider, { target: { value: '-2.6' } });
+    fireEvent.pointerUp(slider);
+    expect(slider).toHaveValue('-2.6');
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+    expect(slider).toHaveValue('0');
+    fireEvent.click(screen.getByRole('button', { name: '重做' }));
+    expect(slider).toHaveValue('-2.6');
+    fireEvent.click(screen.getByRole('button', { name: '重置裁剪' }));
+    expect(slider).toHaveValue('0');
+  });
+  it('places the editor close control at the desktop header end like the viewer', async () => {
+    render(<PhotoEditor onSave={vi.fn()} source="/photo.png" name="Photo.png" onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    const header = document.querySelector('section[role="dialog"] > header');
+    expect(header?.lastElementChild).toHaveAttribute('aria-label', '关闭编辑器');
+  });
   it('guards unsaved edits on Escape before closing and makes the editor behind the prompt inert', async () => {
     const close = vi.fn();
     render(<PhotoEditor onSave={vi.fn()} source="/photo.png" name="Photo.png" onClose={close} />);

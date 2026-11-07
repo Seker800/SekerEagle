@@ -137,4 +137,28 @@ describe('DesktopAssetDragSession', () => {
     );
     vi.useRealTimers();
   });
+
+  it('clears the preparation timeout once the native drag has started', async () => {
+    vi.useFakeTimers();
+    const onError = vi.fn();
+    const preparation = createDeferred<{ token: string }>();
+    const bridge = {
+      prepareAssetDrag: vi.fn(() => preparation.promise),
+      startPreparedAssetDrag: vi.fn(),
+      cancelAssetDragPreparation: vi.fn(),
+    };
+    const session = new DesktopAssetDragSession(bridge, onError);
+
+    session.begin(['asset-1']);
+    await vi.advanceTimersByTimeAsync(29_000);
+    preparation.resolve({ token: 'drag-token' });
+    await session.whenSettled();
+    expect(bridge.startPreparedAssetDrag).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(session.isOutboundDrag()).toBe(true);
+    vi.useRealTimers();
+  });
 });

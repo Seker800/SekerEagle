@@ -6,10 +6,29 @@ import { expect, it, vi, afterEach } from 'vitest';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import type { EagleAsset } from '../../lib/eagle-api';
 import { createEagleQueryKeys } from './eagle-query-keys';
+import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { useEagleMutations } from './useEagleMutations';
 afterEach(() => vi.unstubAllGlobals());
 const json = (value: unknown) => Response.json(value);
 const asset = (id: string, rowVersion: number) => makeEagleAsset({ id, rowVersion });
+
+function makeWrapper(client: QueryClient) {
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="A" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+}
+const callbacks = {
+  onMetadataSaved: vi.fn(),
+  onBatchTagsApplied: vi.fn(),
+  onAssetPrivacyChanged: vi.fn(),
+  onOperationStarted: vi.fn(),
+  onSmartFolderCreated: vi.fn(),
+  onSmartFolderUpdated: vi.fn(),
+};
 it('rating writes through existing view details without creating a ghost short key', async () => {
   const client = new QueryClient();
   const keys = createEagleQueryKeys('A');
@@ -47,6 +66,84 @@ it('rating writes through existing view details without creating a ghost short k
   expect(client.getQueryData(keys.assetDetailPrefix('a'))).toBeUndefined();
   expect(client.getQueryData<EagleAsset>(inspector)?.rowVersion).toBe(2);
   expect(client.getQueryData<EagleAsset>(inspector)?.mediaRevision).toBe(3);
+  view.unmount();
+  client.clear();
+});
+
+it('applies rating optimistically to the list store and restores it when the write fails', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  const store = getEagleWorkspaceCache(client, 'A', 'MATERIAL').store;
+  const detailKey = [...keys.assetDetailPrefix('a'), 'ACTIVE'];
+  const initial = makeEagleAsset({ id: 'a', rating: 1, rowVersion: 1 });
+  store.upsertMany([initial]);
+  client.setQueryData(detailKey, initial);
+  let rejectRequest!: (reason: unknown) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          rejectRequest = reject;
+        }),
+    ),
+  );
+  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+    wrapper: makeWrapper(client),
+  });
+  let pending!: Promise<unknown>;
+  await act(async () => {
+    pending = view.result.current.ratingMutation
+      .mutateAsync({ assets: [{ assetId: 'a', rowVersion: 1 }], rating: 5 })
+      .catch((error: unknown) => error);
+  });
+  expect(store.get('a')?.rating).toBe(5);
+  expect(client.getQueryData<EagleAsset>(detailKey)?.rating).toBe(5);
+
+  await act(async () => {
+    rejectRequest(new Error('write failed'));
+    await pending;
+  });
+  expect(store.get('a')?.rating).toBe(1);
+  expect(client.getQueryData<EagleAsset>(detailKey)?.rating).toBe(1);
+  view.unmount();
+  client.clear();
+});
+
+it('keeps the optimistic rating visible while the list refresh runs in the background', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  const store = getEagleWorkspaceCache(client, 'A', 'MATERIAL').store;
+  const initial = makeEagleAsset({ id: 'a', rating: 1, rowVersion: 1 });
+  store.upsertMany([initial]);
+  let releaseRefresh!: () => void;
+  const refresh = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      await refresh;
+      return json({ ...asset('a', 2), rating: 5 });
+    }),
+  );
+  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+    wrapper: makeWrapper(client),
+  });
+  let pending!: Promise<unknown>;
+  await act(async () => {
+    pending = view.result.current.ratingMutation.mutateAsync({
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      rating: 5,
+    });
+  });
+  expect(store.get('a')?.rating).toBe(5);
+
+  await act(async () => {
+    releaseRefresh();
+    await pending;
+  });
+  expect(store.get('a')?.rating).toBe(5);
   view.unmount();
   client.clear();
 });

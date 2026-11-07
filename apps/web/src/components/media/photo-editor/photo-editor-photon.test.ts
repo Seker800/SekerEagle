@@ -96,6 +96,10 @@ describe('preview and export crop coordinates', () => {
     expect(photoCrop(4000, 3000, DEFAULT_PHOTO_EDITS)).toEqual({
       orientedWidth: 4000,
       orientedHeight: 3000,
+      areaX: 0,
+      areaY: 0,
+      areaWidth: 4000,
+      areaHeight: 3000,
       x: 0,
       y: 0,
       width: 4000,
@@ -113,11 +117,70 @@ describe('preview and export crop coordinates', () => {
     ).toEqual({
       orientedWidth: 3000,
       orientedHeight: 4000,
+      areaX: 0,
+      areaY: 0,
+      areaWidth: 3000,
+      areaHeight: 4000,
       x: 0,
       y: 1000,
       width: 3000,
       height: 3000,
     });
+  });
+  it('inscribes a straightened crop inside the rotated source and keeps corners covered', () => {
+    const edits = {
+      ...DEFAULT_PHOTO_EDITS,
+      straighten: 10,
+      cropRatio: 'original' as const,
+      cropZoom: 1,
+    };
+    const region = photoCrop(4000, 3000, edits);
+    expect(region.areaX + region.areaWidth / 2).toBeCloseTo(region.orientedWidth / 2, 6);
+    expect(region.areaY + region.areaHeight / 2).toBeCloseTo(region.orientedHeight / 2, 6);
+    for (const [x, y] of [
+      [region.x, region.y],
+      [region.x + region.width, region.y],
+      [region.x, region.y + region.height],
+      [region.x + region.width, region.y + region.height],
+    ]) {
+      const dx = x - region.orientedWidth / 2,
+        dy = y - region.orientedHeight / 2;
+      const radians = (-10 * Math.PI) / 180,
+        cos = Math.cos(radians),
+        sin = Math.sin(radians);
+      const sourceX = dx * cos - dy * sin,
+        sourceY = dx * sin + dy * cos;
+      expect(Math.abs(sourceX)).toBeLessThanOrEqual(4000 / 2 + 0.5);
+      expect(Math.abs(sourceY)).toBeLessThanOrEqual(3000 / 2 + 0.5);
+    }
+  });
+  it('keeps every crop corner inside the source after straighten and 90-degree rotation', () => {
+    const edits = {
+      ...DEFAULT_PHOTO_EDITS,
+      rotation: 90,
+      straighten: -12.5,
+      cropRatio: '16:9' as const,
+      cropZoom: 1.8,
+      cropX: 0.8,
+      cropY: 0.1,
+    };
+    const region = photoCrop(4000, 3000, edits);
+    const angle = ((90 - 12.5) * Math.PI) / 180,
+      cos = Math.cos(angle),
+      sin = Math.sin(angle);
+    for (const [x, y] of [
+      [region.x, region.y],
+      [region.x + region.width, region.y],
+      [region.x, region.y + region.height],
+      [region.x + region.width, region.y + region.height],
+    ]) {
+      const dx = x - region.orientedWidth / 2,
+        dy = y - region.orientedHeight / 2;
+      const sourceX = dx * cos + dy * sin,
+        sourceY = -dx * sin + dy * cos;
+      expect(Math.abs(sourceX)).toBeLessThanOrEqual(4000 / 2 + 0.5);
+      expect(Math.abs(sourceY)).toBeLessThanOrEqual(3000 / 2 + 0.5);
+    }
   });
 });
 

@@ -46,7 +46,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 max(12px, env(safe-area-inset-right)) 0 max(9px, env(safe-area-inset-left));
+  padding: 0 max(16px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
   background: var(--photo-bg);
 }
 .title {
@@ -371,8 +371,8 @@
 }
 .editor .history button,
 .editor .iconButton {
-  min-width: 40px;
-  min-height: 40px;
+  min-width: 44px;
+  min-height: 44px;
 }
 .editor .compare {
   color: var(--photo-text);
@@ -1027,6 +1027,9 @@
     gap: 6px;
     padding-left: max(8px, env(safe-area-inset-left));
     padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .editor .header .iconButton {
+    order: -1;
   }
   .title span {
     max-width: 36vw;
