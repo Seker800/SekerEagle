@@ -12,7 +12,7 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
@@ -28,8 +28,10 @@ jobs:
       - run: npm run contracts:check
       - name: Build pinned MinIO test images
         run: |
-          docker build -f deploy/nas/minio.Dockerfile -t minio/minio:RELEASE.2025-04-22T22-12-26Z deploy/nas
-          docker build -f deploy/nas/mc.Dockerfile -t minio/mc:RELEASE.2025-04-16T18-13-26Z deploy/nas
+          goarch=amd64
+          [ "$(uname -m)" = "aarch64" ] && goarch=arm64
+          docker build --build-arg TARGETGOARCH="$goarch" -f deploy/nas/minio.Dockerfile -t minio/minio:RELEASE.2025-04-22T22-12-26Z deploy/nas
+          docker build --build-arg TARGETGOARCH="$goarch" -f deploy/nas/mc.Dockerfile -t minio/mc:RELEASE.2025-04-16T18-13-26Z deploy/nas
       - name: Verify restricted storage credentials and private bucket
         run: SEKEREAGLE_TEST_STORAGE_POLICY=1 node --test scripts/testing/storage-policy.test.mjs
       - name: Install camera media test runtime
