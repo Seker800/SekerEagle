@@ -188,7 +188,8 @@ test('NAS storage does not depend on removed vendor registry images', async () =
       'utf8',
     );
     assert.match(dockerfile, /git fetch --depth=1 origin [a-f0-9]{40}/u);
-    assert.match(dockerfile, /CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1/u);
+    assert.match(dockerfile, /ARG TARGETGOARCH=amd64/u);
+    assert.match(dockerfile, /CGO_ENABLED=0 GOOS=linux GOARCH=\$\{TARGETGOARCH\} GOAMD64=v1/u);
     assert.match(dockerfile, /USER 1000:1000/u);
   }
 });

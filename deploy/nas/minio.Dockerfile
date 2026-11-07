@@ -8,7 +8,7 @@ RUN git init && git remote add origin https://github.com/minio/minio.git \
     && test "$(git rev-parse HEAD)" = 0d7408fc9969caf07de6a8c3a84f9fbb10a6739e
 ENV GOMAXPROCS=2 GOMEMLIMIT=1500MiB
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETGOARCH} go build -trimpath \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETGOARCH} GOAMD64=v1 go build -trimpath \
     -ldflags="-s -w -X github.com/minio/minio/cmd.CopyrightYear=2025 -X github.com/minio/minio/cmd.Version=2025-04-22T22:12:26Z -X github.com/minio/minio/cmd.ReleaseTag=RELEASE.2025-04-22T22-12-26Z -X github.com/minio/minio/cmd.CommitID=0d7408fc9969caf07de6a8c3a84f9fbb10a6739e" \
     -o /out/minio .
 
