@@ -110,7 +110,7 @@ try {
     '--publish',
     '127.0.0.1::9000',
     '--tmpfs',
-    '/data:rw',
+    '/data:rw,uid=1000,gid=1000',
     '--env',
     `MINIO_ROOT_USER=${accessKey}`,
     '--env',
