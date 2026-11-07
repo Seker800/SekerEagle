@@ -1,6 +1,7 @@
 import { loadPhotoLut } from './photo-lut-storage';
 import type { PhotoLut } from './photo-lut';
 import { type PhotoEdits } from './photo-editor-model';
+import { photoProcessedKey } from './photo-editor-preview';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import type { PhotoMetadata } from './photo-watermark-model';
 
@@ -146,26 +147,7 @@ export function createPhotoRenderer() {
   return {
     render(source: HTMLCanvasElement, edits: PhotoEdits): Promise<HTMLCanvasElement> {
       if (stopped) return Promise.reject(new Error('PHOTO_RENDER_FAILED'));
-      const key = JSON.stringify(
-        Object.entries(edits).filter(
-          ([key]) =>
-            !key.startsWith('watermark') &&
-            !(
-              !edits.grain &&
-              !edits.vignette &&
-              [
-                'cropRatio',
-                'cropZoom',
-                'cropAspect',
-                'cropX',
-                'cropY',
-                'rotation',
-                'straighten',
-                'flip',
-              ].includes(key)
-            ),
-        ),
-      );
+      const key = photoProcessedKey(edits);
       if (cached?.source === source && cached.key === key) return Promise.resolve(cached.result);
       const id = ++sequence;
       return new Promise((resolve, reject) => {

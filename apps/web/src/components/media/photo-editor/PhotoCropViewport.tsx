@@ -54,93 +54,112 @@ export function PhotoCropViewport({
     { id: 'sw', label: t('裁剪左下角') },
     { id: 'w', label: t('裁剪左边') },
   ];
+  const left = (crop.x / crop.orientedWidth) * 100;
+  const top = (crop.y / crop.orientedHeight) * 100;
+  const widthPercent = (crop.width / crop.orientedWidth) * 100;
+  const heightPercent = (crop.height / crop.orientedHeight) * 100;
   return (
-    <div
-      className={styles.cropFrame}
-      style={{
-        left: `${(crop.x / crop.orientedWidth) * 100}%`,
-        top: `${(crop.y / crop.orientedHeight) * 100}%`,
-        width: `${(crop.width / crop.orientedWidth) * 100}%`,
-        height: `${(crop.height / crop.orientedHeight) * 100}%`,
-      }}
-      role="group"
-      aria-label={t('裁剪取景区域')}
-      aria-disabled={disabled}
-      tabIndex={disabled ? -1 : 0}
-      onPointerDown={(event) => {
-        if (disabled || active.current || (event.pointerType === 'mouse' && event.button !== 0))
-          return;
-        const rect = event.currentTarget.parentElement!.getBoundingClientRect();
-        const handle = (event.target as HTMLElement).closest<HTMLElement>('[data-crop-handle]')
-          ?.dataset.cropHandle as CropHandle | undefined;
-        event.preventDefault();
-        if (handle) (event.target as HTMLElement).closest<HTMLElement>('button')?.focus();
-        else event.currentTarget.focus();
-        onStart();
-        active.current = {
-          id: event.pointerId,
-          handle: handle ?? 'move',
-          x: event.clientX,
-          y: event.clientY,
-          width: Math.max(1, rect.width),
-          height: Math.max(1, rect.height),
-          edits,
-        };
-        event.currentTarget.setPointerCapture?.(event.pointerId);
-      }}
-      onPointerMove={(event) => {
-        const start = active.current;
-        if (!start || start.id !== event.pointerId || disabled) return;
-        onChange(
-          dragPhotoCrop(
-            width,
-            height,
-            start.edits,
-            start.handle,
-            ((event.clientX - start.x) / start.width) * crop.orientedWidth,
-            ((event.clientY - start.y) / start.height) * crop.orientedHeight,
-            {
-              width: (32 / start.width) * crop.orientedWidth,
-              height: (32 / start.height) * crop.orientedHeight,
-            },
-          ),
-        );
-      }}
-      onPointerUp={end}
-      onPointerCancel={end}
-      onLostPointerCapture={end}
-      onKeyDown={(event) => {
-        if (disabled) return;
-        const step = event.shiftKey ? 20 : 2;
-        const keys: Record<string, [number, number]> = {
-          ArrowLeft: [-step, 0],
-          ArrowRight: [step, 0],
-          ArrowUp: [0, -step],
-          ArrowDown: [0, step],
-        };
-        const delta = keys[event.key];
-        if (!delta) return;
-        event.preventDefault();
-        const handle = (event.target as HTMLElement).dataset.cropHandle as CropHandle | undefined;
-        onStart();
-        onChange(dragPhotoCrop(width, height, edits, handle ?? 'move', ...delta));
-        onCommit();
-      }}
-    >
-      <span />
-      <span />
-      <span />
-      <span />
-      {handles.map(({ id, label }) => (
-        <button
-          key={id}
-          type="button"
-          disabled={disabled}
-          className={styles.cropHandle}
-          data-crop-handle={id}
-          aria-label={label}
+    <>
+      <div className={styles.cropShade} aria-hidden="true">
+        <span style={{ left: 0, top: 0, right: 0, height: `${top}%` }} />
+        <span style={{ left: 0, top: `${top + heightPercent}%`, right: 0, bottom: 0 }} />
+        <span style={{ left: 0, top: `${top}%`, width: `${left}%`, height: `${heightPercent}%` }} />
+        <span
+          style={{
+            left: `${left + widthPercent}%`,
+            top: `${top}%`,
+            right: 0,
+            height: `${heightPercent}%`,
+          }}
         />
-      ))}
-    </div>
+      </div>
+      <div
+        className={styles.cropFrame}
+        style={{
+          left: `${left}%`,
+          top: `${top}%`,
+          width: `${widthPercent}%`,
+          height: `${heightPercent}%`,
+        }}
+        role="group"
+        aria-label={t('裁剪取景区域')}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
+        onPointerDown={(event) => {
+          if (disabled || active.current || (event.pointerType === 'mouse' && event.button !== 0))
+            return;
+          const rect = event.currentTarget.parentElement!.getBoundingClientRect();
+          const handle = (event.target as HTMLElement).closest<HTMLElement>('[data-crop-handle]')
+            ?.dataset.cropHandle as CropHandle | undefined;
+          event.preventDefault();
+          if (handle) (event.target as HTMLElement).closest<HTMLElement>('button')?.focus();
+          else event.currentTarget.focus();
+          onStart();
+          active.current = {
+            id: event.pointerId,
+            handle: handle ?? 'move',
+            x: event.clientX,
+            y: event.clientY,
+            width: Math.max(1, rect.width),
+            height: Math.max(1, rect.height),
+            edits,
+          };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          const start = active.current;
+          if (!start || start.id !== event.pointerId || disabled) return;
+          onChange(
+            dragPhotoCrop(
+              width,
+              height,
+              start.edits,
+              start.handle,
+              ((event.clientX - start.x) / start.width) * crop.orientedWidth,
+              ((event.clientY - start.y) / start.height) * crop.orientedHeight,
+              {
+                width: (32 / start.width) * crop.orientedWidth,
+                height: (32 / start.height) * crop.orientedHeight,
+              },
+            ),
+          );
+        }}
+        onPointerUp={end}
+        onPointerCancel={end}
+        onLostPointerCapture={end}
+        onKeyDown={(event) => {
+          if (disabled) return;
+          const step = event.shiftKey ? 20 : 2;
+          const keys: Record<string, [number, number]> = {
+            ArrowLeft: [-step, 0],
+            ArrowRight: [step, 0],
+            ArrowUp: [0, -step],
+            ArrowDown: [0, step],
+          };
+          const delta = keys[event.key];
+          if (!delta) return;
+          event.preventDefault();
+          const handle = (event.target as HTMLElement).dataset.cropHandle as CropHandle | undefined;
+          onStart();
+          onChange(dragPhotoCrop(width, height, edits, handle ?? 'move', ...delta));
+          onCommit();
+        }}
+      >
+        <span />
+        <span />
+        <span />
+        <span />
+        {handles.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            disabled={disabled}
+            className={styles.cropHandle}
+            data-crop-handle={id}
+            aria-label={label}
+          />
+        ))}
+      </div>
+    </>
   );
 }

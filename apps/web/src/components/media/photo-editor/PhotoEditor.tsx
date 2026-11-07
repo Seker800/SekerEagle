@@ -23,6 +23,7 @@ import {
   photoCrop,
   type PhotoEdits,
 } from './photo-editor-model';
+import { photoPreviewKey } from './photo-editor-preview';
 import {
   createPhotoRenderer,
   composePhoto,
@@ -174,6 +175,16 @@ export function PhotoEditor({
     paintedSequence = useRef(0);
   const sliderStartRef = useRef<PhotoEdits | null>(null);
   const pendingSaveRef = useRef<{ key: string; file: File } | null>(null);
+  const loadGenerationRef = useRef(0);
+  const paintedKeyRef = useRef('');
+  const paintKeyRef = useRef('');
+  const paintInputRef = useRef({ edits, compare, tab, metadata, source, loaded });
+  const paintFrameRef = useRef(0);
+  const paintScheduledRef = useRef(false);
+  const paintRunningRef = useRef(false);
+  const paintDirtyRef = useRef(false);
+  const schedulePaintRef = useRef<() => void>(() => {});
+  const paintPreviewRef = useRef<() => Promise<void>>(async () => {});
 
   function update(patch: Partial<PhotoEdits>, record = true) {
     if ((Object.keys(patch) as (keyof PhotoEdits)[]).every((key) => edits[key] === patch[key]))
@@ -303,10 +314,12 @@ export function PhotoEditor({
 
   useEffect(() => {
     const controller = new AbortController();
+    loadGenerationRef.current++;
     setError('');
     setErrorRetry('load');
     setLoaded(null);
     previewRef.current = null;
+    paintedKeyRef.current = '';
     let renderer: ReturnType<typeof createPhotoRenderer>;
     try {
       renderer = createPhotoRenderer();
@@ -371,48 +384,103 @@ export function PhotoEditor({
     return () => controller.abort();
   }, [source, previewSource, initialMetadata]);
 
-  useEffect(() => {
+  const paintKey = photoPreviewKey(edits, { compare, tab, metadata });
+  paintKeyRef.current = paintKey;
+  paintInputRef.current = { edits, compare, tab, metadata, source, loaded };
+  schedulePaintRef.current = () => {
+    if (paintScheduledRef.current) return;
+    paintScheduledRef.current = true;
+    paintFrameRef.current = requestAnimationFrame(() => {
+      paintScheduledRef.current = false;
+      if (paintRunningRef.current) {
+        paintDirtyRef.current = true;
+        return;
+      }
+      void paintPreviewRef.current();
+    });
+  };
+  paintPreviewRef.current = async () => {
     const input = previewRef.current;
     const renderer = rendererRef.current;
-    if (!loaded || !input || !renderer) return;
-    let cancelled = false;
+    const view = paintInputRef.current;
+    const key = paintKeyRef.current;
+    if (!input || !renderer || !view.loaded || key === paintedKeyRef.current) {
+      setRendering(false);
+      return;
+    }
+    const generation = loadGenerationRef.current;
     const sequence = ++renderSequence.current;
+    paintRunningRef.current = true;
     setRendering(true);
-    const timer = window.setTimeout(() => {
-      const renderEdits: PhotoEdits = compare
+    try {
+      const renderEdits: PhotoEdits = view.compare
         ? {
-            ...resetPhotoAdjustments(edits),
+            ...resetPhotoAdjustments(view.edits),
             filter: 'original',
             filterStrength: DEFAULT_PHOTO_EDITS.filterStrength,
           }
-        : edits;
-      void renderer
-        .render(input, renderEdits)
-        .then((result) => {
-          if (!canvasRef.current || sequence < paintedSequence.current) return;
-          const view = viewRef.current;
-          if (view.source !== source || view.compare !== compare || view.tab !== tab) return;
-          composePhoto(canvasRef.current, result, renderEdits, metadata, tab !== 'crop');
-          setWatermarkSource(result);
-          paintedSequence.current = sequence;
-          setPreviewSize({ width: canvasRef.current.width, height: canvasRef.current.height });
-          if (!cancelled) setRendering(false);
-          setRenderedKey(JSON.stringify({ edits, compare, tab, metadata }));
-          setError('');
-        })
-        .catch((reason: unknown) => {
-          if (!cancelled) {
-            setErrorRetry('load');
-            setError(renderErrorMessage(reason));
-            setRendering(false);
-          }
-        });
-    }, 16);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [loaded, edits, compare, tab, metadata]);
+        : view.edits;
+      const result = await renderer.render(input, renderEdits);
+      if (generation !== loadGenerationRef.current || sequence < paintedSequence.current) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const current = viewRef.current;
+      if (
+        current.source !== view.source ||
+        current.compare !== view.compare ||
+        current.tab !== view.tab
+      )
+        return;
+      if (view.tab === 'crop') {
+        // The crop workspace rotates, flips and straightens with CSS transforms, so its
+        // bitmap only changes with pixels or the base 90° orientation.
+        composePhoto(
+          canvas,
+          result,
+          { ...renderEdits, rotation: 0, straighten: 0, flip: false },
+          {},
+          false,
+        );
+      } else {
+        composePhoto(canvas, result, renderEdits, view.metadata, true);
+        setPreviewSize((previous) =>
+          previous.width === canvas.width && previous.height === canvas.height
+            ? previous
+            : { width: canvas.width, height: canvas.height },
+        );
+      }
+      setWatermarkSource(result);
+      paintedSequence.current = sequence;
+      paintedKeyRef.current = key;
+      setRenderedKey(
+        JSON.stringify({
+          edits: view.edits,
+          compare: view.compare,
+          tab: view.tab,
+          metadata: view.metadata,
+        }),
+      );
+      setError('');
+    } catch (reason) {
+      if (generation !== loadGenerationRef.current) return;
+      if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+        setErrorRetry('load');
+        setError(renderErrorMessage(reason));
+      }
+    } finally {
+      paintRunningRef.current = false;
+      if (paintDirtyRef.current) {
+        paintDirtyRef.current = false;
+        schedulePaintRef.current();
+      } else setRendering(false);
+    }
+  };
+  useEffect(() => {
+    if (!loaded || !rendererRef.current || !previewRef.current) return;
+    if (paintKey === paintedKeyRef.current) return;
+    schedulePaintRef.current();
+  }, [loaded, paintKey]);
+  useEffect(() => () => cancelAnimationFrame(paintFrameRef.current), []);
 
   const fullCrop = loaded ? photoCrop(imageWidth, imageHeight, edits) : null;
   const fullTemplate = findWatermark(edits.watermark);
@@ -543,9 +611,23 @@ export function PhotoEditor({
       />
     );
   }
-  const crop = previewRef.current
-    ? photoCrop(previewRef.current.width, previewRef.current.height, edits)
-    : null;
+  const cropWorkspace =
+    tab === 'crop' && previewRef.current
+      ? photoCrop(previewRef.current.width, previewRef.current.height, edits, false)
+      : null;
+  const frameWidth = cropWorkspace ? cropWorkspace.orientedWidth : previewSize.width;
+  const frameHeight = cropWorkspace ? cropWorkspace.orientedHeight : previewSize.height;
+  const cropCanvasStyle =
+    cropWorkspace && previewRef.current
+      ? {
+          position: 'absolute' as const,
+          left: '50%',
+          top: '50%',
+          width: `${(previewRef.current.width / cropWorkspace.orientedWidth) * 100}%`,
+          height: `${(previewRef.current.height / cropWorkspace.orientedHeight) * 100}%`,
+          transform: `translate(-50%, -50%) scaleX(${edits.flip ? -1 : 1}) rotate(${edits.rotation + edits.straighten}deg)`,
+        }
+      : undefined;
   const tabs = [
     { id: 'crop' as const, label: t('裁剪'), Icon: IconCrop },
     { id: 'filters' as const, label: t('滤镜'), Icon: IconPhoto },
@@ -644,7 +726,7 @@ export function PhotoEditor({
             rendering ||
             compare ||
             (edits.watermark !== 'none' && metadataLoading) ||
-            renderedKey !== previewKey ||
+            (tab !== 'crop' && renderedKey !== previewKey) ||
             (saved && tab !== 'crop')
           }
           onClick={() => {
@@ -696,13 +778,10 @@ export function PhotoEditor({
             className={styles.imageFrame}
             data-cropping={tab === 'crop'}
             style={{
-              aspectRatio: `${previewSize.width} / ${previewSize.height}`,
+              aspectRatio: `${frameWidth} / ${frameHeight}`,
               width: Math.max(
                 1,
-                Math.min(
-                  areaSize.width,
-                  (areaSize.height * previewSize.width) / previewSize.height,
-                ),
+                Math.min(areaSize.width, (areaSize.height * frameWidth) / frameHeight),
               ),
             }}
           >
@@ -710,8 +789,9 @@ export function PhotoEditor({
               ref={canvasRef}
               aria-label={t('照片编辑预览')}
               className={loaded ? styles.canvas : styles.hiddenCanvas}
+              style={cropCanvasStyle}
             />
-            {loaded && tab === 'crop' && crop && (
+            {loaded && tab === 'crop' && cropWorkspace && (
               <PhotoCropViewport
                 edits={edits}
                 width={imageWidth}

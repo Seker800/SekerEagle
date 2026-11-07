@@ -137,10 +137,19 @@
 .hiddenCanvas {
   display: none;
 }
+.cropShade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cropShade span {
+  position: absolute;
+  display: block;
+  background: #0008;
+}
 .cropFrame {
   position: absolute;
   border: 1px solid #fff;
-  box-shadow: 0 0 0 2000px #0008;
   touch-action: none;
   cursor: grab;
 }
@@ -338,6 +347,9 @@
   margin: 4px 0 0;
   text-align: center;
   font-size: 11px;
+}
+.cropControls .parameterRow .slider {
+  margin-bottom: 0;
 }
 .cropFrame span {
   position: absolute;
@@ -1189,6 +1201,9 @@
   }
 }
 
+.editor:has(.cropControls) {
+  --photo-controls-size: 276px;
+}
 .editor:has(.filters) {
   --photo-controls-size: 272px;
 }
