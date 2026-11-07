@@ -2801,6 +2801,11 @@ export function SekerEaglePage({
                         </button>
                       ))}
                     </div>
+                    {ratingMutation.isError && (
+                      <p className={styles.inlineError} role="alert">
+                        {t('保存失败，请重试。')}
+                      </p>
+                    )}
                   </section>
                   <section className={styles.detailSection}>
                     <div className={styles.annotationForm}>

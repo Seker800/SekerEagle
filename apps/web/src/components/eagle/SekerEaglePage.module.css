@@ -780,6 +780,9 @@
 .rating button:disabled {
   opacity: 0.55;
 }
+.rating button[aria-busy='true'] {
+  opacity: 1;
+}
 .rating .ratingPending {
   position: absolute;
   right: -2px;

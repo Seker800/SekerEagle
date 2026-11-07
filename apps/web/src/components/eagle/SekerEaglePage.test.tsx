@@ -1311,6 +1311,17 @@ describe('SekerEaglePage', () => {
     });
   });
 
+  it('rolls back the star and reports when rating save fails', async () => {
+    updateEagleAssetMock.mockRejectedValueOnce(new Error('write failed'));
+    renderPage();
+    const inspector = await selectAssetAndOpenInspector();
+    const star = within(inspector).getByRole('button', { name: '4 星' });
+    fireEvent.click(star);
+
+    expect(await within(inspector).findByRole('alert')).toHaveTextContent('保存失败，请重试。');
+    expect(star.querySelector('.tabler-icon-star-filled')).toBeNull();
+  });
+
   it('applies inspector metadata and rating changes to every selected asset', async () => {
     const secondAsset = {
       ...asset,

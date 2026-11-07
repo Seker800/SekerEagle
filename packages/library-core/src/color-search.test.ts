@@ -45,17 +45,27 @@ test('exact top-two matches retain Eagle exception and minimum dominant area', (
   assert.equal(paletteColorScore('#ffffff', []), null);
 });
 
-test('grain or texture regions below the dominant area floor never select a photo', () => {
-  const palette = [swatch('#803030', 0.8), swatch('#3288ad', 0.2)];
-  assert.equal(paletteColorScore('#2e86ab', palette), null);
+test('grain regions below the dominant area floor never select a photo', async () => {
   assert.equal(
-    paletteColorScore('#2e86ab', [
-      swatch('#803030', 0.6),
-      swatch('#3288ad', 0.24),
-      swatch('#7fa7b8', 0.16),
-    ]),
+    paletteColorScore('#2e86ab', [swatch('#3288ad', 0.24), swatch('#803030', 0.5)]),
     null,
   );
+  assert.equal(
+    paletteColorScore('#2e86ab', [swatch('#803030', 0.7), swatch('#3288ad', 0.3)]),
+    null,
+  );
+  const { extractSearchColors } = await import('./color-palette');
+  const grain = (percent: number) =>
+    Uint8Array.from(
+      Array.from({ length: 10000 }, (_, i) =>
+        i < percent * 100 ? [50, 136, 173, 255] : [128, 48, 48, 255],
+      ).flat(),
+    );
+  for (const percent of [5, 20, 24, 30]) {
+    const palette = extractSearchColors(grain(percent), 4, 10000);
+    assert.equal(paletteColorScore('#2e86ab', palette), null, `${percent}% grain`);
+  }
+  assert.notEqual(paletteColorScore('#2e86ab', extractSearchColors(grain(34), 4, 10000)), null);
 });
 
 test('score is color distance rather than descending occupied area', () => {

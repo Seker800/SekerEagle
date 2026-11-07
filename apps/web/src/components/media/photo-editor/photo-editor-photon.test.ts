@@ -91,6 +91,20 @@ describe('real Photon WASM photo processing', () => {
   });
 });
 
+it('centers vignette and grain after arbitrary straighten and mirror', () => {
+  const width = 400,
+    height = 200;
+  const white = new Uint8Array(width * height * 4).fill(255);
+  const straight = processPhotoPixels(new Uint8Array(white), width, height, {
+    ...DEFAULT_PHOTO_EDITS,
+    straighten: 20,
+    vignette: 100,
+  });
+  const value = (buffer: Uint8Array, x: number, y: number) => buffer[(y * width + x) * 4]!;
+  expect(value(straight, 200, 100)).toBeGreaterThan(250);
+  expect(value(straight, 300, 180)).toBeLessThan(50);
+});
+
 describe('preview and export crop coordinates', () => {
   it('keeps original geometry unchanged', () => {
     expect(photoCrop(4000, 3000, DEFAULT_PHOTO_EDITS)).toEqual({

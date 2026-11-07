@@ -31,6 +31,26 @@ test('renders a straightened, inset crop without empty corners at server resolut
   const { channels } = await sharp(output).stats();
   assert.equal(channels[3]!.min, 255);
 });
+test('mirrors a straightened vignette consistently instead of moving its center', async () => {
+  const source = await sharp({
+    create: { width: 400, height: 200, channels: 4, background: '#ffffff' },
+  })
+    .png()
+    .toBuffer();
+  const edits = { ...DEFAULT_PHOTO_EDITS, straighten: 20, vignette: 100 };
+  const normal = await renderServerPhoto(source, edits, {});
+  const flipped = await renderServerPhoto(source, { ...edits, flip: true }, {});
+  const [a, b] = await Promise.all([
+    sharp(normal).flop().ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+    sharp(flipped).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),
+  ]);
+  assert.equal(a.info.width, b.info.width);
+  assert.equal(a.info.height, b.info.height);
+  let maxDifference = 0;
+  for (let i = 0; i < a.data.length; i++)
+    maxDifference = Math.max(maxDifference, Math.abs(a.data[i]! - b.data[i]!));
+  assert.ok(maxDifference <= 1, `max channel difference ${maxDifference}`);
+});
 test('rejects pixel budgets and missing personal LUTs rather than silently changing the edit', async () => {
   const source = await sharp({ create: { width: 64, height: 32, channels: 4, background: '#fff' } })
     .png()

@@ -56,8 +56,36 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
     asset = { mediaRevision: 2 };
     await saveEagleEditRecipe(db as never, 'owner', mode, 'asset', input, false);
     assert.ok(write);
+    assert.equal(
+      'straighten' in
+        (write as { create: { recipe: { edits: Record<string, unknown> } } }).create.recipe.edits,
+      false,
+    );
   });
 }
+test('draft recipes omit default straighten for older clients and keep explicit angles', async () => {
+  const row = (recipe: object) => ({
+    assetRevision: 2,
+    baseAssetId: null,
+    baseMediaRevision: 2,
+    recipe,
+  });
+  const read = async (recipe: object) => {
+    const db = {
+      eagleAsset: { findFirst: async () => ({ mediaRevision: 2 }) },
+      eagleAssetEditRecipe: { findFirst: async () => row(recipe) },
+    };
+    return readEagleEditRecipe(db as never, 'owner', 'PHOTO', 'asset', false);
+  };
+  const legacy = await read({ version: 1, edits: DEFAULT_PHOTO_EDITS });
+  assert.equal('straighten' in legacy!.recipe.edits, false);
+  const straightened = await read({
+    version: 1,
+    edits: { ...DEFAULT_PHOTO_EDITS, straighten: 4.5 },
+  });
+  assert.equal(straightened!.recipe.edits.straighten, 4.5);
+});
+
 test('draft DTO rejects owner injection and malformed version', () => {
   const errors = validateSync(
     plainToInstance(SaveEagleEditRecipeDto, { ownerId: 'victim', mediaRevision: 0, recipe: [] }),

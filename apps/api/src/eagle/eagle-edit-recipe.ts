@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsObject, Min } from 'class-validator';
-import { readPhotoEditRecipe } from '@sekereagle/library-core';
+import { photoEditRecipe, readPhotoEditRecipe } from '@sekereagle/library-core';
 import type { LibraryMode, Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 export class SaveEagleEditRecipeDto {
@@ -39,7 +39,7 @@ export async function readEagleEditRecipe(
   });
   if (!row) return null;
   return {
-    recipe: validatedEditRecipe(row.recipe),
+    recipe: photoEditRecipe(validatedEditRecipe(row.recipe).edits),
     baseAssetId: row.baseAssetId,
     baseMediaRevision: row.baseMediaRevision,
   };
@@ -75,7 +75,7 @@ export async function saveEagleEditRecipe(
       assetRevision: input.mediaRevision,
       baseAssetId: null,
       baseMediaRevision: input.mediaRevision,
-      recipe: recipe as unknown as Prisma.InputJsonValue,
+      recipe: photoEditRecipe(recipe.edits) as unknown as Prisma.InputJsonValue,
     };
     await tx.eagleAssetEditRecipe.upsert({
       where: { assetId },

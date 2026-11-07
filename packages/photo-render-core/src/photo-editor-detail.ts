@@ -111,6 +111,10 @@ export function applyPhotoDetail(
   const vignette = clamp(edits.vignette / 100, -1, 1);
   if (!grain && !vignette) return pixels;
   const region = photoCrop(width, height, edits);
+  const straighten = edits.straighten ?? 0;
+  const angle = ((edits.rotation + straighten) * Math.PI) / 180;
+  const cos = Math.cos(angle),
+    sin = Math.sin(angle);
   const gridWidth = Math.max(
     2,
     Math.round((1280 * region.width) / Math.max(region.width, region.height)),
@@ -133,7 +137,12 @@ export function applyPhotoDetail(
       if (!pixels[i + 3]) continue;
       let ox = x + 0.5,
         oy = y + 0.5;
-      if (edits.rotation === 90) {
+      if (straighten !== 0) {
+        const sourceX = x + 0.5 - width / 2,
+          sourceY = y + 0.5 - height / 2;
+        ox = region.orientedWidth / 2 + sourceX * cos - sourceY * sin;
+        oy = region.orientedHeight / 2 + sourceX * sin + sourceY * cos;
+      } else if (edits.rotation === 90) {
         ox = height - y - 0.5;
         oy = x + 0.5;
       } else if (edits.rotation === 180) {

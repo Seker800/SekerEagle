@@ -110,7 +110,7 @@ it('applies rating optimistically to the list store and restores it when the wri
   client.clear();
 });
 
-it('keeps the optimistic rating visible while the list refresh runs in the background', async () => {
+it('keeps the optimistic rating visible until the write settles', async () => {
   const client = new QueryClient();
   const keys = createEagleQueryKeys('A');
   const store = getEagleWorkspaceCache(client, 'A', 'MATERIAL').store;
@@ -147,6 +147,60 @@ it('keeps the optimistic rating visible while the list refresh runs in the backg
   view.unmount();
   client.clear();
 });
+
+it('does not refetch an unrelated list after a rating write', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  storeAsset(client, 'a');
+  const listKey = keys.assetList('ACTIVE', {});
+  client.setQueryData(listKey, {});
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json({ ...asset('a', 2), rating: 5 })),
+  );
+  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+    wrapper: makeWrapper(client),
+  });
+  await act(async () => {
+    await view.result.current.ratingMutation.mutateAsync({
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      rating: 5,
+    });
+  });
+  expect(client.getQueryState(listKey)?.isInvalidated).toBe(false);
+  view.unmount();
+  client.clear();
+});
+
+it('refetches a rating-filtered list after a rating write', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  storeAsset(client, 'a');
+  const listKey = keys.assetList('ACTIVE', { rating: 4 });
+  client.setQueryData(listKey, {});
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json({ ...asset('a', 2), rating: 5 })),
+  );
+  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+    wrapper: makeWrapper(client),
+  });
+  await act(async () => {
+    await view.result.current.ratingMutation.mutateAsync({
+      assets: [{ assetId: 'a', rowVersion: 1 }],
+      rating: 5,
+    });
+  });
+  expect(client.getQueryState(listKey)?.isInvalidated).toBe(true);
+  view.unmount();
+  client.clear();
+});
+
+function storeAsset(client: QueryClient, id: string) {
+  getEagleWorkspaceCache(client, 'A', 'MATERIAL').store.upsertMany([
+    makeEagleAsset({ id, rating: 1, rowVersion: 1 }),
+  ]);
+}
 
 it('partial tag failures drain writes, refresh committed results, and retry only unresolved tags', async () => {
   const client = new QueryClient();

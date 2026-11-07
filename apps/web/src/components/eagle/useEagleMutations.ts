@@ -102,6 +102,25 @@ export function useEagleMutations(
     });
   };
 
+  const ratingMembershipSensitive = (filters: unknown): boolean => {
+    if (!filters || typeof filters !== 'object' || Array.isArray(filters)) return false;
+    const record = filters as Record<string, unknown>;
+    if (typeof record.smartFolderId === 'string' || record.rating !== undefined) return true;
+    const hasRatingRule = (value: unknown): boolean => {
+      if (!value || typeof value !== 'object') return false;
+      if (Array.isArray(value)) return value.some(hasRatingRule);
+      const entry = value as Record<string, unknown>;
+      return entry.field === 'RATING' || Object.values(entry).some(hasRatingRule);
+    };
+    return hasRatingRule(record.rules);
+  };
+  const ratingListPredicate = (query: { queryKey: readonly unknown[] }) =>
+    query.queryKey.length === 6 &&
+    query.queryKey[3] === 'assets' &&
+    ratingMembershipSensitive(query.queryKey[5]);
+  const ratingRefreshNeeded = () =>
+    queryClient.getQueryCache().findAll({ queryKey: queryKeys.assets }).some(ratingListPredicate);
+
   const patchRating = (assets: EagleAssetVersion[], rating: number | null) => {
     const ids = assets.map((asset) => asset.assetId);
     const entities = new Map(ids.map((id) => [id, assetStore.get(id)]));
@@ -169,7 +188,9 @@ export function useEagleMutations(
           (current) => (current ? mergeEagleAssetFacts(current, asset).asset : current),
         );
       }
-      void invalidate(queryKeys.assets, queryKeys.assetDetails);
+      void invalidate(queryKeys.smartFolders);
+      if (ratingRefreshNeeded())
+        void queryClient.invalidateQueries({ predicate: ratingListPredicate });
     },
   });
   const metadataMutation = useMutation({
