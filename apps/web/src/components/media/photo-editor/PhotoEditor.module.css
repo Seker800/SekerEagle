@@ -128,6 +128,11 @@
   overflow: hidden;
   box-shadow: 0 2px 8px #0006;
 }
+.previewClip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
 .canvas {
   width: 100%;
   height: 100%;
@@ -1203,6 +1208,9 @@
 
 .editor:has(.cropControls) {
   --photo-controls-size: 276px;
+}
+.editor[data-presentation='native']:has(.cropControls) {
+  --photo-controls-size: 178px;
 }
 .editor:has(.filters) {
   --photo-controls-size: 272px;

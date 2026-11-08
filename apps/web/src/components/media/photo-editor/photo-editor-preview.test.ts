@@ -19,11 +19,14 @@ it('keeps the crop workspace bitmap unchanged while moving, zooming or straighte
   expect(photoProcessedKey(base({ cropX: 0.3, straighten: 12.5 }))).toBe(photoProcessedKey(base()));
 });
 
-it('rasterizes quarter turns, mirroring and comparison in the crop workspace', () => {
+it('leaves quarter turns and mirroring to CSS while rasterizing comparison', () => {
   const held = photoPreviewKey(base(), cropView);
-  expect(photoPreviewKey(base({ rotation: 90 }), cropView)).not.toBe(held);
-  expect(photoPreviewKey(base({ flip: true }), cropView)).not.toBe(held);
+  expect(photoPreviewKey(base({ rotation: 90 }), cropView)).toBe(held);
+  expect(photoPreviewKey(base({ flip: true }), cropView)).toBe(held);
   expect(photoPreviewKey(base(), { ...cropView, compare: true })).not.toBe(held);
+  expect(photoPreviewKey(base({ grain: 40, rotation: 90 }), cropView)).not.toBe(
+    photoPreviewKey(base({ grain: 40 }), cropView),
+  );
 });
 
 it('still reprocesses grain and vignette against crop geometry', () => {

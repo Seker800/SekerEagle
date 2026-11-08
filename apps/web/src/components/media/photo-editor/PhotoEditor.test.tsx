@@ -83,6 +83,9 @@ describe('photo editor interactions', () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '裁剪右下角' })).toBeInTheDocument(),
+    );
     expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '纵向' }));
     expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
@@ -392,7 +395,9 @@ describe('photo editor interactions', () => {
     expect(screen.getByRole('button', { name: '无水印' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
     fireEvent.click(screen.getByRole('button', { name: '对比原图' }));
-    expect(screen.getByRole('group', { name: '裁剪取景区域' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('group', { name: '裁剪取景区域' })).toBeInTheDocument(),
+    );
     await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![4]).toBe(false));
   });
   it('edits watermark text as one undoable operation and can remove the frame', async () => {
@@ -608,6 +613,48 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭编辑器' }));
     fireEvent.click(screen.getByRole('button', { name: '放弃修改' }));
     expect(close).toHaveBeenCalledOnce();
+  });
+  it('discards a render that finishes after the edit was undone', async () => {
+    const resolvers: Array<(canvas: HTMLCanvasElement) => void> = [];
+    const renderPhoto = vi.fn(
+      () => new Promise<HTMLCanvasElement>((resolve) => resolvers.push(resolve)),
+    );
+    const module = await import('./photo-editor-render');
+    vi.spyOn(module, 'createPhotoRenderer').mockReturnValue({
+      render: renderPhoto,
+      dispose: vi.fn(),
+    });
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const flushFrames = () => frames.splice(0).forEach((callback) => callback(0));
+    render(
+      <PhotoEditor
+        source="/photo.png"
+        name="Photo.png"
+        initialMetadata={{ camera: 'Nikon D80', parameters: '24mm · f/4' }}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(frames.length).toBeGreaterThan(0));
+    flushFrames();
+    await waitFor(() => expect(renderPhoto).toHaveBeenCalledTimes(1));
+    resolvers.shift()?.(document.createElement('canvas'));
+    await waitFor(() => expect(composePhoto).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByRole('slider', { name: '曝光' }), {
+      target: { value: '0.3' },
+    });
+    await waitFor(() => expect(frames.length).toBeGreaterThan(0));
+    flushFrames();
+    await waitFor(() => expect(renderPhoto).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+    resolvers.shift()?.(document.createElement('canvas'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(composePhoto).toHaveBeenCalledTimes(1);
   });
 });
 

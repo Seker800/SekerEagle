@@ -161,6 +161,10 @@ export function PhotoEditor({
   const previewKey = JSON.stringify({ edits, compare, tab, metadata });
   const [confirmClose, setConfirmClose] = useState(false);
   const [previewSize, setPreviewSize] = useState({ width: 1, height: 1 });
+  const [paintedView, setPaintedView] = useState<{ source: string; tab: Tab }>({
+    source: '',
+    tab: initialTab,
+  });
   const dialogRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageAreaRef = useRef<HTMLDivElement>(null);
@@ -320,6 +324,7 @@ export function PhotoEditor({
     setLoaded(null);
     previewRef.current = null;
     paintedKeyRef.current = '';
+    setRenderedKey('');
     let renderer: ReturnType<typeof createPhotoRenderer>;
     try {
       renderer = createPhotoRenderer();
@@ -422,6 +427,12 @@ export function PhotoEditor({
         : view.edits;
       const result = await renderer.render(input, renderEdits);
       if (generation !== loadGenerationRef.current || sequence < paintedSequence.current) return;
+      if (paintKeyRef.current !== key) {
+        // The user moved on (e.g. undo) while this frame was rendering; committing it
+        // would leave the canvas on a state the editor no longer shows.
+        paintDirtyRef.current = true;
+        return;
+      }
       const canvas = canvasRef.current;
       if (!canvas) return;
       const current = viewRef.current;
@@ -452,6 +463,11 @@ export function PhotoEditor({
       setWatermarkSource(result);
       paintedSequence.current = sequence;
       paintedKeyRef.current = key;
+      setPaintedView((previous) =>
+        previous.source === view.source && previous.tab === view.tab
+          ? previous
+          : { source: view.source, tab: view.tab },
+      );
       setRenderedKey(
         JSON.stringify({
           edits: view.edits,
@@ -463,6 +479,10 @@ export function PhotoEditor({
       setError('');
     } catch (reason) {
       if (generation !== loadGenerationRef.current) return;
+      if (paintKeyRef.current !== key) {
+        paintDirtyRef.current = true;
+        return;
+      }
       if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
         setErrorRetry('load');
         setError(renderErrorMessage(reason));
@@ -480,7 +500,14 @@ export function PhotoEditor({
     if (paintKey === paintedKeyRef.current) return;
     schedulePaintRef.current();
   }, [loaded, paintKey]);
-  useEffect(() => () => cancelAnimationFrame(paintFrameRef.current), []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(paintFrameRef.current);
+      paintFrameRef.current = 0;
+      paintScheduledRef.current = false;
+    },
+    [],
+  );
 
   const fullCrop = loaded ? photoCrop(imageWidth, imageHeight, edits) : null;
   const fullTemplate = findWatermark(edits.watermark);
@@ -611,8 +638,15 @@ export function PhotoEditor({
       />
     );
   }
+  // The frame only switches layout together with the bitmap it describes, so tab
+  // changes never show a cropped bitmap inside a full-frame box (or the reverse).
+  const layoutTab = paintedView.source === source ? paintedView.tab : initialTab;
+  const straighten = Number.isFinite(edits.straighten)
+    ? Math.max(-45, Math.min(45, edits.straighten))
+    : 0;
+  const rotation = Number.isFinite(edits.rotation) ? edits.rotation : 0;
   const cropWorkspace =
-    tab === 'crop' && previewRef.current
+    layoutTab === 'crop' && previewRef.current
       ? photoCrop(previewRef.current.width, previewRef.current.height, edits, false)
       : null;
   const frameWidth = cropWorkspace ? cropWorkspace.orientedWidth : previewSize.width;
@@ -625,7 +659,7 @@ export function PhotoEditor({
           top: '50%',
           width: `${(previewRef.current.width / cropWorkspace.orientedWidth) * 100}%`,
           height: `${(previewRef.current.height / cropWorkspace.orientedHeight) * 100}%`,
-          transform: `translate(-50%, -50%) scaleX(${edits.flip ? -1 : 1}) rotate(${edits.rotation + edits.straighten}deg)`,
+          transform: `translate(-50%, -50%) scaleX(${edits.flip ? -1 : 1}) rotate(${rotation + straighten}deg)`,
         }
       : undefined;
   const tabs = [
@@ -776,7 +810,7 @@ export function PhotoEditor({
         >
           <div
             className={styles.imageFrame}
-            data-cropping={tab === 'crop'}
+            data-cropping={layoutTab === 'crop'}
             style={{
               aspectRatio: `${frameWidth} / ${frameHeight}`,
               width: Math.max(
@@ -785,12 +819,14 @@ export function PhotoEditor({
               ),
             }}
           >
-            <canvas
-              ref={canvasRef}
-              aria-label={t('照片编辑预览')}
-              className={loaded ? styles.canvas : styles.hiddenCanvas}
-              style={cropCanvasStyle}
-            />
+            <div className={styles.previewClip}>
+              <canvas
+                ref={canvasRef}
+                aria-label={t('照片编辑预览')}
+                className={loaded ? styles.canvas : styles.hiddenCanvas}
+                style={cropCanvasStyle}
+              />
+            </div>
             {loaded && tab === 'crop' && cropWorkspace && (
               <PhotoCropViewport
                 edits={edits}

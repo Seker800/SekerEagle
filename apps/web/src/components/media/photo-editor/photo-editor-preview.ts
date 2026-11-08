@@ -26,14 +26,14 @@ export function photoProcessedKey(edits: PhotoEdits): string {
 /**
  * What the preview canvas must rasterize. The crop workspace shows the full frame
  * and applies rotation, flip and straighten as CSS transforms, so its bitmap only
- * follows pixels, base orientation and comparison.
+ * follows processed pixels and comparison; when grain or vignette are on the
+ * processed key already carries the geometry they are anchored to.
  */
 export function photoPreviewKey(
   edits: PhotoEdits,
   view: { compare: boolean; tab: string; metadata: PhotoMetadata },
 ): string {
   const processed = photoProcessedKey(edits);
-  if (view.tab === 'crop')
-    return JSON.stringify([processed, edits.rotation, edits.flip, view.compare]);
+  if (view.tab === 'crop') return JSON.stringify([processed, view.compare]);
   return JSON.stringify([processed, edits, view.compare, view.tab, view.metadata]);
 }
