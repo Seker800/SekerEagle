@@ -116,7 +116,17 @@ class NativeMultipartConcurrencyTest {
                         }
                     }
                 }
-            val item = MediaCatalog.Item(uri, "test.jpg", "", "image/jpeg", size.toLong(), 1, false)
+            val item =
+                MediaCatalog.Item(
+                    uri,
+                    uri,
+                    "test.jpg",
+                    "",
+                    "image/jpeg",
+                    size.toLong(),
+                    1,
+                    false,
+                )
             val checkpoint = BackupEngine.Checkpoint().apply { hash = "a".repeat(64) }
             MultipartTransport(api, "PHOTO", MediaCatalog(context), item)
                 .upload(

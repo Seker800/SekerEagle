@@ -176,7 +176,9 @@ final class CleanupScreen extends ScrollView {
                   guard(token);
                   if (entries.size() >= 500
                       || entries.containsKey(item.uri.toString())
-                      || !writableDocument(item)) return;
+                      || !writableDocument(item)
+                      // The system delete request only accepts image/video/audio items.
+                      || (!item.document && item.deleteUri == null)) return;
                   try {
                     catalog.checkSize(item);
                   } catch (Exception unusable) {
@@ -251,7 +253,7 @@ final class CleanupScreen extends ScrollView {
             for (Entry entry : checked) {
               if (entry.item.document) documents.add(entry);
               else {
-                media.add(entry.item.uri);
+                media.add(entry.item.deleteUri);
                 mediaEntries.add(entry);
               }
             }
@@ -292,14 +294,25 @@ final class CleanupScreen extends ScrollView {
     io.execute(
         () -> {
           try {
+            int trashed = 0;
             for (Entry entry : pendingMedia) {
               guard(token);
               try (android.database.Cursor cursor =
                   activity
                       .getContentResolver()
-                      .query(entry.item.uri, new String[] {"_id"}, null, null, null)) {
-                if (cursor == null || cursor.moveToFirst())
-                  throw new IOException("部分手机文件尚未清理，请重新检查");
+                      .query(
+                          entry.item.uri,
+                          new String[] {"_id", "is_trashed"},
+                          null,
+                          null,
+                          null)) {
+                if (cursor == null) throw new IOException("部分手机文件尚未清理，请重新检查");
+                if (cursor.moveToFirst()) {
+                  // Some systems move confirmed items to their own trash instead of deleting.
+                  if (cursor.getInt(1) != 1)
+                    throw new IOException("部分手机文件尚未清理，请重新检查");
+                  trashed++;
+                }
               }
             }
             if (!entries.isEmpty())
@@ -310,9 +323,15 @@ final class CleanupScreen extends ScrollView {
                     activity.getContentResolver(), entry.item.uri))
                   throw new IOException("部分文件未能清理，请重新检查");
               }
+            final int movedToTrash = trashed;
             activity.runOnUiThread(
                 () -> {
-                  if (token == generation && isAttachedToWindow()) reset("清理完成，服务器备份已保留");
+                  if (token == generation && isAttachedToWindow())
+                    reset(
+                        movedToTrash > 0 ? "手机文件已移入系统回收站" : "清理完成，服务器备份已保留",
+                        movedToTrash > 0
+                            ? "请在系统相册的最近删除中清空回收站以释放空间。服务器备份已保留。"
+                            : "可再次检查所选备份目录。服务器备份不会被删除。");
                 });
           } catch (Exception e) {
             fail(token, e);
@@ -327,18 +346,23 @@ final class CleanupScreen extends ScrollView {
   }
 
   private void reset(String message) {
+    reset(message, "可再次检查所选备份目录。服务器备份不会被删除。");
+  }
+
+  private void reset(String message, String detailText) {
     generation++;
     busy = false;
     plan = Collections.emptyList();
     pendingDocuments = Collections.emptyList();
     pendingMedia = Collections.emptyList();
     status.setText(message);
-    detail.setText("可再次检查所选备份目录。服务器备份不会被删除。");
+    detail.setText(detailText);
     action.setEnabled(true);
     action.setText("检查可释放空间");
   }
 
   private void fail(int token, Exception error) {
+    android.util.Log.w("CleanupScreen", "清理检查失败", error);
     activity.runOnUiThread(
         () -> {
           if (token == generation && isAttachedToWindow())

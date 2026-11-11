@@ -140,7 +140,7 @@ APK 内置编辑器仍使用网页同一个 PhotoEditor，通过显式 native �
 
 在「更多 → 释放空间」主动检查。暂停正在进行的备份后，只枚举当前服务／部署／账号所选目录，要求同一模式已确认的文件检查点、原文件完整哈希与稳定性匹配，并重新确认服务器当前可见副本。未备份、变化、服务器已删除／无法确认、时间戳未知或权限不足的文件保留。检查计划一分钟后过期，继续清理前再次复核身份、文件和服务器；每批最多 500 项，可重复检查。
 
-界面先显示数量与可释放容量，用户明确确认后，MediaStore 文件交给 [Android 系统删除请求](<https://developer.android.com/reference/android/provider/MediaStore#createDeleteRequest(android.content.ContentResolver,%20java.util.Collection%3Candroid.net.Uri%3E)>)，取消不继续清理；系统返回后核对文件是否移除。系统选择器目录只在用户授权可写时，经应用明确确认后逐文件再次复核并使用 DocumentsContract 删除；只读授权的旧目录需重新选择授予写权限才参与清理。清理不调用服务器删除 API、不清除成功回执，备份完成也不会自动清理。
+界面先显示数量与可释放容量，用户明确确认后，MediaStore 文件交给 [Android 系统删除请求](<https://developer.android.com/reference/android/provider/MediaStore#createDeleteRequest(android.content.ContentResolver,%20java.util.Collection%3Candroid.net.Uri%3E)>)，取消不继续清理；请求使用对应的图片／视频／音频集合项 URI，Files 表的 `file/<id>` URI 会被系统拒绝；非媒体类型行不进入清理计划。系统返回后核对文件是否移除，被系统移入回收站时提示用户清空「最近删除」以释放空间。系统选择器目录只在用户授权可写时，经应用明确确认后逐文件再次复核并使用 DocumentsContract 删除；只读授权的旧目录需重新选择授予写权限才参与清理。清理不调用服务器删除 API、不清除成功回执，备份完成也不会自动清理。
 
 ## 数据语义与边界
 

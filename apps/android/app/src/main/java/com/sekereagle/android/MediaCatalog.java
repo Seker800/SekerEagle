@@ -17,13 +17,14 @@ final class MediaCatalog {
   }
 
   static final class Item {
-    final Uri uri;
+    final Uri uri, deleteUri;
     final String name, path, mime;
     final long size, modified;
     final boolean document;
 
     Item(
         Uri uri,
+        Uri deleteUri,
         String name,
         String path,
         String mime,
@@ -31,6 +32,7 @@ final class MediaCatalog {
         long modified,
         boolean document) {
       this.uri = uri;
+      this.deleteUri = deleteUri;
       this.name = name;
       this.path = path;
       this.mime = mime;
@@ -94,7 +96,14 @@ final class MediaCatalog {
     if (afterId > maxSeenId) maxSeenId = afterId;
     Uri collection = MediaStore.Files.getContentUri("external");
     String[] projection = {
-      "_id", "_display_name", "relative_path", "_size", "date_modified", "is_pending", "is_trashed"
+      "_id",
+      "_display_name",
+      "relative_path",
+      "_size",
+      "date_modified",
+      "is_pending",
+      "is_trashed",
+      "media_type"
     };
     long after = afterId;
     for (; ; ) {
@@ -131,6 +140,7 @@ final class MediaCatalog {
           batch.add(
               new Item(
                   ContentUris.withAppendedId(collection, after),
+                  deleteUri(cursor.getInt(7), after),
                   name,
                   path,
                   entry.getString("mimeType"),
@@ -143,6 +153,19 @@ final class MediaCatalog {
       for (Item item : batch) visitor.visit(item);
       if (rows < 256) return;
     }
+  }
+
+  /** MediaStore delete requests accept item URIs of a media collection, never the Files table. */
+  private static Uri deleteUri(int mediaType, long id) {
+    Uri collection;
+    if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE)
+      collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL);
+    else if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO)
+      collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL);
+    else if (mediaType == MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO)
+      collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL);
+    else return null;
+    return ContentUris.withAppendedId(collection, id);
   }
 
   void scan(JSONArray rules, Visitor visitor, BackupEngine.Guard guard) throws Exception {
@@ -232,6 +255,7 @@ final class MediaCatalog {
           visitor.visit(
               new Item(
                   DocumentsContract.buildDocumentUriUsingTree(tree, childId),
+                  null,
                   name,
                   path,
                   entry.getString("mimeType"),
@@ -276,7 +300,8 @@ final class MediaCatalog {
           modifiedColumn >= 0 && !cursor.isNull(modifiedColumn)
               ? cursor.getLong(modifiedColumn) * (document ? 1 : 1000)
               : 0;
-      Item item = new Item(uri, name, "", entry.getString("mimeType"), size, modified, document);
+      Item item =
+          new Item(uri, null, name, "", entry.getString("mimeType"), size, modified, document);
       checkSize(item);
       return item;
     }

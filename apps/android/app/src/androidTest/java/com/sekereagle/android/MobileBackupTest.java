@@ -309,6 +309,9 @@ public final class MobileBackupTest {
             android.content.ContentUris.withAppendedId(
                 MediaStore.Files.getContentUri("external"),
                 android.content.ContentUris.parseId(original)),
+            android.content.ContentUris.withAppendedId(
+                MediaStore.Images.Media.getContentUri("external"),
+                android.content.ContentUris.parseId(original)),
             "cleanup-backed-up.png",
             path,
             "image/png",
@@ -319,8 +322,19 @@ public final class MobileBackupTest {
     BackupScreen.addRule(settings, scope, "media", path);
     runScan();
     checkCleanupEligibility(catalog, item, true);
+    // The app's scanned item must carry a Media item URI the system request accepts.
+    java.util.List<MediaCatalog.Item> scanned = new java.util.ArrayList<>();
+    catalog.scan(
+        settings.scanRules(scope),
+        (candidate, mode) -> {
+          if (candidate.name.equals("cleanup-backed-up.png")) scanned.add(candidate);
+        },
+        () -> {});
+    assertEquals(1, scanned.size());
+    assertEquals(item.deleteUri, scanned.get(0).deleteUri);
     android.app.PendingIntent prompt =
-        MediaStore.createDeleteRequest(context.getContentResolver(), java.util.List.of(original));
+        MediaStore.createDeleteRequest(
+            context.getContentResolver(), java.util.List.of(scanned.get(0).deleteUri));
     assertNotNull(prompt);
     // Merely building the system request never deletes a file or a server resource.
     assertTrue(exists(original, "photos"));
@@ -331,6 +345,9 @@ public final class MobileBackupTest {
     MediaCatalog.Item other =
         new MediaCatalog.Item(
             changed,
+            android.content.ContentUris.withAppendedId(
+                MediaStore.Images.Media.getContentUri("external"),
+                android.content.ContentUris.parseId(changed)),
             "cleanup-unconfirmed.png",
             path,
             "image/png",
@@ -489,7 +506,16 @@ public final class MobileBackupTest {
     MediaCatalog catalog = new MediaCatalog(context);
     MediaCatalog.Item item =
         new MediaCatalog.Item(
-            uri, "retry-part.png", path, "image/png", size(uri), modified(uri), false);
+            uri,
+            android.content.ContentUris.withAppendedId(
+                MediaStore.Images.Media.getContentUri("external"),
+                android.content.ContentUris.parseId(uri)),
+            "retry-part.png",
+            path,
+            "image/png",
+            size(uri),
+            modified(uri),
+            false);
     String session = UUID.randomUUID().toString();
     int[] signs = {0}, puts = {0};
     boolean[] permanent = {false};
