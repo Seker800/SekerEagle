@@ -6,8 +6,8 @@ android {
         applicationId 'com.sekereagle.android'
         minSdk 30
         targetSdk 36
-        versionCode 34
-        versionName '0.9.17'
+        versionCode 35
+        versionName '0.9.18'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true; compose true }
@@ -66,6 +66,7 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.10.0'
+    implementation 'androidx.media3:media3-exoplayer:1.11.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
     androidTestImplementation platform('androidx.compose:compose-bom:2026.03.00')
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'

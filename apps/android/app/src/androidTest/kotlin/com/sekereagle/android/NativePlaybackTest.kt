@@ -24,6 +24,7 @@ class NativePlaybackTest {
         InstrumentationRegistry.getInstrumentation().context.assets.open("playback.mp4").use {
             it.readBytes()
         }
+    @Volatile private var payload = bytes
     private val origin = "http://127.0.0.1:${server.localPort}"
     private lateinit var session: NativeSession
     private lateinit var worker: Thread
@@ -55,15 +56,16 @@ class NativePlaybackTest {
                                     line.substringAfter(':').trim()
                             }
                             requests.add(headers)
+                            val body = payload
                             val range = headers["range"]!!.removePrefix("bytes=").split('-')
                             val start = range[0].toInt()
-                            val end = minOf(range[1].toInt(), bytes.lastIndex)
-                            val data = bytes.copyOfRange(start, end + 1)
+                            val end = minOf(range[1].toInt(), body.lastIndex)
+                            val data = body.copyOfRange(start, end + 1)
                             val status = response
                             socket
                                 .getOutputStream()
                                 .write(
-                                    ("HTTP/1.1 $status Test\r\nContent-Type: $mime\r\nContent-Range: bytes $start-$end/${bytes.size + totalAdjustment}\r\nContent-Length: ${data.size}\r\nLocation: http://127.0.0.1:1/foreign\r\nConnection: close\r\n\r\n")
+                                    ("HTTP/1.1 $status Test\r\nContent-Type: $mime\r\nContent-Range: bytes $start-$end/${body.size + totalAdjustment}\r\nContent-Length: ${data.size}\r\nLocation: http://127.0.0.1:1/foreign\r\nConnection: close\r\n\r\n")
                                         .toByteArray()
                                 )
                             socket.getOutputStream().write(data)
@@ -129,35 +131,70 @@ class NativePlaybackTest {
     }
 
     @Test
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     fun rangeRejectsWholeResponsesAndInvalidationStopsEvenCachedReads() {
+        val uri = android.net.Uri.parse(origin + path)
+        fun source() = NativeVideoDataSource(session, path, bytes.size.toLong(), uri)
+        fun spec(length: Long) =
+            androidx.media3.datasource.DataSpec.Builder()
+                .setUri(uri)
+                .setPosition(0)
+                .setLength(length)
+                .build()
         response = 200
-        val source = NativeVideoSource(session, path, bytes.size.toLong())
-        assertThrows(java.io.IOException::class.java) { source.readAt(0, ByteArray(10), 0, 10) }
+        assertThrows(java.io.IOException::class.java) { source().open(spec(-1)) }
         response = 302
-        assertThrows(NativeSession.Failure::class.java) { source.readAt(0, ByteArray(10), 0, 10) }
+        assertThrows(NativeSession.Failure::class.java) { source().open(spec(-1)) }
         response = 206
         mime = "text/html"
-        assertThrows(java.io.IOException::class.java) { source.readAt(0, ByteArray(10), 0, 10) }
+        assertThrows(java.io.IOException::class.java) { source().open(spec(-1)) }
         mime = "video/mp4"
         totalAdjustment = 1
-        assertThrows(java.io.IOException::class.java) { source.readAt(0, ByteArray(10), 0, 10) }
+        assertThrows(java.io.IOException::class.java) { source().open(spec(-1)) }
         totalAdjustment = 0
+        val source = source()
+        assertEquals(100, source.open(spec(100)))
         val first = ByteArray(10)
-        assertEquals(10, source.readAt(0, first, 0, 10))
+        assertEquals(10, source.read(first, 0, 10))
         assertArrayEquals(bytes.copyOfRange(0, 10), first)
-        assertEquals(-1, source.readAt(bytes.size.toLong(), first, 0, 10))
         val count = requests.size
         val foreign =
-            NativeVideoSource(session, "https://example.invalid/video", bytes.size.toLong())
-        assertThrows(IllegalArgumentException::class.java) {
-            foreign.readAt(0, ByteArray(10), 0, 10)
-        }
+            NativeVideoDataSource(session, "https://example.invalid/video", bytes.size.toLong(), uri)
+        assertThrows(IllegalArgumentException::class.java) { foreign.open(spec(-1)) }
         foreign.close()
         assertEquals(count, requests.size)
         session.invalidateLocally()
-        assertThrows(NativeSession.Failure::class.java) { source.readAt(0, ByteArray(10), 0, 10) }
+        assertThrows(NativeSession.Failure::class.java) { source.read(ByteArray(10), 0, 10) }
         assertEquals(count, requests.size)
         source.close()
-        assertThrows(java.io.IOException::class.java) { source.readAt(0, ByteArray(10), 0, 10) }
+        assertThrows(java.io.IOException::class.java) { source.read(ByteArray(10), 0, 10) }
+    }
+
+    @Test
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    fun sequentialPlaybackUsesOneStreamingResponseInsteadOfWindowRequests() {
+        payload =
+            ByteArray(4 * 1024 * 1024) {
+                (it * 31 % 251).toByte()
+            }
+        val uri = android.net.Uri.parse(origin + path)
+        val source = NativeVideoDataSource(session, path, payload.size.toLong(), uri)
+        val spec =
+            androidx.media3.datasource.DataSpec.Builder()
+                .setUri(uri)
+                .setPosition(0)
+                .setLength(-1)
+                .build()
+        assertEquals(payload.size.toLong(), source.open(spec))
+        val buffer = ByteArray(64 * 1024)
+        val received = java.io.ByteArrayOutputStream()
+        while (true) {
+            val count = source.read(buffer, 0, buffer.size)
+            if (count < 0) break
+            received.write(buffer, 0, count)
+        }
+        source.close()
+        assertArrayEquals(payload, received.toByteArray())
+        assertEquals(1, requests.size)
     }
 }

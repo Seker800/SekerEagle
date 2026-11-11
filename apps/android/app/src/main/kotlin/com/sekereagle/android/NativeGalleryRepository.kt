@@ -175,9 +175,13 @@ class NativeGalleryRepository(
             )
         }
 
-    internal fun videoSource(asset: NativeAsset): NativeVideoSource {
+    internal fun videoPlayback(asset: NativeAsset): NativeVideoPlayback {
         require(asset.video && asset.playback != null && asset.playbackSize > 0)
-        return NativeVideoSource(session, asset.playback, asset.playbackSize)
+        val uri = android.net.Uri.parse(session.origin + asset.playback)
+        return NativeVideoPlayback(
+            uri,
+            NativeVideoDataSourceFactory(session, asset.playback, asset.playbackSize, uri),
+        )
     }
 
     suspend fun options(

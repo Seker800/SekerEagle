@@ -5,7 +5,9 @@ import com.sekereagle.android.core.BackupPolicy
 import com.sekereagle.android.core.NativeCookies
 import com.sekereagle.android.core.NativeGalleryPolicy
 import java.io.ByteArrayOutputStream
+import java.io.Closeable
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import org.json.JSONObject
@@ -110,14 +112,19 @@ class NativeSession private constructor(context: Context, val origin: String) : 
     fun media(path: String): ByteArray =
         request("GET", path, null, 16 * 1024 * 1024, true, image = true)
 
-    internal fun videoRange(
+    /**
+     * Opens one authenticated video response that the decoder consumes sequentially. Keeping the
+     * response open lets the player read ahead continuously instead of paying a round trip per
+     * window; the caller must close the returned stream.
+     */
+    internal fun openVideoStream(
         path: String,
         position: Long,
-        length: Int,
+        length: Long,
         size: Long,
         ticket: Int,
         bind: (HttpURLConnection) -> Unit,
-    ): ByteArray {
+    ): NativeVideoStream {
         require(
             path.matches(
                 Regex(
@@ -125,41 +132,54 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                 )
             )
         )
-        require(position >= 0 && position < size && length in 1..524288)
-        ensureActive(ticket)
-        val end = minOf(size - 1, position + length - 1)
-        return exchange(
-            "GET",
-            path,
-            null,
-            true,
-            "video/mp4",
-            { connection ->
-                ensureActive(ticket)
-                bind(connection)
-                connection.setRequestProperty("Range", "bytes=$position-$end")
-            },
-        ) { connection, active ->
-            if (
-                connection.responseCode != 206 ||
-                    connection.getHeaderField("Content-Range") != "bytes $position-$end/$size" ||
-                    connection.contentType.orEmpty().substringBefore(';') != "video/mp4"
-            )
-                throw IOException("播放副本暂不可用")
-            val bytes = ByteArray((end - position + 1).toInt())
-            connection.inputStream.use { input ->
-                var offset = 0
-                while (offset < bytes.size) {
-                    ensureActive(ticket)
-                    active()
-                    val count = input.read(bytes, offset, bytes.size - offset)
-                    if (count < 0) throw IOException("播放数据不完整")
-                    offset += count
-                }
-            }
+        require(position >= 0 && position < size)
+        require(length in 1..(size - position))
+        val end = position + length - 1
+        var refreshed = false
+        while (true) {
             ensureActive(ticket)
-            active()
-            bytes
+            val cookie =
+                synchronized(credentialLock) {
+                    ensureActive(ticket)
+                    jar.header(path)
+                }
+            val connection = URL(origin + path).openConnection() as HttpURLConnection
+            var handedOff = false
+            try {
+                bind(connection)
+                connection.instanceFollowRedirects = false
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 30_000
+                connection.requestMethod = "GET"
+                connection.setRequestProperty("Origin", origin)
+                connection.setRequestProperty("Cookie", cookie)
+                connection.setRequestProperty("Accept", "video/mp4")
+                connection.setRequestProperty("Range", "bytes=$position-$end")
+                val status = connection.responseCode
+                ensureActive(ticket)
+                if (status == 401 && !refreshed) {
+                    refreshed = true
+                    connection.disconnect()
+                    refreshAfterUnauthorized(ticket, path, cookie)
+                    continue
+                }
+                if (status !in 200..299) {
+                    if (status == 401) clear()
+                    throw Failure(status)
+                }
+                if (
+                    status != 206 ||
+                        connection.getHeaderField("Content-Range") !=
+                            "bytes $position-$end/$size" ||
+                        connection.contentType.orEmpty().substringBefore(';') != "video/mp4"
+                )
+                    throw IOException("播放副本暂不可用")
+                val stream = connection.inputStream
+                handedOff = true
+                return NativeVideoStream(this, ticket, connection, stream)
+            } finally {
+                if (!handedOff) connection.disconnect()
+            }
         }
     }
 
@@ -220,6 +240,29 @@ class NativeSession private constructor(context: Context, val origin: String) : 
 
     private fun ensureActive(ticket: Int) =
         synchronized(credentialLock) { if (blocked || ticket != epoch) throw Failure(401) }
+
+    private fun refreshAfterUnauthorized(
+        ticket: Int,
+        path: String,
+        cookie: String,
+        cancellation: NativeTransferCancellation? = null,
+    ) {
+        synchronized(refreshLock) {
+            ensureActive(ticket)
+            // A concurrent preview may already have rotated the same session.
+            val current = synchronized(credentialLock) { jar.header(path) }
+            if (current == cookie)
+                request(
+                    "POST",
+                    "/api/auth/refresh",
+                    "{}".toByteArray(),
+                    2 * 1024 * 1024,
+                    false,
+                    cancellation,
+                    expectedEpoch = ticket,
+                )
+        }
+    }
 
     private fun request(
         method: String,
@@ -344,21 +387,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                     (!path.startsWith("/api/auth/") || path == "/api/auth/me")
             ) {
                 connection.disconnect()
-                synchronized(refreshLock) {
-                    ensureActive(ticket)
-                    // A concurrent preview may already have rotated the same session.
-                    val current = synchronized(credentialLock) { jar.header(path) }
-                    if (current == cookie)
-                        request(
-                            "POST",
-                            "/api/auth/refresh",
-                            "{}".toByteArray(),
-                            2 * 1024 * 1024,
-                            false,
-                            cancellation,
-                            expectedEpoch = ticket,
-                        )
-                }
+                refreshAfterUnauthorized(ticket, path, cookie, cancellation)
                 return exchange(
                     method,
                     path,
@@ -425,5 +454,20 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             val normalized = BackupPolicy.origin(origin, BuildConfig.DEBUG)
             return sessions.getOrPut(normalized) { NativeSession(context, normalized) }
         }
+    }
+}
+
+/** One authenticated video response; closing it releases the connection immediately. */
+internal class NativeVideoStream(
+    private val session: NativeSession,
+    private val ticket: Int,
+    private val connection: HttpURLConnection,
+    val input: InputStream,
+) : Closeable {
+    fun checkActive() = session.checkAuthorization(ticket)
+
+    override fun close() {
+        runCatching { input.close() }
+        connection.disconnect()
     }
 }
