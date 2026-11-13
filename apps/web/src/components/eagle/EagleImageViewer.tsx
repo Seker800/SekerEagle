@@ -169,22 +169,84 @@ export function EagleImageViewer({
 }) {
   const compact = useCompactLayout();
   const [zoomActivated, setZoomActivated] = useState(false);
+  const [loadedOriginalSrc, setLoadedOriginalSrc] = useState<string | null>(null);
+  const [originalLoading, setOriginalLoading] = useState(false);
+  const [originalPercent, setOriginalPercent] = useState<number | null>(null);
+  const originalUrlRef = useRef<string | null>(null);
   const rotation = useRef(0);
   useEffect(() => {
     rotation.current = 0;
     setZoomActivated(false);
+    setLoadedOriginalSrc(null);
+    setOriginalLoading(false);
+    setOriginalPercent(null);
+    return () => {
+      if (originalUrlRef.current) {
+        URL.revokeObjectURL(originalUrlRef.current);
+        originalUrlRef.current = null;
+      }
+    };
   }, [image.assetId, image.src]);
+  useEffect(() => {
+    if (!zoomActivated || descriptor || !highResolutionSrc || loadedOriginalSrc) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    setOriginalLoading(true);
+    setOriginalPercent(null);
+    void (async () => {
+      try {
+        const response = await fetch(highResolutionSrc, {
+          credentials: 'include',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error('HIGH_RES_LOAD_FAILED');
+        const total = Number(response.headers.get('content-length') ?? 0);
+        const contentType = response.headers.get('content-type') ?? 'image/jpeg';
+        const reader = response.body?.getReader();
+        let blob: Blob;
+        if (reader) {
+          const chunks: Uint8Array[] = [];
+          let received = 0;
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.byteLength;
+            if (total) setOriginalPercent(Math.min(99, Math.round((received / total) * 100)));
+          }
+          blob = new Blob(chunks as BlobPart[], { type: contentType });
+        } else {
+          blob = await response.blob();
+        }
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        originalUrlRef.current = url;
+        setOriginalPercent(100);
+        setOriginalLoading(false);
+        setLoadedOriginalSrc(url);
+      } catch (reason) {
+        if (!cancelled && !(reason instanceof DOMException && reason.name === 'AbortError')) {
+          setOriginalLoading(false);
+          setOriginalPercent(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [zoomActivated, descriptor, highResolutionSrc, loadedOriginalSrc]);
   const previewSource = useMemo(() => createEaglePreviewTileSource(image.src), [image.src]);
   const highResolutionSource = useMemo(() => {
     if (!zoomActivated) return null;
     if (descriptor) return createEagleTileSource(descriptor);
-    return highResolutionSrc ? createEaglePreviewTileSource(highResolutionSrc) : null;
-  }, [zoomActivated, descriptor, highResolutionSrc]);
+    return loadedOriginalSrc ? createEaglePreviewTileSource(loadedOriginalSrc) : null;
+  }, [zoomActivated, descriptor, loadedOriginalSrc]);
   const source = highResolutionSource ?? previewSource;
   const sourceKey = highResolutionSource
     ? descriptor
       ? `pyramid:${descriptor.id}`
-      : `original:${highResolutionSrc}`
+      : `original:${loadedOriginalSrc}`
     : `preview:${image.src}`;
   const viewerElementRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ViewerHandle | undefined>(undefined);
@@ -205,6 +267,7 @@ export function EagleImageViewer({
   const loadedTilesRef = useRef(new Set<string>());
   descriptorRef.current = descriptor;
   const [status, setStatus] = useState<ViewerStatus>('loading');
+  const [sourceOpenedKey, setSourceOpenedKey] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [tileProgress, setTileProgress] = useState({ loaded: 0, total: 0 });
   const [initializationAttempt, setInitializationAttempt] = useState(0);
@@ -218,7 +281,8 @@ export function EagleImageViewer({
     if (!viewer || !pending) return;
     pendingSourceRef.current = null;
     sourceOpenTimerRef.current = undefined;
-    pendingViewportRef.current = pending.preserveViewport
+    const upgrading = pending.preserveViewport;
+    pendingViewportRef.current = upgrading
       ? {
           center: viewer.viewport.getCenter(true),
           zoom: viewer.viewport.getZoom(true),
@@ -227,11 +291,14 @@ export function EagleImageViewer({
     openedSourceKeyRef.current = '';
     sourceKeyRef.current = pending.sourceKey;
     activeImageKeyRef.current = pending.imageKey;
-    setDetailLoading(false);
+    setDetailLoading(upgrading && Boolean(descriptorRef.current));
     setTileProgress({ loaded: 0, total: 0 });
+    setSourceOpenedKey('');
     loadedTilesRef.current.clear();
     tilePlanRef.current = null;
-    setStatus('loading');
+    // A zoom upgrade keeps the loaded preview visible; only a cold image change
+    // uses the full-screen loading state.
+    setStatus(upgrading ? 'ready' : 'loading');
     viewer.open(pending.source);
   };
   const schedulePendingSourceOpen = () => {
@@ -342,6 +409,7 @@ export function EagleImageViewer({
             });
           }
           viewer.forceRedraw();
+          setSourceOpenedKey(sourceKeyRef.current);
           setStatus('ready');
           updateDetailLoading();
         });
@@ -434,18 +502,34 @@ export function EagleImageViewer({
     tileProgress.loaded > 0 &&
     tileProgress.loaded < tileProgress.total;
   const sourceIsPreview = sourceKey.startsWith('preview:');
+  const showOriginalProgress = sourceIsPreview && originalLoading;
+  const showOriginalBar = showOriginalProgress && originalPercent !== null;
   const qualityNotice =
     displayStatus === 'ready' && !loading
       ? sourceIsPreview
         ? previewLimited
-          ? t('预览图 · 放大加载高清')
+          ? showOriginalProgress
+            ? t('正在加载原图…')
+            : t('预览图 · 放大加载高清')
           : ''
         : descriptor
-          ? showDetailProgress
+          ? detailLoading
             ? t('正在加载高清细节…')
             : ''
           : ''
       : '';
+  const qualityPercent = showDetailProgress
+    ? Math.round((tileProgress.loaded / tileProgress.total) * 100)
+    : showOriginalBar
+      ? originalPercent
+      : null;
+  const qualityCount = showDetailProgress
+    ? `${tileProgress.loaded}/${tileProgress.total}`
+    : showOriginalBar
+      ? `${originalPercent}%`
+      : null;
+  const showPreviewBackdrop =
+    !error && (sourceIsPreview || detailLoading || sourceKey !== sourceOpenedKey);
   const secondary = (
     <>
       {!loading && !error && onLocate && image.assetId && (
@@ -505,26 +589,26 @@ export function EagleImageViewer({
         sourceUrl={loading ? undefined : image.motionSrc}
         posterUrl={image.src}
       />
+      {showPreviewBackdrop && (
+        <img
+          className={styles.previewBackdrop}
+          src={image.src}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
+      )}
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
       {qualityNotice && (
         <div className={styles.qualityNotice} role="status" aria-live="polite">
           <div className={styles.qualityLabel}>
             <span className={styles.qualityDot} aria-hidden="true" />
             <span>{qualityNotice}</span>
-            {showDetailProgress && (
-              <span className={styles.qualityCount}>
-                {tileProgress.loaded}/{tileProgress.total}
-              </span>
-            )}
+            {qualityCount && <span className={styles.qualityCount}>{qualityCount}</span>}
           </div>
-          {showDetailProgress && (
+          {qualityPercent !== null && (
             <div className={styles.qualityTrack} aria-hidden="true">
-              <div
-                className={styles.qualityBar}
-                style={{
-                  width: `${Math.round((tileProgress.loaded / tileProgress.total) * 100)}%`,
-                }}
-              />
+              <div className={styles.qualityBar} style={{ width: `${qualityPercent}%` }} />
             </div>
           )}
         </div>

@@ -1707,6 +1707,7 @@ export const enUS = {
   '正在计算符合规则的素材…': 'Calculating assets matching the rule…',
   '正在加载大图…': 'Loading Large Image...',
   '正在加载高清细节…': 'Loading full-resolution detail...',
+  '正在加载原图…': 'Loading the original image...',
   预览图: 'Preview image',
   '预览图 · 放大加载高清': 'Preview image · zoom in to load detail',
   '正在加载个人素材库…': 'Loading personal library…',

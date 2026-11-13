@@ -186,7 +186,7 @@ describe('EagleImageViewer', () => {
       ),
     );
     act(() => handlers.get('open')?.());
-    expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+    expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
     expect(screen.queryByText('0/48')).toBeNull();
     act(() => handlers.get('tile-loaded')?.({ tile: { level: 12, x: 0, y: 0 } }));
     expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
@@ -197,25 +197,43 @@ describe('EagleImageViewer', () => {
   });
 
   it('loads the original only after zooming when no pyramid is needed', async () => {
-    render(
-      <EagleImageViewer
-        image={image}
-        highResolutionSrc="/original.jpg"
-        previewLimited
-        onClose={vi.fn()}
-      />,
-    );
-    await waitFor(() => expect(handlers.has('open')).toBe(true));
-    act(() => handlers.get('open')?.());
-    expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
-    expect(openMock).not.toHaveBeenCalled();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-length': '3', 'content-type': 'image/jpeg' }),
+      body: null,
+      blob: async () => new Blob(['img'], { type: 'image/jpeg' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:original');
+    try {
+      render(
+        <EagleImageViewer
+          image={image}
+          highResolutionSrc="/original.jpg"
+          previewLimited
+          onClose={vi.fn()}
+        />,
+      );
+      await waitFor(() => expect(handlers.has('open')).toBe(true));
+      act(() => handlers.get('open')?.());
+      expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
+      expect(openMock).not.toHaveBeenCalled();
 
-    act(() => handlers.get('zoom')?.());
-    await waitFor(() =>
-      expect(openMock).toHaveBeenCalledWith({ type: 'image', url: '/original.jpg' }),
-    );
-    act(() => handlers.get('open')?.());
-    expect(screen.queryByText('预览图 · 放大加载高清')).toBeNull();
+      act(() => handlers.get('zoom')?.());
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/original.jpg',
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      await waitFor(() =>
+        expect(openMock).toHaveBeenCalledWith({ type: 'image', url: 'blob:original' }),
+      );
+      act(() => handlers.get('open')?.());
+      expect(screen.queryByText('预览图 · 放大加载高清')).toBeNull();
+    } finally {
+      createObjectURL.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('shows an existing thumbnail while loading and removes it when the viewer opens', async () => {
