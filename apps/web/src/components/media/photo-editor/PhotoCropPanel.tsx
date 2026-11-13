@@ -165,18 +165,20 @@ export function PhotoCropPanel({
         </button>
         {CROP_RATIO_PAIRS.map((ratios) => {
           const ratio = ratios[portrait ? 1 : 0];
+          const label = ratio === '65:24' || ratio === '24:65' ? 'XPan' : ratio;
           return (
             <button
               type="button"
               key={ratios[0]}
               ref={edits.cropRatio === ratio ? selectedRatioRef : undefined}
               aria-pressed={edits.cropRatio === ratio}
+              title={ratio}
               onClick={() => selectRatio(ratio)}
             >
               <span className={styles.ratioPreview} aria-hidden="true">
                 <RatioShape aspect={Number(ratio.split(':')[0]) / Number(ratio.split(':')[1])} />
               </span>
-              <span>{ratio}</span>
+              <span>{label}</span>
             </button>
           );
         })}

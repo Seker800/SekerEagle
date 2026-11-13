@@ -1,6 +1,7 @@
-import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from '@sekereagle/library-core';
+import { INITIAL_PHOTO_EDITS, type PhotoEdits } from '@sekereagle/library-core';
 export {
   DEFAULT_PHOTO_EDITS,
+  INITIAL_PHOTO_EDITS,
   CROP_RATIO_PAIRS,
   FIXED_CROP_RATIOS,
   type PhotoEdits,
@@ -63,7 +64,7 @@ export function photoCrop(width: number, height: number, edits: PhotoEdits, rast
 }
 
 export function hasPhotoEdits(edits: PhotoEdits): boolean {
-  return Object.keys(DEFAULT_PHOTO_EDITS).some(
-    (key) => edits[key as keyof PhotoEdits] !== DEFAULT_PHOTO_EDITS[key as keyof PhotoEdits],
+  return Object.keys(INITIAL_PHOTO_EDITS).some(
+    (key) => edits[key as keyof PhotoEdits] !== INITIAL_PHOTO_EDITS[key as keyof PhotoEdits],
   );
 }

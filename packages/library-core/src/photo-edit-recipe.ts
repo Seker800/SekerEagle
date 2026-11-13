@@ -8,6 +8,7 @@ export const CROP_RATIO_PAIRS = [
   ['5:4', '4:5'],
   ['16:9', '9:16'],
   ['21:9', '9:21'],
+  ['65:24', '24:65'],
 ] as const;
 export const FIXED_CROP_RATIOS = ['original', ...new Set(CROP_RATIO_PAIRS.flat())] as const;
 export type CropRatio = 'free' | (typeof FIXED_CROP_RATIOS)[number];
@@ -97,6 +98,12 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   cropAspect: 0,
   cropX: 0.5,
   cropY: 0.5,
+};
+/** New editor sessions start with the photo-info strip on a frosted background. */
+export const INITIAL_PHOTO_EDITS: PhotoEdits = {
+  ...DEFAULT_PHOTO_EDITS,
+  watermark: 'photo-strip',
+  watermarkTheme: 'frosted',
 };
 
 export interface PhotoEditRecipe {

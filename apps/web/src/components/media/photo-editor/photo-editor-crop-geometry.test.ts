@@ -7,6 +7,13 @@ import {
 } from './photo-editor-model';
 import { dragPhotoCrop, type CropHandle } from './photo-editor-crop-geometry';
 
+it('supports XPan 65:24 and its portrait orientation', () => {
+  const wide = photoCrop(6500, 2400, { ...DEFAULT_PHOTO_EDITS, cropRatio: '65:24' });
+  expect(wide.width / wide.height).toBeCloseTo(65 / 24, 3);
+  const tall = photoCrop(2400, 6500, { ...DEFAULT_PHOTO_EDITS, cropRatio: '24:65' });
+  expect(tall.width / tall.height).toBeCloseTo(24 / 65, 3);
+});
+
 it('free edges change one dimension and corners change both while preserving the opposite anchor', () => {
   const edits: PhotoEdits = { ...DEFAULT_PHOTO_EDITS, cropRatio: 'free' };
   const right = photoCrop(2000, 1200, {

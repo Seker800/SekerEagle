@@ -21,6 +21,12 @@ test('recipe round trips every adjustment and rejects unsupported or unsafe data
     assert.throws(() => readPhotoEditRecipe(invalid));
   }
 });
+test('accepts the XPan 65:24 crop ratio and its portrait orientation', () => {
+  for (const cropRatio of ['65:24', '24:65'] as const) {
+    const recipe = { version: 1 as const, edits: { ...DEFAULT_PHOTO_EDITS, cropRatio } };
+    assert.equal(readPhotoEditRecipe(recipe).edits.cropRatio, cropRatio);
+  }
+});
 test('straighten accepts fractional degrees within 45 and defaults for old recipes', () => {
   const recipe = {
     version: 1,

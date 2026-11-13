@@ -101,7 +101,7 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '重置裁剪' }));
     expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '纵向' }));
-    for (const ratio of ['1:1', '3:4', '2:3', '4:5', '9:16', '9:21']) {
+    for (const ratio of ['1:1', '3:4', '2:3', '4:5', '9:16', '9:21', 'XPan']) {
       fireEvent.click(screen.getByRole('button', { name: ratio }));
       expect(screen.getByRole('button', { name: ratio })).toHaveAttribute('aria-pressed', 'true');
     }
@@ -364,7 +364,15 @@ describe('photo editor interactions', () => {
     expect(button).toHaveAttribute('aria-pressed', 'false');
   });
   it('compares only filters and adjustments while preserving framing, watermark and history', async () => {
-    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    render(
+      <PhotoEditor
+        source="/photo.png"
+        name="Photo.png"
+        initialEdits={{ ...DEFAULT_PHOTO_EDITS }}
+        onClose={vi.fn()}
+        onSave={vi.fn()}
+      />,
+    );
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
     fireEvent.change(screen.getByRole('slider', { name: '曝光' }), { target: { value: '0.5' } });
     fireEvent.click(screen.getByRole('button', { name: '滤镜' }));
@@ -398,6 +406,19 @@ describe('photo editor interactions', () => {
       expect(screen.getByRole('group', { name: '裁剪取景区域' })).toBeInTheDocument(),
     );
     await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![4]).toBe(false));
+  });
+  it('starts new edits with the photo info strip on a frosted background', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '水印' }));
+    expect(screen.getByRole('button', { name: '摄影信息条' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: '毛玻璃底' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
   it('edits watermark text as one undoable operation and can remove the frame', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
@@ -677,7 +698,15 @@ it('keeps filter strength above its thumbnails in the common tool inspector', as
 });
 
 it('undoes and redoes the frosted watermark background as one ordinary edit', async () => {
-  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  render(
+    <PhotoEditor
+      source="/photo.png"
+      name="Photo.png"
+      initialEdits={{ ...DEFAULT_PHOTO_EDITS }}
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+    />,
+  );
   await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '水印' }));
   fireEvent.click(screen.getByRole('button', { name: '居中留白' }));
@@ -919,6 +948,7 @@ it('opens only the small preview, preserves export dimensions and loads the orig
       previewSource="/preview.webp"
       sourceSize={{ width: 6000, height: 4500 }}
       initialMetadata={{ camera: 'Nikon Z5' }}
+      initialEdits={{ ...DEFAULT_PHOTO_EDITS }}
       name="Photo.jpg"
       onClose={vi.fn()}
       onSave={save}

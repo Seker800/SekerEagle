@@ -18,6 +18,7 @@ import {
 import { t } from '../../../i18n';
 import {
   DEFAULT_PHOTO_EDITS,
+  INITIAL_PHOTO_EDITS,
   hasPhotoEdits,
   photoCrop,
   type PhotoEdits,
@@ -131,10 +132,10 @@ export function PhotoEditor({
   const compact = presentation === 'native' || compactLayout;
   const [history, setHistory] = useState<History>({
     past: [],
-    current: { ...DEFAULT_PHOTO_EDITS, ...initialEdits },
+    current: { ...INITIAL_PHOTO_EDITS, ...initialEdits },
     future: [],
   });
-  const edits = useMemo(() => ({ ...DEFAULT_PHOTO_EDITS, ...history.current }), [history.current]);
+  const edits = useMemo(() => ({ ...INITIAL_PHOTO_EDITS, ...history.current }), [history.current]);
   const [copied, setCopied] = useState(false);
   const [draftStatus, setDraftStatus] = useState('');
   const draftQueue = useRef(Promise.resolve());
