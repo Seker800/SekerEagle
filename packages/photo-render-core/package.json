@@ -74,10 +74,6 @@
       "types": "./dist/photo-editor-watermark.d.ts",
       "default": "./dist/photo-editor-watermark.js"
     },
-    "./photo-editor-limits": {
-      "types": "./dist/photo-editor-limits.d.ts",
-      "default": "./dist/photo-editor-limits.js"
-    },
     "./photo-editor-geometry": {
       "types": "./dist/photo-editor-geometry.d.ts",
       "default": "./dist/photo-editor-geometry.js"

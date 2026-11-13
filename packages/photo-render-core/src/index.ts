@@ -13,5 +13,4 @@ export * from './photo-watermark-background';
 export * from './photo-watermark-drawing';
 export * from './photo-watermark-layouts';
 export * from './photo-editor-watermark';
-export * from './photo-editor-limits';
 export * from './photo-editor-geometry';

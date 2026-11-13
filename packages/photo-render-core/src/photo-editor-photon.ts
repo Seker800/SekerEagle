@@ -21,7 +21,6 @@ export function processPhotoPixels(
     !Number.isSafeInteger(height) ||
     width <= 0 ||
     height <= 0 ||
-    width * height > 48_000_000 ||
     pixels.length !== width * height * 4
   )
     throw new Error('INVALID_PHOTO_PIXELS');

@@ -18,7 +18,6 @@ vi.mock('./photo-editor-watermark', () => ({
 }));
 
 vi.mock('./photo-editor-render', () => ({
-  MAX_PHOTO_PIXELS: 48_000_000,
   sourceCanvas: vi.fn(() =>
     Object.assign(document.createElement('canvas'), { width: 800, height: 600 }),
   ),
@@ -778,7 +777,7 @@ it('explains a stale source conflict and blocks retries against the same frozen 
   expect(button).toBeDisabled();
 });
 
-it('rejects an oversized bordered output before allocating a full-resolution canvas', async () => {
+it('allows a bordered output that exceeds the old editor pixel budget', async () => {
   vi.stubGlobal(
     'Image',
     class {
@@ -794,8 +793,8 @@ it('rejects an oversized bordered output before allocating a full-resolution can
   await waitFor(() => expect(screen.getByRole('button', { name: '保存到相册' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '水印' }));
   fireEvent.click(screen.getByRole('button', { name: '居中留白' }));
-  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('水印后的图片超过'));
-  expect(screen.getByRole('button', { name: '保存到相册' })).toBeDisabled();
+  await waitFor(() => expect(screen.getByRole('button', { name: '保存到相册' })).toBeEnabled());
+  expect(screen.queryByRole('alert')).toBeNull();
 });
 
 it('restores initial edits, autosaves a draft and copies the current recipe', async () => {

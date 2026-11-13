@@ -1,6 +1,5 @@
-import { photoCrop, type PhotoEdits } from './photo-editor-model';
-import { MAX_PHOTO_PIXELS, withinPhotoOutputBudget } from './photo-editor-limits';
-import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo-watermark-model';
+import type { PhotoEdits } from './photo-editor-model';
+import type { PhotoMetadata } from './photo-watermark-model';
 import { composePhoto, sourceCanvas, type createPhotoRenderer } from './photo-editor-render';
 import { editedPhotoName } from './photo-editor-save';
 export async function renderEditedPhotoFile(
@@ -10,12 +9,6 @@ export async function renderEditedPhotoFile(
   renderer: ReturnType<typeof createPhotoRenderer>,
   name: string,
 ): Promise<File> {
-  if (image.naturalWidth * image.naturalHeight > MAX_PHOTO_PIXELS)
-    throw new Error('PHOTO_PIXEL_LIMIT');
-  const crop = photoCrop(image.naturalWidth, image.naturalHeight, edits),
-    template = findWatermark(edits.watermark);
-  const size = template ? photoWatermarkLayout(crop.width, crop.height, template) : crop;
-  if (!withinPhotoOutputBudget(size.width, size.height)) throw new Error('PHOTO_OUTPUT_LIMIT');
   const input = sourceCanvas(image);
   try {
     const result = await renderer.render(input, edits),

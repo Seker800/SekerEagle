@@ -13,6 +13,7 @@
 
 - 1 个 owner；约 6 万张照片/素材、单张最高 6100 万像素（现用库以 `docs/current-runtime.md` 的实时核验为准，不把快照当实时值）。
 - 单张输入边界按 `packages/library-core/src/media-formats.ts`：图片 500MB / 1.2 亿像素，视频 5GB / 4 小时；常见高像素照片按数千万像素估算。
+- 编辑器不另设低于导入边界的像素上限；接受的图片直接进入编辑，实际资源不足时返回真实错误，由用户决定优化方式。
 - API 单实例（同一进程含 MATERIAL / PHOTO 两个 module）、NAS 上的 PostgreSQL + MinIO、Mac 业务 worker 与媒体节点。
 - 所有成本估算按这个规模，**不按「成千上万并发用户」算**。
 

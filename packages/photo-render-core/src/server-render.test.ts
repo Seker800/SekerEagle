@@ -51,7 +51,7 @@ test('mirrors a straightened vignette consistently instead of moving its center'
     maxDifference = Math.max(maxDifference, Math.abs(a.data[i]! - b.data[i]!));
   assert.ok(maxDifference <= 1, `max channel difference ${maxDifference}`);
 });
-test('rejects pixel budgets and missing personal LUTs rather than silently changing the edit', async () => {
+test('rejects missing personal LUTs rather than silently changing the edit', async () => {
   const source = await sharp({ create: { width: 64, height: 32, channels: 4, background: '#fff' } })
     .png()
     .toBuffer();

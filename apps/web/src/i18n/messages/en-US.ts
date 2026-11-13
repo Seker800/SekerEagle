@@ -1963,8 +1963,8 @@ export const enUS = {
   '编辑 RAW 显影副本': 'Edit developed RAW copy',
   关闭编辑器: 'Close editor',
   '照片处理失败，请重试。': 'Photo processing failed. Please retry.',
-  '暂支持不超过 4800 万像素的照片，请先缩小图片。':
-    'Photos up to 48 megapixels are supported. Resize the image first.',
+  '当前客户端无法为这张照片分配画布，请重试或改用桌面端。':
+    'This client cannot allocate a canvas for this photo. Retry or use the desktop app.',
   '照片读取失败，请选择 JPG、PNG 或 WebP 图片。':
     'Could not read this photo. Choose a JPG, PNG or WebP image.',
   '照片导出失败，请重试。': 'Photo export failed. Please retry.',
@@ -2071,8 +2071,6 @@ export const enUS = {
   '已导入 {{value1}} 个 LUT，仅保存在此浏览器':
     'Imported {{value1}} LUTs, stored only in this browser',
   毛玻璃底: 'Frosted glass',
-  '水印后的图片超过编辑器尺寸限制，请裁剪图片或选择叠印水印。':
-    'The bordered image exceeds editor limits. Crop the photo or choose an overlay watermark.',
   '原照片或保存条件已变化，请关闭后重新打开编辑器。':
     'The original photo or save conditions changed. Close and reopen the editor.',
   打开导航: 'Open navigation',

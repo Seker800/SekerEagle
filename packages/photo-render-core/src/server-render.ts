@@ -7,7 +7,6 @@ import { readPhotoEditRecipe, type PhotoEdits } from '@sekereagle/library-core';
 import { processPhotoPixels } from './photo-editor-photon';
 import { drawPhoto } from './photo-editor-geometry';
 import { renderPhotoWatermark } from './photo-editor-watermark';
-import { MAX_PHOTO_PIXELS, withinPhotoOutputBudget } from './photo-editor-limits';
 import type { PhotoMetadata } from './photo-watermark-model';
 import type { PhotoLut } from './photo-lut';
 let ready = false;
@@ -23,13 +22,12 @@ async function renderServerPhotoLocal(
     initSync({ module: readFileSync(require.resolve('@silvia-odwyer/photon/photon_rs_bg.wasm')) });
     ready = true;
   }
-  const { data, info } = await sharp(source, { limitInputPixels: MAX_PHOTO_PIXELS })
+  const { data, info } = await sharp(source)
     .rotate()
     .toColourspace('srgb')
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
-  if (!withinPhotoOutputBudget(info.width, info.height)) throw new Error('PHOTO_SOURCE_TOO_LARGE');
   const pixels = processPhotoPixels(new Uint8Array(data), info.width, info.height, edits, lut);
   const canvas = createCanvas(info.width, info.height);
   canvas
@@ -39,8 +37,6 @@ async function renderServerPhotoLocal(
   const cropped = create();
   drawPhoto(cropped, canvas as unknown as HTMLCanvasElement, edits);
   const output = renderPhotoWatermark(cropped, edits, metadata, create);
-  if (!withinPhotoOutputBudget(output.width, output.height))
-    throw new Error('PHOTO_OUTPUT_TOO_LARGE');
   return (output as unknown as Canvas).toBuffer('image/png');
 }
 

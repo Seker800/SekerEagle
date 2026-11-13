@@ -4,7 +4,6 @@ import { useCompactLayout } from '../../../hooks/useCompactLayout';
 import { loadEditablePhoto, renderEditedPhotoFile } from './photo-editor-export';
 import { photoEditRecipe, type PhotoEditRecipe } from '@sekereagle/library-core';
 import { ApiError } from '../../../lib/api-error';
-import { withinPhotoOutputBudget } from './photo-editor-limits';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconAdjustments,
@@ -24,12 +23,7 @@ import {
   type PhotoEdits,
 } from './photo-editor-model';
 import { photoPreviewKey } from './photo-editor-preview';
-import {
-  createPhotoRenderer,
-  composePhoto,
-  MAX_PHOTO_PIXELS,
-  sourceCanvas,
-} from './photo-editor-render';
+import { createPhotoRenderer, composePhoto, sourceCanvas } from './photo-editor-render';
 import styles from './PhotoEditor.module.css';
 import { type SavedPhoto } from './photo-editor-save';
 import { PhotoAdjustmentControl } from './PhotoAdjustmentControl';
@@ -55,6 +49,8 @@ function renderErrorMessage(reason: unknown): string {
     return t('当前客户端阻止了照片处理模块，请更新桌面客户端后重新打开。');
   if (reason instanceof Error && reason.message === 'LUT_NOT_FOUND')
     return t('当前设备缺少这张照片使用的自定义滤镜，请在滤镜面板导入对应 LUT 后重试。');
+  if (reason instanceof Error && reason.message === 'CANVAS_UNAVAILABLE')
+    return t('当前客户端无法为这张照片分配画布，请重试或改用桌面端。');
   return t('照片处理失败，请重试。');
 }
 
@@ -336,15 +332,6 @@ export function PhotoEditor({
     void loadEditablePhoto(previewSource ?? source, controller.signal)
       .then((image) => {
         if (controller.signal.aborted) return;
-        if (
-          Math.max(
-            image.naturalWidth * image.naturalHeight,
-            (sourceSize?.width ?? image.naturalWidth) * (sourceSize?.height ?? image.naturalHeight),
-          ) > MAX_PHOTO_PIXELS
-        ) {
-          setError(t('暂支持不超过 4800 万像素的照片，请先缩小图片。'));
-          return;
-        }
         try {
           previewRef.current = sourceCanvas(image, 1280);
           setLoaded(image);
@@ -509,22 +496,10 @@ export function PhotoEditor({
     [],
   );
 
-  const fullCrop = loaded ? photoCrop(imageWidth, imageHeight, edits) : null;
-  const fullTemplate = findWatermark(edits.watermark);
-  const fullOutput =
-    fullCrop && fullTemplate
-      ? photoWatermarkLayout(fullCrop.width, fullCrop.height, fullTemplate)
-      : fullCrop;
-  const outputTooLarge =
-    !!fullOutput && !withinPhotoOutputBudget(fullOutput.width, fullOutput.height);
-  const outputWarning = outputTooLarge
-    ? t('水印后的图片超过编辑器尺寸限制，请裁剪图片或选择叠印水印。')
-    : '';
   async function savePhoto() {
     if (
       saveUnavailable ||
       sourceConflict ||
-      outputTooLarge ||
       !loaded ||
       !rendererRef.current ||
       busy ||
@@ -755,7 +730,6 @@ export function PhotoEditor({
             !loaded ||
             Boolean(saveUnavailable) ||
             sourceConflict ||
-            (tab !== 'crop' && outputTooLarge) ||
             busy ||
             rendering ||
             compare ||
@@ -843,11 +817,6 @@ export function PhotoEditor({
           </div>
           {!loaded && !error && <p role="status">{t('正在读取照片…')}</p>}
         </div>
-        {outputWarning && (
-          <div className={styles.error} role="alert">
-            {outputWarning}
-          </div>
-        )}
         {saveUnavailable && (
           <p className={styles.error} role="status">
             {saveUnavailable}

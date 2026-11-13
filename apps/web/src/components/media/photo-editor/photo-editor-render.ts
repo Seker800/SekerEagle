@@ -5,17 +5,19 @@ import { photoProcessedKey } from './photo-editor-preview';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import type { PhotoMetadata } from './photo-watermark-model';
 
-export { MAX_PHOTO_PIXELS } from './photo-editor-limits';
 export function sourceCanvas(image: HTMLImageElement, maxEdge?: number): HTMLCanvasElement {
   const scale = maxEdge
     ? Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight))
     : 1;
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.width = width;
+  canvas.height = height;
+  if (canvas.width !== width || canvas.height !== height) throw new Error('CANVAS_UNAVAILABLE');
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, width, height);
   return canvas;
 }
 
