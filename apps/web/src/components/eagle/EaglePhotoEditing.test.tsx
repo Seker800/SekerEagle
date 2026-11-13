@@ -17,6 +17,8 @@ const state = vi.hoisted(() => ({
   getRecipe: vi.fn(),
   saveRecipe: vi.fn(),
   getAsset: vi.fn(),
+  createRender: vi.fn(),
+  readRender: vi.fn(),
 }));
 vi.mock('../../lib/library-workspace', () => ({
   useLibraryWorkspace: () => ({
@@ -26,6 +28,8 @@ vi.mock('../../lib/library-workspace', () => ({
       getEagleEditRecipe: state.getRecipe,
       saveEagleEditRecipe: state.saveRecipe,
       getEagleAsset: state.getAsset,
+      createEagleEditRender: state.createRender,
+      readEagleEditRender: state.readRender,
     },
   }),
 }));
@@ -65,6 +69,10 @@ beforeEach(() => {
   state.getRecipe.mockReset().mockResolvedValue(null);
   state.saveRecipe.mockReset().mockResolvedValue({ saved: true });
   state.getAsset.mockReset().mockResolvedValue(asset);
+  state.createRender.mockReset().mockResolvedValue({ id: 'job' });
+  state.readRender
+    .mockReset()
+    .mockResolvedValue({ status: 'COMPLETED', asset: { id: 'copy', name: 'copy.png' } });
 });
 describe('shared library photo editing', () => {
   it('keeps unsupported, deleted and processing resources out of the edit flow', () => {
@@ -117,7 +125,7 @@ describe('shared library photo editing', () => {
   });
   it('opens a current RAW rendition in PHOTO and rejects foreign-mode and unavailable sources', async () => {
     state.mode = 'PHOTO';
-    const { wrapper, client } = harness();
+    const { wrapper } = harness();
     const { result } = renderHook(
       () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'photo' }),
       { wrapper },
@@ -128,13 +136,59 @@ describe('shared library photo editing', () => {
     expect(result.current.session).toBeNull();
     act(() => result.current.open({ ...raw, libraryMode: 'PHOTO' }));
     expect(result.current.session?.source).toBe('/api/photos/assets/source/renditions/edit');
+    expect(typeof result.current.session?.onSaveRecipe).toBe('function');
+  });
+  it('saves a RAW session through the server edit render instead of uploading a reduced PNG', async () => {
+    const { wrapper, client } = harness();
     const refresh = vi.spyOn(client, 'invalidateQueries');
-    state.upload.mockResolvedValue({ asset: { id: 'copy' } });
-    await result.current.session!.onSave(new File(['png'], 'output.png'));
-    expect(refresh).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner', 'PHOTO', 'assets'] });
-    expect(refresh).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner', 'PHOTO', 'manual-tags'] });
-    act(() => result.current.close());
-    expect(result.current.session).toBeNull();
+    const { result } = renderHook(
+      () =>
+        useEaglePhotoEditing({
+          accessToken: 'token',
+          ownerId: 'owner',
+          scopeKey: 'owner:MATERIAL',
+        }),
+      { wrapper },
+    );
+    act(() => result.current.open(raw));
+    const recipe = { version: 1 as const, edits: DEFAULT_PHOTO_EDITS };
+    expect(await result.current.session!.onSaveRecipe!(recipe, 'lut-data')).toEqual({
+      id: 'copy',
+      name: 'copy.png',
+    });
+    expect(state.createRender).toHaveBeenCalledWith('source', {
+      requestId: expect.any(String),
+      mediaRevision: 2,
+      rowVersion: 7,
+      recipe,
+      lut: 'lut-data',
+    });
+    expect(state.readRender).toHaveBeenCalledWith('source', 'job');
+    expect(state.upload).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner', 'MATERIAL', 'assets'] });
+    expect(refresh).toHaveBeenCalledWith({
+      queryKey: ['eagle', 'owner', 'MATERIAL', 'manual-tags'],
+    });
+  });
+  it('reuses the render request id when retrying an unchanged RAW recipe', async () => {
+    const { wrapper } = harness();
+    const { result } = renderHook(
+      () =>
+        useEaglePhotoEditing({
+          accessToken: 'token',
+          ownerId: 'owner',
+          scopeKey: 'owner:MATERIAL',
+        }),
+      { wrapper },
+    );
+    act(() => result.current.open(raw));
+    const recipe = { version: 1 as const, edits: DEFAULT_PHOTO_EDITS };
+    state.readRender.mockRejectedValueOnce(new Error('offline'));
+    await expect(result.current.session!.onSaveRecipe!(recipe)).rejects.toThrow('offline');
+    await result.current.session!.onSaveRecipe!(recipe);
+    expect(state.createRender.mock.calls[0]![1].requestId).toBe(
+      state.createRender.mock.calls[1]![1].requestId,
+    );
   });
   it('propagates upload failure for the existing editor retry flow', async () => {
     const { wrapper } = harness();

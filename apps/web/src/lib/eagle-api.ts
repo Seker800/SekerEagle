@@ -738,9 +738,33 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       body: JSON.stringify({ mediaRevision, recipe }),
     });
   }
+  function createEagleEditRender(
+    assetId: string,
+    input: {
+      requestId: string;
+      mediaRevision: number;
+      rowVersion: number;
+      recipe: PhotoEditRecipe;
+      lut?: string;
+    },
+  ) {
+    return api<{ id: string }>(`/eagle/assets/${encodeURIComponent(assetId)}/edit-renders`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+  function readEagleEditRender(assetId: string, jobId: string) {
+    return api<{
+      status: string;
+      message?: string;
+      asset?: { id: string; name: string };
+    }>(`/eagle/assets/${encodeURIComponent(assetId)}/edit-renders/${encodeURIComponent(jobId)}`);
+  }
   return {
     getEagleEditRecipe,
     saveEagleEditRecipe,
+    createEagleEditRender,
+    readEagleEditRender,
     getEagleMediaCapabilities,
     listEagleAssets,
     listEagleTrash,
@@ -782,6 +806,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
 export const {
   getEagleEditRecipe,
   saveEagleEditRecipe,
+  createEagleEditRender,
+  readEagleEditRender,
   getEagleMediaCapabilities,
   listEagleAssets,
   listEagleTrash,

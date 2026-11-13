@@ -71,6 +71,7 @@ export interface PhotoEditSession {
   onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
   onSave: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
+  onSaveRecipe?: (recipe: PhotoEditRecipe, lut?: string) => Promise<SavedPhoto>;
 }
 
 export function useEaglePhotoEditing({
@@ -86,6 +87,7 @@ export function useEaglePhotoEditing({
   const client = useQueryClient();
   const currentScope = useRef(scopeKey);
   currentScope.current = scopeKey;
+  const renderRequest = useRef<{ key: string; id: string } | null>(null);
   const [clipboard, setClipboard] = useState<{ scopeKey: string; recipe: PhotoEditRecipe } | null>(
     null,
   );
@@ -104,7 +106,8 @@ export function useEaglePhotoEditing({
   ): PhotoEditSession | null => {
     const source = getEagleEditContentUrl(asset);
     if (!source || (asset.libraryMode && asset.libraryMode !== libraryMode)) return null;
-    const exportMedia = isCameraRawMime(asset.mimeType)
+    const cameraRaw = isCameraRawMime(asset.mimeType);
+    const exportMedia = cameraRaw
       ? asset.renditions.find(
           (row) =>
             row.revision === asset.mediaRevision &&
@@ -155,6 +158,48 @@ export function useEaglePhotoEditing({
         }
         return { id: result.asset.id, name: file.name };
       },
+      ...(cameraRaw
+        ? {
+            onSaveRecipe: async (recipe: PhotoEditRecipe, lut?: string) => {
+              assertScope();
+              // Reuse the same request id when retrying an unchanged recipe, so an
+              // ambiguous network failure cannot publish two edited copies.
+              const recipeKey = JSON.stringify({ recipe, lut: lut ?? null });
+              const requestId =
+                renderRequest.current?.key === recipeKey
+                  ? renderRequest.current.id
+                  : crypto.randomUUID();
+              renderRequest.current = { key: recipeKey, id: requestId };
+              const job = await api.createEagleEditRender(sourceId, {
+                requestId,
+                mediaRevision: asset.mediaRevision,
+                rowVersion: sourceVersion,
+                recipe,
+                ...(lut ? { lut } : {}),
+              });
+              const deadline = Date.now() + 6 * 60 * 1000;
+              let saved: { id: string; name: string } | null = null;
+              while (!saved && Date.now() < deadline) {
+                assertScope();
+                const result = await api.readEagleEditRender(sourceId, job.id);
+                if (result.status === 'COMPLETED' && result.asset) saved = result.asset;
+                else if (result.status === 'FAILED') {
+                  renderRequest.current = null;
+                  throw new Error(result.message || t('照片保存失败，请重试。'));
+                } else await new Promise((resolve) => window.setTimeout(resolve, 1500));
+              }
+              if (!saved)
+                throw new Error(
+                  t('成片仍在后台处理，请稍后查看图库；也可留在当前编辑器重试保存。'),
+                );
+              renderRequest.current = null;
+              for (const queryKey of [keys.assets, keys.manualTags]) {
+                void client.invalidateQueries({ queryKey }).catch(() => undefined);
+              }
+              return saved;
+            },
+          }
+        : {}),
     };
   };
   const resolveSession = async (asset: EagleAssetListItem) => {

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import {
   CAMERA_MAX_DECODED_RAW_PIXELS,
+  CAMERA_MAX_EDIT_DECODED_RAW_PIXELS,
   CAMERA_MAX_RAW_PIXELS,
   CAMERA_MAX_VIDEO_DURATION_MS,
 } from '@sekereagle/library-core';
@@ -245,12 +246,17 @@ export async function assertCameraRawRuntime(): Promise<void> {
     { env: mediaSubprocessEnvironment(), timeout: 10000, maxBuffer: 256 * 1024 },
   );
 }
+export type CameraRawPurpose = 'BROWSE' | 'DEVELOP' | 'EDIT';
+export function cameraRawDecodedLimit(purpose: CameraRawPurpose): number {
+  return purpose === 'EDIT' ? CAMERA_MAX_EDIT_DECODED_RAW_PIXELS : CAMERA_MAX_DECODED_RAW_PIXELS;
+}
 export async function readCameraRaw(
   inputPath: string,
   outputPath?: string,
   thumbnailPath?: string,
-  purpose: 'BROWSE' | 'DEVELOP' = 'DEVELOP',
+  purpose: CameraRawPurpose = 'DEVELOP',
 ): Promise<CameraRawDimensions> {
+  const decodedLimit = cameraRawDecodedLimit(purpose);
   const script = join(__dirname, '../python/raw_image.py');
   const { stdout } = await run(
     process.env.CAMERA_RAW_PYTHON?.trim() || 'python3',
@@ -258,7 +264,7 @@ export async function readCameraRaw(
       script,
       inputPath,
       String(CAMERA_MAX_RAW_PIXELS),
-      String(CAMERA_MAX_DECODED_RAW_PIXELS),
+      String(decodedLimit),
       ...(outputPath ? [outputPath, ...(thumbnailPath ? [thumbnailPath] : [])] : []),
       ...(purpose === 'BROWSE' && outputPath ? ['--browse'] : []),
     ],
@@ -283,7 +289,7 @@ export async function readCameraRaw(
       !Number.isSafeInteger(result.decodedHeight) ||
       result.decodedWidth! <= 0 ||
       result.decodedHeight! <= 0 ||
-      result.decodedWidth! * result.decodedHeight! > CAMERA_MAX_DECODED_RAW_PIXELS)
+      result.decodedWidth! * result.decodedHeight! > decodedLimit)
   )
     throw new Error('RAW 显影尺寸无效或超出安全限制。');
   return result;

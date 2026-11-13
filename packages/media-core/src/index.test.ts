@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseCameraVideoProbe } from './index';
+import { cameraRawDecodedLimit, parseCameraVideoProbe } from './index';
 
+test('RAW edits decode every accepted sensor pixel while previews keep the half-size budget', () => {
+  assert.equal(cameraRawDecodedLimit('EDIT'), 120_000_000);
+  assert.equal(cameraRawDecodedLimit('DEVELOP'), 50_000_000);
+  assert.equal(cameraRawDecodedLimit('BROWSE'), 50_000_000);
+});
 const probe = (container: string, codec: string) => ({
   format: { format_name: container, duration: '2' },
   streams: [{ codec_type: 'video', codec_name: codec, width: 1920, height: 1080 }],

@@ -1,6 +1,10 @@
 import { decodeHeifFile, assertSafeHeifInfo as assertHeifPixels } from '@sekereagle/media-core';
 import { isCameraRawMime, CAMERA_MAX_IMAGE_PIXELS } from '@sekereagle/library-core';
-import { readCameraRaw, type CameraDimensions } from '@sekereagle/media-core';
+import {
+  readCameraRaw,
+  type CameraDimensions,
+  type CameraRawPurpose,
+} from '@sekereagle/media-core';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -62,7 +66,7 @@ export async function withProcessableImage<T>(
     originalDimensions?: CameraDimensions,
   ) => Promise<T>,
   retainOriginal = false,
-  rawPurpose: 'BROWSE' | 'DEVELOP' = 'DEVELOP',
+  rawPurpose: CameraRawPurpose = 'DEVELOP',
 ): Promise<{ result: T; sha256: string; sourceMode: 'IMAGE' | 'RAW_EMBEDDED' | 'RAW_DEVELOPED' }> {
   const hash = createHash('sha256');
   const hashTap = new Transform({

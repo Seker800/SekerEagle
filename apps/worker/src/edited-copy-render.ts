@@ -55,6 +55,8 @@ export async function renderEditedCopy(
         {},
         lut ? readPortableLut(lut) : undefined,
       ),
+    false,
+    'EDIT',
   );
   if (source.sha256 && source.sha256 !== sha256) throw new Error('EDIT_SOURCE_HASH_MISMATCH');
   const dimensions = await sharp(bytes).metadata();

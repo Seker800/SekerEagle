@@ -38,7 +38,7 @@ class RawPolicyTests(unittest.TestCase):
         self.raw.postprocess.assert_called_once()
         self.assertFalse(result.get("embeddedPreview", False))
 
-    def test_high_resolution_original_keeps_dimensions_and_decodes_half_size(self):
+    def test_preview_budget_keeps_dimensions_and_decodes_half_size(self):
         with patch("builtins.open", MagicMock()):
             result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff")
         self.assertEqual((result["width"], result["height"]), (8736, 11648))
@@ -46,6 +46,14 @@ class RawPolicyTests(unittest.TestCase):
         self.assertTrue(self.raw.postprocess.call_args.kwargs["half_size"])
         self.assertFalse(self.raw.postprocess.call_args.kwargs["no_auto_bright"])
         self.assertNotIn("auto_bright_thr", self.raw.postprocess.call_args.kwargs)
+
+    def test_edit_budget_decodes_full_sensor_resolution(self):
+        self.raw.postprocess.return_value = SimpleNamespace(shape=(11648, 8736, 3))
+        with patch("builtins.open", MagicMock()):
+            result = self.module.decode_raw(self.raw, 120_000_000, 120_000_000, "edit.tiff")
+        self.assertEqual((result["width"], result["height"]), (8736, 11648))
+        self.assertEqual((result["decodedWidth"], result["decodedHeight"]), (8736, 11648))
+        self.assertFalse(self.raw.postprocess.call_args.kwargs["half_size"])
 
     def test_missing_native_calibration_uses_profile_after_unpack(self):
         self.raw.rgb_xyz_matrix.any.return_value = False

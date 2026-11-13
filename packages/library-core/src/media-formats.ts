@@ -5,9 +5,11 @@ export const CAMERA_MAX_VIDEO_DURATION_MS = 4 * 3600 * 1000;
 export const CAMERA_MAX_IMAGE_PIXELS = 120_000_000;
 // Native HEIF expands whole images; 64MP includes nominal 50MP phone dimensions.
 export const CAMERA_MAX_DECODED_HEIF_PIXELS = 64_000_000;
-export const CAMERA_MAX_DECODED_RAW_PIXELS = 50_000_000;
 // Sensor payload limit is separate from the bounded RGB derivative budget.
 export const CAMERA_MAX_RAW_PIXELS = 120_000_000;
+// Previews may decode at half size; edited copies render every sensor pixel.
+export const CAMERA_MAX_DECODED_RAW_PIXELS = 50_000_000;
+export const CAMERA_MAX_EDIT_DECODED_RAW_PIXELS = CAMERA_MAX_RAW_PIXELS;
 export const CAMERA_RAW_EDIT_MAX_SIZE = 6000;
 export type CameraMediaKind = 'image' | 'raw' | 'video';
 export interface CameraMediaFormat {
