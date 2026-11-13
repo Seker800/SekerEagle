@@ -102,24 +102,15 @@ interface ViewportSnapshot {
 const DIRECT_INTERACTION_ANIMATION_SECONDS = 0.08;
 const PYRAMID_UPGRADE_IDLE_MS = 120;
 const MAX_ZOOM_PIXEL_RATIO = 8;
-const DEFAULT_DETAIL_EDGE = 3840;
 function isDirectPointer(pointerType: string): boolean {
   return pointerType === 'mouse' || pointerType === 'pen';
 }
-function computeTilePlan(descriptor: EaglePyramidDescriptor, displayEdge: number) {
-  const maxEdge = Math.max(descriptor.width, descriptor.height, 1);
-  const targetEdge = Math.max(1, Math.min(displayEdge || DEFAULT_DETAIL_EDGE, maxEdge));
-  const scaleDown =
-    targetEdge >= maxEdge ? 0 : Math.max(0, Math.floor(Math.log2(maxEdge / targetEdge)));
-  const level = Math.max(0, Math.min(descriptor.maxLevel, descriptor.maxLevel - scaleDown));
+function computeTileTotal(descriptor: EaglePyramidDescriptor, level: number) {
   const scale = Math.pow(2, level - descriptor.maxLevel);
   const width = Math.max(1, Math.ceil(descriptor.width * scale));
   const height = Math.max(1, Math.ceil(descriptor.height * scale));
   const tileSize = Math.max(1, descriptor.tileSize);
-  return {
-    level,
-    total: Math.max(1, Math.ceil(width / tileSize) * Math.ceil(height / tileSize)),
-  };
+  return Math.max(1, Math.ceil(width / tileSize) * Math.ceil(height / tileSize));
 }
 async function importOpenSeadragon() {
   return import('openseadragon');
@@ -284,33 +275,34 @@ export function EagleImageViewer({
           const item = viewer.world.getItemAt(0);
           setDetailLoading(!(item?.getFullyLoaded?.() ?? true));
         };
-        const configureTilePlan = () => {
-          const element = viewerElementRef.current;
-          const edge =
-            Math.max(element?.clientWidth ?? 0, element?.clientHeight ?? 0) *
-              (window.devicePixelRatio || 1) || DEFAULT_DETAIL_EDGE;
-          const plan = descriptorRef.current ? computeTilePlan(descriptorRef.current, edge) : null;
-          tilePlanRef.current = plan;
-          loadedTilesRef.current.clear();
-          setTileProgress({ loaded: 0, total: plan?.total ?? 0 });
-        };
         const onTileLoaded = (event?: unknown) => {
           updateDetailLoading();
           const tile = (event as { tile?: { level?: number; x?: number; y?: number } } | undefined)
             ?.tile;
-          const plan = tilePlanRef.current;
+          const descriptor = descriptorRef.current;
           if (
             !tile ||
-            !plan ||
-            tile.level !== plan.level ||
+            !descriptor ||
+            tile.level === undefined ||
             tile.x === undefined ||
             tile.y === undefined
           )
             return;
-          loadedTilesRef.current.add(`${tile.x}:${tile.y}`);
+          const current = tilePlanRef.current;
+          const key = `${tile.x}:${tile.y}`;
+          if (!current || tile.level > current.level) {
+            const total = computeTileTotal(descriptor, tile.level);
+            tilePlanRef.current = { level: tile.level, total };
+            loadedTilesRef.current.clear();
+            loadedTilesRef.current.add(key);
+            setTileProgress({ loaded: 1, total });
+            return;
+          }
+          if (tile.level !== current.level) return;
+          loadedTilesRef.current.add(key);
           setTileProgress({
-            loaded: Math.min(loadedTilesRef.current.size, plan.total),
-            total: plan.total,
+            loaded: Math.min(loadedTilesRef.current.size, current.total),
+            total: current.total,
           });
         };
         viewer.addHandler('fully-loaded-change', updateDetailLoading);
@@ -335,7 +327,6 @@ export function EagleImageViewer({
             });
           }
           viewer.forceRedraw();
-          configureTilePlan();
           setStatus('ready');
           updateDetailLoading();
         });
@@ -421,10 +412,15 @@ export function EagleImageViewer({
     viewer.open(sourceRef.current);
   };
   const displayStatus = error ? 'error' : loading ? 'loading' : status;
+  const showDetailProgress =
+    detailLoading &&
+    tileProgress.total > 0 &&
+    tileProgress.loaded > 0 &&
+    tileProgress.loaded < tileProgress.total;
   const qualityNotice =
     displayStatus === 'ready' && !loading
       ? descriptor
-        ? detailLoading
+        ? showDetailProgress
           ? t('正在加载高清细节…')
           : ''
         : previewLimited
@@ -496,13 +492,13 @@ export function EagleImageViewer({
           <div className={styles.qualityLabel}>
             <span className={styles.qualityDot} aria-hidden="true" />
             <span>{qualityNotice}</span>
-            {detailLoading && tileProgress.total > 0 && (
+            {showDetailProgress && (
               <span className={styles.qualityCount}>
                 {tileProgress.loaded}/{tileProgress.total}
               </span>
             )}
           </div>
-          {detailLoading && tileProgress.total > 0 && (
+          {showDetailProgress && (
             <div className={styles.qualityTrack} aria-hidden="true">
               <div
                 className={styles.qualityBar}

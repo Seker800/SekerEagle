@@ -171,9 +171,10 @@ describe('EagleImageViewer', () => {
     );
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
-    expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
-    expect(screen.getByText('0/48')).toBeInTheDocument();
+    expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+    expect(screen.queryByText('0/48')).toBeNull();
     act(() => handlers.get('tile-loaded')?.({ tile: { level: 12, x: 0, y: 0 } }));
+    expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
     expect(screen.getByText('1/48')).toBeInTheDocument();
     getFullyLoadedMock.mockReturnValue(true);
     act(() => handlers.get('fully-loaded-change')?.());
