@@ -158,25 +158,23 @@ describe('EagleImageViewer', () => {
   });
 
   it('labels a large preview until the high-resolution source opens', async () => {
-    render(<EagleImageViewer image={image} highResolutionExpected onClose={vi.fn()} />);
+    render(<EagleImageViewer image={image} previewLimited onClose={vi.fn()} />);
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
-    expect(screen.getByText('预览图')).toBeInTheDocument();
+    expect(screen.getByText('预览图 · 高清未就绪')).toBeInTheDocument();
   });
 
   it('shows high-resolution detail loading until the tiles are fully loaded', async () => {
     getFullyLoadedMock.mockReturnValue(false);
     render(
-      <EagleImageViewer
-        image={image}
-        descriptor={descriptor}
-        highResolutionExpected
-        onClose={vi.fn()}
-      />,
+      <EagleImageViewer image={image} descriptor={descriptor} previewLimited onClose={vi.fn()} />,
     );
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
     expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
+    expect(screen.getByText('0/48')).toBeInTheDocument();
+    act(() => handlers.get('tile-loaded')?.({ tile: { level: 12, x: 0, y: 0 } }));
+    expect(screen.getByText('1/48')).toBeInTheDocument();
     getFullyLoadedMock.mockReturnValue(true);
     act(() => handlers.get('fully-loaded-change')?.());
     expect(screen.queryByText('正在加载高清细节…')).toBeNull();

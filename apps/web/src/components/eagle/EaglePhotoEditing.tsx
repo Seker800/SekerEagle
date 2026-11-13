@@ -71,7 +71,11 @@ export interface PhotoEditSession {
   load?: () => Promise<PhotoEditSession>;
   onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
-  onSave: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
+  onSave: (
+    file: File,
+    recipe?: PhotoEditRecipe,
+    onProgress?: (percent: number) => void,
+  ) => Promise<SavedPhoto>;
   onSaveRecipe?: (
     recipe: PhotoEditRecipe,
     lut?: string,
@@ -148,9 +152,9 @@ export function useEaglePhotoEditing({
         assertScope();
         setClipboard({ scopeKey, recipe });
       },
-      onSave: async (file, recipe) => {
+      onSave: async (file, recipe, onProgress) => {
         assertScope();
-        const result = await upload(accessToken, file, () => undefined, {
+        const result = await upload(accessToken, file, (value) => onProgress?.(value.percent), {
           duplicatePolicy: 'CREATE_COPY',
           copySourceAssetId: sourceId,
           copySourceRowVersion: sourceVersion,

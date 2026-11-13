@@ -14,17 +14,39 @@
   top: 12px;
   left: 12px;
   z-index: 6;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 10px;
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+  padding: 7px 10px;
   color: #e7ecf3;
   background: #10141ce0;
   border: 1px solid #ffffff1f;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 12px;
   pointer-events: none;
   backdrop-filter: blur(6px);
+}
+.qualityLabel {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.qualityCount {
+  margin-left: auto;
+  color: #9aa8ba;
+  font-variant-numeric: tabular-nums;
+}
+.qualityTrack {
+  height: 3px;
+  overflow: hidden;
+  background: #ffffff1f;
+  border-radius: 999px;
+}
+.qualityBar {
+  height: 100%;
+  background: var(--ui-accent);
+  border-radius: inherit;
+  transition: width 0.2s ease;
 }
 .qualityDot {
   width: 6px;

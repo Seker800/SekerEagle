@@ -102,8 +102,24 @@ interface ViewportSnapshot {
 const DIRECT_INTERACTION_ANIMATION_SECONDS = 0.08;
 const PYRAMID_UPGRADE_IDLE_MS = 120;
 const MAX_ZOOM_PIXEL_RATIO = 8;
+const DEFAULT_DETAIL_EDGE = 3840;
 function isDirectPointer(pointerType: string): boolean {
   return pointerType === 'mouse' || pointerType === 'pen';
+}
+function computeTilePlan(descriptor: EaglePyramidDescriptor, displayEdge: number) {
+  const maxEdge = Math.max(descriptor.width, descriptor.height, 1);
+  const targetEdge = Math.max(1, Math.min(displayEdge || DEFAULT_DETAIL_EDGE, maxEdge));
+  const scaleDown =
+    targetEdge >= maxEdge ? 0 : Math.max(0, Math.floor(Math.log2(maxEdge / targetEdge)));
+  const level = Math.max(0, Math.min(descriptor.maxLevel, descriptor.maxLevel - scaleDown));
+  const scale = Math.pow(2, level - descriptor.maxLevel);
+  const width = Math.max(1, Math.ceil(descriptor.width * scale));
+  const height = Math.max(1, Math.ceil(descriptor.height * scale));
+  const tileSize = Math.max(1, descriptor.tileSize);
+  return {
+    level,
+    total: Math.max(1, Math.ceil(width / tileSize) * Math.ceil(height / tileSize)),
+  };
 }
 async function importOpenSeadragon() {
   return import('openseadragon');
@@ -136,7 +152,7 @@ export function EagleImageViewer({
   actions,
   loading = false,
   loadingPlaceholder,
-  highResolutionExpected = false,
+  previewLimited = false,
   error,
   onRetry,
 }: {
@@ -144,7 +160,7 @@ export function EagleImageViewer({
   asset?: EagleAssetListItem;
   readOnly?: boolean;
   descriptor?: EaglePyramidDescriptor;
-  highResolutionExpected?: boolean;
+  previewLimited?: boolean;
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
   onEdit?: () => void;
@@ -183,8 +199,13 @@ export function EagleImageViewer({
   const sourceOpenTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastInteractionAtRef = useRef(0);
   const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
+  const descriptorRef = useRef(descriptor);
+  const tilePlanRef = useRef<{ level: number; total: number } | null>(null);
+  const loadedTilesRef = useRef(new Set<string>());
+  descriptorRef.current = descriptor;
   const [status, setStatus] = useState<ViewerStatus>('loading');
   const [detailLoading, setDetailLoading] = useState(false);
+  const [tileProgress, setTileProgress] = useState({ loaded: 0, total: 0 });
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
@@ -206,6 +227,9 @@ export function EagleImageViewer({
     sourceKeyRef.current = pending.sourceKey;
     activeImageKeyRef.current = pending.imageKey;
     setDetailLoading(false);
+    setTileProgress({ loaded: 0, total: 0 });
+    loadedTilesRef.current.clear();
+    tilePlanRef.current = null;
     setStatus('loading');
     viewer.open(pending.source);
   };
@@ -260,8 +284,37 @@ export function EagleImageViewer({
           const item = viewer.world.getItemAt(0);
           setDetailLoading(!(item?.getFullyLoaded?.() ?? true));
         };
+        const configureTilePlan = () => {
+          const element = viewerElementRef.current;
+          const edge =
+            Math.max(element?.clientWidth ?? 0, element?.clientHeight ?? 0) *
+              (window.devicePixelRatio || 1) || DEFAULT_DETAIL_EDGE;
+          const plan = descriptorRef.current ? computeTilePlan(descriptorRef.current, edge) : null;
+          tilePlanRef.current = plan;
+          loadedTilesRef.current.clear();
+          setTileProgress({ loaded: 0, total: plan?.total ?? 0 });
+        };
+        const onTileLoaded = (event?: unknown) => {
+          updateDetailLoading();
+          const tile = (event as { tile?: { level?: number; x?: number; y?: number } } | undefined)
+            ?.tile;
+          const plan = tilePlanRef.current;
+          if (
+            !tile ||
+            !plan ||
+            tile.level !== plan.level ||
+            tile.x === undefined ||
+            tile.y === undefined
+          )
+            return;
+          loadedTilesRef.current.add(`${tile.x}:${tile.y}`);
+          setTileProgress({
+            loaded: Math.min(loadedTilesRef.current.size, plan.total),
+            total: plan.total,
+          });
+        };
         viewer.addHandler('fully-loaded-change', updateDetailLoading);
-        viewer.addHandler('tile-loaded', updateDetailLoading);
+        viewer.addHandler('tile-loaded', onTileLoaded);
         viewer.addHandler('tile-load-failed', updateDetailLoading);
         viewer.addHandler('open', () => {
           openedSourceKeyRef.current = sourceKeyRef.current;
@@ -282,6 +335,7 @@ export function EagleImageViewer({
             });
           }
           viewer.forceRedraw();
+          configureTilePlan();
           setStatus('ready');
           updateDetailLoading();
         });
@@ -373,8 +427,8 @@ export function EagleImageViewer({
         ? detailLoading
           ? t('正在加载高清细节…')
           : ''
-        : highResolutionExpected
-          ? t('预览图')
+        : previewLimited
+          ? t('预览图 · 高清未就绪')
           : ''
       : '';
   const secondary = (
@@ -439,8 +493,25 @@ export function EagleImageViewer({
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
       {qualityNotice && (
         <div className={styles.qualityNotice} role="status" aria-live="polite">
-          <span className={styles.qualityDot} aria-hidden="true" />
-          {qualityNotice}
+          <div className={styles.qualityLabel}>
+            <span className={styles.qualityDot} aria-hidden="true" />
+            <span>{qualityNotice}</span>
+            {detailLoading && tileProgress.total > 0 && (
+              <span className={styles.qualityCount}>
+                {tileProgress.loaded}/{tileProgress.total}
+              </span>
+            )}
+          </div>
+          {detailLoading && tileProgress.total > 0 && (
+            <div className={styles.qualityTrack} aria-hidden="true">
+              <div
+                className={styles.qualityBar}
+                style={{
+                  width: `${Math.round((tileProgress.loaded / tileProgress.total) * 100)}%`,
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
       {displayStatus !== 'ready' ? (

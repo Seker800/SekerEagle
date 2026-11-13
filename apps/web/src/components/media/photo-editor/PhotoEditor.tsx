@@ -61,6 +61,21 @@ function saveStageLabel(stage: PhotoSaveStage): string {
   }
 }
 
+function saveProgressPercent(progress: { stage: PhotoSaveStage; percent?: number }): number {
+  switch (progress.stage) {
+    case 'preparing':
+      return 12;
+    case 'submitting':
+      return 18;
+    case 'rendering':
+      return 45;
+    case 'preview':
+      return 78;
+    case 'uploading':
+      return progress.percent ?? 60;
+  }
+}
+
 function renderErrorMessage(reason: unknown): string {
   if (reason instanceof Error && reason.message === 'PHOTO_WASM_BLOCKED')
     return t('当前客户端阻止了照片处理模块，请更新桌面客户端后重新打开。');
@@ -106,7 +121,11 @@ export function PhotoEditor({
     lut?: string,
     onStage?: (stage: PhotoSaveStage) => void,
   ) => Promise<SavedPhoto>;
-  onSave?: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
+  onSave?: (
+    file: File,
+    recipe?: PhotoEditRecipe,
+    onProgress?: (percent: number) => void,
+  ) => Promise<SavedPhoto>;
 }) {
   const compactLayout = useCompactLayout();
   const compact = presentation === 'native' || compactLayout;
@@ -168,6 +187,7 @@ export function PhotoEditor({
   const [saveProgress, setSaveProgress] = useState<{
     stage: PhotoSaveStage;
     startedAt: number;
+    percent?: number;
   } | null>(null);
   const [saveElapsed, setSaveElapsed] = useState(0);
   const saveStartedAt = saveProgress?.startedAt ?? 0;
@@ -565,7 +585,9 @@ export function PhotoEditor({
           ? writePortableLut(await loadPhotoLut(edits.filter.slice(4)))
           : undefined;
         const result = await onSaveRecipe(recipe, lut, (stage) =>
-          setSaveProgress((previous) => (previous ? { ...previous, stage } : previous)),
+          setSaveProgress((previous) =>
+            previous ? { ...previous, stage, percent: undefined } : previous,
+          ),
         );
         setSavedName(result.name);
         setSavedId(result.id);
@@ -576,7 +598,9 @@ export function PhotoEditor({
       const saveKey = JSON.stringify({ source, edits, metadata });
       let file = pendingSaveRef.current?.key === saveKey ? pendingSaveRef.current.file : undefined;
       if (!file) {
-        setSaveProgress((previous) => (previous ? { ...previous, stage: 'rendering' } : previous));
+        setSaveProgress((previous) =>
+          previous ? { ...previous, stage: 'rendering', percent: undefined } : previous,
+        );
         const controller = new AbortController();
         exportController.current = controller;
         const original = previewSource
@@ -593,9 +617,17 @@ export function PhotoEditor({
           exportController.current = null;
         }
       }
-      setSaveProgress((previous) => (previous ? { ...previous, stage: 'uploading' } : previous));
+      setSaveProgress((previous) =>
+        previous ? { ...previous, stage: 'uploading', percent: undefined } : previous,
+      );
       savingToAlbum = true;
-      const savedPhoto = await onSave(file, photoEditRecipe(edits));
+      const savedPhoto = await onSave(file, photoEditRecipe(edits), (percent) =>
+        setSaveProgress((previous) =>
+          previous
+            ? { ...previous, stage: 'uploading', percent: Math.max(0, Math.min(100, percent)) }
+            : previous,
+        ),
+      );
       pendingSaveRef.current = null;
       setSavedName(savedPhoto.name);
       setSavedId(savedPhoto.id);
@@ -866,10 +898,16 @@ export function PhotoEditor({
             <div className={styles.saveProgress} role="status" aria-live="polite">
               <div className={styles.saveProgressHeader}>
                 <span>{saveStageLabel(saveProgress.stage)}</span>
-                <span>{saveElapsed}s</span>
+                <span>
+                  {saveProgress.percent !== undefined ? `${saveProgress.percent}% · ` : ''}
+                  {saveElapsed}s
+                </span>
               </div>
               <div className={styles.saveProgressTrack} aria-hidden="true">
-                <div className={styles.saveProgressBar} />
+                <div
+                  className={styles.saveProgressBar}
+                  style={{ width: `${saveProgressPercent(saveProgress)}%` }}
+                />
               </div>
               <small>{t('成片在原图上生成，请保持页面打开。')}</small>
             </div>

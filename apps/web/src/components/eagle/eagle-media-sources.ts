@@ -15,6 +15,13 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
     : null;
 }
 
+/** True when browsing shows a downscaled preview rather than the asset's pixel size. */
+export function eaglePreviewIsLimited(asset: EagleAssetListItem): boolean {
+  const preview = selectEagleBrowseRendition(asset);
+  const previewEdge = Math.max(preview?.width ?? 0, preview?.height ?? 0);
+  return previewEdge > 0 && Math.max(asset.width ?? 0, asset.height ?? 0) > previewEdge;
+}
+
 /** Explicit editing may use originals only for browser-native formats. RAW uses bounded sRGB. */
 export function getEagleEditContentUrl(asset: EagleAssetListItem): string | null {
   if (asset.lifecycleStatus !== 'READY' || asset.deletedAt) return null;

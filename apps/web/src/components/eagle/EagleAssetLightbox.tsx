@@ -10,7 +10,7 @@ import {
   getEaglePreviewContentUrl,
   getEagleVideoContentUrl,
   getEagleLivePhotoContentUrl,
-  needsEagleImagePyramid,
+  eaglePreviewIsLimited,
 } from './eagle-media-sources';
 import { EagleViewerShell, eagleViewerMetadata } from './EagleViewerShell';
 import { EagleImageViewer } from './EagleImageViewer';
@@ -64,7 +64,7 @@ export function EagleAssetLightbox({
           motionSrc: getEagleLivePhotoContentUrl(asset),
         }}
         descriptor={descriptor}
-        highResolutionExpected={needsEagleImagePyramid(asset.width, asset.height)}
+        previewLimited={eaglePreviewIsLimited(asset)}
         subtitle={eagleViewerMetadata(asset)}
         loading={loading}
         error={loadError}

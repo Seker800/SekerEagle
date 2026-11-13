@@ -153,32 +153,17 @@
   border-radius: 999px;
 }
 .saveProgressBar {
-  width: 38%;
+  width: 0;
   height: 100%;
   background: var(--photo-accent);
   border-radius: inherit;
-  animation: saveProgressSlide 1.2s ease-in-out infinite;
+  transition: width 0.3s ease;
 }
 .saveProgress small {
   display: block;
   margin-top: 6px;
   color: var(--photo-muted);
   font-size: 11px;
-}
-@keyframes saveProgressSlide {
-  0% {
-    transform: translateX(-110%);
-  }
-  100% {
-    transform: translateX(360%);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .saveProgressBar {
-    width: 100%;
-    opacity: 0.55;
-    animation: none;
-  }
 }
 .imageFrame {
   position: relative;

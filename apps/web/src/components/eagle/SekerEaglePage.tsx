@@ -127,6 +127,7 @@ import {
   getEagleLivePhotoContentUrl,
   collapseLivePhotoComponents,
   needsEagleImagePyramid,
+  eaglePreviewIsLimited,
 } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
@@ -1029,6 +1030,9 @@ export function SekerEaglePage({
     enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
+    // The high-resolution pyramid may still be generated after the preview opens.
+    // Keep checking the open image so it upgrades without a manual refresh.
+    refetchInterval: (query) => (query.state.data ? false : 15_000),
   });
   const isInspectorOpen = isAssetView && isInspectorVisible;
   const activeSmartFolder =
@@ -3121,7 +3125,7 @@ export function SekerEaglePage({
           subtitle={previewImageAsset ? eagleViewerMetadata(previewImageAsset) : undefined}
           navigation={previewNavigation}
           descriptor={previewPyramidQuery.data}
-          highResolutionExpected={previewCanHavePyramid}
+          previewLimited={previewImageAsset ? eaglePreviewIsLimited(previewImageAsset) : false}
           editLabel={previewImageAsset ? eaglePhotoEditLabel(previewImageAsset) : undefined}
           onEdit={
             libraryView !== 'TRASH' &&
