@@ -12,6 +12,7 @@ import { createEagleQueryKeys } from './eagle-query-keys';
 import { formatPhotoMetadata } from '../media/photo-editor/photo-editor-metadata';
 import type { PhotoMetadata } from '../media/photo-editor/photo-watermark-model';
 import type { SavedPhoto } from '../media/photo-editor/photo-editor-save';
+import type { PhotoSaveStage } from '../media/photo-editor/PhotoEditor';
 import styles from './EaglePhotoEditing.module.css';
 
 const PhotoEditor = lazy(() =>
@@ -71,7 +72,11 @@ export interface PhotoEditSession {
   onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
   onSave: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
-  onSaveRecipe?: (recipe: PhotoEditRecipe, lut?: string) => Promise<SavedPhoto>;
+  onSaveRecipe?: (
+    recipe: PhotoEditRecipe,
+    lut?: string,
+    onStage?: (stage: PhotoSaveStage) => void,
+  ) => Promise<SavedPhoto>;
 }
 
 export function useEaglePhotoEditing({
@@ -160,8 +165,13 @@ export function useEaglePhotoEditing({
       },
       ...(cameraRaw
         ? {
-            onSaveRecipe: async (recipe: PhotoEditRecipe, lut?: string) => {
+            onSaveRecipe: async (
+              recipe: PhotoEditRecipe,
+              lut?: string,
+              onStage?: (stage: PhotoSaveStage) => void,
+            ) => {
               assertScope();
+              onStage?.('submitting');
               // Reuse the same request id when retrying an unchanged recipe, so an
               // ambiguous network failure cannot publish two edited copies.
               const recipeKey = JSON.stringify({ recipe, lut: lut ?? null });
@@ -177,6 +187,7 @@ export function useEaglePhotoEditing({
                 recipe,
                 ...(lut ? { lut } : {}),
               });
+              onStage?.('rendering');
               const deadline = Date.now() + 6 * 60 * 1000;
               let saved: { id: string; name: string } | null = null;
               while (!saved && Date.now() < deadline) {
@@ -186,7 +197,10 @@ export function useEaglePhotoEditing({
                 else if (result.status === 'FAILED') {
                   renderRequest.current = null;
                   throw new Error(result.message || t('照片保存失败，请重试。'));
-                } else await new Promise((resolve) => window.setTimeout(resolve, 1500));
+                } else {
+                  onStage?.(result.status === 'PROCESSING' ? 'preview' : 'rendering');
+                  await new Promise((resolve) => window.setTimeout(resolve, 1500));
+                }
               }
               if (!saved)
                 throw new Error(

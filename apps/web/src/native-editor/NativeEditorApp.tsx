@@ -67,7 +67,7 @@ export function NativeEditorApp({ request }: { request: Request }) {
       onOpenSaved={async () => {
         await request('showSaved');
       }}
-      onSaveRecipe={async (recipe, lut) => {
+      onSaveRecipe={async (recipe, lut, onStage) => {
         if (!source.serverEditing) throw new Error(t('服务器编辑服务尚未更新，暂时无法保存成片。'));
         await request('lutBegin', { size: lut?.length ?? 0 });
         if (lut)
@@ -75,6 +75,7 @@ export function NativeEditorApp({ request }: { request: Request }) {
             await request('lutChunk', { offset, data: lut.slice(offset, offset + 48 * 1024) });
           }
         await request('saveRecipe', { recipe });
+        onStage?.('rendering');
         const waitUntil = Date.now() + 6 * 60 * 1000;
         while (activeSave.current) {
           const result = await request<{
@@ -85,6 +86,7 @@ export function NativeEditorApp({ request }: { request: Request }) {
           if (result.status === 'COMPLETED' && result.asset) return result.asset;
           if (result.status === 'FAILED')
             throw new Error(result.message || t('照片保存失败，请重试。'));
+          onStage?.(result.status === 'PROCESSING' ? 'preview' : 'rendering');
           if (Date.now() >= waitUntil)
             throw new Error(t('成片仍在后台处理，请稍后查看图库；也可留在当前编辑器重试保存。'));
           await new Promise((resolve) => window.setTimeout(resolve, 1500));

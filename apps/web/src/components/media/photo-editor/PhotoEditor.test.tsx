@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PhotoEditor } from './PhotoEditor';
+import { PhotoEditor, type PhotoSaveStage } from './PhotoEditor';
 import { readPhotoMetadata } from './photo-editor-metadata';
 import { composePhoto, sourceCanvas } from './photo-editor-render';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
@@ -1129,6 +1129,52 @@ it('server recipe saving never loads or exports the original, and preserves full
   expect(paths).not.toContain('/original-forbidden.jpg');
   expect(onSave).not.toHaveBeenCalled();
   expect(onSaveRecipe.mock.calls[0][0].edits.watermarkCamera).toBe('Test Camera');
+});
+
+it('shows a visible save progress bar with stage and elapsed time', async () => {
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  let finish!: (value: { id: string; name: string }) => void;
+  let onStage: ((stage: PhotoSaveStage) => void) | undefined;
+  const onSaveRecipe = vi.fn(
+    (_recipe: unknown, _lut: unknown, stage?: (stage: PhotoSaveStage) => void) =>
+      new Promise<{ id: string; name: string }>((resolve) => {
+        onStage = stage;
+        finish = resolve;
+      }),
+  );
+  render(
+    <PhotoEditor
+      source="/original.jpg"
+      previewSource="/preview.webp"
+      sourceSize={{ width: 4000, height: 3000 }}
+      name="photo.jpg"
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      onSaveRecipe={onSaveRecipe}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(screen.getByText('正在提交成片任务…')).toBeInTheDocument());
+  act(() => onStage?.('rendering'));
+  expect(screen.getByText('正在按原图生成成片…')).toBeInTheDocument();
+  expect(screen.getByText(/^\d+s$/)).toBeInTheDocument();
+  await act(async () => {
+    finish({ id: 'copy', name: 'copy.png' });
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(screen.queryByText('正在按原图生成成片…')).toBeNull());
 });
 
 it('limits phone adjustment categories to tone, color and detail', async () => {

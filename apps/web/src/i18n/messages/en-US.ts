@@ -1706,6 +1706,8 @@ export const enUS = {
   '正在构建中心…': 'Building centroid...',
   '正在计算符合规则的素材…': 'Calculating assets matching the rule…',
   '正在加载大图…': 'Loading Large Image...',
+  '正在加载高清细节…': 'Loading full-resolution detail...',
+  预览图: 'Preview image',
   '正在加载个人素材库…': 'Loading personal library…',
   '正在加载更多素材…': 'Loading more assets…',
   '正在加载令牌…': 'Loading tokens…',
@@ -1950,6 +1952,13 @@ export const enUS = {
   已保存到相册: 'Saved to library',
   '保留原图，修改后的照片以“已编辑”后缀保存到相册。':
     'Keep the original. Save a new photo with an edited suffix.',
+  '正在读取原图…': 'Reading the original...',
+  '正在提交成片任务…': 'Submitting the edit...',
+  '正在按原图生成成片…': 'Rendering the full-resolution copy...',
+  '成片已生成，正在准备预览…': 'Copy rendered. Preparing its preview...',
+  '正在保存成片…': 'Saving the edited copy...',
+  '成片在原图上生成，请保持页面打开。':
+    'The copy is rendered from the original. Keep this page open.',
   '放弃未保存的修改？': 'Discard unsaved edits?',
   '本地测试相册读取失败。': 'Could not read the local test album.',
   使用高清实拍照片: 'Use high-resolution photograph',

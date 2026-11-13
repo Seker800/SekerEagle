@@ -63,9 +63,14 @@ interface ViewerViewport {
 }
 interface ViewerWorldItem {
   getBounds(): ViewerRect;
+  getFullyLoaded?(): boolean;
 }
 interface ViewerHandle {
   addHandler(name: 'open' | 'open-failed' | 'after-resize', handler: () => void): void;
+  addHandler(
+    name: 'fully-loaded-change' | 'tile-loaded' | 'tile-load-failed',
+    handler: (event?: unknown) => void,
+  ): void;
   addHandler(name: 'canvas-click', handler: (event: ViewerClickEvent) => void): void;
   addHandler(name: 'canvas-drag', handler: (event: ViewerDragEvent) => void): void;
   addHandler(name: 'canvas-drag-end', handler: (event: ViewerDragEndEvent) => void): void;
@@ -131,6 +136,7 @@ export function EagleImageViewer({
   actions,
   loading = false,
   loadingPlaceholder,
+  highResolutionExpected = false,
   error,
   onRetry,
 }: {
@@ -138,6 +144,7 @@ export function EagleImageViewer({
   asset?: EagleAssetListItem;
   readOnly?: boolean;
   descriptor?: EaglePyramidDescriptor;
+  highResolutionExpected?: boolean;
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
   onEdit?: () => void;
@@ -177,6 +184,7 @@ export function EagleImageViewer({
   const lastInteractionAtRef = useRef(0);
   const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
   const [status, setStatus] = useState<ViewerStatus>('loading');
+  const [detailLoading, setDetailLoading] = useState(false);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
@@ -197,6 +205,7 @@ export function EagleImageViewer({
     openedSourceKeyRef.current = '';
     sourceKeyRef.current = pending.sourceKey;
     activeImageKeyRef.current = pending.imageKey;
+    setDetailLoading(false);
     setStatus('loading');
     viewer.open(pending.source);
   };
@@ -246,6 +255,14 @@ export function EagleImageViewer({
         browserImageTarget.decoding = 'async';
         browserImageTarget.draggable = false;
         browserImageTarget.src = imageRef.current.src;
+        const updateDetailLoading = () => {
+          if (cancelled) return;
+          const item = viewer.world.getItemAt(0);
+          setDetailLoading(!(item?.getFullyLoaded?.() ?? true));
+        };
+        viewer.addHandler('fully-loaded-change', updateDetailLoading);
+        viewer.addHandler('tile-loaded', updateDetailLoading);
+        viewer.addHandler('tile-load-failed', updateDetailLoading);
         viewer.addHandler('open', () => {
           openedSourceKeyRef.current = sourceKeyRef.current;
           const pendingViewport = pendingViewportRef.current;
@@ -266,6 +283,7 @@ export function EagleImageViewer({
           }
           viewer.forceRedraw();
           setStatus('ready');
+          updateDetailLoading();
         });
         viewer.addHandler('after-resize', () => {
           cancelAnimationFrame(resizeFrame);
@@ -275,6 +293,7 @@ export function EagleImageViewer({
         });
         viewer.addHandler('open-failed', () => {
           openedSourceKeyRef.current = '';
+          setDetailLoading(false);
           setStatus('error');
         });
         viewer.addHandler('canvas-click', (event) => {
@@ -348,6 +367,16 @@ export function EagleImageViewer({
     viewer.open(sourceRef.current);
   };
   const displayStatus = error ? 'error' : loading ? 'loading' : status;
+  const qualityNotice =
+    displayStatus === 'ready' && !loading
+      ? descriptor
+        ? detailLoading
+          ? t('正在加载高清细节…')
+          : ''
+        : highResolutionExpected
+          ? t('预览图')
+          : ''
+      : '';
   const secondary = (
     <>
       {!loading && !error && onLocate && image.assetId && (
@@ -408,6 +437,12 @@ export function EagleImageViewer({
         posterUrl={image.src}
       />
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
+      {qualityNotice && (
+        <div className={styles.qualityNotice} role="status" aria-live="polite">
+          <span className={styles.qualityDot} aria-hidden="true" />
+          {qualityNotice}
+        </div>
+      )}
       {displayStatus !== 'ready' ? (
         <div className={styles.loadState} role={displayStatus === 'error' ? 'alert' : 'status'}>
           {displayStatus === 'loading' && loadingPlaceholder ? (

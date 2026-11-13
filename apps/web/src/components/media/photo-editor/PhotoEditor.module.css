@@ -119,6 +119,67 @@
   overflow: hidden;
   position: relative;
 }
+.saveProgress {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 5;
+  width: min(380px, calc(100% - 32px));
+  padding: 10px 12px;
+  transform: translateX(-50%);
+  color: var(--photo-text);
+  background: #101014ee;
+  border: 1px solid #ffffff26;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px #0009;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+.saveProgressHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.saveProgressHeader span:last-child {
+  color: var(--photo-muted);
+  font-variant-numeric: tabular-nums;
+}
+.saveProgressTrack {
+  height: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+  background: #ffffff1f;
+  border-radius: 999px;
+}
+.saveProgressBar {
+  width: 38%;
+  height: 100%;
+  background: var(--photo-accent);
+  border-radius: inherit;
+  animation: saveProgressSlide 1.2s ease-in-out infinite;
+}
+.saveProgress small {
+  display: block;
+  margin-top: 6px;
+  color: var(--photo-muted);
+  font-size: 11px;
+}
+@keyframes saveProgressSlide {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .saveProgressBar {
+    width: 100%;
+    opacity: 0.55;
+    animation: none;
+  }
+}
 .imageFrame {
   position: relative;
   flex: 0 1 auto;

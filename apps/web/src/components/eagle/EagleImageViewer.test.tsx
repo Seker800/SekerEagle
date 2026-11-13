@@ -10,6 +10,7 @@ const {
   destroyMock,
   forceRedrawMock,
   getBoundsMock,
+  getFullyLoadedMock,
   getCenterMock,
   getZoomMock,
   goHomeMock,
@@ -24,6 +25,7 @@ const {
 } = vi.hoisted(() => {
   const hoistedHandlers = new Map<string, (event?: unknown) => void>();
   const hoistedAddOverlayMock = vi.fn();
+  const hoistedGetFullyLoadedMock = vi.fn(() => true);
   const hoistedDestroyMock = vi.fn();
   const hoistedForceRedrawMock = vi.fn();
   const hoistedGetBoundsMock = vi.fn(() => ({
@@ -66,7 +68,10 @@ const {
       zoomTo: hoistedZoomToMock,
     },
     world: {
-      getItemAt: vi.fn(() => ({ getBounds: hoistedGetBoundsMock })),
+      getItemAt: vi.fn(() => ({
+        getBounds: hoistedGetBoundsMock,
+        getFullyLoaded: hoistedGetFullyLoadedMock,
+      })),
     },
     zoomPerScroll: 1.12,
   };
@@ -76,6 +81,7 @@ const {
     destroyMock: hoistedDestroyMock,
     forceRedrawMock: hoistedForceRedrawMock,
     getBoundsMock: hoistedGetBoundsMock,
+    getFullyLoadedMock: hoistedGetFullyLoadedMock,
     getCenterMock: hoistedGetCenterMock,
     getZoomMock: hoistedGetZoomMock,
     goHomeMock: hoistedGoHomeMock,
@@ -115,6 +121,7 @@ describe('EagleImageViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handlers.clear();
+    getFullyLoadedMock.mockReturnValue(true);
   });
 
   it('copies the complete image even when viewing pyramid tiles', async () => {
@@ -148,6 +155,31 @@ describe('EagleImageViewer', () => {
     const browserMayOpenItsMenu = fireEvent.contextMenu(overlay.element);
     expect(browserMayOpenItsMenu).toBe(true);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
+
+  it('labels a large preview until the high-resolution source opens', async () => {
+    render(<EagleImageViewer image={image} highResolutionExpected onClose={vi.fn()} />);
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.getByText('预览图')).toBeInTheDocument();
+  });
+
+  it('shows high-resolution detail loading until the tiles are fully loaded', async () => {
+    getFullyLoadedMock.mockReturnValue(false);
+    render(
+      <EagleImageViewer
+        image={image}
+        descriptor={descriptor}
+        highResolutionExpected
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
+    getFullyLoadedMock.mockReturnValue(true);
+    act(() => handlers.get('fully-loaded-change')?.());
+    expect(screen.queryByText('正在加载高清细节…')).toBeNull();
   });
 
   it('shows an existing thumbnail while loading and removes it when the viewer opens', async () => {

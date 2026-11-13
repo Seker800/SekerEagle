@@ -44,6 +44,23 @@ import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo
 type Tab = 'adjust' | 'filters' | 'crop' | 'watermark';
 type History = { past: PhotoEdits[]; current: PhotoEdits; future: PhotoEdits[] };
 
+export type PhotoSaveStage = 'preparing' | 'submitting' | 'rendering' | 'preview' | 'uploading';
+
+function saveStageLabel(stage: PhotoSaveStage): string {
+  switch (stage) {
+    case 'preparing':
+      return t('正在读取原图…');
+    case 'submitting':
+      return t('正在提交成片任务…');
+    case 'rendering':
+      return t('正在按原图生成成片…');
+    case 'preview':
+      return t('成片已生成，正在准备预览…');
+    case 'uploading':
+      return t('正在保存成片…');
+  }
+}
+
 function renderErrorMessage(reason: unknown): string {
   if (reason instanceof Error && reason.message === 'PHOTO_WASM_BLOCKED')
     return t('当前客户端阻止了照片处理模块，请更新桌面客户端后重新打开。');
@@ -84,7 +101,11 @@ export function PhotoEditor({
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
   onOpenSaved?: (assetId: string) => Promise<void>;
   onClose: () => void;
-  onSaveRecipe?: (recipe: PhotoEditRecipe, lut?: string) => Promise<SavedPhoto>;
+  onSaveRecipe?: (
+    recipe: PhotoEditRecipe,
+    lut?: string,
+    onStage?: (stage: PhotoSaveStage) => void,
+  ) => Promise<SavedPhoto>;
   onSave?: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
 }) {
   const compactLayout = useCompactLayout();
@@ -144,6 +165,22 @@ export function PhotoEditor({
   const [errorRetry, setErrorRetry] = useState<'load' | 'save' | 'locate'>('load');
   const [sourceConflict, setSourceConflict] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<{
+    stage: PhotoSaveStage;
+    startedAt: number;
+  } | null>(null);
+  const [saveElapsed, setSaveElapsed] = useState(0);
+  const saveStartedAt = saveProgress?.startedAt ?? 0;
+  useEffect(() => {
+    if (!saveStartedAt) {
+      setSaveElapsed(0);
+      return;
+    }
+    const tick = () => setSaveElapsed(Math.max(0, Math.floor((Date.now() - saveStartedAt) / 1000)));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [saveStartedAt]);
   const [rendering, setRendering] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedName, setSavedName] = useState('');
@@ -511,6 +548,10 @@ export function PhotoEditor({
       return;
     setBusy(true);
     setError('');
+    setSaveProgress({
+      stage: onSaveRecipe ? 'submitting' : 'preparing',
+      startedAt: Date.now(),
+    });
     let savingToAlbum = false;
     try {
       if (onSaveRecipe) {
@@ -523,7 +564,9 @@ export function PhotoEditor({
         const lut = edits.filter.startsWith('lut:')
           ? writePortableLut(await loadPhotoLut(edits.filter.slice(4)))
           : undefined;
-        const result = await onSaveRecipe(recipe, lut);
+        const result = await onSaveRecipe(recipe, lut, (stage) =>
+          setSaveProgress((previous) => (previous ? { ...previous, stage } : previous)),
+        );
         setSavedName(result.name);
         setSavedId(result.id);
         setSaved(true);
@@ -533,6 +576,7 @@ export function PhotoEditor({
       const saveKey = JSON.stringify({ source, edits, metadata });
       let file = pendingSaveRef.current?.key === saveKey ? pendingSaveRef.current.file : undefined;
       if (!file) {
+        setSaveProgress((previous) => (previous ? { ...previous, stage: 'rendering' } : previous));
         const controller = new AbortController();
         exportController.current = controller;
         const original = previewSource
@@ -549,6 +593,7 @@ export function PhotoEditor({
           exportController.current = null;
         }
       }
+      setSaveProgress((previous) => (previous ? { ...previous, stage: 'uploading' } : previous));
       savingToAlbum = true;
       const savedPhoto = await onSave(file, photoEditRecipe(edits));
       pendingSaveRef.current = null;
@@ -568,6 +613,8 @@ export function PhotoEditor({
         );
       }
     } finally {
+      setSaveProgress(null);
+      setSaveElapsed(0);
       setBusy(false);
     }
   }
@@ -815,6 +862,18 @@ export function PhotoEditor({
               />
             )}
           </div>
+          {saveProgress && (
+            <div className={styles.saveProgress} role="status" aria-live="polite">
+              <div className={styles.saveProgressHeader}>
+                <span>{saveStageLabel(saveProgress.stage)}</span>
+                <span>{saveElapsed}s</span>
+              </div>
+              <div className={styles.saveProgressTrack} aria-hidden="true">
+                <div className={styles.saveProgressBar} />
+              </div>
+              <small>{t('成片在原图上生成，请保持页面打开。')}</small>
+            </div>
+          )}
           {!loaded && !error && <p role="status">{t('正在读取照片…')}</p>}
         </div>
         {saveUnavailable && (

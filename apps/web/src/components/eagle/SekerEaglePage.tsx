@@ -3121,6 +3121,7 @@ export function SekerEaglePage({
           subtitle={previewImageAsset ? eagleViewerMetadata(previewImageAsset) : undefined}
           navigation={previewNavigation}
           descriptor={previewPyramidQuery.data}
+          highResolutionExpected={previewCanHavePyramid}
           editLabel={previewImageAsset ? eaglePhotoEditLabel(previewImageAsset) : undefined}
           onEdit={
             libraryView !== 'TRASH' &&
