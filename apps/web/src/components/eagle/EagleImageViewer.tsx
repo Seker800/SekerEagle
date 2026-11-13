@@ -66,7 +66,7 @@ interface ViewerWorldItem {
   getFullyLoaded?(): boolean;
 }
 interface ViewerHandle {
-  addHandler(name: 'open' | 'open-failed' | 'after-resize', handler: () => void): void;
+  addHandler(name: 'open' | 'open-failed' | 'after-resize' | 'zoom', handler: () => void): void;
   addHandler(
     name: 'fully-loaded-change' | 'tile-loaded' | 'tile-load-failed',
     handler: (event?: unknown) => void,
@@ -144,6 +144,7 @@ export function EagleImageViewer({
   loading = false,
   loadingPlaceholder,
   previewLimited = false,
+  highResolutionSrc,
   error,
   onRetry,
 }: {
@@ -152,6 +153,7 @@ export function EagleImageViewer({
   readOnly?: boolean;
   descriptor?: EaglePyramidDescriptor;
   previewLimited?: boolean;
+  highResolutionSrc?: string | null;
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
   onEdit?: () => void;
@@ -166,16 +168,24 @@ export function EagleImageViewer({
   onRetry?: () => void;
 }) {
   const compact = useCompactLayout();
+  const [zoomActivated, setZoomActivated] = useState(false);
   const rotation = useRef(0);
   useEffect(() => {
     rotation.current = 0;
+    setZoomActivated(false);
   }, [image.assetId, image.src]);
-  const source = useMemo(
-    () =>
-      descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
-    [descriptor, image.src],
-  );
-  const sourceKey = descriptor ? `pyramid:${descriptor.id}` : `preview:${image.src}`;
+  const previewSource = useMemo(() => createEaglePreviewTileSource(image.src), [image.src]);
+  const highResolutionSource = useMemo(() => {
+    if (!zoomActivated) return null;
+    if (descriptor) return createEagleTileSource(descriptor);
+    return highResolutionSrc ? createEaglePreviewTileSource(highResolutionSrc) : null;
+  }, [zoomActivated, descriptor, highResolutionSrc]);
+  const source = highResolutionSource ?? previewSource;
+  const sourceKey = highResolutionSource
+    ? descriptor
+      ? `pyramid:${descriptor.id}`
+      : `original:${highResolutionSrc}`
+    : `preview:${image.src}`;
   const viewerElementRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ViewerHandle | undefined>(undefined);
   const imageRef = useRef(image);
@@ -308,6 +318,11 @@ export function EagleImageViewer({
         viewer.addHandler('fully-loaded-change', updateDetailLoading);
         viewer.addHandler('tile-loaded', onTileLoaded);
         viewer.addHandler('tile-load-failed', updateDetailLoading);
+        viewer.addHandler('zoom', () => {
+          if (!openedSourceKeyRef.current) return;
+          const home = viewer.viewport.getHomeZoom?.() ?? viewer.viewport.getZoom();
+          if (viewer.viewport.getZoom() > home * 1.05) setZoomActivated(true);
+        });
         viewer.addHandler('open', () => {
           openedSourceKeyRef.current = sourceKeyRef.current;
           const pendingViewport = pendingViewportRef.current;
@@ -390,8 +405,9 @@ export function EagleImageViewer({
     const preserveViewport =
       activeImageKeyRef.current === imageKey &&
       openedSourceKeyRef.current === sourceKeyRef.current &&
-      sourceKeyRef.current.startsWith('preview:') &&
-      sourceKey.startsWith('pyramid:');
+      (sourceKeyRef.current.startsWith('preview:') ||
+        sourceKeyRef.current.startsWith('original:')) &&
+      (sourceKey.startsWith('pyramid:') || sourceKey.startsWith('original:'));
     pendingSourceRef.current = { imageKey, preserveViewport, source, sourceKey };
     if (preserveViewport) {
       lastInteractionAtRef.current = Date.now();
@@ -417,14 +433,17 @@ export function EagleImageViewer({
     tileProgress.total > 0 &&
     tileProgress.loaded > 0 &&
     tileProgress.loaded < tileProgress.total;
+  const sourceIsPreview = sourceKey.startsWith('preview:');
   const qualityNotice =
     displayStatus === 'ready' && !loading
-      ? descriptor
-        ? showDetailProgress
-          ? t('正在加载高清细节…')
+      ? sourceIsPreview
+        ? previewLimited
+          ? t('预览图 · 放大加载高清')
           : ''
-        : previewLimited
-          ? t('预览图 · 高清未就绪')
+        : descriptor
+          ? showDetailProgress
+            ? t('正在加载高清细节…')
+            : ''
           : ''
       : '';
   const secondary = (

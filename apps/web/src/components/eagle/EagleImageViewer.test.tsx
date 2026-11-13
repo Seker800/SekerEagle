@@ -12,6 +12,7 @@ const {
   getBoundsMock,
   getFullyLoadedMock,
   getCenterMock,
+  getHomeZoomMock,
   getZoomMock,
   goHomeMock,
   handlers,
@@ -40,6 +41,7 @@ const {
   const hoistedOpenMock = vi.fn();
   const hoistedApplyConstraintsMock = vi.fn();
   const hoistedGetCenterMock = vi.fn(() => ({ x: 0.4, y: 0.6 }));
+  const hoistedGetHomeZoomMock = vi.fn(() => 1);
   const hoistedGetZoomMock = vi.fn(() => 2.5);
   const hoistedPanByMock = vi.fn();
   const hoistedPanToMock = vi.fn();
@@ -60,6 +62,7 @@ const {
       applyConstraints: hoistedApplyConstraintsMock,
       deltaPointsFromPixels: vi.fn((point: unknown) => point),
       getCenter: hoistedGetCenterMock,
+      getHomeZoom: hoistedGetHomeZoomMock,
       getZoom: hoistedGetZoomMock,
       panBy: hoistedPanByMock,
       panTo: hoistedPanToMock,
@@ -83,6 +86,7 @@ const {
     getBoundsMock: hoistedGetBoundsMock,
     getFullyLoadedMock: hoistedGetFullyLoadedMock,
     getCenterMock: hoistedGetCenterMock,
+    getHomeZoomMock: hoistedGetHomeZoomMock,
     getZoomMock: hoistedGetZoomMock,
     goHomeMock: hoistedGoHomeMock,
     handlers: hoistedHandlers,
@@ -122,6 +126,7 @@ describe('EagleImageViewer', () => {
     vi.clearAllMocks();
     handlers.clear();
     getFullyLoadedMock.mockReturnValue(true);
+    getHomeZoomMock.mockReturnValue(1);
   });
 
   it('copies the complete image even when viewing pyramid tiles', async () => {
@@ -161,15 +166,25 @@ describe('EagleImageViewer', () => {
     render(<EagleImageViewer image={image} previewLimited onClose={vi.fn()} />);
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
-    expect(screen.getByText('预览图 · 高清未就绪')).toBeInTheDocument();
+    expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
   });
 
-  it('shows high-resolution detail loading until the tiles are fully loaded', async () => {
+  it('loads high-resolution tiles only after zooming and reports real tile progress', async () => {
     getFullyLoadedMock.mockReturnValue(false);
     render(
       <EagleImageViewer image={image} descriptor={descriptor} previewLimited onClose={vi.fn()} />,
     );
     await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
+    expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+
+    act(() => handlers.get('zoom')?.());
+    await waitFor(() =>
+      expect(openMock).toHaveBeenCalledWith(
+        expect.objectContaining({ width: descriptor.width, height: descriptor.height }),
+      ),
+    );
     act(() => handlers.get('open')?.());
     expect(screen.queryByText('正在加载高清细节…')).toBeNull();
     expect(screen.queryByText('0/48')).toBeNull();
@@ -179,6 +194,28 @@ describe('EagleImageViewer', () => {
     getFullyLoadedMock.mockReturnValue(true);
     act(() => handlers.get('fully-loaded-change')?.());
     expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+  });
+
+  it('loads the original only after zooming when no pyramid is needed', async () => {
+    render(
+      <EagleImageViewer
+        image={image}
+        highResolutionSrc="/original.jpg"
+        previewLimited
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
+    expect(openMock).not.toHaveBeenCalled();
+
+    act(() => handlers.get('zoom')?.());
+    await waitFor(() =>
+      expect(openMock).toHaveBeenCalledWith({ type: 'image', url: '/original.jpg' }),
+    );
+    act(() => handlers.get('open')?.());
+    expect(screen.queryByText('预览图 · 放大加载高清')).toBeNull();
   });
 
   it('shows an existing thumbnail while loading and removes it when the viewer opens', async () => {
@@ -318,13 +355,16 @@ describe('EagleImageViewer', () => {
     expect(getBoundsMock).toHaveBeenCalled();
   });
 
-  it('opens pyramid tiles at their natural home view when the preview has not opened yet', async () => {
+  it('does not open pyramid tiles until the preview is open and the user zooms', async () => {
     const view = render(<EagleImageViewer image={image} onClose={vi.fn()} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
 
     view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
+    expect(openMock).not.toHaveBeenCalled();
 
-    expect(openMock).toHaveBeenCalledTimes(1);
+    act(() => handlers.get('open')?.());
+    act(() => handlers.get('zoom')?.());
+    await waitFor(() => expect(openMock).toHaveBeenCalledTimes(1));
     expect(openMock).toHaveBeenCalledWith(
       expect.objectContaining({
         width: descriptor.width,
@@ -332,15 +372,9 @@ describe('EagleImageViewer', () => {
         tileSize: descriptor.tileSize,
       }),
     );
-    expect(getCenterMock).not.toHaveBeenCalled();
-    expect(getZoomMock).not.toHaveBeenCalled();
-
-    act(() => handlers.get('open')?.());
-    expect(zoomToMock).not.toHaveBeenCalled();
-    expect(panToMock).not.toHaveBeenCalled();
   });
 
-  it('upgrades to pyramid tiles after interaction settles and preserves an opened viewport', async () => {
+  it('upgrades to pyramid tiles when the user zooms and preserves the opened viewport', async () => {
     const view = render(<EagleImageViewer image={image} onClose={vi.fn()} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
     act(() => handlers.get('open')?.());
@@ -349,14 +383,7 @@ describe('EagleImageViewer', () => {
     view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
     expect(openMock).not.toHaveBeenCalled();
 
-    act(() =>
-      handlers.get('canvas-scroll')?.({
-        pointerType: 'mouse',
-        position: { x: 200, y: 100 },
-        scroll: 0.1,
-        preventDefaultAction: false,
-      }),
-    );
+    act(() => handlers.get('zoom')?.());
     act(() => vi.advanceTimersByTime(119));
     expect(openMock).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));

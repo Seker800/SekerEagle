@@ -128,6 +128,7 @@ import {
   collapseLivePhotoComponents,
   needsEagleImagePyramid,
   eaglePreviewIsLimited,
+  getEagleViewerHighResolutionUrl,
 } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
@@ -3126,6 +3127,9 @@ export function SekerEaglePage({
           navigation={previewNavigation}
           descriptor={previewPyramidQuery.data}
           previewLimited={previewImageAsset ? eaglePreviewIsLimited(previewImageAsset) : false}
+          highResolutionSrc={
+            previewImageAsset ? getEagleViewerHighResolutionUrl(previewImageAsset) : undefined
+          }
           editLabel={previewImageAsset ? eaglePhotoEditLabel(previewImageAsset) : undefined}
           onEdit={
             libraryView !== 'TRASH' &&

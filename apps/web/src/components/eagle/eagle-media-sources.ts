@@ -22,6 +22,14 @@ export function eaglePreviewIsLimited(asset: EagleAssetListItem): boolean {
   return previewEdge > 0 && Math.max(asset.width ?? 0, asset.height ?? 0) > previewEdge;
 }
 
+/** Browser-readable source loaded only after the viewer zooms in. */
+export function getEagleViewerHighResolutionUrl(asset: EagleAssetListItem): string | null {
+  if (['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType))
+    return getEagleAssetContentUrl(asset.id, asset.libraryMode);
+  if (isCameraRawMime(asset.mimeType)) return getEagleEditContentUrl(asset);
+  return null;
+}
+
 /** Explicit editing may use originals only for browser-native formats. RAW uses bounded sRGB. */
 export function getEagleEditContentUrl(asset: EagleAssetListItem): string | null {
   if (asset.lifecycleStatus !== 'READY' || asset.deletedAt) return null;

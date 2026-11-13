@@ -1708,7 +1708,7 @@ export const enUS = {
   '正在加载大图…': 'Loading Large Image...',
   '正在加载高清细节…': 'Loading full-resolution detail...',
   预览图: 'Preview image',
-  '预览图 · 高清未就绪': 'Preview image · high resolution unavailable',
+  '预览图 · 放大加载高清': 'Preview image · zoom in to load detail',
   '正在加载个人素材库…': 'Loading personal library…',
   '正在加载更多素材…': 'Loading more assets…',
   '正在加载令牌…': 'Loading tokens…',
