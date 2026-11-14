@@ -158,12 +158,13 @@ export function createQueueRunner({
       failureStage = 'COMMIT';
       await store.update(job.id, { status: 'COMMITTING' });
       const completed = await api.complete(job.id, parts);
-      await markCompleted(store, job.id, completed);
+      const settled = completed.assetId ? completed : await awaitServerCompletion(api, job.id);
+      await markCompleted(store, job.id, settled);
       await safelyReportConnectionRestored(onConnectionRestored, job.id);
       await safelyReportTerminalState(onTerminalState, job, {
         status: 'COMPLETED',
-        assetId: completed.assetId,
-        duplicate: completed.duplicate,
+        assetId: settled.assetId,
+        duplicate: settled.duplicate,
       });
     } catch (error) {
       const attempts = (job.attempts || 0) + 1;
@@ -249,6 +250,18 @@ async function initiateWithFallback({ serverCandidates, pat, fetchImpl, declarat
 function isLoopbackServer(serverUrl) {
   const hostname = new URL(serverUrl).hostname;
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+async function awaitServerCompletion(api, clientCaptureId) {
+  const deadline = Date.now() + 120_000;
+  for (;;) {
+    const capture = await api.get(clientCaptureId);
+    if (capture.status === 'COMPLETED' && capture.assetId) return capture;
+    if (capture.status === 'FAILED' || capture.status === 'ABORTED')
+      throw new CaptureApiError(capture.lastError || '服务器校验失败。');
+    if (Date.now() >= deadline) throw new CaptureApiError('服务器仍在确认入库，稍后自动重试。');
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 1000));
+  }
 }
 
 function markCompleted(store, jobId, completed) {

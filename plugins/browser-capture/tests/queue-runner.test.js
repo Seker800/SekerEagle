@@ -174,6 +174,72 @@ test('reuses committed part metadata when server finalization needs recovery', a
   assert.equal(job.assetId, 'asset-1');
 });
 
+test('waits for the server finalization job before marking an accepted capture complete', async () => {
+  Object.defineProperty(globalThis, 'chrome', {
+    configurable: true,
+    value: { runtime: { getManifest: () => ({ version: '0.1.0' }) } },
+  });
+  const job = {
+    id: '13e84291-8ad7-4c44-aa76-29a45ce058b2',
+    status: 'RETRY',
+    sourceUrl: 'https://cdn.example.com/photo.jpg',
+    metadata: {
+      displayName: 'Photo',
+      pageTitle: 'Gallery',
+      pageUrl: 'https://example.com/gallery',
+      imageUrl: 'https://cdn.example.com/photo.jpg',
+      altText: 'Photo',
+    },
+    capturedAt: '2026-08-19T00:00:00.000Z',
+    createdAt: 1,
+    attempts: 1,
+    nextAttemptAt: 0,
+    blob: new Blob(['image'], { type: 'image/jpeg' }),
+    mimeType: 'image/jpeg',
+    originalName: 'photo.jpg',
+  };
+  const store = {
+    list: async () => [job],
+    update: async (_id, changes) => Object.assign(job, changes),
+  };
+  const requests = [];
+  const responses = [
+    {
+      clientCaptureId: job.id,
+      uploadSessionId: 'upload-1',
+      status: 'FAILED',
+      assetId: null,
+      partSize: 5_242_880,
+      replayed: true,
+    },
+    { uploadSessionId: 'upload-1', parts: [{ partNumber: 1, etag: 'stored-etag' }] },
+    { uploadSessionId: 'upload-1', status: 'ASSEMBLED' },
+    { status: 'COMPLETED', assetId: 'asset-1', duplicate: false, lastError: null },
+  ];
+  const runner = createQueueRunner({
+    store,
+    getConfig: async () => ({
+      serverUrl: 'https://eagle.example.com',
+      pat: 'sea_pat_test',
+      concurrency: 3,
+    }),
+    fetchImpl: async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify(responses.shift()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  await runner.drain();
+
+  assert.equal(requests.length, 4);
+  assert.match(requests[3].url, /browser-captures\//);
+  assert.equal(job.status, 'COMPLETED');
+  assert.equal(job.assetId, 'asset-1');
+});
+
 test('automatic connection falls back from unavailable loopback to the public endpoint', async () => {
   Object.defineProperty(globalThis, 'chrome', {
     configurable: true,

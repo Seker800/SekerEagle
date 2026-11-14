@@ -26,6 +26,7 @@ test('operations host discovers backlog immediately, prevents local overlap and 
         maintenance++;
       },
     },
+    { tick: async () => undefined },
     true,
   );
   host.start();
@@ -57,6 +58,7 @@ test('operations host retains recovery pause and retries maintenance after error
   const host = new AssetOperationBackground(
     [{ recoverPendingFinalizations: async () => assert.fail('recovery paused') }],
     maintenance,
+    { tick: async () => undefined },
     false,
   );
   host.start();
@@ -65,7 +67,12 @@ test('operations host retains recovery pause and retries maintenance after error
   await turn();
   assert.equal(attempts, 2);
   await host.close();
-  const restarted = new AssetOperationBackground([], maintenance, false);
+  const restarted = new AssetOperationBackground(
+    [],
+    maintenance,
+    { tick: async () => undefined },
+    false,
+  );
   restarted.start();
   await restarted.close();
   assert.equal(attempts, 3);

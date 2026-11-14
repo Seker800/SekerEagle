@@ -48,6 +48,8 @@ export class EagleUploadRecoveryService {
     const sessions = await this.prisma.uploadSession.findMany({
       where: {
         finalizationAttempts: { lt: 10 },
+        // Durable jobs own their own retry backoff; this loop only recovers sessions without one.
+        finalizationJob: null,
         OR: [
           { status: { in: ['ASSEMBLED', 'FAILED'] } },
           {

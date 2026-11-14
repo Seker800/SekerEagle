@@ -592,10 +592,27 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
+  async function waitForUploadFinalization(sessionId: string, signal: AbortSignal) {
+    for (;;) {
+      signal.throwIfAborted();
+      const session = await api<{
+        status: string;
+        eagleAssetId: string | null;
+        objectCleanupPending: boolean;
+        lastError: string | null;
+      }>(`/eagle/uploads/${sessionId}`, { signal });
+      if (session.status === 'COMPLETED' && session.eagleAssetId)
+        return { assetId: session.eagleAssetId, duplicate: session.objectCleanupPending };
+      if (session.status === 'FAILED' || session.status === 'ABORTED')
+        throw new Error(session.lastError || t('上传文件校验失败。'));
+      await sleep(1000, signal);
+    }
+  }
+
   async function uploadEagleAsset(
     _token: string,
     file: File,
-    onProgress: (value: { percent: number }) => void,
+    onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options?: {
       duplicatePolicy?: 'CREATE_COPY';
       signal?: AbortSignal;
@@ -652,6 +669,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       editorUploads.set(file, retained);
     }
     const parts = retained?.parts ?? [];
+    let accepted = false;
     try {
       const count = Math.ceil(file.size / session.partSize);
       for (let index = parts.length; index < count; index += 1) {
@@ -684,20 +702,31 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         onProgress({ percent: Math.round((partNumber / count) * 100) });
       }
       const completed = await api<{
-        assetId: string;
-        duplicate: boolean;
+        uploadSessionId: string;
+        status: string;
+        assetId?: string;
+        duplicate?: boolean;
       }>(`/eagle/uploads/${session.id}/complete`, {
         method: 'POST',
         signal,
         body: JSON.stringify({ parts }),
       });
-      if (retained) retained.completedAssetId = completed.assetId;
+      accepted = completed.assetId === undefined;
+      let settled: { assetId: string; duplicate: boolean };
+      if (completed.assetId) {
+        settled = { assetId: completed.assetId, duplicate: completed.duplicate === true };
+      } else {
+        onProgress({ percent: 100, phase: 'validating' });
+        settled = await waitForUploadFinalization(session.id, signal);
+      }
+      if (retained) retained.completedAssetId = settled.assetId;
       return {
-        duplicate: completed.duplicate,
-        asset: await getEagleAsset('', completed.assetId, signal),
+        duplicate: settled.duplicate,
+        asset: await getEagleAsset('', settled.assetId, signal),
       };
     } catch (error) {
-      if (!options?.retry && !signal.aborted)
+      // Once the server accepted the finalization job it owns the object; never abort that session here.
+      if (!accepted && !options?.retry && !signal.aborted)
         await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}', signal }).catch(
           () => undefined,
         );
@@ -845,3 +874,25 @@ export const {
   getEaglePyramidDescriptor,
   getEagleRenditionContentUrl,
 } = createEagleApi();
+
+function abortReason(signal: AbortSignal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError');
+}
+
+function sleep(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}

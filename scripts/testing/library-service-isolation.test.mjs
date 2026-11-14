@@ -15,6 +15,12 @@ import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
 import { EagleMediaService } from '../../apps/api/dist/eagle/eagle-media.service.js';
 import { EagleUploadService } from '../../apps/api/dist/eagle/eagle-upload.service.js';
 
+async function finalizeAcceptedUpload(service, sessionId) {
+  const result = await service.recoverUploadSession(sessionId);
+  assert.ok(result, 'the operations host must finalize an accepted upload');
+  return result;
+}
+
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL ?? '',
   s3Endpoint: process.env.S3_ENDPOINT ?? '',
@@ -150,9 +156,8 @@ test('existing editor copies retain private tags and metadata atomically in thei
       NotFoundException,
     );
     const session = await service.initiate(f.ownerId, input, true);
-    const result = await service.complete(f.ownerId, session.id, {
-      parts: [{ partNumber: 1, etag: 'part' }],
-    });
+    await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+    const result = await finalizeAcceptedUpload(service, session.id);
     const copy = await prisma.eagleAsset.findUniqueOrThrow({
       where: { id: result.assetId },
       include: {
@@ -278,10 +283,8 @@ test('source changes during an existing editor upload roll back copy publication
     where: { id: f.material.id },
     data: { rowVersion: { increment: 1 } },
   });
-  await assert.rejects(
-    () => service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] }),
-    /原照片已变化/,
-  );
+  await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+  await assert.rejects(() => service.recoverUploadSession(session.id), /原照片已变化/);
   assert.equal(
     await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
     1,
@@ -380,9 +383,8 @@ test('photo upload freezes mode, rejects old-route resume and deduplicates only 
     size: 1,
   });
   await assert.rejects(() => materials.getSession(f.ownerId, upload.id), NotFoundException);
-  const completed = await photos.complete(f.ownerId, upload.id, {
-    parts: [{ partNumber: 1, etag: 'part' }],
-  });
+  await photos.complete(f.ownerId, upload.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+  const completed = await finalizeAcceptedUpload(photos, upload.id);
   assert.notEqual(completed.assetId, f.material.id);
   assert.equal(completed.duplicate, false);
   const row = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: completed.assetId } });
@@ -2425,9 +2427,8 @@ test('published photo edits inherit timeline and capture data, join their source
       copySourceRowVersion: 1,
       editRecipe: { version: 1, edits: DEFAULT_PHOTO_EDITS },
     });
-    const result = await service.complete(f.ownerId, session.id, {
-      parts: [{ partNumber: 1, etag: 'part' }],
-    });
+    await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+    const result = await finalizeAcceptedUpload(service, session.id);
     assert.equal(
       (await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] }))
         .assetId,

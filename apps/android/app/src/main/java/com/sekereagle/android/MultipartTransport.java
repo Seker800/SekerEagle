@@ -228,7 +228,40 @@ final class MultipartTransport implements BackupEngine.Transport {
     JSONObject completed =
         api.request(
             "POST", path + "/" + cp.session + "/complete", new JSONObject().put("parts", parts));
-    if (completed.optString("assetId").isEmpty()) throw new IOException("服务器尚未确认原文件入库");
+    if (completed.optString("assetId").isEmpty()) awaitFinalization(cp, save, guard);
+  }
+
+  /** Completion only accepts the durable job; the operations host inspects and publishes later. */
+  private void awaitFinalization(
+      BackupEngine.Checkpoint cp, BackupEngine.Save save, BackupEngine.Guard guard)
+      throws Exception {
+    long deadline = System.currentTimeMillis() + 120_000;
+    for (; ; ) {
+      guard.check();
+      JSONObject session = api.request("GET", path + "/" + cp.session, null);
+      String status = session.optString("status");
+      if (status.equals("COMPLETED")
+          && !session.isNull("eagleAssetId")
+          && !session.optString("eagleAssetId").isEmpty()) return;
+      if (status.equals("ABORTED")) throw new IOException("上传会话已中止");
+      if (status.equals("FAILED")
+          && (session.optInt("finalizationAttempts") >= 10
+              || session.optBoolean("objectCleanupPending"))) {
+        cp.session = "";
+        cp.partSize = 0;
+        cp.terminalError = "服务器已拒绝该文件，请检查后重试失败文件";
+        save.write(cp);
+        throw new BackupEngine.PermanentFailure(cp.terminalError);
+      }
+      if (System.currentTimeMillis() >= deadline)
+        throw new IOException("服务器仍在确认入库，下次自动接续");
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException error) {
+        Thread.currentThread().interrupt();
+        throw error;
+      }
+    }
   }
 
   private JSONObject uploadPart(String session, int number, byte[] bytes, BackupEngine.Guard guard)

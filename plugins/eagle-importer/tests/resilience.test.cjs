@@ -172,6 +172,34 @@ test('fresh uploads avoid the resumable-parts lookup on the hot path', async () 
   assert.equal(partsLookups, 0);
 });
 
+test('uploads accepted by the server wait for the background finalization job', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-accepted-upload-'));
+  const filePath = path.join(directory, 'photo.jpg');
+  await fs.writeFile(filePath, 'hello');
+  let sessionReads = 0;
+  const api = {
+    initiateUpload: async () => ({ id: 'session-1', partSizeBytes: 5, resumed: false }),
+    getUploadedParts: async () => ({ parts: [], partSizeBytes: 5 }),
+    uploadPart: async (_sessionId, partNumber) => ({ partNumber, etag: 'etag-1' }),
+    completeUpload: async () => ({ uploadSessionId: 'session-1', status: 'ASSEMBLED' }),
+    getUploadSession: async () => {
+      sessionReads += 1;
+      return { status: 'COMPLETED', eagleAssetId: 'asset-1', objectCleanupPending: false };
+    },
+  };
+  const engine = new ImportEngine({ api, store: { state: {}, save: async () => {} } });
+
+  const result = await engine.uploadItem(
+    'run-1',
+    { id: 'item-1' },
+    { filePath, originalFileName: 'photo.jpg', mimeType: 'image/jpeg', size: 5 },
+    () => {},
+  );
+
+  assert.equal(result.assetId, 'asset-1');
+  assert.equal(sessionReads, 1);
+});
+
 test('resumed uploads still recover already uploaded parts', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-resumed-upload-'));
   const filePath = path.join(directory, 'photo.jpg');

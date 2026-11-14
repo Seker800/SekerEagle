@@ -82,6 +82,41 @@ describe('listEagleAssetUpdates', () => {
     ]);
   });
 
+  it('waits for the durable upload finalization job before reading the new asset', async () => {
+    vi.stubGlobal('window', { location: { origin: 'http://localhost:8180' } });
+    const progress = vi.fn();
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ id: 'session-1', partSize: 10 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          uploadUrl: 'http://localhost:8180/sekereagle-assets/part?X-Amz-Signature=test',
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: 'etag' } }))
+      .mockResolvedValueOnce(
+        Response.json({ uploadSessionId: 'session-1', status: 'ASSEMBLED' }, { status: 202 }),
+      )
+      .mockResolvedValueOnce(Response.json({ status: 'FINALIZING' }))
+      .mockResolvedValueOnce(
+        Response.json({
+          status: 'COMPLETED',
+          eagleAssetId: 'asset-1',
+          objectCleanupPending: false,
+          lastError: null,
+        }),
+      )
+      .mockImplementation(async () => Response.json({ id: 'asset-1' }));
+
+    const result = await uploadEagleAsset(
+      '',
+      new File(['image'], 'image.png', { type: 'image/png' }),
+      progress,
+    );
+
+    expect(result.asset.id).toBe('asset-1');
+    expect(progress).toHaveBeenCalledWith({ percent: 100, phase: 'validating' });
+  });
+
   it('uploads object parts through the current LAN gateway without browser credentials', async () => {
     vi.stubGlobal('window', { location: { origin: 'http://192.168.1.10:8180' } });
     const fetchMock = vi

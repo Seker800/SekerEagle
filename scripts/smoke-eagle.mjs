@@ -39,6 +39,18 @@ async function login(email, password) {
   return cookiesFrom(result.response);
 }
 
+async function waitForUpload(uploadId, auth) {
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const state = await api(`/api/eagle/uploads/${uploadId}`, auth);
+    if (state.payload?.status === 'COMPLETED' && state.payload.eagleAssetId)
+      return state.payload.eagleAssetId;
+    if (state.payload?.status === 'FAILED' || state.payload?.status === 'ABORTED')
+      throw new Error(state.payload.lastError || '上传校验失败');
+    await delay(500);
+  }
+  throw new Error('上传校验超时');
+}
+
 const adminCookie = await login(adminEmail, adminPassword);
 const suffix = Date.now().toString(36);
 const password = `Eagle-smoke-${suffix}-password`;
@@ -87,12 +99,15 @@ const completed = await api(`/api/eagle/uploads/${uploadId}/complete`, {
   cookie: owner.cookie,
   body: { parts: [{ partNumber: 1, etag }] },
 });
-if (completed.response.status !== 201) {
+if (![201, 202].includes(completed.response.status)) {
   throw new Error(
     `完成上传失败: ${completed.response.status} ${JSON.stringify(completed.payload)}`,
   );
 }
-const assetId = completed.payload?.assetId;
+const assetId =
+  typeof completed.payload?.assetId === 'string'
+    ? completed.payload.assetId
+    : await waitForUpload(uploadId, { cookie: owner.cookie });
 if (typeof assetId !== 'string') throw new Error('完成上传响应缺少 assetId');
 
 let asset;
@@ -285,16 +300,20 @@ const importCompleted = await api(`/api/eagle/uploads/${importUpload.payload.id}
   bearer: importerToken,
   body: { parts: [{ partNumber: 1, etag: importEtag }] },
 });
+if (![201, 202].includes(importCompleted.response.status)) throw new Error('导入项完成上传失败');
+const importedAssetId =
+  typeof importCompleted.payload?.assetId === 'string'
+    ? importCompleted.payload.assetId
+    : await waitForUpload(importUpload.payload.id, { bearer: importerToken });
 const importFinished = await api(
   `/api/eagle/imports/${firstImport.runId}/items/${importItem.id}/finish`,
   {
     method: 'POST',
     bearer: importerToken,
-    body: { assetId: importCompleted.payload?.assetId },
+    body: { assetId: importedAssetId },
   },
 );
 if (!importFinished.response.ok) throw new Error('导入项元数据收敛失败');
-const importedAssetId = importCompleted.payload.assetId;
 
 const metadataImport = await createImportRun('updated');
 if (

@@ -172,6 +172,7 @@ function serializeCapture(
     mimeType: capture.uploadSession.mimeType,
     size: Number(capture.uploadSession.size),
     partSize,
+    duplicate: capture.uploadSession.objectCleanupPending,
     lastError: capture.uploadSession.lastError,
     replayed,
     completedAt: capture.completedAt,

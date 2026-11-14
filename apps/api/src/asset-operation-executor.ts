@@ -33,6 +33,9 @@ import { EagleMaintenanceService } from './eagle/eagle-maintenance.service';
 import { EagleImportsService } from './eagle/import/eagle-app-import.service';
 import { PrismaEagleImportsRepository } from './eagle/import/adapters/prisma/eagle-app-import.repository';
 import { PrismaSekerEagleIngestionAdapter } from './eagle/adapters/prisma/seker-eagle-ingestion.adapter';
+import { UploadFinalizationExecutor } from './upload-finalization-executor';
+
+const UPLOAD_MODES = ['MATERIAL', 'PHOTO'] as const;
 
 /** Same domain services, a separate process/pool, no HTTP module or authentication secrets. */
 export function createAssetOperationExecutors(
@@ -74,26 +77,27 @@ export function createAssetOperationBackground(
   );
   const inspection = new EagleUploadInspectionService(storage);
   const capabilities = new EagleMediaCapabilityService();
-  const recoveries = (['MATERIAL', 'PHOTO'] as const).map(
-    (mode) =>
-      new EagleUploadRecoveryService(
+  const uploads = Object.fromEntries(
+    UPLOAD_MODES.map((mode) => [
+      mode,
+      new EagleUploadService(
         prisma,
-        new EagleUploadService(
-          prisma,
-          storage,
-          capabilities,
-          inspection,
-          mode,
-          mode === 'PHOTO' ? new PhotoRevisionObserver() : undefined,
-        ),
-        imports,
         storage,
+        capabilities,
+        inspection,
         mode,
+        mode === 'PHOTO' ? new PhotoRevisionObserver() : undefined,
       ),
+    ]),
+  ) as Record<(typeof UPLOAD_MODES)[number], EagleUploadService>;
+  const recoveries = (['MATERIAL', 'PHOTO'] as const).map(
+    (mode) => new EagleUploadRecoveryService(prisma, uploads[mode], imports, storage, mode),
   );
+  const finalizations = new UploadFinalizationExecutor(prisma, uploads, imports);
   return new AssetOperationBackground(
     recoveries,
     new EagleMaintenanceService(prisma, imports),
+    finalizations,
     process.env.EAGLE_UPLOAD_RECOVERY_ENABLED !== 'false',
   );
 }
@@ -142,7 +146,7 @@ async function main() {
     background = createAssetOperationBackground(prisma, storage);
     background.start();
     for (const executor of executors) executor.startExecutor();
-    wakeup = new AssetOperationWakeup(env.DATABASE_URL!, executors);
+    wakeup = new AssetOperationWakeup(env.DATABASE_URL!, executors, background.finalizations);
     await wakeup.start();
     await writeFile(readyFile, String(process.pid), { mode: 0o600 });
   } catch (error) {

@@ -225,3 +225,9 @@ Prisma7发布前实际新旧镜像对照、SQL计数协议及处理见[全部分
 暂存依据默认12,000资源投影，保护主进程内存，到顶LRU淘汰后恢复原在线校验，不限制图库或用户操作；启动变量`SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES`为正整数。列表IPC30秒期限与原网页默认读期限一致，保护悬挂网络请求，可由用户取消提前终止。
 
 真实Electron、200条合成列表／24张磁盘图、每组5次：列表额外处理约1–3ms；30ms请求延迟时整屏180–190→60ms，80ms时440→120ms；零延迟时约30→30ms。实际解码与两帧、真实preload和utility RPC均纳入；不是NAS或用户图库实测。设计、逐场景成本与复现命令见[完整记录](client-cache-list-reuse-2026-11-02.md)。
+
+## 2026年11月14日 上传校验异步化
+
+上传完成不再在 API 进程内读取原图：`complete` 只合并分片、写 `UploadFinalizationJob` 并向 operations 发 NOTIFY；operations 一次领取一个任务，流式落盘并只读文件头。每次受理为 1 事务（会话更新＋任务 upsert＋NOTIFY）与 1 次 CompleteMultipartUpload；每次任务为 1 次领取更新、1 次会话读取、1 次 HEAD、1 次流式 GET 和原发布事务，另有 1 次任务状态更新。客户端在校验期间每秒读取一次会话，完成后读取资源并失效一次列表；不重放已加载分页。
+
+本机同代码路径实测：111MP PNG 检查峰值从 710–785MB 降到约 104MB；50MP／34MB JPEG 从 133MB 降到约 104MB。临时文件一次只有一个，大小受原上传声明与现有媒体上限约束。上述为代码路径与本机样本，真实数据库计数以 `test:library-integration` 为准，不冒充 NAS 生产 p95。设计与验证步骤见[上传校验异步化](upload-finalization-2026-11-14.md)。

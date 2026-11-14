@@ -11,6 +11,7 @@ export class AssetOperationWakeup {
   constructor(
     private readonly databaseUrl: string,
     private readonly executors: readonly EagleAssetOperationService[],
+    private readonly finalizations?: { tick(): Promise<void> },
   ) {}
   async start() {
     if (this.closing) return;
@@ -43,6 +44,7 @@ export class AssetOperationWakeup {
       if (message.channel !== 'eagle_asset_operations' || this.closing) return;
       const executor = this.executors.find((value) => value.mode === message.payload);
       if (executor) void executor.tick().catch(() => console.warn('ASSET_OPERATION_WAKE_FAILED'));
+      void this.finalizations?.tick().catch(() => console.warn('UPLOAD_FINALIZATION_WAKE_FAILED'));
     });
     try {
       await client.connect();
@@ -54,6 +56,7 @@ export class AssetOperationWakeup {
       this.delay = 1000;
       for (const executor of this.executors)
         void executor.tick().catch(() => console.warn('ASSET_OPERATION_WAKE_FAILED'));
+      void this.finalizations?.tick().catch(() => console.warn('UPLOAD_FINALIZATION_WAKE_FAILED'));
     } catch {
       if (!this.closing) console.warn('ASSET_OPERATION_WAKEUP_UNAVAILABLE_POLLING_REMAINS_ACTIVE');
       recover();

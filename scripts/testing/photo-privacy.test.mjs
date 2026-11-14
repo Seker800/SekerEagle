@@ -544,7 +544,8 @@ async function replacePrivacyFixture(f, assetId, uploadDb = prisma) {
     'PHOTO',
     new PhotoRevisionObserver(),
   );
-  return upload.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+  await upload.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+  return upload.recoverUploadSession(session.id);
 }
 for (const replacedRole of ['STILL', 'MOTION']) {
   test(`替换 ${replacedRole} 后，对端实况组件在全量重算后仍受保护`, async () => {

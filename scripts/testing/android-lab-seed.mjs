@@ -230,7 +230,18 @@ async function seed(config) {
       const complete = await api(`${base}/uploads/${session.id}/complete`, {
         parts: [{ partNumber: 1, etag: uploaded.headers.get('etag') }],
       });
-      const id = complete.assetId;
+      let id = complete.assetId;
+      for (let attempt = 0; !id && attempt < 600; attempt++) {
+        const sessionState = await api(`${base}/uploads/${session.id}`);
+        if (sessionState.status === 'COMPLETED' && sessionState.eagleAssetId) {
+          id = sessionState.eagleAssetId;
+          break;
+        }
+        if (sessionState.status === 'FAILED' || sessionState.status === 'ABORTED')
+          throw new Error(sessionState.lastError || 'Test upload validation failed');
+        await pause(500);
+      }
+      assert.ok(id, 'Test upload did not finish validation');
       let ready = false;
       for (let attempt = 0; attempt < 240; attempt++) {
         const item = await db.eagleAsset.findFirst({

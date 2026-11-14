@@ -396,7 +396,25 @@ class ImportEngine {
       .sort((left, right) => left.partNumber - right.partNumber);
     this.assertActive();
     await this.itemState(item, { status: 'COMMITTING', uploadSessionId: sessionId });
-    return this.api.completeUpload(sessionId, parts);
+    const completed = await this.api.completeUpload(sessionId, parts);
+    return completed.assetId ? completed : this.awaitFinalization(sessionId);
+  }
+
+  async awaitFinalization(sessionId) {
+    const deadline = Date.now() + 10 * 60_000;
+    for (;;) {
+      this.assertActive();
+      const session = await this.api.getUploadSession(sessionId);
+      if (session.status === 'COMPLETED' && session.eagleAssetId)
+        return {
+          assetId: session.eagleAssetId,
+          duplicate: Boolean(session.objectCleanupPending),
+        };
+      if (session.status === 'FAILED' || session.status === 'ABORTED')
+        throw new Error(session.lastError || '服务器校验失败。');
+      if (Date.now() >= deadline) throw new Error('服务器仍在确认入库，请稍后重试该文件。');
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   }
 
   async cancelRun(runId) {

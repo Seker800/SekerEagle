@@ -6999,7 +6999,7 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };
@@ -10517,7 +10517,7 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      202: {
         headers: {
           [name: string]: unknown;
         };

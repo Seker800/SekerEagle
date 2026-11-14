@@ -204,14 +204,18 @@ async function serve(config) {
   const env = labEnvironment(config);
   await migrate(env);
   await bootstrap(config, env);
-  const children = ['apps/api/dist/main.js', 'apps/worker/dist/main.js'].map((path, i) => {
+  const children = [
+    ['apps/api/dist/main.js', 'api'],
+    ['apps/api/dist/asset-operation-executor.js', 'operations'],
+    ['apps/worker/dist/main.js', 'worker'],
+  ].map(([path, label]) => {
     const child = spawn(process.execPath, [path], {
       cwd: root,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    child.stdout.on('data', (bytes) => log(i === 0 ? 'api' : 'worker', bytes));
-    child.stderr.on('data', (bytes) => log(i === 0 ? 'api' : 'worker', bytes));
+    child.stdout.on('data', (bytes) => log(label, bytes));
+    child.stderr.on('data', (bytes) => log(label, bytes));
     return child;
   });
   const webRoot = join(root, 'apps/web/dist');

@@ -510,9 +510,19 @@ try {
     const { uploadUrl } = await api(`/${mode}/uploads/${session.id}/parts/1`, {});
     const response = await fetch(uploadUrl, { method: 'PUT', body: bytes });
     assert.equal(response.status, 200);
-    return api(`/${mode}/uploads/${session.id}/complete`, {
+    const completed = await api(`/${mode}/uploads/${session.id}/complete`, {
       parts: [{ partNumber: 1, etag: response.headers.get('etag') }],
     });
+    if (completed.assetId) return completed;
+    for (let attempt = 0; attempt < 1200; attempt++) {
+      const state = await api(`/${mode}/uploads/${session.id}`);
+      if (state.status === 'COMPLETED' && state.eagleAssetId)
+        return { assetId: state.eagleAssetId, duplicate: state.objectCleanupPending };
+      if (state.status === 'FAILED' || state.status === 'ABORTED')
+        throw new Error(state.lastError || 'upload validation failed');
+      await sleep(500);
+    }
+    throw new Error('upload validation timed out');
   }
   const a = await upload('photos', sharpPhoto, 'public-sample-synthetic-exif.jpg'),
     b = await upload('photos', blurryPhoto, 'public-sample-blurred.jpg'),

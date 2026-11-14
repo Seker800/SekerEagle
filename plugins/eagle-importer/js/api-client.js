@@ -170,6 +170,9 @@ class ApiClient {
   getUploadedParts(sessionId) {
     return this.request(`/eagle/uploads/${sessionId}/parts`, { retries: 2 });
   }
+  getUploadSession(sessionId) {
+    return this.request(`/eagle/uploads/${sessionId}`, { retries: 2 });
+  }
   async uploadPart(sessionId, partNumber, bytes) {
     const signed = await this.request(`/eagle/uploads/${sessionId}/parts/${partNumber}`, {
       method: 'POST',

@@ -28,11 +28,15 @@ test('maintenance prunes old completed jobs in a bounded batch and retains recen
 
   assert.deepEqual(result, {
     completedJobsDeleted: 123,
+    uploadJobsDeleted: 123,
     importRunsDeleted: 4,
     transfersExpired: 0,
   });
   assert.match(rawCalls[0]?.sql ?? '', /"status" = 'COMPLETED'/);
   assert.match(rawCalls[0]?.sql ?? '', /LIMIT/);
   assert.equal((rawCalls[0]?.values[0] as Date).toISOString(), '2026-07-18T00:00:00.000Z');
+  assert.match(rawCalls[1]?.sql ?? '', /"UploadFinalizationJob"/);
+  assert.match(rawCalls[1]?.sql ?? '', /'COMPLETED', 'FAILED'/);
+  assert.equal((rawCalls[1]?.values[0] as Date).toISOString(), '2026-07-18T00:00:00.000Z');
   assert.deepEqual(importCalls, [{ retentionDays: 30, keepPerLibrary: 10, limit: 100 }]);
 });

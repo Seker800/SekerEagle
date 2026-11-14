@@ -275,17 +275,61 @@ export class EagleUploadService {
           throw error;
         });
       }
-      await this.prisma.uploadSession.updateMany({
+    }
+    const now = new Date();
+    await this.prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.uploadSession.updateMany({
         where: {
           id: session.id,
           uploaderId: ownerId,
-          status: 'INITIATED',
           libraryMode: this.libraryMode,
+          status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED'] },
         },
-        data: { status: 'ASSEMBLED', assembledAt: new Date(), lastError: null },
+        data: {
+          status: 'ASSEMBLED',
+          assembledAt: now,
+          completionParts: parts,
+          finalizationAttempts: 0,
+          finalizationStartedAt: null,
+          lastError: null,
+        },
       });
+      if (claimed.count !== 1) return;
+      const job = await transaction.uploadFinalizationJob.findUnique({
+        where: { uploadSessionId: session.id },
+        select: { status: true },
+      });
+      // A worker may already own this session; a retried complete must not requeue it.
+      if (job?.status === 'PROCESSING') return;
+      await transaction.uploadFinalizationJob.upsert({
+        where: { uploadSessionId: session.id },
+        create: { uploadSessionId: session.id, status: 'PENDING', availableAt: now },
+        update: {
+          status: 'PENDING',
+          availableAt: now,
+          attempts: 0,
+          lockedAt: null,
+          lastError: null,
+        },
+      });
+      await transaction.$executeRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})`;
+    });
+    const current = await this.prisma.uploadSession.findFirst({
+      where: { id: session.id, uploaderId: ownerId, libraryMode: this.libraryMode },
+      select: { status: true, eagleAssetId: true, objectCleanupPending: true },
+    });
+    if (current?.status === 'COMPLETED' && current.eagleAssetId) {
+      return {
+        uploadSessionId: session.id,
+        assetId: current.eagleAssetId,
+        status: current.objectCleanupPending ? 'READY' : 'PROCESSING',
+        duplicate: current.objectCleanupPending,
+      };
     }
-    return this.finalizeAssembled({ ...session, status: 'ASSEMBLED' }, parts);
+    return {
+      uploadSessionId: session.id,
+      status: current?.status === 'FINALIZING' ? 'FINALIZING' : 'ASSEMBLED',
+    };
   }
 
   async recoverUploadSession(uploadSessionId: string) {
@@ -777,16 +821,21 @@ export class EagleUploadService {
   async abort(ownerId: string, uploadSessionId: string) {
     const session = await this.requireInitiated(ownerId, uploadSessionId);
     await this.storage.abortMultipartUpload(session.objectKey, session.multipartUploadId);
-    const result = await this.prisma.uploadSession.updateMany({
-      where: {
-        id: session.id,
-        uploaderId: ownerId,
-        status: 'INITIATED',
-        libraryMode: this.libraryMode,
-      },
-      data: { status: 'ABORTED', abortedAt: new Date() },
+    await this.prisma.$transaction(async (transaction) => {
+      const result = await transaction.uploadSession.updateMany({
+        where: {
+          id: session.id,
+          uploaderId: ownerId,
+          status: 'INITIATED',
+          libraryMode: this.libraryMode,
+        },
+        data: { status: 'ABORTED', abortedAt: new Date() },
+      });
+      if (result.count !== 1) throw new ConflictException('上传会话状态已改变。');
+      await transaction.uploadFinalizationJob.deleteMany({
+        where: { uploadSessionId: session.id },
+      });
     });
-    if (result.count !== 1) throw new ConflictException('上传会话状态已改变。');
     return { uploadSessionId: session.id, status: 'ABORTED' };
   }
 
@@ -815,7 +864,7 @@ export class EagleUploadService {
       where: {
         id: uploadSessionId,
         uploaderId: ownerId,
-        status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED', 'COMPLETED'] },
+        status: { in: ['INITIATED', 'ASSEMBLED', 'FINALIZING', 'FAILED', 'COMPLETED'] },
         libraryMode: this.libraryMode,
       },
       include: { eagleState: true },

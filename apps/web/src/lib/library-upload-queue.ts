@@ -10,6 +10,7 @@ export interface EagleUploadItem {
   size: number;
   percent: number;
   state: 'queued' | 'uploading' | 'completed' | 'failed';
+  phase?: 'validating';
   error?: string;
 }
 type Job = {
@@ -61,7 +62,7 @@ export class LibraryUploadQueue {
     key: QueryKey,
     run: (
       file: File,
-      progress: (value: { percent: number }) => void,
+      progress: (value: { percent: number; phase?: 'validating' }) => void,
       signal: AbortSignal,
     ) => Promise<unknown>,
   ) {
@@ -72,7 +73,15 @@ export class LibraryUploadQueue {
         pending: false,
         key,
         run: (signal) =>
-          run(file, (progress) => this.#update(id, { percent: progress.percent }), signal),
+          run(
+            file,
+            (progress) =>
+              this.#update(id, {
+                percent: progress.percent,
+                ...(progress.phase ? { phase: progress.phase } : {}),
+              }),
+            signal,
+          ),
       });
       return {
         id,

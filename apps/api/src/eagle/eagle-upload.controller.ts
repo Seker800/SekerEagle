@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseIntPipe,
   ParseUUIDPipe,
@@ -81,6 +82,7 @@ export class EagleUploadController {
   }
 
   @Post(':uploadSessionId/complete')
+  @HttpCode(202)
   @UseGuards(BrowserOrPatOriginGuard)
   async complete(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -88,9 +90,9 @@ export class EagleUploadController {
     @Body() input: CompleteEagleUploadDto,
   ) {
     try {
-      const completed = await this.uploads.complete(principal.sub, uploadSessionId, input);
-      await this.imports.finalizeUpload(principal.sub, uploadSessionId, completed.assetId);
-      return completed;
+      // The HTTP request only assembles the object and accepts the finalization job.
+      // Inspection and publication run in the independent operations process.
+      return await this.uploads.complete(principal.sub, uploadSessionId, input);
     } catch (error) {
       const permanent = error instanceof BadRequestException;
       await this.imports

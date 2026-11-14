@@ -144,10 +144,7 @@ test('completion preserves an assembled object for recovery when DB finalization
     'MATERIAL',
   );
 
-  await assert.rejects(
-    service.complete(ownerId, sessionId, { parts: [{ partNumber: 1, etag: 'etag-1' }] }),
-    /database unavailable/,
-  );
+  await assert.rejects(service.recoverUploadSession(sessionId), /database unavailable/);
 
   assert.equal(
     updates.some((data) => data.status === 'ASSEMBLED'),
@@ -220,12 +217,10 @@ test('finalization skips an owner-scoped duplicate and queues uploaded object cl
     'MATERIAL',
   );
 
-  const result = await service.complete(ownerId, sessionId, {
-    parts: [{ partNumber: 1, etag: 'etag-1' }],
-  });
+  const result = await service.recoverUploadSession(sessionId);
 
-  assert.equal(result.assetId, 'asset-existing');
-  assert.equal(result.duplicate, true);
+  assert.equal(result?.assetId, 'asset-existing');
+  assert.equal(result?.duplicate, true);
   assert.equal(writes[0]?.objectCleanupPending, true);
   assert.equal(captureWrites[0]?.assetId, 'asset-existing');
   assert.equal(captureWrites[0]?.completedAt instanceof Date, true);
@@ -297,16 +292,14 @@ test('content replacement preserves the logical asset id and advances its media 
     'MATERIAL',
   );
 
-  const result = await service.complete(ownerId, sessionId, {
-    parts: [{ partNumber: 1, etag: 'etag-1' }],
-  });
+  const result = await service.recoverUploadSession(sessionId);
 
   assert.match(
     locks[0] ?? '',
     /sekereagle:privacy:/,
     'replacement must acquire privacy before the asset row lock',
   );
-  assert.equal(result.assetId, 'asset-existing');
+  assert.equal(result?.assetId, 'asset-existing');
   assert.equal(assetWrites[0]?.mediaRevision, 4);
   assert.equal(assetWrites[0]?.livePhotoIdentifier, null);
   assert.equal(assetWrites[0]?.livePhotoRole, null);
@@ -378,22 +371,20 @@ test('new browser captures commit provenance and initial metadata with the uploa
     'MATERIAL',
   );
 
-  const result = await service.complete(ownerId, sessionId, {
-    parts: [{ partNumber: 1, etag: 'etag-1' }],
-  });
+  const result = await service.recoverUploadSession(sessionId);
 
-  assert.equal(result.duplicate, false);
+  assert.equal(result?.duplicate, false);
   assert.equal(assetWrites[0]?.displayName, 'Sunset Inspiration');
   assert.equal(assetWrites[0]?.normalizedDisplayName, 'sunset inspiration');
   assert.deepEqual(annotationWrites, [
     {
       libraryMode: 'MATERIAL',
       ownerId,
-      assetId: result.assetId,
+      assetId: result?.assetId,
       sourceUrl: 'https://example.com/gallery?id=7',
     },
   ]);
-  assert.equal(captureWrites[0]?.assetId, result.assetId);
+  assert.equal(captureWrites[0]?.assetId, result?.assetId);
   assert.equal(captureWrites[0]?.completedAt instanceof Date, true);
   assert.equal(
     jobs[0]?.some(({ kind }) => kind === 'GENERATE_AI_TAGS'),
@@ -456,6 +447,110 @@ test('processing progress rejects unavailable sessions without revealing another
   await assert.rejects(service.getSession(ownerId, sessionId), NotFoundException);
 });
 
+test('completion assembles the object, enqueues finalization and never inspects in the API request', async () => {
+  let status = 'INITIATED';
+  const jobs: Array<Record<string, unknown>> = [];
+  const notifications: unknown[] = [];
+  const session = {
+    id: sessionId,
+    uploaderId: ownerId,
+    status: 'INITIATED',
+    originalName: 'photo.jpg',
+    mimeType: 'image/jpeg',
+    size: 5n,
+    objectKey: `users/${ownerId}/assets/id/photo.jpg`,
+    multipartUploadId: 'multipart-id',
+    eagleAssetId: null,
+    eagleState: {},
+  };
+  const transaction = {
+    uploadSession: {
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        status = String(data.status);
+        return { count: 1 };
+      },
+    },
+    uploadFinalizationJob: {
+      findUnique: async () => null,
+      upsert: async (input: Record<string, unknown>) => jobs.push(input),
+    },
+    $executeRaw: async (...args: unknown[]) => {
+      notifications.push(args);
+      return 1;
+    },
+  };
+  const service = new EagleUploadService(
+    {
+      uploadSession: {
+        findFirst: async () => ({ ...session, status }),
+        count: async () => 1,
+        updateMany: async () => ({ count: 1 }),
+      },
+      $transaction: async (callback: (value: unknown) => unknown) => callback(transaction),
+    } as never,
+    {
+      completeMultipartUpload: async () => undefined,
+      headObject: async () => ({ ContentLength: 5 }),
+    } as never,
+    {} as never,
+    { inspect: async () => assert.fail('the API request must not inspect originals') } as never,
+    'MATERIAL',
+  );
+
+  const result = await service.complete(ownerId, sessionId, {
+    parts: [{ partNumber: 1, etag: 'etag-1' }],
+  });
+
+  assert.deepEqual(result, { uploadSessionId: sessionId, status: 'ASSEMBLED' });
+  assert.equal(status, 'ASSEMBLED');
+  assert.equal((jobs[0] as { create: { status: string } }).create.status, 'PENDING');
+  assert.equal(notifications.length, 1);
+});
+
+test('a retried completion does not requeue a job the worker already owns', async () => {
+  let upserts = 0;
+  const session = {
+    id: sessionId,
+    uploaderId: ownerId,
+    status: 'ASSEMBLED',
+    originalName: 'photo.jpg',
+    mimeType: 'image/jpeg',
+    size: 5n,
+    objectKey: `users/${ownerId}/assets/id/photo.jpg`,
+    multipartUploadId: 'multipart-id',
+    eagleAssetId: null,
+    completionParts: [{ PartNumber: 1, ETag: 'etag-1' }],
+    eagleState: {},
+  };
+  const service = new EagleUploadService(
+    {
+      uploadSession: { findFirst: async () => session, count: async () => 1 },
+      $transaction: async (callback: (value: unknown) => unknown) =>
+        callback({
+          uploadSession: { updateMany: async () => ({ count: 1 }) },
+          uploadFinalizationJob: {
+            findUnique: async () => ({ status: 'PROCESSING' }),
+            upsert: async () => {
+              upserts++;
+            },
+          },
+          $executeRaw: async () => 1,
+        }),
+    } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    'MATERIAL',
+  );
+
+  const result = await service.complete(ownerId, sessionId, {
+    parts: [{ partNumber: 1, etag: 'etag-1' }],
+  });
+
+  assert.deepEqual(result, { uploadSessionId: sessionId, status: 'ASSEMBLED' });
+  assert.equal(upserts, 0);
+});
+
 test('transient inspection failure increments finalization attempts exactly once', async () => {
   const { ServiceUnavailableException } = await import('@nestjs/common');
   const updates: Record<string, unknown>[] = [];
@@ -492,10 +587,7 @@ test('transient inspection failure increments finalization attempts exactly once
     } as never,
     'MATERIAL',
   );
-  await assert.rejects(
-    service.complete(ownerId, sessionId, { parts: [{ partNumber: 1, etag: 'etag' }] }),
-    ServiceUnavailableException,
-  );
+  await assert.rejects(service.recoverUploadSession(sessionId), ServiceUnavailableException);
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0]?.finalizationAttempts, { increment: 1 });
   assert.equal(updates[0]?.objectCleanupPending, false);
@@ -538,9 +630,7 @@ test('concurrent finalization retries share inspection and consume one failed at
     'MATERIAL',
   );
   const results = await Promise.allSettled(
-    Array.from({ length: 3 }, () =>
-      service.complete(ownerId, sessionId, { parts: [{ partNumber: 1, etag: 'etag' }] }),
-    ),
+    Array.from({ length: 3 }, () => service.recoverUploadSession(sessionId)),
   );
   assert.ok(
     results.every(

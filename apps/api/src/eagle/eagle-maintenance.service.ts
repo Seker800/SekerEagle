@@ -33,12 +33,25 @@ export class EagleMaintenanceService {
       USING doomed
       WHERE job."id" = doomed."id"
     `;
+    const uploadJobsDeleted = await this.prisma.$executeRaw`
+      WITH doomed AS (
+        SELECT "id"
+        FROM "UploadFinalizationJob"
+        WHERE "status" IN ('COMPLETED', 'FAILED')
+          AND "updatedAt" < ${completedBefore}
+        ORDER BY "updatedAt" ASC, "id" ASC
+        LIMIT ${COMPLETED_JOB_BATCH_SIZE}
+      )
+      DELETE FROM "UploadFinalizationJob" AS job
+      USING doomed
+      WHERE job."id" = doomed."id"
+    `;
     const importRunsDeleted = await this.imports.pruneTerminalRuns({
       retentionDays: 30,
       keepPerLibrary: 10,
       limit: 100,
     });
-    return { completedJobsDeleted, importRunsDeleted, transfersExpired };
+    return { completedJobsDeleted, uploadJobsDeleted, importRunsDeleted, transfersExpired };
   }
 
   async expireLibraryTransfers(now = new Date()): Promise<number> {

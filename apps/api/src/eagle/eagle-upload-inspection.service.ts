@@ -39,6 +39,19 @@ export class EagleUploadInspectionService {
     if (isCameraVideoMime(mimeType) || isCameraRawMime(mimeType)) {
       return inspectCameraFile(object.Body as unknown as Readable, mimeType);
     }
+    return inspectStandardImage(object.Body as unknown as Readable, mimeType);
+  }
+}
+
+/**
+ * Stream the original to a temporary file while hashing it, then read only the
+ * header for dimensions. Buffering the whole object in the API process made a
+ * large upload burst exhaust the container memory limit.
+ */
+async function inspectStandardImage(stream: Readable, mimeType: string) {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-image-inspect-'));
+  const inputPath = join(directory, 'input');
+  try {
     const hash = createHash('sha256');
     const hashingStream = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
@@ -46,46 +59,42 @@ export class EagleUploadInspectionService {
         callback(null, chunk);
       },
     });
-    const image = sharp({
+    await pipeline(stream, hashingStream, createWriteStream(inputPath, { flags: 'wx' }));
+    const metadata = await sharp(inputPath, {
       failOn: 'warning',
       limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
-    });
-    const metadataPromise = image.metadata();
-    try {
-      const [metadata] = await Promise.all([
-        metadataPromise,
-        pipeline(object.Body as unknown as Readable, hashingStream, image),
-      ]);
-      const detectedMimeType: string | undefined =
-        metadata.mediaType ??
-        (
-          {
-            avif: 'image/avif',
-            jpeg: 'image/jpeg',
-            png: 'image/png',
-            webp: 'image/webp',
-            gif: 'image/gif',
-            heif: 'image/heic',
-            tiff: 'image/tiff',
-          } as const
-        )[metadata.format as 'avif' | 'jpeg' | 'png' | 'webp' | 'gif' | 'heif' | 'tiff'];
-      const heifAlias =
-        metadata.format === 'heif' &&
-        (mimeType === 'image/heic' || mimeType === 'image/heif') &&
-        (detectedMimeType === 'image/heic' || detectedMimeType === 'image/heif');
-      if ((!heifAlias && detectedMimeType !== mimeType) || !metadata.width || !metadata.height) {
-        throw new BadRequestException('图片内容与声明格式不匹配。');
-      }
-      return {
-        sha256: hash.digest('hex'),
-        format: metadata.format,
-        width: metadata.autoOrient.width ?? metadata.width,
-        height: metadata.autoOrient.height ?? metadata.height,
-        durationMs: null,
-      };
-    } catch (error) {
-      throw inspectionFailure(error, 'image');
+    }).metadata();
+    const detectedMimeType: string | undefined =
+      metadata.mediaType ??
+      (
+        {
+          avif: 'image/avif',
+          jpeg: 'image/jpeg',
+          png: 'image/png',
+          webp: 'image/webp',
+          gif: 'image/gif',
+          heif: 'image/heic',
+          tiff: 'image/tiff',
+        } as const
+      )[metadata.format as 'avif' | 'jpeg' | 'png' | 'webp' | 'gif' | 'heif' | 'tiff'];
+    const heifAlias =
+      metadata.format === 'heif' &&
+      (mimeType === 'image/heic' || mimeType === 'image/heif') &&
+      (detectedMimeType === 'image/heic' || detectedMimeType === 'image/heif');
+    if ((!heifAlias && detectedMimeType !== mimeType) || !metadata.width || !metadata.height) {
+      throw new BadRequestException('图片内容与声明格式不匹配。');
     }
+    return {
+      sha256: hash.digest('hex'),
+      format: metadata.format,
+      width: metadata.autoOrient.width ?? metadata.width,
+      height: metadata.autoOrient.height ?? metadata.height,
+      durationMs: null,
+    };
+  } catch (error) {
+    throw inspectionFailure(error, 'image');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 }
 

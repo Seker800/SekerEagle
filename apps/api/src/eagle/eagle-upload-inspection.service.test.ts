@@ -100,6 +100,31 @@ test('HEIC upload probes guarded native headers without full RGB decode and hash
   }
 });
 
+test('ordinary image inspection writes a temporary file and removes it after reading the header', async () => {
+  const { mkdtemp, readdir, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const dir = await mkdtemp(join(tmpdir(), 'inspection-tmp-root-'));
+  const previous = process.env.TMPDIR;
+  process.env.TMPDIR = dir;
+  try {
+    const png = await sharp({
+      create: { width: 12, height: 8, channels: 4, background: '#336699' },
+    })
+      .png()
+      .toBuffer();
+    const service = new EagleUploadInspectionService({
+      getObject: async () => ({ Body: Readable.from([png]) }),
+    } as never);
+    const result = await service.inspect('original.png', 'image/png');
+    assert.equal(result.width, 12);
+    assert.deepEqual(await readdir(dir), []);
+  } finally {
+    if (previous === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previous;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('ordinary camera JPEG above 50 megapixels is accepted within the shared input budget', async () => {
   const bytes = await sharp({
     create: { width: 6144, height: 8160, channels: 3, background: '#336699' },

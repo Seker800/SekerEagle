@@ -18,7 +18,7 @@ export async function verifyUploadPublication({
   assert.equal(sourceBefore.ownerId, ownerId);
   assert.equal(sourceBefore.libraryMode, libraryMode);
   const countBefore = await db.eagleAsset.count({ where: { ownerId, libraryMode } });
-  const request = async (path, body) => {
+  const post = async (path, body) => {
     const response = await fetch(`${origin}/api/${mode}/${path}`, {
       method: 'POST',
       headers: { cookie, origin, 'content-type': 'application/json' },
@@ -26,7 +26,13 @@ export async function verifyUploadPublication({
     });
     return { status: response.status, body: await response.json() };
   };
-  const created = await request('uploads', {
+  const get = async (path) => {
+    const response = await fetch(`${origin}/api/${mode}/${path}`, {
+      headers: { cookie, origin },
+    });
+    return { status: response.status, body: await response.json() };
+  };
+  const created = await post('uploads', {
     originalName: 'publication-lock-regression.png',
     mimeType: 'image/png',
     size: bytes.length,
@@ -36,13 +42,11 @@ export async function verifyUploadPublication({
   });
   assert.equal(created.status, 201);
   const sessionId = created.body.id;
-  const signed = await request(`uploads/${sessionId}/parts/1`, {});
+  const signed = await post(`uploads/${sessionId}/parts/1`, {});
   assert.equal(signed.status, 201);
   const uploaded = await fetch(signed.body.uploadUrl, { method: 'PUT', body: bytes });
   assert.equal(uploaded.status, 200);
   const parts = [{ partNumber: 1, etag: uploaded.headers.get('etag') }];
-  const budget = Number(process.env.EAGLE_UPLOAD_PUBLICATION_TIMEOUT_MS ?? 30_000);
-  const expectBusy = budget < 5000;
   const holdMs = 6500;
   let ready;
   const acquired = new Promise((resolve) => {
@@ -62,43 +66,41 @@ export async function verifyUploadPublication({
       throw new Error('Lock probe exited before acquisition');
     }),
   ]);
-  const begun = Date.now();
-  // Both browser requests must resolve to one atomic publication, including after contention.
-  let completions;
-  let responseElapsedMs;
-  try {
-    completions = await Promise.all([
-      request(`uploads/${sessionId}/complete`, { parts }),
-      request(`uploads/${sessionId}/complete`, { parts }),
-    ]);
-    responseElapsedMs = Date.now() - begun;
-  } finally {
-    await lock;
-  }
-  const elapsedMs = Date.now() - begun;
-  if (expectBusy) {
-    assert.ok(
-      responseElapsedMs < budget + 1500,
-      `SQL lock must stop near its budget, response took ${responseElapsedMs}ms`,
-    );
-    for (const response of completions) {
-      assert.equal(response.status, 503);
-      assert.equal(response.body.code, 'UPLOAD_PUBLICATION_BUSY');
-      assert.ok(!JSON.stringify(response.body).includes('Prisma'));
+  const acceptanceStarted = Date.now();
+  // Both browser requests only accept one durable job; publication runs in the operations host.
+  const completions = await Promise.all([
+    post(`uploads/${sessionId}/complete`, { parts }),
+    post(`uploads/${sessionId}/complete`, { parts }),
+  ]);
+  const acceptanceMs = Date.now() - acceptanceStarted;
+  await lock;
+  for (const response of completions) assert.ok([201, 202].includes(response.status));
+  assert.ok(
+    acceptanceMs < 2000,
+    `accepting the upload waited ${acceptanceMs}ms on the privacy lock`,
+  );
+  assert.equal(
+    await db.uploadFinalizationJob.count({ where: { uploadSessionId: sessionId } }),
+    1,
+    'concurrent completion must enqueue exactly one job',
+  );
+  const publicationStarted = Date.now();
+  let id;
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const state = await get(`uploads/${sessionId}`);
+    if (state.body.status === 'COMPLETED' && state.body.eagleAssetId) {
+      id = state.body.eagleAssetId;
+      break;
     }
-    const failed = await db.uploadSession.findUniqueOrThrow({ where: { id: sessionId } });
-    assert.equal(failed.status, 'FAILED');
-    assert.equal(failed.eagleAssetId, null);
-    assert.equal(failed.objectCleanupPending, false);
-    assert.equal(await db.eagleAsset.count({ where: { ownerId, libraryMode } }), countBefore);
-    completions = [await request(`uploads/${sessionId}/complete`, { parts })];
+    if (state.body.status === 'FAILED' || state.body.status === 'ABORTED')
+      throw new Error(state.body.lastError || 'upload publication failed');
+    await delay(500);
   }
-  for (const response of completions) assert.equal(response.status, 201);
-  const id = completions[0].body.assetId;
-  assert.ok(id && id !== source.id);
-  assert.ok(completions.every((response) => response.body.assetId === id));
-  const repeated = await request(`uploads/${sessionId}/complete`, { parts });
-  assert.equal(repeated.status, 201);
+  assert.ok(id, 'the operations host did not publish the accepted upload');
+  const publicationMs = Date.now() - publicationStarted;
+  const repeated = await post(`uploads/${sessionId}/complete`, { parts });
+  assert.ok([201, 202].includes(repeated.status));
   assert.equal(repeated.body.assetId, id);
   assert.equal(await db.eagleAsset.count({ where: { ownerId, libraryMode } }), countBefore + 1);
   const originalAfter = await db.eagleAsset.findUniqueOrThrow({ where: { id: source.id } });
@@ -110,9 +112,9 @@ export async function verifyUploadPublication({
   console.log(
     JSON.stringify({
       mode,
-      uploadPublication: expectBusy ? '503-rollback-and-retry' : 'contention-survived',
-      elapsedMs,
-      responseElapsedMs,
+      uploadPublication: 'accepted-then-published',
+      acceptanceMs,
+      publicationMs,
       copies: 1,
       originalUnchanged: true,
     }),
