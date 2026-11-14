@@ -6,6 +6,7 @@ import { EagleImageViewer } from './EagleImageViewer';
 
 const {
   addOverlayMock,
+  addTiledImageMock,
   applyConstraintsMock,
   destroyMock,
   forceRedrawMock,
@@ -16,15 +17,18 @@ const {
   getZoomMock,
   goHomeMock,
   handlers,
+  detailHandlers,
   openMock,
   openSeadragonMock,
   panByMock,
   panToMock,
   pointFromPixelMock,
+  removeItemMock,
   zoomByMock,
   zoomToMock,
 } = vi.hoisted(() => {
   const hoistedHandlers = new Map<string, (event?: unknown) => void>();
+  const hoistedDetailHandlers = new Map<string, (event?: unknown) => void>();
   const hoistedAddOverlayMock = vi.fn();
   const hoistedGetFullyLoadedMock = vi.fn(() => true);
   const hoistedDestroyMock = vi.fn();
@@ -38,6 +42,18 @@ const {
     x: 0,
     y: 0,
   }));
+  const hoistedWorldItem = () => ({
+    addHandler: (name: string, handler: (event?: unknown) => void) =>
+      hoistedDetailHandlers.set(name, handler),
+    getBounds: hoistedGetBoundsMock,
+    getFullyLoaded: hoistedGetFullyLoadedMock,
+  });
+  const hoistedAddTiledImageMock = vi.fn(
+    (options: { success?: (event: { item: ReturnType<typeof hoistedWorldItem> }) => void }) => {
+      options.success?.({ item: hoistedWorldItem() });
+    },
+  );
+  const hoistedRemoveItemMock = vi.fn();
   const hoistedOpenMock = vi.fn();
   const hoistedApplyConstraintsMock = vi.fn();
   const hoistedGetCenterMock = vi.fn(() => ({ x: 0.4, y: 0.6 }));
@@ -54,6 +70,7 @@ const {
       hoistedHandlers.set(name, handler),
     ),
     addOverlay: hoistedAddOverlayMock,
+    addTiledImage: hoistedAddTiledImageMock,
     destroy: hoistedDestroyMock,
     forceRedraw: hoistedForceRedrawMock,
     open: hoistedOpenMock,
@@ -71,15 +88,14 @@ const {
       zoomTo: hoistedZoomToMock,
     },
     world: {
-      getItemAt: vi.fn(() => ({
-        getBounds: hoistedGetBoundsMock,
-        getFullyLoaded: hoistedGetFullyLoadedMock,
-      })),
+      getItemAt: vi.fn(hoistedWorldItem),
+      removeItem: hoistedRemoveItemMock,
     },
     zoomPerScroll: 1.12,
   };
   return {
     addOverlayMock: hoistedAddOverlayMock,
+    addTiledImageMock: hoistedAddTiledImageMock,
     applyConstraintsMock: hoistedApplyConstraintsMock,
     destroyMock: hoistedDestroyMock,
     forceRedrawMock: hoistedForceRedrawMock,
@@ -90,11 +106,13 @@ const {
     getZoomMock: hoistedGetZoomMock,
     goHomeMock: hoistedGoHomeMock,
     handlers: hoistedHandlers,
+    detailHandlers: hoistedDetailHandlers,
     openMock: hoistedOpenMock,
     openSeadragonMock: vi.fn(() => hoistedViewer),
     panByMock: hoistedPanByMock,
     panToMock: hoistedPanToMock,
     pointFromPixelMock: hoistedPointFromPixelMock,
+    removeItemMock: hoistedRemoveItemMock,
     viewer: hoistedViewer,
     zoomByMock: hoistedZoomByMock,
     zoomToMock: hoistedZoomToMock,
@@ -125,6 +143,7 @@ describe('EagleImageViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handlers.clear();
+    detailHandlers.clear();
     getFullyLoadedMock.mockReturnValue(true);
     getHomeZoomMock.mockReturnValue(1);
   });
@@ -178,22 +197,33 @@ describe('EagleImageViewer', () => {
     act(() => handlers.get('open')?.());
     expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
     expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+    expect(addTiledImageMock).not.toHaveBeenCalled();
 
+    vi.useFakeTimers();
     act(() => handlers.get('zoom')?.());
-    await waitFor(() =>
-      expect(openMock).toHaveBeenCalledWith(
-        expect.objectContaining({ width: descriptor.width, height: descriptor.height }),
-      ),
+    act(() => vi.advanceTimersByTime(119));
+    expect(addTiledImageMock).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+
+    expect(addTiledImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tileSource: expect.objectContaining({
+          width: descriptor.width,
+          height: descriptor.height,
+          tileSize: descriptor.tileSize,
+        }),
+      }),
     );
-    act(() => handlers.get('open')?.());
     expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
     expect(screen.queryByText('0/48')).toBeNull();
     act(() => handlers.get('tile-loaded')?.({ tile: { level: 12, x: 0, y: 0 } }));
     expect(screen.getByText('正在加载高清细节…')).toBeInTheDocument();
     expect(screen.getByText('1/48')).toBeInTheDocument();
     getFullyLoadedMock.mockReturnValue(true);
-    act(() => handlers.get('fully-loaded-change')?.());
+    act(() => detailHandlers.get('fully-loaded-change')?.());
     expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+    expect(removeItemMock).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 
   it('loads the original only after zooming when no pyramid is needed', async () => {
@@ -217,7 +247,7 @@ describe('EagleImageViewer', () => {
       await waitFor(() => expect(handlers.has('open')).toBe(true));
       act(() => handlers.get('open')?.());
       expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
-      expect(openMock).not.toHaveBeenCalled();
+      expect(addTiledImageMock).not.toHaveBeenCalled();
 
       act(() => handlers.get('zoom')?.());
       await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -226,10 +256,11 @@ describe('EagleImageViewer', () => {
         expect.objectContaining({ credentials: 'include' }),
       );
       await waitFor(() =>
-        expect(openMock).toHaveBeenCalledWith({ type: 'image', url: 'blob:original' }),
+        expect(addTiledImageMock).toHaveBeenCalledWith(
+          expect.objectContaining({ tileSource: { type: 'image', url: 'blob:original' } }),
+        ),
       );
-      act(() => handlers.get('open')?.());
-      expect(screen.queryByText('预览图 · 放大加载高清')).toBeNull();
+      await waitFor(() => expect(screen.queryByText('预览图 · 放大加载高清')).toBeNull());
     } finally {
       createObjectURL.mockRestore();
       vi.unstubAllGlobals();
@@ -373,56 +404,103 @@ describe('EagleImageViewer', () => {
     expect(getBoundsMock).toHaveBeenCalled();
   });
 
-  it('does not open pyramid tiles until the preview is open and the user zooms', async () => {
+  it('does not add pyramid tiles until the preview is open and the user zooms', async () => {
     const view = render(<EagleImageViewer image={image} onClose={vi.fn()} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
 
     view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
-    expect(openMock).not.toHaveBeenCalled();
+    expect(addTiledImageMock).not.toHaveBeenCalled();
 
     act(() => handlers.get('open')?.());
     act(() => handlers.get('zoom')?.());
-    await waitFor(() => expect(openMock).toHaveBeenCalledTimes(1));
-    expect(openMock).toHaveBeenCalledWith(
+    await waitFor(() => expect(addTiledImageMock).toHaveBeenCalledTimes(1));
+    expect(addTiledImageMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        width: descriptor.width,
-        height: descriptor.height,
-        tileSize: descriptor.tileSize,
+        tileSource: expect.objectContaining({
+          width: descriptor.width,
+          height: descriptor.height,
+          tileSize: descriptor.tileSize,
+        }),
       }),
     );
   });
 
-  it('upgrades to pyramid tiles when the user zooms and preserves the opened viewport', async () => {
+  it('upgrades to pyramid tiles as an aligned layer without reopening the viewer', async () => {
     const view = render(<EagleImageViewer image={image} onClose={vi.fn()} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
     act(() => handlers.get('open')?.());
 
     vi.useFakeTimers();
     view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
-    expect(openMock).not.toHaveBeenCalled();
+    expect(addTiledImageMock).not.toHaveBeenCalled();
 
     act(() => handlers.get('zoom')?.());
     act(() => vi.advanceTimersByTime(119));
-    expect(openMock).not.toHaveBeenCalled();
+    expect(addTiledImageMock).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
 
-    expect(openMock).toHaveBeenCalledTimes(1);
-    expect(openMock).toHaveBeenCalledWith(
+    expect(addTiledImageMock).toHaveBeenCalledTimes(1);
+    expect(addTiledImageMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        width: descriptor.width,
-        height: descriptor.height,
-        tileSize: descriptor.tileSize,
+        tileSource: expect.objectContaining({
+          width: descriptor.width,
+          height: descriptor.height,
+          tileSize: descriptor.tileSize,
+        }),
       }),
     );
-    expect(getCenterMock).toHaveBeenCalledWith(true);
-    expect(getZoomMock).toHaveBeenCalledWith(true);
-
-    act(() => handlers.get('open')?.());
-    expect(zoomToMock).toHaveBeenCalledWith(2.5, undefined, true);
-    expect(panToMock).toHaveBeenCalledWith({ x: 0.4, y: 0.6 }, true);
-    expect(applyConstraintsMock).toHaveBeenCalledWith(true);
+    expect(openMock).not.toHaveBeenCalled();
+    expect(getCenterMock).not.toHaveBeenCalledWith(true);
+    expect(getZoomMock).not.toHaveBeenCalledWith(true);
+    expect(zoomToMock).not.toHaveBeenCalled();
+    expect(panToMock).not.toHaveBeenCalled();
     expect(openSeadragonMock).toHaveBeenCalledTimes(1);
     expect(destroyMock).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('never renders a second static preview image while high resolution loads', async () => {
+    getFullyLoadedMock.mockReturnValue(false);
+    const view = render(
+      <EagleImageViewer image={image} descriptor={descriptor} previewLimited onClose={vi.fn()} />,
+    );
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+
+    vi.useFakeTimers();
+    act(() => handlers.get('zoom')?.());
+    act(() => vi.advanceTimersByTime(120));
+
+    expect(addTiledImageMock).toHaveBeenCalledTimes(1);
+    expect(view.container.querySelector('img')).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('does not restart the upgrade state when deeper zoom levels load', async () => {
+    getFullyLoadedMock.mockReturnValue(false);
+    render(
+      <EagleImageViewer image={image} descriptor={descriptor} previewLimited onClose={vi.fn()} />,
+    );
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+
+    vi.useFakeTimers();
+    act(() => handlers.get('zoom')?.());
+    act(() => vi.advanceTimersByTime(120));
+    act(() => handlers.get('tile-loaded')?.({ tile: { level: 12, x: 0, y: 0 } }));
+    getFullyLoadedMock.mockReturnValue(true);
+    act(() => detailHandlers.get('fully-loaded-change')?.());
+    expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+
+    getFullyLoadedMock.mockReturnValue(false);
+    act(() => detailHandlers.get('fully-loaded-change')?.());
+    act(() => handlers.get('tile-loaded')?.({ tile: { level: 13, x: 0, y: 0 } }));
+    act(() => handlers.get('zoom')?.());
+    act(() => vi.advanceTimersByTime(120));
+
+    expect(screen.queryByText('正在加载高清细节…')).toBeNull();
+    expect(screen.queryByText('1/48')).toBeNull();
+    expect(addTiledImageMock).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
 

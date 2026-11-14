@@ -80,24 +80,23 @@ interface ViewerHandle {
     element: HTMLImageElement;
     location: ViewerRect;
   }): void;
+  addTiledImage(options: {
+    error?: (event?: unknown) => void;
+    success?: (event: { item: ViewerWorldItem }) => void;
+    tileSource: ViewerSource;
+    width?: number;
+    x?: number;
+    y?: number;
+  }): void;
   destroy(): void;
   forceRedraw(): void;
   open(source: ViewerSource): void;
   viewport: ViewerViewport;
   world: {
     getItemAt(index: number): ViewerWorldItem | undefined;
+    removeItem(item: ViewerWorldItem): void;
   };
   zoomPerScroll: number;
-}
-interface PendingSource {
-  imageKey: string;
-  preserveViewport: boolean;
-  source: ViewerSource;
-  sourceKey: string;
-}
-interface ViewportSnapshot {
-  center: ViewerPoint;
-  zoom: number;
 }
 const DIRECT_INTERACTION_ANIMATION_SECONDS = 0.08;
 const PYRAMID_UPGRADE_IDLE_MS = 120;
@@ -222,7 +221,6 @@ export function EagleImageViewer({
         const url = URL.createObjectURL(blob);
         originalUrlRef.current = url;
         setOriginalPercent(100);
-        setOriginalLoading(false);
         setLoadedOriginalSrc(url);
       } catch (reason) {
         if (!cancelled && !(reason instanceof DOMException && reason.name === 'AbortError')) {
@@ -237,79 +235,113 @@ export function EagleImageViewer({
     };
   }, [zoomActivated, descriptor, highResolutionSrc, loadedOriginalSrc]);
   const previewSource = useMemo(() => createEaglePreviewTileSource(image.src), [image.src]);
+  const previewKey = `preview:${image.src}`;
   const highResolutionSource = useMemo(() => {
     if (!zoomActivated) return null;
     if (descriptor) return createEagleTileSource(descriptor);
     return loadedOriginalSrc ? createEaglePreviewTileSource(loadedOriginalSrc) : null;
   }, [zoomActivated, descriptor, loadedOriginalSrc]);
-  const source = highResolutionSource ?? previewSource;
-  const sourceKey = highResolutionSource
-    ? descriptor
+  const highResolutionKey = !highResolutionSource
+    ? null
+    : descriptor
       ? `pyramid:${descriptor.id}`
-      : `original:${loadedOriginalSrc}`
-    : `preview:${image.src}`;
+      : `original:${loadedOriginalSrc}`;
   const viewerElementRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ViewerHandle | undefined>(undefined);
+  const viewerAliveRef = useRef(false);
   const imageRef = useRef(image);
   const onCloseRef = useRef(onClose);
-  const sourceRef = useRef<ViewerSource>(source);
-  const desiredSourceKeyRef = useRef(sourceKey);
-  const sourceKeyRef = useRef('');
-  const openedSourceKeyRef = useRef('');
-  const activeImageKeyRef = useRef(image.assetId ?? image.src);
-  const pendingSourceRef = useRef<PendingSource | null>(null);
-  const pendingViewportRef = useRef<ViewportSnapshot | null>(null);
-  const sourceOpenTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const previewSourceRef = useRef<ViewerSource>(previewSource);
+  const previewKeyRef = useRef(previewKey);
+  const requestedPreviewKeyRef = useRef('');
+  const openedPreviewKeyRef = useRef('');
+  const previewItemRef = useRef<ViewerWorldItem | null>(null);
+  const detailItemRef = useRef<ViewerWorldItem | null>(null);
+  const detailKeyRef = useRef<string | null>(null);
+  const pendingDetailRef = useRef<{
+    generation: number;
+    key: string;
+    source: ViewerSource;
+  } | null>(null);
+  const detailGenerationRef = useRef(0);
+  const detailSettledRef = useRef(false);
+  const detailTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastInteractionAtRef = useRef(0);
-  const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
+  const scheduleDetailOpenRef = useRef<() => void>(() => undefined);
+  const updateDetailLoadingRef = useRef<() => void>(() => undefined);
   const descriptorRef = useRef(descriptor);
   const tilePlanRef = useRef<{ level: number; total: number } | null>(null);
   const loadedTilesRef = useRef(new Set<string>());
   descriptorRef.current = descriptor;
   const [status, setStatus] = useState<ViewerStatus>('loading');
-  const [sourceOpenedKey, setSourceOpenedKey] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailSettled, setDetailSettled] = useState(false);
   const [tileProgress, setTileProgress] = useState({ loaded: 0, total: 0 });
   const [initializationAttempt, setInitializationAttempt] = useState(0);
-  sourceRef.current = source;
-  desiredSourceKeyRef.current = sourceKey;
+  previewSourceRef.current = previewSource;
+  previewKeyRef.current = previewKey;
   imageRef.current = image;
   onCloseRef.current = onClose;
-  const openPendingSource = () => {
+  const openDetailSource = () => {
     const viewer = viewerRef.current;
-    const pending = pendingSourceRef.current;
+    const pending = pendingDetailRef.current;
+    pendingDetailRef.current = null;
+    if (detailTimerRef.current !== undefined) {
+      clearTimeout(detailTimerRef.current);
+      detailTimerRef.current = undefined;
+    }
     if (!viewer || !pending) return;
-    pendingSourceRef.current = null;
-    sourceOpenTimerRef.current = undefined;
-    const upgrading = pending.preserveViewport;
-    pendingViewportRef.current = upgrading
-      ? {
-          center: viewer.viewport.getCenter(true),
-          zoom: viewer.viewport.getZoom(true),
-        }
-      : null;
-    openedSourceKeyRef.current = '';
-    sourceKeyRef.current = pending.sourceKey;
-    activeImageKeyRef.current = pending.imageKey;
-    setDetailLoading(upgrading && Boolean(descriptorRef.current));
+    if (!openedPreviewKeyRef.current || detailItemRef.current) {
+      setOriginalLoading(false);
+      return;
+    }
+    const previewBounds = previewItemRef.current?.getBounds();
+    detailKeyRef.current = pending.key;
+    detailSettledRef.current = false;
+    setDetailSettled(false);
+    setDetailLoading(Boolean(descriptorRef.current));
     setTileProgress({ loaded: 0, total: 0 });
-    setSourceOpenedKey('');
     loadedTilesRef.current.clear();
     tilePlanRef.current = null;
-    // A zoom upgrade keeps the loaded preview visible; only a cold image change
-    // uses the full-screen loading state.
-    setStatus(upgrading ? 'ready' : 'loading');
-    viewer.open(pending.source);
+    viewer.addTiledImage({
+      tileSource: pending.source,
+      ...(previewBounds
+        ? { x: previewBounds.x, y: previewBounds.y, width: previewBounds.width }
+        : {}),
+      success: (event) => {
+        if (pending.generation !== detailGenerationRef.current || !viewerAliveRef.current) {
+          if (viewerAliveRef.current) viewer.world.removeItem(event.item);
+          return;
+        }
+        detailItemRef.current = event.item;
+        // The viewer-level "fully-loaded-change" is an aggregate that does not
+        // reset when a layer is added, so watch the detail layer itself.
+        (
+          event.item as ViewerWorldItem & {
+            addHandler?: (name: 'fully-loaded-change', handler: () => void) => void;
+          }
+        ).addHandler?.('fully-loaded-change', updateDetailLoadingRef.current);
+        updateDetailLoadingRef.current();
+      },
+      error: () => {
+        if (pending.generation !== detailGenerationRef.current) return;
+        detailKeyRef.current = null;
+        detailItemRef.current = null;
+        setDetailLoading(false);
+        setOriginalLoading(false);
+        setZoomActivated(false);
+      },
+    });
   };
-  const schedulePendingSourceOpen = () => {
-    if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
+  const scheduleDetailOpen = () => {
+    if (detailTimerRef.current !== undefined) clearTimeout(detailTimerRef.current);
     const delay = Math.max(0, lastInteractionAtRef.current + PYRAMID_UPGRADE_IDLE_MS - Date.now());
-    sourceOpenTimerRef.current = setTimeout(openPendingSource, delay);
+    detailTimerRef.current = setTimeout(openDetailSource, delay);
   };
-  schedulePendingSourceOpenRef.current = schedulePendingSourceOpen;
+  scheduleDetailOpenRef.current = scheduleDetailOpen;
   const markDirectInteraction = () => {
     lastInteractionAtRef.current = Date.now();
-    if (pendingSourceRef.current) schedulePendingSourceOpenRef.current();
+    if (pendingDetailRef.current) scheduleDetailOpenRef.current();
   };
   useEffect(() => {
     const element = viewerElementRef.current;
@@ -319,7 +351,7 @@ export function EagleImageViewer({
     void loadOpenSeadragon()
       .then(({ default: OpenSeadragon }) => {
         if (cancelled) return;
-        const initialSource = sourceRef.current;
+        const initialSource = previewSourceRef.current;
         const viewer = OpenSeadragon({
           element,
           tileSources: initialSource,
@@ -349,13 +381,33 @@ export function EagleImageViewer({
         browserImageTarget.src = imageRef.current.src;
         const updateDetailLoading = () => {
           if (cancelled) return;
-          const item = viewer.world.getItemAt(0);
-          setDetailLoading(!(item?.getFullyLoaded?.() ?? true));
+          const item = detailItemRef.current;
+          if (!item) {
+            setDetailLoading(false);
+            return;
+          }
+          const fullyLoaded = item.getFullyLoaded?.() ?? true;
+          if (!fullyLoaded) {
+            if (!detailSettledRef.current) setDetailLoading(true);
+            return;
+          }
+          detailSettledRef.current = true;
+          setDetailSettled(true);
+          setDetailLoading(false);
+          setOriginalLoading(false);
+          const previewItem = previewItemRef.current;
+          previewItemRef.current = null;
+          if (previewItem) viewer.world.removeItem(previewItem);
         };
+        updateDetailLoadingRef.current = updateDetailLoading;
         const onTileLoaded = (event?: unknown) => {
           updateDetailLoading();
-          const tile = (event as { tile?: { level?: number; x?: number; y?: number } } | undefined)
-            ?.tile;
+          const payload = event as
+            | { tile?: { level?: number; x?: number; y?: number }; tiledImage?: unknown }
+            | undefined;
+          if (payload?.tiledImage && payload.tiledImage !== detailItemRef.current) return;
+          if (detailSettledRef.current) return;
+          const tile = payload?.tile;
           const descriptor = descriptorRef.current;
           if (
             !tile ||
@@ -386,19 +438,15 @@ export function EagleImageViewer({
         viewer.addHandler('tile-loaded', onTileLoaded);
         viewer.addHandler('tile-load-failed', updateDetailLoading);
         viewer.addHandler('zoom', () => {
-          if (!openedSourceKeyRef.current) return;
+          if (!openedPreviewKeyRef.current) return;
           const home = viewer.viewport.getHomeZoom?.() ?? viewer.viewport.getZoom();
           if (viewer.viewport.getZoom() > home * 1.05) setZoomActivated(true);
         });
         viewer.addHandler('open', () => {
-          openedSourceKeyRef.current = sourceKeyRef.current;
-          const pendingViewport = pendingViewportRef.current;
-          pendingViewportRef.current = null;
-          if (pendingViewport) {
-            viewer.viewport.zoomTo(pendingViewport.zoom, undefined, true);
-            viewer.viewport.panTo(pendingViewport.center, true);
-            viewer.viewport.applyConstraints(true);
-          }
+          openedPreviewKeyRef.current = requestedPreviewKeyRef.current;
+          previewItemRef.current = viewer.world.getItemAt(0) ?? null;
+          detailItemRef.current = null;
+          detailKeyRef.current = null;
           const item = viewer.world.getItemAt(0);
           if (item) {
             browserImageTarget.src = imageRef.current.src;
@@ -409,7 +457,6 @@ export function EagleImageViewer({
             });
           }
           viewer.forceRedraw();
-          setSourceOpenedKey(sourceKeyRef.current);
           setStatus('ready');
           updateDetailLoading();
         });
@@ -420,8 +467,9 @@ export function EagleImageViewer({
           });
         });
         viewer.addHandler('open-failed', () => {
-          openedSourceKeyRef.current = '';
+          openedPreviewKeyRef.current = '';
           setDetailLoading(false);
+          setOriginalLoading(false);
           setStatus('error');
         });
         viewer.addHandler('canvas-click', (event) => {
@@ -452,39 +500,67 @@ export function EagleImageViewer({
           viewer.viewport.applyConstraints(false);
         });
         viewerRef.current = viewer;
-        sourceKeyRef.current = desiredSourceKeyRef.current;
-        activeImageKeyRef.current = image.assetId ?? image.src;
+        viewerAliveRef.current = true;
+        requestedPreviewKeyRef.current = previewKeyRef.current;
       })
       .catch(() => {
         if (!cancelled) setStatus('error');
       });
     return () => {
       cancelled = true;
+      viewerAliveRef.current = false;
       cancelAnimationFrame(resizeFrame);
-      if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
+      if (detailTimerRef.current !== undefined) clearTimeout(detailTimerRef.current);
+      detailGenerationRef.current += 1;
       viewerRef.current?.destroy();
       viewerRef.current = undefined;
     };
   }, [initializationAttempt]);
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer || sourceKeyRef.current === sourceKey) return;
-    const imageKey = image.assetId ?? image.src;
-    const preserveViewport =
-      activeImageKeyRef.current === imageKey &&
-      openedSourceKeyRef.current === sourceKeyRef.current &&
-      (sourceKeyRef.current.startsWith('preview:') ||
-        sourceKeyRef.current.startsWith('original:')) &&
-      (sourceKey.startsWith('pyramid:') || sourceKey.startsWith('original:'));
-    pendingSourceRef.current = { imageKey, preserveViewport, source, sourceKey };
-    if (preserveViewport) {
-      lastInteractionAtRef.current = Date.now();
-      schedulePendingSourceOpen();
+    if (!viewer) return;
+    if (requestedPreviewKeyRef.current === previewKey || openedPreviewKeyRef.current === previewKey)
       return;
+    requestedPreviewKeyRef.current = previewKey;
+    detailGenerationRef.current += 1;
+    pendingDetailRef.current = null;
+    if (detailTimerRef.current !== undefined) {
+      clearTimeout(detailTimerRef.current);
+      detailTimerRef.current = undefined;
     }
-    if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
-    openPendingSource();
-  }, [image.assetId, image.src, source, sourceKey]);
+    if (detailItemRef.current) {
+      viewer.world.removeItem(detailItemRef.current);
+      detailItemRef.current = null;
+    }
+    detailKeyRef.current = null;
+    detailSettledRef.current = false;
+    setDetailSettled(false);
+    setDetailLoading(false);
+    setTileProgress({ loaded: 0, total: 0 });
+    setStatus('loading');
+    viewer.open(previewSource);
+  }, [previewKey, previewSource]);
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !highResolutionSource || !highResolutionKey) return;
+    if (detailKeyRef.current === highResolutionKey) return;
+    if (pendingDetailRef.current?.key === highResolutionKey) return;
+    detailGenerationRef.current += 1;
+    pendingDetailRef.current = {
+      generation: detailGenerationRef.current,
+      key: highResolutionKey,
+      source: highResolutionSource,
+    };
+    if (detailItemRef.current) {
+      viewer.world.removeItem(detailItemRef.current);
+      detailItemRef.current = null;
+    }
+    detailKeyRef.current = null;
+    detailSettledRef.current = false;
+    setDetailSettled(false);
+    lastInteractionAtRef.current = Date.now();
+    scheduleDetailOpenRef.current();
+  }, [highResolutionSource, highResolutionKey]);
   const retry = () => {
     const viewer = viewerRef.current;
     if (!viewer) {
@@ -492,8 +568,13 @@ export function EagleImageViewer({
       setInitializationAttempt((attempt) => attempt + 1);
       return;
     }
+    detailSettledRef.current = false;
+    setDetailSettled(false);
+    setDetailLoading(false);
+    setOriginalLoading(false);
     setStatus('loading');
-    viewer.open(sourceRef.current);
+    requestedPreviewKeyRef.current = previewKey;
+    viewer.open(previewSource);
   };
   const displayStatus = error ? 'error' : loading ? 'loading' : status;
   const showDetailProgress =
@@ -501,21 +582,21 @@ export function EagleImageViewer({
     tileProgress.total > 0 &&
     tileProgress.loaded > 0 &&
     tileProgress.loaded < tileProgress.total;
-  const sourceIsPreview = sourceKey.startsWith('preview:');
-  const showOriginalProgress = sourceIsPreview && originalLoading;
+  const showOriginalProgress = originalLoading;
   const showOriginalBar = showOriginalProgress && originalPercent !== null;
+  const showPreviewHint = previewLimited && !detailSettled;
   const qualityNotice =
     displayStatus === 'ready' && !loading
-      ? sourceIsPreview
-        ? previewLimited
+      ? descriptor
+        ? detailLoading
+          ? t('正在加载高清细节…')
+          : showPreviewHint
+            ? t('预览图 · 放大加载高清')
+            : ''
+        : showPreviewHint
           ? showOriginalProgress
             ? t('正在加载原图…')
             : t('预览图 · 放大加载高清')
-          : ''
-        : descriptor
-          ? detailLoading
-            ? t('正在加载高清细节…')
-            : ''
           : ''
       : '';
   const qualityPercent = showDetailProgress
@@ -528,8 +609,6 @@ export function EagleImageViewer({
     : showOriginalBar
       ? `${originalPercent}%`
       : null;
-  const showPreviewBackdrop =
-    !error && (sourceIsPreview || detailLoading || sourceKey !== sourceOpenedKey);
   const secondary = (
     <>
       {!loading && !error && onLocate && image.assetId && (
@@ -589,15 +668,6 @@ export function EagleImageViewer({
         sourceUrl={loading ? undefined : image.motionSrc}
         posterUrl={image.src}
       />
-      {showPreviewBackdrop && (
-        <img
-          className={styles.previewBackdrop}
-          src={image.src}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-        />
-      )}
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
       {qualityNotice && (
         <div className={styles.qualityNotice} role="status" aria-live="polite">
