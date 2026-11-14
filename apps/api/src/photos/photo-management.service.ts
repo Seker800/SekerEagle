@@ -546,9 +546,12 @@ export class PhotoManagementService {
   ) {
     const rows = await this.prisma.eaglePhotoMetadata.findMany({
       where: { ownerId, libraryMode: 'PHOTO', asset: visible(ownerId, includePrivate) },
+      include: { asset: { select: { mimeType: true } } },
       orderBy: [{ capturedAt: 'desc' }, { assetId: 'asc' }],
     });
-    const suggestions = suggestPhotoGroups(rows.map((row) => ({ ...row, id: row.assetId })));
+    const suggestions = suggestPhotoGroups(
+      rows.map((row) => ({ ...row, id: row.assetId, mimeType: row.asset.mimeType })),
+    );
     const revisions = new Map(rows.map((row) => [row.assetId, row.assetRevision]));
     return this.prisma.$transaction(async (tx) => {
       await beforePublish?.(tx);

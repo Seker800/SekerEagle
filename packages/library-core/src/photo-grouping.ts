@@ -1,7 +1,10 @@
+import { isCameraRawMime } from './media-formats';
+
 interface GroupCandidate {
   id: string;
   capturedAt: Date | null;
   cameraModel: string | null;
+  mimeType?: string | null;
   perceptualHash: string | null;
   sharpnessScore: number | null;
 }
@@ -45,9 +48,16 @@ export function suggestPhotoGroups(candidates: readonly GroupCandidate[]) {
     }
     if (members.length < 2) continue;
     members.forEach((row) => used.add(row.id));
+    // Sharpness between a RAW and its JPEG sibling only reflects development and
+    // compression, not a better shot; the camera-rendered JPEG is the expected cover.
     const ranked = members
       .filter((row) => row.sharpnessScore !== null)
-      .toSorted((a, b) => b.sharpnessScore! - a.sharpnessScore! || a.id.localeCompare(b.id));
+      .toSorted(
+        (a, b) =>
+          Number(isCameraRawMime(a.mimeType ?? '')) - Number(isCameraRawMime(b.mimeType ?? '')) ||
+          b.sharpnessScore! - a.sharpnessScore! ||
+          a.id.localeCompare(b.id),
+      );
     groups.push({
       kind:
         members.at(-1)!.capturedAt!.getTime() - anchor.capturedAt!.getTime() <= 3000

@@ -25,10 +25,13 @@ export async function groupAnalyzedPhoto(
       },
       asset: { deletedAt: null, isPrivate: current.asset.isPrivate },
     },
+    include: { asset: { select: { mimeType: true } } },
     orderBy: [{ capturedAt: 'asc' }, { assetId: 'asc' }],
     take: 500,
   });
-  for (const suggestion of suggestPhotoGroups(rows.map((row) => ({ ...row, id: row.assetId })))) {
+  for (const suggestion of suggestPhotoGroups(
+    rows.map((row) => ({ ...row, id: row.assetId, mimeType: row.asset.mimeType })),
+  )) {
     if (!suggestion.assetIds.includes(assetId)) continue;
     const groups = await tx.eaglePhotoGroup.findMany({
       where: {

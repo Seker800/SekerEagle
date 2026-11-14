@@ -36,6 +36,7 @@ import {
   type SaveEagleEditRecipeDto,
 } from './eagle-edit-recipe';
 import { locateEagleAsset } from './eagle-asset-location';
+import { selectPhotoStackCover } from './photo-stack-cover';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
@@ -421,6 +422,7 @@ export class EagleService {
                 lifecycleStatus: true,
                 createdAt: true,
                 chronologicalAt: true,
+                mimeType: true,
                 photoMetadata: { select: { captureMetadataInherited: true } },
               },
             },
@@ -468,31 +470,25 @@ export class EagleService {
       : groups;
     const stacks = matchingGroups
       .filter(({ members }) => members.length > 1)
-      .map((group) => ({
-        id: group.id,
-        bestSelectedByUser: group.bestSelectedByUser,
-        timelineAt: new Date(
-          Math.max(...group.members.map(({ asset }) => asset.chronologicalAt.getTime())),
-        ).toISOString(),
-        assetIds: group.members.map(({ assetId }) => assetId),
-        processingAssetIds: group.members
-          .filter(({ asset }) => asset.lifecycleStatus === 'PROCESSING')
-          .map(({ assetId }) => assetId),
-        bestAssetId: (
-          group.members.find(
-            ({ assetId, asset }) =>
-              assetId === group.bestAssetId && asset.lifecycleStatus === 'READY',
-          ) ??
-          group.members
-            .filter(
-              ({ asset }) =>
-                asset.lifecycleStatus === 'READY' && asset.photoMetadata?.captureMetadataInherited,
-            )
-            .sort((a, b) => b.asset.createdAt.getTime() - a.asset.createdAt.getTime())[0] ??
-          group.members.find(({ asset }) => asset.lifecycleStatus === 'READY') ??
-          group.members[0]!
-        ).assetId,
-      }));
+      .map((group) => {
+        const cover = selectPhotoStackCover(
+          group.members,
+          group.bestAssetId,
+          group.bestSelectedByUser,
+        );
+        return {
+          id: group.id,
+          bestSelectedByUser: group.bestSelectedByUser,
+          timelineAt: new Date(
+            Math.max(...group.members.map(({ asset }) => asset.chronologicalAt.getTime())),
+          ).toISOString(),
+          assetIds: group.members.map(({ assetId }) => assetId),
+          processingAssetIds: group.members
+            .filter(({ asset }) => asset.lifecycleStatus === 'PROCESSING')
+            .map(({ assetId }) => assetId),
+          bestAssetId: cover?.assetId ?? group.members[0]!.assetId,
+        };
+      });
     if (!stacks.length) return [];
     const covers = await findSearchAssets(this.prisma, {
       where: {

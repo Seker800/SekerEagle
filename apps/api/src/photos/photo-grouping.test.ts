@@ -31,3 +31,49 @@ test('grouping is conservative about missing dates and selects a clear reference
   assert.equal(groups[0]!.bestAssetId, 'b');
   assert.equal(inputs.length, 3);
 });
+
+test('prefers the camera-rendered JPEG over a sharper RAW sibling as the group reference', () => {
+  const groups = suggestPhotoGroups([
+    {
+      id: 'raw',
+      capturedAt: new Date(10000),
+      cameraModel: 'camera',
+      mimeType: 'image/x-adobe-dng',
+      perceptualHash: '0000000000000000',
+      sharpnessScore: 99,
+    },
+    {
+      id: 'jpeg',
+      capturedAt: new Date(10000),
+      cameraModel: 'camera',
+      mimeType: 'image/jpeg',
+      perceptualHash: '0000000000000001',
+      sharpnessScore: 2,
+    },
+  ]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]!.bestAssetId, 'jpeg');
+});
+
+test('ranks RAW members by sharpness when the group has no non-RAW reference', () => {
+  const groups = suggestPhotoGroups([
+    {
+      id: 'soft',
+      capturedAt: new Date(10000),
+      cameraModel: 'camera',
+      mimeType: 'image/x-adobe-dng',
+      perceptualHash: '0000000000000000',
+      sharpnessScore: 1,
+    },
+    {
+      id: 'sharp',
+      capturedAt: new Date(10000),
+      cameraModel: 'camera',
+      mimeType: 'image/x-adobe-dng',
+      perceptualHash: '0000000000000001',
+      sharpnessScore: 9,
+    },
+  ]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0]!.bestAssetId, 'sharp');
+});
