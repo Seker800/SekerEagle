@@ -168,8 +168,57 @@ final class MediaCatalog {
     return ContentUris.withAppendedId(collection, id);
   }
 
+  /** Rebuilds an item recorded by a previous run; the media row itself is re-read before upload. */
+  Item stored(String uri, String name, long size, long modified, boolean document)
+      throws Exception {
+    JSONObject entry = format(name);
+    if (entry == null) throw new IOException("暂不支持该格式，请重新选择文件");
+    return new Item(
+        Uri.parse(uri),
+        null,
+        name,
+        "",
+        entry.getString("mimeType"),
+        size,
+        modified,
+        document);
+  }
+
   void scan(JSONArray rules, Visitor visitor, BackupEngine.Guard guard) throws Exception {
     scan(rules, visitor, guard, -1, 0, -1);
+  }
+
+  /** Media indexed by modification time only; SAF trees cannot be queried this way. */
+  void scanRecent(
+      JSONArray rules,
+      Visitor visitor,
+      BackupEngine.Guard guard,
+      long changedAfterSeconds,
+      long maxIdBound)
+      throws Exception {
+    boolean indexed = false;
+    for (int i = 0; i < rules.length(); i++)
+      if (rules.getJSONObject(i).getString("type").equals("media")) indexed = true;
+    if (!indexed) return;
+    media(-1, changedAfterSeconds, maxIdBound, indexedVisitor(rules, visitor, guard));
+  }
+
+  private MediaVisitor indexedVisitor(
+      JSONArray rules, Visitor visitor, BackupEngine.Guard guard) {
+    return item -> {
+      guard.check();
+      JSONObject selected = null;
+      for (int i = 0; i < rules.length(); i++) {
+        JSONObject rule = rules.getJSONObject(i);
+        if (rule.getString("type").equals("media")
+            && BackupPolicy.inFolder(
+                rule.getString("path"), item.path, rule.optBoolean("recursive", true))
+            && (selected == null
+                || rule.getString("path").length() > selected.getString("path").length()))
+          selected = rule;
+      }
+      if (selected != null) visitor.visit(item, selected.getString("mode"));
+    };
   }
 
   void scan(
@@ -184,21 +233,7 @@ final class MediaCatalog {
     for (int i = 0; i < rules.length(); i++)
       if (rules.getJSONObject(i).getString("type").equals("media")) indexed = true;
     if (indexed) {
-      MediaVisitor indexedVisitor =
-          item -> {
-            guard.check();
-            JSONObject selected = null;
-            for (int i = 0; i < rules.length(); i++) {
-              JSONObject rule = rules.getJSONObject(i);
-              if (rule.getString("type").equals("media")
-                  && BackupPolicy.inFolder(
-                      rule.getString("path"), item.path, rule.optBoolean("recursive", true))
-                  && (selected == null
-                      || rule.getString("path").length() > selected.getString("path").length()))
-                selected = rule;
-            }
-            if (selected != null) visitor.visit(item, selected.getString("mode"));
-          };
+      MediaVisitor indexedVisitor = indexedVisitor(rules, visitor, guard);
       if (afterId < 0) {
         media(-1, 0, -1, indexedVisitor);
       } else {
@@ -325,24 +360,51 @@ final class MediaCatalog {
   }
 
   InputStream open(Item item, long offset, BackupEngine.Guard guard) throws Exception {
+    return open(item, offset, guard, null);
+  }
+
+  InputStream open(
+      Item item, long offset, BackupEngine.Guard guard, java.util.function.LongConsumer progress)
+      throws Exception {
     InputStream input = resolver.openInputStream(item.uri);
     if (input == null) throw new IOException("文件无法读取");
     try {
-      if (offset == 0) return input;
-      if (input instanceof FileInputStream) ((FileInputStream) input).getChannel().position(offset);
-      else {
-        long remaining = offset;
-        while (remaining > 0) {
-          guard.check();
-          long count = input.skip(remaining);
-          if (count == 0) {
-            if (input.read() < 0) throw new IOException("文件读取未完成");
-            count = 1;
+      if (offset > 0) {
+        if (input instanceof FileInputStream) ((FileInputStream) input).getChannel().position(offset);
+        else {
+          long remaining = offset;
+          while (remaining > 0) {
+            guard.check();
+            long count = input.skip(remaining);
+            if (count == 0) {
+              if (input.read() < 0) throw new IOException("文件读取未完成");
+              count = 1;
+            }
+            remaining -= count;
           }
-          remaining -= count;
         }
       }
-      return input;
+      if (progress == null) return input;
+      return new FilterInputStream(input) {
+        private long total;
+
+        @Override
+        public int read() throws IOException {
+          int value = super.read();
+          if (value >= 0) progress.accept(++total);
+          return value;
+        }
+
+        @Override
+        public int read(byte[] bytes, int start, int length) throws IOException {
+          int count = super.read(bytes, start, length);
+          if (count > 0) {
+            total += count;
+            progress.accept(total);
+          }
+          return count;
+        }
+      };
     } catch (Exception e) {
       input.close();
       throw e;

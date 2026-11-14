@@ -13,7 +13,9 @@ import com.sekereagle.android.core.BackupExecutor;
 import com.sekereagle.android.core.BackupPermissionPolicy;
 import com.sekereagle.android.core.BackupRunPolicy;
 import com.sekereagle.android.core.BackupScanPolicy;
+import com.sekereagle.android.core.UploadRetryPolicy;
 import java.io.IOException;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.*;
@@ -57,6 +59,17 @@ public final class BackupService extends Service {
     state.setValue(scope, "status", "备份已暂停");
     BackupService service = current;
     if (service != null && scope.equals(service.scope)) service.cancelRun(true);
+  }
+
+  /** Restores the failed files to the front of the next run without clearing successful receipts. */
+  static void retryFailed(Context context, String scope) {
+    try (BackupJournal journal = new BackupJournal(context)) {
+      journal.retryFailures(scope);
+    }
+    context.startForegroundService(
+        new Intent(context, BackupService.class)
+            .putExtra("scope", scope)
+            .putExtra("manual", true));
   }
 
   /** Stop obsolete work without changing the user's durable pause preference. */
@@ -147,6 +160,7 @@ public final class BackupService extends Service {
 
   private void runBackup() {
     settings.setFlag(scope, "running", true);
+    BackupLive.begin(scope);
     resetRunCounts();
     BackupJournal journal = null;
     BackupExecutor workers = null;
@@ -185,6 +199,35 @@ public final class BackupService extends Service {
       MediaCatalog catalog = new MediaCatalog(this);
       workers = new BackupExecutor(FILE_THREADS, FILES_IN_FLIGHT);
       final BackupExecutor fileWorkers = workers;
+      // Files that failed before this run stay queued for after the scan; new photos must never
+      // wait behind a multi-gigabyte retry backlog. Incremental scans never revisit them.
+      final Set<String> retriedKeys = new HashSet<>();
+      final List<PendingRetry> pendingRetries = new ArrayList<>();
+      for (BackupJournal.Retry retry : store.failures(scope)) {
+        guard();
+        // A known failure is never re-submitted by the scan, even after automatic retries stop;
+        // only the explicit retry action resets its attempt count.
+        retriedKeys.add(
+            retry.mode + ":" + com.sekereagle.android.core.BackupPolicy.digest(retry.uri));
+        if (retry.attempts >= UploadRetryPolicy.MAX_ATTEMPTS) continue;
+        MediaCatalog.Item pending;
+        try {
+          // The file may have been edited since it failed; use the provider's current metadata.
+          pending = catalog.selected(android.net.Uri.parse(retry.uri));
+        } catch (Exception refreshFailed) {
+          try {
+            pending =
+                catalog.stored(retry.uri, retry.name, retry.size, retry.modified, retry.document);
+          } catch (Exception unsupported) {
+            continue;
+          }
+        }
+        String fileKey =
+            retry.mode + ":" + com.sekereagle.android.core.BackupPolicy.digest(retry.uri);
+        pendingRetries.add(
+            new PendingRetry(
+                pending, retry.mode, fileKey, pending.size + ":" + pending.modified));
+      }
       long scanStarted = System.currentTimeMillis() / 1000;
       long[] state = store.scanState(scope);
       String rulesHash = com.sekereagle.android.core.BackupPolicy.digest(rules.toString());
@@ -192,9 +235,8 @@ public final class BackupService extends Service {
       boolean full =
           rulesChanged
               || BackupScanPolicy.full(state[0], state[1], state[2], scanStarted, resume);
-      update("正在扫描所选目录");
-      catalog.scan(
-          rules,
+      final Set<String> submittedKeys = new HashSet<>();
+      MediaCatalog.Visitor visit =
           (item, mode) -> {
             guard();
             String fileKey =
@@ -202,7 +244,7 @@ public final class BackupService extends Service {
                     + ":"
                     + com.sekereagle.android.core.BackupPolicy.digest(item.uri.toString());
             String fingerprint = item.size + ":" + item.modified;
-            countRun(null);
+            if (retriedKeys.contains(fileKey)) return;
             if (item.modified > 0) {
               if (store.scanCompleted(scope, fileKey, fingerprint)) {
                 countRun("SKIPPED");
@@ -220,9 +262,41 @@ public final class BackupService extends Service {
                 return;
               }
             }
+            if (!submittedKeys.add(fileKey)) return;
+            BackupLive.queued(item.uri.toString(), item.name, mode, item.size);
             fileWorkers.submit(
                 () -> processItem(store, catalog, api, item, mode, fileKey, fingerprint));
-          },
+          };
+      if (full) {
+        // Newest files first: a multi-gigabyte backlog of older failures must not hide today's
+        // photos behind a full ascending scan.
+        update("正在优先检查最近修改的文件");
+        catalog.scanRecent(
+            rules,
+            visit,
+            this::guard,
+            scanStarted - 24 * 3600,
+            state[0] >= 0 ? state[0] : Long.MAX_VALUE);
+      }
+      for (PendingRetry retry : pendingRetries) {
+        guard();
+        BackupLive.queued(
+            retry.item.uri.toString(), retry.item.name, retry.mode, retry.item.size);
+        fileWorkers.submit(
+            () ->
+                processItem(
+                    store,
+                    catalog,
+                    api,
+                    retry.item,
+                    retry.mode,
+                    retry.fileKey,
+                    retry.fingerprint));
+      }
+      update("正在扫描所选目录");
+      catalog.scan(
+          rules,
+          visit,
           this::guard,
           full ? -1 : state[0],
           full ? 0 : BackupScanPolicy.changedAfter(state[1]),
@@ -240,6 +314,7 @@ public final class BackupService extends Service {
       refreshCounts(journal);
       settings.setFlag(scope, "scanOpen", false);
       update(runFailed == 0 ? "备份完成" : "备份结束，有失败项可重试");
+      BackupLive.end(pendingMessage);
       settings.setValue(scope, "lastFinished", Long.toString(System.currentTimeMillis()));
     } catch (ApiClient.Failure e) {
       if (current == this && !cancelled && e.invalidatesCredential())
@@ -259,6 +334,7 @@ public final class BackupService extends Service {
       if (current == this) {
         retiring = true;
         if (cancelled && settings.flag(scope, "userPaused", false)) pendingMessage = "备份已暂停";
+        BackupLive.end(pendingMessage);
         flushUpdate();
         // Keep the retiring run occupied until its main-thread handoff. New starts
         // queue behind it, so an old completion can never stop a newer run.
@@ -284,6 +360,18 @@ public final class BackupService extends Service {
     }
   }
 
+  private static final class PendingRetry {
+    final MediaCatalog.Item item;
+    final String mode, fileKey, fingerprint;
+
+    PendingRetry(MediaCatalog.Item item, String mode, String fileKey, String fingerprint) {
+      this.item = item;
+      this.mode = mode;
+      this.fileKey = fileKey;
+      this.fingerprint = fingerprint;
+    }
+  }
+
   private void processItem(
       BackupJournal journal,
       MediaCatalog catalog,
@@ -297,11 +385,20 @@ public final class BackupService extends Service {
     journal.scanResult(scope, fileKey, fingerprint, "CHECKING");
     refreshCounts(journal);
     update("正在检查：" + item.name);
+    BackupLive.start(item.uri.toString());
     try {
       catalog.checkSize(item);
       BackupEngine engine =
           new BackupEngine(
-              journal, new MultipartTransport(api, mode, catalog, item), this::guard, contentLock);
+              journal,
+              new MultipartTransport(
+                  api,
+                  mode,
+                  catalog,
+                  item,
+                  bytes -> BackupLive.progress(item.uri.toString(), bytes)),
+              this::guard,
+              contentLock);
       BackupEngine.File source =
           new BackupEngine.File(
               item.uri.toString(),
@@ -309,10 +406,11 @@ public final class BackupService extends Service {
               item.modified,
               () -> catalog.hash(item, this::guard),
               () -> catalog.stable(item));
-      BackupEngine.Result result = engine.process(scope, mode, source);
+      BackupEngine.Result result = processWithRetry(engine, scope, mode, source, item);
       guard();
       journal.scanResult(scope, fileKey, fingerprint, result.name());
       refreshCounts(journal);
+      BackupLive.finish(item.uri.toString(), result.name(), "");
       recordTransfer(item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
       countRun(result.name());
       update("正在扫描并备份");
@@ -321,25 +419,77 @@ public final class BackupService extends Service {
     } catch (ApiClient.Failure e) {
       if (e.status == 401 || e.status == 403) throw e;
       guard();
-      journal.scanResult(scope, fileKey, fingerprint, "FAILED");
-      refreshCounts(journal);
+      markFailure(journal, fileKey, fingerprint, item, mode, e);
       failure(item.name, e);
       countRun("FAILED");
       update("正在扫描并备份");
     } catch (SecurityException e) {
       guard();
-      journal.scanResult(scope, fileKey, fingerprint, "FAILED");
-      refreshCounts(journal);
-      failure(item.name, new IOException("文件访问权限失效，请重新授权"));
+      IOException reason = new IOException("文件访问权限失效，请重新授权");
+      markFailure(journal, fileKey, fingerprint, item, mode, reason);
+      failure(item.name, reason);
       countRun("FAILED");
       update("正在扫描并备份");
     } catch (Exception e) {
       guard();
-      journal.scanResult(scope, fileKey, fingerprint, "FAILED");
-      refreshCounts(journal);
+      markFailure(journal, fileKey, fingerprint, item, mode, e);
       failure(item.name, e);
       countRun("FAILED");
       update("正在扫描并备份");
+    }
+  }
+
+  private void markFailure(
+      BackupJournal journal,
+      String fileKey,
+      String fingerprint,
+      MediaCatalog.Item item,
+      String mode,
+      Exception error)
+      throws Exception {
+    String message = safeMessage(error);
+    journal.scanFailure(
+        scope,
+        fileKey,
+        fingerprint,
+        item.uri.toString(),
+        item.name,
+        mode,
+        item.size,
+        item.modified,
+        item.document,
+        message);
+    refreshCounts(journal);
+    BackupLive.finish(item.uri.toString(), BackupLive.FAILED, message);
+  }
+
+  /** A rolling deploy can refuse connections for a few seconds; each file resumes from its checkpoint. */
+  private BackupEngine.Result processWithRetry(
+      BackupEngine engine,
+      String scope,
+      String mode,
+      BackupEngine.File source,
+      MediaCatalog.Item item)
+      throws Exception {
+    for (int attempt = 1; ; attempt++) {
+      try {
+        return engine.process(scope, mode, source);
+      } catch (Exception error) {
+        if (error instanceof Hold
+            || attempt >= UploadRetryPolicy.MAX_ATTEMPTS
+            || !UploadRetryPolicy.retryable(error)) throw error;
+        update("网络波动，正在重试：" + item.name);
+        long until = SystemClock.elapsedRealtime() + UploadRetryPolicy.delayMillis(attempt);
+        while (SystemClock.elapsedRealtime() < until) {
+          guard();
+          try {
+            Thread.sleep(Math.max(50L, Math.min(250L, until - SystemClock.elapsedRealtime())));
+          } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw error;
+          }
+        }
+      }
     }
   }
 
@@ -467,6 +617,7 @@ public final class BackupService extends Service {
   private synchronized void update(String message) {
     if (current != this || cancelled) return;
     pendingMessage = message;
+    BackupLive.message(message);
     long now = SystemClock.elapsedRealtime();
     if (lastUpdate != 0 && now - lastUpdate < 1000) return;
     lastUpdate = now;
@@ -478,7 +629,14 @@ public final class BackupService extends Service {
     settings.snapshot(
         scope,
         pendingMessage,
-        "已记录 " + seen + " · 本次 " + runSeen + " · 已上传 " + runUploaded + " · 已存在 " + runSkipped + " · 失败 " + runFailed,
+        "已记录 "
+            + seen
+            + " · 已上传 "
+            + uploaded
+            + " · 待补传 "
+            + failed
+            + " · 本轮处理 "
+            + runSeen,
         errors.toString(),
         transferRows.toString());
     getSystemService(NotificationManager.class).notify(NOTICE, notification(pendingMessage));

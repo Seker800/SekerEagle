@@ -145,10 +145,10 @@ class NativeTransferManager private constructor(context: Context) {
         require(session.origin == identity.origin && identity.scope == settings.active()) {
             "账号已变化，请重新选择"
         }
-        require(mutable.value.batches.size + queuedAdds < 20) { "传输列表已满，请先清理已完成任务" }
         queuedAdds++
         command {
             queuedAdds--
+            pruneCompleted(identity.scope, keep = 1)
             if (settings.active() != identity.scope || settings.origin() != identity.origin) {
                 changes.tryEmit(
                     NativeTransferEvent(
@@ -315,6 +315,155 @@ class NativeTransferManager private constructor(context: Context) {
         update(id) { it.copy(waiting = false, paused = true, message = "已暂停") }
         if (mutable.value.activeId == id) worker?.cancel()
         persist()
+    }
+
+    internal fun pauseAll(scope: String) = command {
+        mutable.value =
+            mutable.value.copy(
+                batches =
+                    mutable.value.batches.map {
+                        if (
+                            it.scope == scope &&
+                                (it.waiting || it.id == mutable.value.activeId)
+                        )
+                            it.copy(waiting = false, paused = true, message = "已暂停")
+                        else it
+                    }
+            )
+        if (
+            mutable.value.batches.any {
+                it.id == mutable.value.activeId && it.scope == scope && it.paused
+            }
+        )
+            worker?.cancel()
+        persist()
+    }
+
+    internal fun resumeAll(scope: String) = command {
+        if (settings.active() != scope) return@command
+        val resumable =
+            mutable.value.batches.filter {
+                it.scope == scope &&
+                    it.id != mutable.value.activeId &&
+                    !it.waiting &&
+                    it.unfinished.isNotEmpty()
+            }
+        if (resumable.isEmpty()) return@command
+        mutable.value =
+            mutable.value.copy(
+                batches =
+                    mutable.value.batches.map {
+                        if (it.id in resumable.map { batch -> batch.id })
+                            it.copy(waiting = true, paused = false, message = "等待上传")
+                        else it
+                    }
+            )
+        persist()
+        try {
+            startService(scope)
+        } catch (_: RuntimeException) {
+            mutable.value =
+                mutable.value.copy(
+                    batches =
+                        mutable.value.batches.map {
+                            if (it.id in resumable.map { batch -> batch.id })
+                                it.copy(waiting = false, paused = true, message = "请回到应用后重试")
+                            else it
+                        }
+                )
+            persist()
+        }
+    }
+
+    /** Retries one failed file by moving it into its own batch, leaving the source record intact. */
+    internal fun retryEntry(id: String, uri: Uri) = command {
+        val batch = mutable.value.batches.firstOrNull { it.id == id } ?: return@command
+        val entry = batch.entries.firstOrNull { it.uri == uri } ?: return@command
+        pruneCompleted(batch.scope, keep = 1)
+        if (mutable.value.batches.size >= 20) {
+            changes.tryEmit(
+                NativeTransferEvent(batch.scope, batch.mode, message = "传输列表已满，请先清理已完成任务")
+            )
+            return@command
+        }
+        update(id) {
+            it.copy(
+                entries = it.entries.filterNot { entry -> entry.uri == uri },
+                progress =
+                    it.progress?.let { progress ->
+                        progress.copy(
+                            entries = progress.entries.filterNot { entry -> entry.uri == uri },
+                            issues = progress.issues.filterNot { issue -> issue.entry.uri == uri },
+                            remaining =
+                                progress.remaining.filterNot { entry -> entry.uri == uri },
+                        )
+                    },
+            )
+        }
+        if (mutable.value.batches.any { it.id == id && it.entries.isEmpty() }) {
+            mutable.value =
+                mutable.value.copy(batches = mutable.value.batches.filterNot { it.id == id })
+            withContext(Dispatchers.IO) {
+                BackupJournal(app).use { it.forget("manual:${batch.scope}:$id") }
+            }
+        }
+        val fresh =
+            NativeTransferBatch(
+                UUID.randomUUID().toString(),
+                batch.scope,
+                batch.origin,
+                batch.mode,
+                listOf(entry),
+            )
+        mutable.value = mutable.value.copy(batches = mutable.value.batches + fresh)
+        persist()
+        try {
+            startService(batch.scope)
+        } catch (_: RuntimeException) {
+            update(fresh.id) {
+                it.copy(waiting = false, paused = true, message = "请回到应用后重试")
+            }
+            persist()
+        }
+    }
+
+    internal fun removeCompleted(scope: String) = command {
+        val drop =
+            mutable.value.batches.filter {
+                it.scope == scope && it.id != mutable.value.activeId && !it.waiting &&
+                    it.unfinished.isEmpty()
+            }
+        if (drop.isEmpty()) return@command
+        mutable.value =
+            mutable.value.copy(batches = mutable.value.batches.filterNot { it.id in drop.map { b -> b.id } })
+        persist()
+        withContext(Dispatchers.IO) {
+            BackupJournal(app).use { journal ->
+                drop.forEach { journal.forget("manual:${it.scope}:${it.id}") }
+            }
+        }
+    }
+
+    /** Keeps the durable batch list bounded without asking the user to delete finished records. */
+    private suspend fun pruneCompleted(scope: String, keep: Int) {
+        if (scope.isEmpty()) return
+        val overflow = mutable.value.batches.size + keep - 20
+        if (overflow <= 0) return
+        val drop =
+            mutable.value.batches
+                .filter {
+                    it.scope == scope && it.id != mutable.value.activeId && !it.waiting &&
+                        it.unfinished.isEmpty()
+                }
+                .take(overflow)
+        if (drop.isEmpty()) return
+        mutable.value =
+            mutable.value.copy(batches = mutable.value.batches.filterNot { it.id in drop.map { b -> b.id } })
+        withContext(Dispatchers.IO) {
+            BackupJournal(app).use { journal ->
+                drop.forEach { journal.forget("manual:${it.scope}:${it.id}") }
+            }
+        }
     }
 
     internal fun resume(id: String) = command {

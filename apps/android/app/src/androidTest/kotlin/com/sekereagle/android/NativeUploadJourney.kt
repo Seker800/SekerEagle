@@ -147,10 +147,11 @@ internal class NativeUploadJourney(
                         it.progress.skipped == skipped
                 } == true
         }
+        compose.onNodeWithTag("transfer-tab-manual").performClick()
         compose
-            .onNodeWithTag("upload-summary:$batchId")
+            .onNodeWithTag("upload-status")
             .performScrollTo()
-            .assertTextEquals("已上传 $uploaded · 重复跳过 $skipped")
+            .assertTextEquals("已完成 ${uploaded + skipped} · 排队 0 · 失败 0")
     }
 
     private fun dismiss() {

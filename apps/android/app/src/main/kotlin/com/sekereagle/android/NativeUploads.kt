@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.sekereagle.android.core.BackupEngine
 import com.sekereagle.android.core.NativeUploadPolicy
+import com.sekereagle.android.core.UploadRetryPolicy
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -267,13 +268,30 @@ class NativeUploads(
                                 BackupEngine.fileKey(target, initial.mode.name, source),
                                 hash,
                             )
-                            val outcome =
+                            val engine =
                                 BackupEngine(
-                                        taskJournal,
-                                        MultipartTransport(api, initial.mode.name, catalog, item),
-                                        ::check,
+                                    taskJournal,
+                                    MultipartTransport(api, initial.mode.name, catalog, item),
+                                    ::check,
+                                )
+                            var outcome: BackupEngine.Result? = null
+                            for (attempt in 1..UploadRetryPolicy.MAX_ATTEMPTS) {
+                                try {
+                                    outcome = engine.process(target, initial.mode.name, source)
+                                    break
+                                } catch (reason: Exception) {
+                                    if (
+                                        attempt == UploadRetryPolicy.MAX_ATTEMPTS ||
+                                            !UploadRetryPolicy.retryable(reason)
                                     )
-                                    .process(target, initial.mode.name, source)
+                                        throw reason
+                                    result =
+                                        result.copy(stage = "网络波动，正在重试", bytes = 0)
+                                    publish(ticket, result)
+                                    delay(UploadRetryPolicy.delayMillis(attempt))
+                                    check()
+                                }
+                            }
                             result =
                                 if (outcome == BackupEngine.Result.UPLOADED && !api.duplicate)
                                     result.copy(uploaded = result.uploaded + 1)

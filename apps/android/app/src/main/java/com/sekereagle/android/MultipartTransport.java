@@ -16,13 +16,24 @@ final class MultipartTransport implements BackupEngine.Transport {
   private final String path;
   private final MediaCatalog catalog;
   private final MediaCatalog.Item item;
+  private final java.util.function.LongConsumer progress;
 
   MultipartTransport(UploadApi api, String mode, MediaCatalog catalog, MediaCatalog.Item item) {
+    this(api, mode, catalog, item, null);
+  }
+
+  MultipartTransport(
+      UploadApi api,
+      String mode,
+      MediaCatalog catalog,
+      MediaCatalog.Item item,
+      java.util.function.LongConsumer progress) {
     if (!(mode.equals("PHOTO") || mode.equals("MATERIAL")))
       throw new IllegalArgumentException("无效模式");
     this.api = api;
     this.catalog = catalog;
     this.item = item;
+    this.progress = progress;
     path = "/api/" + (mode.equals("PHOTO") ? "photos" : "eagle") + "/uploads";
   }
 
@@ -150,7 +161,8 @@ final class MultipartTransport implements BackupEngine.Transport {
     JSONArray parts = new JSONArray();
     int total = (int) ((item.size + cp.partSize - 1) / cp.partSize);
     ArrayDeque<Future<JSONObject>> pending = new ArrayDeque<>();
-    try (ForwardUploadSource source = new ForwardUploadSource(catalog.open(item, 0, guard))) {
+    try (ForwardUploadSource source =
+        new ForwardUploadSource(catalog.open(item, 0, guard, progress))) {
       try {
         for (int number = 1; number <= total; number++) {
           guard.check();

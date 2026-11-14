@@ -611,6 +611,71 @@ public final class MobileBackupTest {
   }
 
   @Test
+  public void testVersionFourJournalAddsRetryMetadata() throws Exception {
+    android.content.Context isolated = context.createDeviceProtectedStorageContext();
+    isolated.deleteDatabase("mobile-backup.db");
+    android.database.sqlite.SQLiteDatabase legacy =
+        isolated.openOrCreateDatabase("mobile-backup.db", 0, null);
+    legacy.execSQL(
+        "CREATE TABLE files(key TEXT PRIMARY KEY, hash TEXT NOT NULL, session TEXT NOT NULL,"
+            + " part_size INTEGER NOT NULL, confirmed INTEGER NOT NULL, terminal_error TEXT NOT NULL"
+            + " DEFAULT '')");
+    legacy.execSQL("CREATE TABLE receipts(key TEXT PRIMARY KEY)");
+    legacy.execSQL(
+        "CREATE TABLE scan_progress (scope TEXT NOT NULL, key TEXT NOT NULL, fingerprint TEXT NOT"
+            + " NULL DEFAULT '', result TEXT NOT NULL, PRIMARY KEY(scope,key))");
+    legacy.execSQL(
+        "CREATE TABLE scan_runs (scope TEXT PRIMARY KEY, seen INTEGER NOT NULL, uploaded INTEGER"
+            + " NOT NULL, skipped INTEGER NOT NULL, failed INTEGER NOT NULL)");
+    legacy.execSQL(
+        "CREATE TABLE scan_state (scope TEXT PRIMARY KEY, max_id INTEGER NOT NULL DEFAULT -1,"
+            + " scanned_at INTEGER NOT NULL DEFAULT 0, full_scanned_at INTEGER NOT NULL DEFAULT 0,"
+            + " rules_hash TEXT NOT NULL DEFAULT '')");
+    legacy.execSQL("INSERT INTO scan_progress VALUES('owner','owner:PHOTO:old','1:2','FAILED')");
+    legacy.execSQL("INSERT INTO receipts VALUES('owner:PHOTO:receipt')");
+    legacy.setVersion(4);
+    legacy.close();
+    try (BackupJournal upgraded = new BackupJournal(isolated)) {
+      // Rows written before v5 have no URI and cannot be retried by identity.
+      assertEquals(0, upgraded.failures("owner").size());
+      upgraded.scanFailure(
+          "owner",
+          "owner:PHOTO:new",
+          "10:20",
+          "content://media/external/images/media/1",
+          "IMG_1.jpg",
+          "PHOTO",
+          10L,
+          20L,
+          false,
+          "服务请求失败（HTTP 502）");
+      List<BackupJournal.Retry> failures = upgraded.failures("owner");
+      assertEquals(1, failures.size());
+      assertEquals("IMG_1.jpg", failures.get(0).name);
+      assertEquals(1, failures.get(0).attempts);
+      upgraded.scanFailure(
+          "owner",
+          "owner:PHOTO:new",
+          "10:20",
+          "content://media/external/images/media/1",
+          "IMG_1.jpg",
+          "PHOTO",
+          10L,
+          20L,
+          false,
+          "服务请求失败（HTTP 502）");
+      assertEquals(2, upgraded.failures("owner").get(0).attempts);
+      upgraded.scanResult("owner", "owner:PHOTO:new", "10:20", "UPLOADED");
+      assertEquals(0, upgraded.failures("owner").size());
+      assertTrue(upgraded.contains("owner:PHOTO:receipt"));
+      upgraded.retryFailures("owner");
+      assertTrue(upgraded.contains("owner:PHOTO:receipt"));
+    } finally {
+      isolated.deleteDatabase("mobile-backup.db");
+    }
+  }
+
+  @Test
   public void testCaptureModernScreens() throws Exception {
     org.junit.Assume.assumeTrue(
         InstrumentationRegistry.getArguments().getString("screenshots", "false").equals("true"));
