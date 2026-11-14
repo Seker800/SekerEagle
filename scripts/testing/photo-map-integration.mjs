@@ -429,6 +429,52 @@ try {
   await refresh(owner);
   assert.equal((await rawService.clusters(owner, false, world)).total, old.total);
   assert.equal((await rawService.clusters(owner, true, world)).total, old.total + 2);
+  // Deleting a located photo keeps the visible generation; it disappears from member
+  // reads immediately and from the count after the background rebuild catches up.
+  const doomed = await make({}, 44, 110);
+  await refresh(owner);
+  const beforeDelete = await rawService.clusters(owner, false, world);
+  const versionBeforeDelete = (
+    await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })
+  ).visibilityVersion;
+  await prisma.eagleAsset.update({
+    where: { id: doomed },
+    data: { deletedAt: new Date() },
+  });
+  const stateAfterDelete = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey });
+  assert.equal(stateAfterDelete.visibilityVersion, versionBeforeDelete);
+  const duringDelete = await rawService.clusters(owner, false, world);
+  assert.equal(duringDelete.status, 'UPDATING');
+  assert.equal(duringDelete.snapshotId, beforeDelete.snapshotId);
+  assert.equal(duringDelete.total, beforeDelete.total);
+  await refresh(owner);
+  const afterDelete = await rawService.clusters(owner, false, world);
+  assert.notEqual(afterDelete.snapshotId, beforeDelete.snapshotId);
+  assert.equal(afterDelete.total, beforeDelete.total - 1);
+  // A media revision bump (edit or replacement) keeps the visible generation too;
+  // re-analysis without a coordinate change must not revoke it.
+  const revised = await make({}, 45, 110);
+  await refresh(owner);
+  const beforeRevision = await rawService.clusters(owner, false, world);
+  const versionBeforeRevision = (
+    await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })
+  ).visibilityVersion;
+  await prisma.eagleAsset.update({ where: { id: revised }, data: { mediaRevision: 2 } });
+  await prisma.eaglePhotoMetadata.update({
+    where: { assetId: revised },
+    data: { assetRevision: 2 },
+  });
+  const stateAfterRevision = await prisma.eaglePhotoMapState.findUniqueOrThrow({
+    where: stateKey,
+  });
+  assert.equal(stateAfterRevision.visibilityVersion, versionBeforeRevision);
+  const duringRevision = await rawService.clusters(owner, false, world);
+  assert.equal(duringRevision.status, 'UPDATING');
+  assert.equal(duringRevision.snapshotId, beforeRevision.snapshotId);
+  await refresh(owner);
+  const afterRevision = await rawService.clusters(owner, false, world);
+  assert.notEqual(afterRevision.snapshotId, beforeRevision.snapshotId);
+  assert.equal(afterRevision.total, beforeRevision.total);
   const busy = await prisma.eagleAssetProcessingJob.create({
     data: {
       ownerId: owner,
