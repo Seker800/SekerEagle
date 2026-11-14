@@ -403,8 +403,7 @@ export function EagleImageViewer({
         const onTileLoaded = (event?: unknown) => {
           updateDetailLoading();
           const payload = event as
-            | { tile?: { level?: number; x?: number; y?: number }; tiledImage?: unknown }
-            | undefined;
+            { tile?: { level?: number; x?: number; y?: number }; tiledImage?: unknown } | undefined;
           if (payload?.tiledImage && payload.tiledImage !== detailItemRef.current) return;
           if (detailSettledRef.current) return;
           const tile = payload?.tile;
