@@ -62,7 +62,7 @@ test('trusted local completion uses shared publication without media decoding', 
   assert.deepEqual((calls[0] as { where: unknown }).where, {
     id,
     uploaderId: owner,
-    status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED', 'COMPLETED'] },
+    status: { in: ['INITIATED', 'ASSEMBLED', 'FINALIZING', 'FAILED', 'COMPLETED'] },
     libraryMode: 'PHOTO',
   });
 });

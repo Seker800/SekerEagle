@@ -109,6 +109,7 @@ test('completion preserves an assembled object for recovery when DB finalization
     objectKey: `users/${ownerId}/assets/id/photo.jpg`,
     multipartUploadId: 'multipart-id',
     eagleAssetId: null,
+    completionParts: [{ PartNumber: 1, ETag: 'etag-1' }],
     eagleState: {},
   };
   const prisma = {

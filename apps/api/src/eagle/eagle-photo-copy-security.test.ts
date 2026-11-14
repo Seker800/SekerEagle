@@ -251,9 +251,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
         } as never,
         mode,
       );
-      const result = await service.complete(ownerId, 'session', {
-        parts: [{ partNumber: 1, etag: 'part' }],
-      });
+      const result = await service.recoverUploadSession('session');
       assert.ok(tagInput, 'editing must attach the edited marker');
       assert.deepEqual(tagInput.where.ownerId_libraryMode_normalizedName, {
         ownerId,
@@ -271,7 +269,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
           (link) =>
             link.ownerId === ownerId &&
             link.libraryMode === mode &&
-            link.assetId === result.assetId,
+            link.assetId === result?.assetId,
         ),
       );
       assert.equal(

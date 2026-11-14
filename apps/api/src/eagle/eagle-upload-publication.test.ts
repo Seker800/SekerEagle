@@ -11,7 +11,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       options = received;
       return { assetId: 'copy', duplicate: false };
     });
-    await service.complete('owner', 'session', { parts: [{ partNumber: 1, etag: 'etag' }] });
+    await service.recoverUploadSession('session');
     assert.equal(options?.timeout, 30_000);
   });
 
@@ -26,7 +26,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       return { assetId: 'copy', duplicate: false };
     });
     await assert.rejects(
-      service.complete('owner', 'session', { parts: [{ partNumber: 1, etag: 'etag' }] }),
+      service.recoverUploadSession('session'),
       (error: unknown) =>
         error instanceof ServiceUnavailableException &&
         (error.getResponse() as { code: string }).code === 'UPLOAD_PUBLICATION_BUSY',
@@ -39,10 +39,8 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       undefined,
       'temporary lock pressure must not exhaust recovery attempts',
     );
-    const result = await service.complete('owner', 'session', {
-      parts: [{ partNumber: 1, etag: 'etag' }],
-    });
-    assert.equal(result.assetId, 'copy');
+    const result = await service.recoverUploadSession('session');
+    assert.equal(result?.assetId, 'copy');
     assert.equal(attempts, 2);
   });
 }
@@ -116,10 +114,8 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
         },
       }),
     );
-    const result = await service.complete('owner', 'session', {
-      parts: [{ partNumber: 1, etag: 'etag' }],
-    });
-    assert.equal(result.assetId, 'already-published');
+    const result = await service.recoverUploadSession('session');
+    assert.equal(result?.assetId, 'already-published');
   });
 }
 
@@ -153,12 +149,8 @@ test('PostgreSQL statement timeout is retryable while unrelated SQL errors remai
       const { service } = fixture('PHOTO', async () => {
         throw error;
       });
-      await assert.rejects(
-        service.complete('owner', 'session', { parts: [{ partNumber: 1, etag: 'etag' }] }),
-        (received: unknown) =>
-          sqlCode === '57014'
-            ? received instanceof ServiceUnavailableException
-            : received === error,
+      await assert.rejects(service.recoverUploadSession('session'), (received: unknown) =>
+        sqlCode === '57014' ? received instanceof ServiceUnavailableException : received === error,
       );
     }
 });
