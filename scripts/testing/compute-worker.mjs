@@ -6,9 +6,11 @@ import { setInterval, clearInterval } from 'node:timers';
 import { once } from 'node:events';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import sharp from 'sharp';
@@ -28,6 +30,18 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET,
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
+// Local Mac checkouts keep the worker media toolchain in .runtime; CI installs ffmpeg
+// on PATH. Resolve the same binaries the worker uses before spawning it.
+const localMediaBin = fileURLToPath(
+  new URL('../../.runtime/compute-tools/media/bin/', import.meta.url),
+);
+for (const [envName, command] of [
+  ['FFMPEG_PATH', 'ffmpeg'],
+  ['FFPROBE_PATH', 'ffprobe'],
+]) {
+  const local = join(localMediaBin, command);
+  if (!process.env[envName]?.trim() && existsSync(local)) process.env[envName] = local;
+}
 // Both are real process dependencies of the remote-video fixture. Fail before opening
 // a database client or starting servers instead of surfacing a later generic HTTP 500.
 for (const [configuredPath, fallback] of [
