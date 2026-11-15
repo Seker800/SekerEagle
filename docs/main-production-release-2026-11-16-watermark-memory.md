@@ -16,7 +16,7 @@
 - Web 镜像从同一源码以 `linux/amd64` 构建；线上 `index.html`（`640c7129…`）、`PhotoEditor-DTpmKIAk.js`（`5eb83ef0…`）、`SekerEaglePage-fXP_DhVh.js`（`b91645eb…`）与本机构建 SHA256 一致；镜像内 85 个静态文件与本地 84 个构建文件一致（额外为 nginx 默认 `50x.html`）。
 - Mac worker release 由现用 `worker-1f5cbb727f0a` 克隆，覆盖本次 worker dist 与 `library-core` dist/src；684 个程序文件哈希记录在私有 `.omx/artifacts/release-b852071b/worker-program.sha256`。release 内 `readPhotoEditRecipe` 实际接受带 `watermarkVariants` 的配方，`edited-copy-render` 模块可加载；现场 PID 90288，worker ID `worker-1bf14bec-3895-4d22-8906-b60bfcc0e875`，心跳新鲜、`activeJobCount=0`。
 - 生产 API 容器内再次用真实发布镜像验证带 `watermarkVariants` 的配方可读，返回 `black`，不是只验证本地源码。
-- Web 全量 1162 项、library-core 67 项、API 编辑相关 20 项通过；架构门禁 42 项、脚本契约 74 项通过（1 项跳过、0 失败）、lint、typecheck、Prettier、contracts、backup 测试通过。全量 `npm test` 首轮暴露两项过期契约（媒体拖动测试仍匹配旧 `onDragStart` 写法、上传网关测试误取第一条 `location ~`），已修复并复跑通过，未把首轮失败当通过。
+- Web 全量 1162 项、library-core 67 项、API 编辑相关 20 项通过；架构门禁 42 项、脚本契约 74 项通过（1 项跳过、0 失败）、lint、typecheck、Prettier、contracts、backup 测试通过。最终全量 `npm test` 整链退出 0。首轮曾暴露两项过期契约（媒体拖动测试仍匹配旧 `onDragStart` 写法、上传网关测试误取第一条 `location ~`），已修复并复跑；随后完整重跑通过，未把首轮失败当通过。
 
 ## 数据安全与备份
 
