@@ -953,6 +953,23 @@
   border-radius: 16px;
   font-size: 11px;
 }
+
+.watermarkCapabilityDivider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--photo-line);
+}
+.editor .watermarkCapabilities .watermarkEditAction {
+  border-color: transparent;
+  background: transparent;
+  color: var(--photo-text);
+  padding-inline: 6px;
+}
+.editor .watermarkCapabilities .watermarkEditAction:hover {
+  color: var(--photo-accent);
+}
 .watermarkCategories {
   min-height: 38px;
   justify-content: safe center;
@@ -1578,35 +1595,4 @@
 }
 .editor[data-presentation='native'] .title span {
   display: none;
-}
-
-.watermarkCornerColors {
-  margin: 0 0 12px;
-  padding: 0;
-  border: 0;
-  color: #d3d3d3;
-  font-size: 12px;
-}
-.watermarkCornerColors legend {
-  margin-bottom: 8px;
-  padding: 0;
-  color: var(--photo-text);
-  font-weight: 600;
-}
-.watermarkCornerColors > div {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-.watermarkCornerColors > div > span {
-  width: 72px;
-  color: var(--photo-muted);
-}
-.editor .watermarkCornerColors button {
-  min-height: 28px;
-  padding: 3px 10px;
-  border: 1px solid var(--photo-line);
-  border-radius: 14px;
-  font-size: 11px;
 }

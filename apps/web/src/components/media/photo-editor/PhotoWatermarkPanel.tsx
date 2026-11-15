@@ -133,45 +133,6 @@ function WatermarkSettingsEditor({
             onChange={(event) => change({ watermarkWebsite: event.target.value })}
           />
         </label>
-        {findWatermark(draft.watermark)?.style === 'side' && (
-          <fieldset className={styles.watermarkCornerColors}>
-            <legend>{t('角标颜色')}</legend>
-            <div role="group" aria-label={t('机型角标')}>
-              <span>{t('机型角标')}</span>
-              <button
-                type="button"
-                aria-pressed={draft.watermarkCameraColor === 'white'}
-                onClick={() => change({ watermarkCameraColor: 'white' })}
-              >
-                {t('白字')}
-              </button>
-              <button
-                type="button"
-                aria-pressed={draft.watermarkCameraColor === 'black'}
-                onClick={() => change({ watermarkCameraColor: 'black' })}
-              >
-                {t('黑字')}
-              </button>
-            </div>
-            <div role="group" aria-label={t('时间角标')}>
-              <span>{t('时间角标')}</span>
-              <button
-                type="button"
-                aria-pressed={draft.watermarkTimeColor === 'white'}
-                onClick={() => change({ watermarkTimeColor: 'white' })}
-              >
-                {t('白字')}
-              </button>
-              <button
-                type="button"
-                aria-pressed={draft.watermarkTimeColor === 'black'}
-                onClick={() => change({ watermarkTimeColor: 'black' })}
-              >
-                {t('黑字')}
-              </button>
-            </div>
-          </fieldset>
-        )}
         <button
           type="button"
           disabled={!metadata.camera && !metadata.parameters && !metadata.capturedAt}
@@ -195,8 +156,6 @@ function WatermarkSettingsEditor({
                 watermarkParameters: draft.watermarkParameters,
                 watermarkCapturedAt: draft.watermarkCapturedAt,
                 watermarkWebsite: draft.watermarkWebsite,
-                watermarkCameraColor: draft.watermarkCameraColor,
-                watermarkTimeColor: draft.watermarkTimeColor,
               });
               onClose();
             }}
@@ -284,6 +243,37 @@ export function PhotoWatermarkPanel({
             {themeLabel}
           </button>
         )}
+        {selected?.style === 'side' && (
+          <>
+            <button
+              type="button"
+              disabled={disabled}
+              title={t('点击切换')}
+              onClick={() =>
+                onChange({
+                  watermarkCameraColor: edits.watermarkCameraColor === 'white' ? 'black' : 'white',
+                })
+              }
+            >
+              {edits.watermarkCameraColor === 'black' ? t('机型黑字') : t('机型白字')}
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              title={t('点击切换')}
+              onClick={() =>
+                onChange({
+                  watermarkTimeColor: edits.watermarkTimeColor === 'white' ? 'black' : 'white',
+                })
+              }
+            >
+              {edits.watermarkTimeColor === 'black' ? t('时间黑字') : t('时间白字')}
+            </button>
+          </>
+        )}
+        {(selected?.theme || selected?.style === 'side') && (
+          <span className={styles.watermarkCapabilityDivider} aria-hidden="true" />
+        )}
         {selected && (
           <button
             type="button"
@@ -345,6 +335,7 @@ export function PhotoWatermarkPanel({
           <button
             ref={settingsButton}
             type="button"
+            className={styles.watermarkEditAction}
             aria-label={t('编辑水印文字')}
             disabled={disabled}
             onClick={() => setSettingsOpen(true)}
