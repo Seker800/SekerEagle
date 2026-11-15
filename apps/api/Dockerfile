@@ -15,6 +15,7 @@ COPY packages/eagle-filter-core/package.json packages/eagle-filter-core/package.
 COPY packages/vector-core/package.json packages/vector-core/package.json
 RUN npm install --global npm@10.9.4 && npm ci
 COPY apps/api apps/api
+RUN chmod -R a+rX apps/api/prisma/migrations
 COPY packages/library-core packages/library-core
 COPY packages/photo-render-core packages/photo-render-core
 COPY packages/library-persistence packages/library-persistence
