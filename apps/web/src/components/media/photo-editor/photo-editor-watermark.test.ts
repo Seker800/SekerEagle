@@ -288,8 +288,15 @@ describe('watermark typography and content hierarchy', () => {
     for (const text of ['FUJIFILM X-E5', '2026.10.19']) expect(texts).toContain(text);
     expect(texts.some((text) => text.includes('35mm'))).toBe(true);
   });
-  it('puts camera and date on the photo corners with parameters and website in the rail', () => {
-    const drawn: { text: string; x: number; y: number }[] = [];
+  it('puts camera and date on the photo corners and aligns the rail column', () => {
+    const drawn: {
+      text: string;
+      size: number;
+      left: number;
+      top: number;
+      right: number;
+      bottom: number;
+    }[] = [];
     renderPhotoWatermark(
       asHTML(createCanvas(1600, 1000)),
       {
@@ -308,26 +315,45 @@ describe('watermark typography and content hierarchy', () => {
           context = canvas.getContext('2d');
         const original = context.fillText.bind(context);
         vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
-          const matrix = context.getTransform();
+          const metrics = context.measureText(text),
+            matrix = context.getTransform();
+          const corners = [
+            [x - metrics.actualBoundingBoxLeft, y - metrics.actualBoundingBoxAscent],
+            [x + metrics.actualBoundingBoxRight, y + metrics.actualBoundingBoxDescent],
+            [x - metrics.actualBoundingBoxLeft, y + metrics.actualBoundingBoxDescent],
+            [x + metrics.actualBoundingBoxRight, y - metrics.actualBoundingBoxAscent],
+          ].map(([px, py]) => ({
+            x: matrix.a * px + matrix.c * py + matrix.e,
+            y: matrix.b * px + matrix.d * py + matrix.f,
+          }));
           drawn.push({
             text: String(text),
-            x: matrix.a * x + matrix.c * y + matrix.e,
-            y: matrix.b * x + matrix.d * y + matrix.f,
+            size: Number(context.font.match(/([\d.]+)px/)?.[1]),
+            left: Math.min(...corners.map((point) => point.x)),
+            top: Math.min(...corners.map((point) => point.y)),
+            right: Math.max(...corners.map((point) => point.x)),
+            bottom: Math.max(...corners.map((point) => point.y)),
           });
           original(text, x, y);
         });
         return asHTML(canvas);
       },
     );
-    const point = (text: string) => drawn.find((entry) => entry.text.includes(text))!;
-    expect(point('FUJIFILM').x).toBeLessThan(800);
-    expect(point('FUJIFILM').y).toBeLessThan(500);
-    expect(point('2026.10.19').x).toBeLessThan(800);
-    expect(point('2026.10.19').y).toBeGreaterThan(500);
-    expect(point('35mm').x).toBeGreaterThan(1600);
-    expect(point('35mm').y).toBeLessThan(500);
-    expect(point('PHOTO.EXAMPLE.COM').x).toBeGreaterThan(1600);
-    expect(point('PHOTO.EXAMPLE.COM').y).toBeGreaterThan(500);
+    const box = (text: string) => drawn.find((entry) => entry.text.includes(text))!;
+    expect(box('FUJIFILM').right).toBeLessThan(1600);
+    expect(box('FUJIFILM').top).toBeLessThan(500);
+    expect(box('2026.10.19').right).toBeLessThan(1600);
+    expect(box('2026.10.19').top).toBeGreaterThan(500);
+    expect(box('35mm').left).toBeGreaterThan(1600);
+    expect(box('35mm').top).toBeLessThan(500);
+    expect(box('PHOTO.EXAMPLE.COM').left).toBeGreaterThan(1600);
+    expect(box('PHOTO.EXAMPLE.COM').top).toBeGreaterThan(500);
+    expect(box('35mm').size).toBeCloseTo(box('PHOTO.EXAMPLE.COM').size, 1);
+    expect(box('35mm').size).toBeCloseTo(box('2026.10.19').size, 1);
+    expect(Math.abs(box('35mm').left - box('PHOTO.EXAMPLE.COM').left)).toBeLessThan(2);
+    expect(Math.abs(box('FUJIFILM').left - box('2026.10.19').left)).toBeLessThan(2);
+    expect(Math.abs(box('FUJIFILM').top - box('35mm').top)).toBeLessThan(8);
+    expect(Math.abs(box('2026.10.19').bottom - box('PHOTO.EXAMPLE.COM').bottom)).toBeLessThan(8);
   });
   it('keeps the date visible for a right-aligned signature', () => {
     expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');
