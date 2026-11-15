@@ -139,27 +139,27 @@ it('merges signature alignment into controls instead of separate layouts', () =>
   expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
 });
 
-it('cycles camera and time corner colors independently from the background theme', () => {
+it('sets camera and time corner colors in the text settings dialog', () => {
   const { props, view, onChange } = setup();
   const side = { ...props.edits, watermark: 'photo-side' };
   view.rerender(<PhotoWatermarkPanel {...props} edits={side} />);
-  for (const name of ['机型白字', '时间白字', '白底'])
-    expect(screen.getByRole('button', { name })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '机型白字' }));
-  expect(onChange).toHaveBeenCalledWith({ watermarkCameraColor: 'black' });
-  fireEvent.click(screen.getByRole('button', { name: '时间白字' }));
-  expect(onChange).toHaveBeenCalledWith({ watermarkTimeColor: 'black' });
-  view.rerender(
-    <PhotoWatermarkPanel
-      {...props}
-      edits={{ ...side, watermarkCameraColor: 'black', watermarkTimeColor: 'white' }}
-    />,
+  fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
+  const cameraGroup = screen.getByRole('group', { name: '机型角标' });
+  const timeGroup = screen.getByRole('group', { name: '时间角标' });
+  expect(within(cameraGroup).getByRole('button', { name: '白字' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
   );
-  expect(screen.getByRole('button', { name: '机型黑字' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '时间白字' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '白底' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '机型黑字' }));
-  expect(onChange).toHaveBeenCalledWith({ watermarkCameraColor: 'white' });
+  expect(within(timeGroup).getByRole('button', { name: '白字' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  fireEvent.click(within(cameraGroup).getByRole('button', { name: '黑字' }));
+  fireEvent.click(within(timeGroup).getByRole('button', { name: '黑字' }));
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(onChange).toHaveBeenCalledWith(
+    expect.objectContaining({ watermarkCameraColor: 'black', watermarkTimeColor: 'black' }),
+  );
 });
 
 it('lets every watermark toggle a website and edit its text without applying a cancelled draft', () => {
