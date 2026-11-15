@@ -33,13 +33,7 @@ export function createEagleQueryKeys(
     photoPeopleSummaryScope: (visible: boolean) => [...root, 'people-summary', visible] as const,
     photoPeopleOptions: (visible: boolean) => [...root, 'people', 'options', visible] as const,
     photoPeopleMergeTargets: (visible: boolean, revision: string, search = '') =>
-      [
-        ...root,
-        'people-merge-targets',
-        visible,
-        revision,
-        ...(search ? [search] : []),
-      ] as const,
+      [...root, 'people-merge-targets', visible, revision, ...(search ? [search] : [])] as const,
     photoPersonReview: [...root, 'person-review'] as const,
     photoPersonReviewScope: (visible: boolean, revision?: string) =>
       [...root, 'person-review', visible, revision, 'count-first-v3'] as const,
