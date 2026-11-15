@@ -1,6 +1,6 @@
 import { t } from '../../i18n';
 import { useMemo, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
-import { IconFolderBolt, IconPalette, IconSettings } from '@tabler/icons-react';
+import { IconFolderBolt, IconPalette, IconSettings, IconTrash } from '@tabler/icons-react';
 import type { EagleSmartFolder } from '../../lib/eagle-api';
 import styles from './EagleSmartFolderTree.module.css';
 const SMART_FOLDER_COLORS = [
@@ -25,6 +25,7 @@ interface EagleSmartFolderTreeProps {
   onMove: (folder: EagleSmartFolder, input: MoveEagleSmartFolderInput) => void;
   onChangeColor: (folder: EagleSmartFolder, color: string | null) => void;
   onEdit: (folder: EagleSmartFolder) => void;
+  onDelete: (folder: EagleSmartFolder) => void;
 }
 type FolderContextMenu = {
   folder: EagleSmartFolder;
@@ -42,6 +43,7 @@ export function EagleSmartFolderTree({
   onMove,
   onChangeColor,
   onEdit,
+  onDelete,
 }: EagleSmartFolderTreeProps) {
   const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -216,6 +218,25 @@ export function EagleSmartFolderTree({
             >
               <IconSettings size={14} />
               {' ' + t('修改文件夹参数…') + ' '}
+            </button>
+            <button
+              className={styles.deleteAction}
+              type="button"
+              role="menuitem"
+              aria-label={t('删除智能文件夹')}
+              disabled={busy || (childrenByParent.get(contextMenu.folder.id)?.length ?? 0) > 0}
+              title={
+                (childrenByParent.get(contextMenu.folder.id)?.length ?? 0) > 0
+                  ? t('请先删除或移出子级智能文件夹')
+                  : undefined
+              }
+              onClick={() => {
+                onDelete(contextMenu.folder);
+                setContextMenu(null);
+              }}
+            >
+              <IconTrash size={14} />
+              {' ' + t('删除智能文件夹…') + ' '}
             </button>
             <div className={styles.menuTitle}>
               <IconPalette size={14} />

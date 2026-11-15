@@ -38,6 +38,7 @@ interface EagleMutationCallbacks {
   onOperationStarted: () => void;
   onSmartFolderCreated: () => void;
   onSmartFolderUpdated: (folder: EagleSmartFolder, changes: SmartFolderChanges) => void;
+  onSmartFolderDeleted: (folder: EagleSmartFolder) => void;
 }
 
 export function useEagleMutations(
@@ -56,6 +57,7 @@ export function useEagleMutations(
       createEagleSmartFolder,
       deleteEagleManualTag,
       deleteEagleManualTagGroup,
+      deleteEagleSmartFolder,
       moveEagleSmartFolder,
       replaceEagleAssetManualTags,
       updateEagleAsset,
@@ -382,6 +384,13 @@ export function useEagleMutations(
       await invalidate(queryKeys.smartFolders, queryKeys.assets);
     },
   });
+  const deleteSmartFolderMutation = useMutation({
+    mutationFn: (folder: EagleSmartFolder) => deleteEagleSmartFolder(accessToken, folder.id),
+    onSuccess: async (_result, folder) => {
+      callbacks.onSmartFolderDeleted(folder);
+      await invalidate(queryKeys.smartFolders);
+    },
+  });
   const moveSmartFolderMutation = useMutation({
     mutationFn: ({
       folder,
@@ -458,6 +467,7 @@ export function useEagleMutations(
     emptyTrashMutation,
     smartFolderMutation,
     updateSmartFolderMutation,
+    deleteSmartFolderMutation,
     moveSmartFolderMutation,
   };
 }

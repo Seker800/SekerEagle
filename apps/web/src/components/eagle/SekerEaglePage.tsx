@@ -695,6 +695,7 @@ export function SekerEaglePage({
     emptyTrashMutation,
     smartFolderMutation,
     updateSmartFolderMutation,
+    deleteSmartFolderMutation,
     moveSmartFolderMutation,
   } = useEagleMutations(accessToken, queryKeys, {
     onMetadataSaved: metadataDraft.saved,
@@ -711,6 +712,9 @@ export function SekerEaglePage({
       if (activeSmartFolderId !== folder.id || changes.name === undefined) return;
       setSearch('');
       setQuickFilters(createEmptyEagleQuickFilterState());
+    },
+    onSmartFolderDeleted: (folder) => {
+      if (activeSmartFolderId === folder.id) navigateLibrary({ view: 'ACTIVE' });
     },
   });
   const loadedAssets = useMemo(() => {
@@ -1158,6 +1162,12 @@ export function SekerEaglePage({
     navigateLibrary({ view: 'ACTIVE', photoView });
   const applySmartFolder = (folder: EagleSmartFolder) =>
     navigateLibrary({ view: 'SMART_FOLDER', folder });
+  const deleteSmartFolder = (folder: EagleSmartFolder) => {
+    if (
+      window.confirm(t('删除智能文件夹“{{value1}}”？素材本身不会被删除。', { value1: folder.name }))
+    )
+      deleteSmartFolderMutation.mutate(folder);
+  };
   const selectAsset = (assetId: string, gesture: EagleSelectionGesture) =>
     selection.select(
       assets.map((asset) => asset.id),
@@ -1569,7 +1579,11 @@ export function SekerEaglePage({
         <EagleSmartFolderTree
           folders={smartFolders}
           activeFolderId={activeSmartFolderId}
-          busy={updateSmartFolderMutation.isPending || moveSmartFolderMutation.isPending}
+          busy={
+            updateSmartFolderMutation.isPending ||
+            deleteSmartFolderMutation.isPending ||
+            moveSmartFolderMutation.isPending
+          }
           onSelect={(folder) => {
             closeNavigation();
             applySmartFolder(folder);
@@ -1583,6 +1597,7 @@ export function SekerEaglePage({
             setEditingSmartFolder(folder);
             setIsSmartFolderDialogOpen(true);
           }}
+          onDelete={deleteSmartFolder}
         />
         {smartFoldersQuery.isError && (
           <button
@@ -2195,6 +2210,7 @@ export function SekerEaglePage({
                 restoreMutation.isError ||
                 emptyTrashMutation.isError ||
                 updateSmartFolderMutation.isError ||
+                deleteSmartFolderMutation.isError ||
                 moveSmartFolderMutation.isError) && (
                 <div className={styles.errorBar} role="alert">
                   {
@@ -2203,6 +2219,7 @@ export function SekerEaglePage({
                       restoreMutation.error ??
                       emptyTrashMutation.error ??
                       updateSmartFolderMutation.error ??
+                      deleteSmartFolderMutation.error ??
                       moveSmartFolderMutation.error
                     )?.message
                   }

@@ -1347,6 +1347,7 @@ export const enUS = {
   清空所有人工标签: 'Clear all manual tags',
   请检查网络后重试: 'Please check your network and retry.',
   '请立即保存，令牌只显示这一次': 'Save immediately — token only displays once.',
+  请先删除或移出子级智能文件夹: 'Delete or move the child smart folders first.',
   '请求失败（{{value1}}）': 'Request failed ({{value1}})',
   '请输入 HEX、RGB 或 HSL 颜色': 'Enter HEX, RGB, or HSL color.',
   取消: 'Cancel',
@@ -1405,6 +1406,10 @@ export const enUS = {
   '删除{{value1}}？素材本身不会被删除。': "Delete {{value1}}? The asset won't be deleted.",
   '删除标签组“{{value1}}”？组内标签会移到未分类。':
     "Delete tag group '{{value1}}'? Tags will move to unclassified.",
+  '删除智能文件夹“{{value1}}”？素材本身不会被删除。':
+    "Delete smart folder '{{value1}}'? The assets themselves won't be deleted.",
+  删除智能文件夹: 'Delete Smart Folder',
+  '删除智能文件夹…': 'Delete smart folder…',
   '删除规则 {{value1}}': 'Delete Rule {{value1}}',
   删除人工标签: 'Delete Manual Tag',
   '删除人工标签…': 'Remove Manual Tags…',

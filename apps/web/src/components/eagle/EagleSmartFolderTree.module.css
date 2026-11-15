@@ -111,6 +111,28 @@
   opacity: 0.5;
   cursor: default;
 }
+.deleteAction {
+  width: 100%;
+  min-height: 31px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--ui-radius-control);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d7d9dd;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+}
+.deleteAction:hover:not(:disabled) {
+  color: #ff9a9a;
+  background: rgb(227 93 106 / 14%);
+}
+.deleteAction:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .palette {
   padding-top: 5px;
   display: grid;

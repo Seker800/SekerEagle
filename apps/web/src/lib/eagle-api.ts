@@ -481,6 +481,10 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
+  async function deleteEagleSmartFolder(_token: string, id: string) {
+    return api<{ id: string }>(`/eagle/smart-folders/${id}`, { method: 'DELETE' });
+  }
+
   async function replaceEagleAssetManualTags(_token: string, id: string, tagIds: string[]) {
     return api<
       OperationResponse<{
@@ -825,6 +829,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     updateEagleSmartFolder,
     countEagleAssets,
     moveEagleSmartFolder,
+    deleteEagleSmartFolder,
     replaceEagleAssetManualTags,
     batchChangeEagleManualTags,
     batchTrashEagleAssets,
@@ -868,6 +873,7 @@ export const {
   updateEagleSmartFolder,
   countEagleAssets,
   moveEagleSmartFolder,
+  deleteEagleSmartFolder,
   replaceEagleAssetManualTags,
   batchChangeEagleManualTags,
   batchTrashEagleAssets,

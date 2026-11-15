@@ -28,6 +28,7 @@ const callbacks = {
   onOperationStarted: vi.fn(),
   onSmartFolderCreated: vi.fn(),
   onSmartFolderUpdated: vi.fn(),
+  onSmartFolderDeleted: vi.fn(),
 };
 it('rating writes through existing view details without creating a ghost short key', async () => {
   const client = new QueryClient();
@@ -54,6 +55,7 @@ it('rating writes through existing view details without creating a ghost short k
         onOperationStarted: vi.fn(),
         onSmartFolderCreated: vi.fn(),
         onSmartFolderUpdated: vi.fn(),
+        onSmartFolderDeleted: vi.fn(),
       }),
     { wrapper },
   );
@@ -247,6 +249,7 @@ it('partial tag failures drain writes, refresh committed results, and retry only
         onOperationStarted: vi.fn(),
         onSmartFolderCreated: vi.fn(),
         onSmartFolderUpdated: vi.fn(),
+        onSmartFolderDeleted: vi.fn(),
       }),
     { wrapper },
   );
@@ -321,6 +324,7 @@ it('releases a queued batch tag mutation without waiting for list reads or deskt
         onOperationStarted: vi.fn(),
         onSmartFolderCreated: vi.fn(),
         onSmartFolderUpdated: vi.fn(),
+        onSmartFolderDeleted: vi.fn(),
       }),
     { wrapper },
   );
@@ -377,6 +381,7 @@ it('chains a rapid metadata edit to its own accepted rating receipt without inve
         onOperationStarted: vi.fn(),
         onSmartFolderCreated: vi.fn(),
         onSmartFolderUpdated: vi.fn(),
+        onSmartFolderDeleted: vi.fn(),
       }),
     { wrapper },
   );
@@ -414,6 +419,38 @@ it('chains a rapid metadata edit to its own accepted rating receipt without inve
     predecessorOperationIds: ['command-2'],
   });
 
+  view.unmount();
+  client.clear();
+});
+
+it('deletes a smart folder through the API and reports the removed folder', async () => {
+  const client = new QueryClient();
+  const keys = createEagleQueryKeys('A');
+  const folder = {
+    id: 'folder-1',
+    name: '项目集合',
+    color: null,
+    parentId: null,
+    queryVersion: 1,
+    queryJson: { version: 1 as const, filters: {} },
+    position: 0,
+    rowVersion: 1,
+  };
+  const fetchMock = vi.fn(async (_path: RequestInfo | URL, _init?: RequestInit) =>
+    json({ id: 'folder-1' }),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  const onSmartFolderDeleted = vi.fn();
+  const view = renderHook(
+    () => useEagleMutations('', keys, { ...callbacks, onSmartFolderDeleted }),
+    { wrapper: makeWrapper(client) },
+  );
+  await act(async () => {
+    await view.result.current.deleteSmartFolderMutation.mutateAsync(folder);
+  });
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/eagle/smart-folders/folder-1');
+  expect(fetchMock.mock.calls[0][1]?.method).toBe('DELETE');
+  expect(onSmartFolderDeleted).toHaveBeenCalledWith(folder);
   view.unmount();
   client.clear();
 });

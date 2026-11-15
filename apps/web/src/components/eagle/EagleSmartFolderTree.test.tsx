@@ -48,6 +48,7 @@ describe('EagleSmartFolderTree', () => {
         onMove={vi.fn()}
         onChangeColor={vi.fn()}
         onEdit={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
 
@@ -69,6 +70,7 @@ describe('EagleSmartFolderTree', () => {
         onMove={vi.fn()}
         onChangeColor={onChangeColor}
         onEdit={onEdit}
+        onDelete={vi.fn()}
       />,
     );
 
@@ -92,6 +94,34 @@ describe('EagleSmartFolderTree', () => {
     expect(onChangeColor).toHaveBeenCalledWith(folders[0], '#65ad78');
   });
 
+  it('offers deleting a folder from the right-click menu but not while it has children', () => {
+    const onDelete = vi.fn();
+    render(
+      <EagleSmartFolderTree
+        folders={folders}
+        activeFolderId={null}
+        onSelect={vi.fn()}
+        onMove={vi.fn()}
+        onChangeColor={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByRole('treeitem', { name: '项目集合' }), {
+      clientX: 20,
+      clientY: 30,
+    });
+    expect(screen.getByRole('menuitem', { name: '删除智能文件夹' })).toBeDisabled();
+
+    fireEvent.contextMenu(screen.getByRole('treeitem', { name: '海报' }), {
+      clientX: 20,
+      clientY: 30,
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除智能文件夹' }));
+    expect(onDelete).toHaveBeenCalledWith(folders[2]);
+  });
+
   it('moves a folder inside a root or between root siblings by drag and drop', () => {
     const onMove = vi.fn();
     render(
@@ -102,6 +132,7 @@ describe('EagleSmartFolderTree', () => {
         onMove={onMove}
         onChangeColor={vi.fn()}
         onEdit={vi.fn()}
+        onDelete={vi.fn()}
       />,
     );
 

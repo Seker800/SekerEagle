@@ -134,6 +134,7 @@ const listEagleSmartFoldersMock = vi.fn();
 const createEagleSmartFolderMock = vi.fn();
 const updateEagleSmartFolderMock = vi.fn();
 const moveEagleSmartFolderMock = vi.fn();
+const deleteEagleSmartFolderMock = vi.fn();
 const listEagleAssetUpdatesMock = vi.fn();
 const getEaglePyramidDescriptorMock = vi.fn();
 const countEagleAssetsMock = vi.fn();
@@ -181,6 +182,7 @@ vi.mock('../../lib/eagle-api', () => {
     createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
     updateEagleSmartFolder: (...args: unknown[]) => updateEagleSmartFolderMock(...args),
     moveEagleSmartFolder: (...args: unknown[]) => moveEagleSmartFolderMock(...args),
+    deleteEagleSmartFolder: (...args: unknown[]) => deleteEagleSmartFolderMock(...args),
   };
   return { ...api, createEagleApi: () => api };
 });
@@ -474,6 +476,7 @@ describe('SekerEaglePage', () => {
       position: 0,
       rowVersion: 2,
     });
+    deleteEagleSmartFolderMock.mockResolvedValue({ id: 'folder-1' });
     listEagleAssetUpdatesMock.mockResolvedValue([]);
     uploadEagleAssetMock.mockResolvedValue({ duplicate: false });
     fetchEagleReviewSummaryMock.mockResolvedValue({
@@ -2864,6 +2867,50 @@ describe('SekerEaglePage', () => {
         rowVersion: 1,
       }),
     );
+  });
+
+  it('deletes a smart folder after confirmation and returns to the library when it was active', async () => {
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'folder-1',
+        name: '项目集合',
+        color: null,
+        parentId: null,
+        queryVersion: 1,
+        queryJson: { version: 1, filters: {} },
+        position: 0,
+        rowVersion: 1,
+      },
+    ]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+
+    const folder = await screen.findByRole('treeitem', { name: '项目集合' });
+    fireEvent.click(within(folder).getByRole('button'));
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        'token',
+        expect.objectContaining({ smartFolderId: 'folder-1' }),
+        expect.any(AbortSignal),
+      ),
+    );
+
+    fireEvent.contextMenu(folder, { clientX: 20, clientY: 30 });
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除智能文件夹' }));
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining('删除智能文件夹“项目集合”？素材本身不会被删除。'),
+    );
+    await waitFor(() =>
+      expect(deleteEagleSmartFolderMock).toHaveBeenCalledWith('token', 'folder-1'),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('treeitem', { name: '项目集合' })).toHaveAttribute(
+        'aria-selected',
+        'false',
+      ),
+    );
+    expect(await screen.findByRole('heading', { name: '全部' })).toBeVisible();
+    confirm.mockRestore();
   });
 
   it.each(['MATERIAL', 'PHOTO'] as const)(
