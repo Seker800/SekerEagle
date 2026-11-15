@@ -329,7 +329,7 @@ async function notifyCaptureResult(result) {
   await chrome.notifications
     .create(`capture:${result.id}:${result.status}`, {
       type: 'basic',
-      iconUrl: chrome.runtime.getURL('icons/icon.svg'),
+      iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
       title: succeeded ? 'SekerEagle 灵感采集成功' : 'SekerEagle 灵感采集失败',
       message,
       priority: succeeded ? 0 : 2,
