@@ -29,7 +29,7 @@
 
 - 安卓 JVM：新增 `CleanupPolicyTest`（时间边界、未知日期、项数/字节分批、超大单项）与 `CleanupEngineTest.local`（不读取原文件、缺收据/文件变化拒绝），全部通过；计划生成阶段仍对服务器确认的候选执行一次内容哈希。
 - API：`EagleUploadService.checkContentBatch` 单测通过；真实 PostgreSQL 测试验证 owner/模式/size/私密与 500 条批量结果一致；已注册进 `test:library-integration`。
-- 未执行：安卓实机/模拟器交互回归、系统删除对话框的 500 项/10GB 分批观察、生产部署。
+- 未执行：安卓实机/模拟器交互回归、系统删除对话框的 500 项/10GB 分批观察。服务端批量接口已于 2026-11-15 随 `review-fixes-82f8fa1a` 上线；现网安卓 0.9.19 未安装含分批逻辑的新 APK。
 
 ## 限制与后续
 

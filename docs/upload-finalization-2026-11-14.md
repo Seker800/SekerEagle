@@ -105,3 +105,7 @@ HEIC／RAW／视频原本就是临时文件路径，保持不变。并发预算�
 - `finalizeImport` 也受 10 次上限约束，导入项被取消等永久冲突不会再无限重试。
 - `complete` 对 `FAILED` 且 attempts≥10 或 `objectCleanupPending` 的会话返回 400 终态；重试不再把 `finalizationAttempts` 和 job attempts 重置为 0，客户端重试不会清空退避预算。
 - 网页轮询增加 10 分钟上限，并只在 `attempts>=10` 或 `objectCleanupPending` 时把 FAILED 当终态；importer、浏览器采集和测试脚本使用同一判断。
+
+## 部署
+
+2026-11-15 随 `sekereagle/api:review-fixes-82f8fa1a`（源码 `82f8fa1a`）上线；迁移 90 同时应用。旧安卓 0.9.19 首次收到 202 会显示失败，下一轮内容检查会识别已入库，删除前无数据风险；新 APK 含轮询。
