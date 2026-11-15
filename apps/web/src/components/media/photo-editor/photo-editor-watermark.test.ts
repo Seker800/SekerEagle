@@ -283,13 +283,13 @@ describe('watermark typography and content hierarchy', () => {
     expect(parameters.size).toBeGreaterThanOrEqual(16);
     expect(parameters.size).toBeLessThanOrEqual(20);
   });
-  it('retains camera, parameters and date as distinct side-rail information', () => {
+  it('retains camera, parameters and date as distinct side-template information', () => {
     const texts = capture('photo-side').map(({ text }) => text);
     for (const text of ['FUJIFILM X-E5', '2026.10.19']) expect(texts).toContain(text);
     expect(texts.some((text) => text.includes('35mm'))).toBe(true);
   });
-  it('splits the vertical rail into camera/website and parameters/date ends', () => {
-    const drawn: { text: string; worldY: number }[] = [];
+  it('puts camera and date on the photo corners with parameters and website in the rail', () => {
+    const drawn: { text: string; x: number; y: number }[] = [];
     renderPhotoWatermark(
       asHTML(createCanvas(1600, 1000)),
       {
@@ -309,20 +309,25 @@ describe('watermark typography and content hierarchy', () => {
         const original = context.fillText.bind(context);
         vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
           const matrix = context.getTransform();
-          drawn.push({ text: String(text), worldY: matrix.b * x + matrix.d * y + matrix.f });
+          drawn.push({
+            text: String(text),
+            x: matrix.a * x + matrix.c * y + matrix.e,
+            y: matrix.b * x + matrix.d * y + matrix.f,
+          });
           original(text, x, y);
         });
         return asHTML(canvas);
       },
     );
-    const worldY = (text: string) => drawn.find((entry) => entry.text.includes(text))!.worldY;
-    const camera = worldY('FUJIFILM'),
-      site = worldY('PHOTO.EXAMPLE.COM'),
-      parameters = worldY('35mm'),
-      time = worldY('2026.10.19');
-    expect(Math.abs(camera - site)).toBeLessThan(1);
-    expect(Math.abs(parameters - time)).toBeLessThan(1);
-    expect(site).toBeGreaterThan(parameters);
+    const point = (text: string) => drawn.find((entry) => entry.text.includes(text))!;
+    expect(point('FUJIFILM').x).toBeLessThan(800);
+    expect(point('FUJIFILM').y).toBeLessThan(500);
+    expect(point('2026.10.19').x).toBeLessThan(800);
+    expect(point('2026.10.19').y).toBeGreaterThan(500);
+    expect(point('35mm').x).toBeGreaterThan(1600);
+    expect(point('35mm').y).toBeLessThan(500);
+    expect(point('PHOTO.EXAMPLE.COM').x).toBeGreaterThan(1600);
+    expect(point('PHOTO.EXAMPLE.COM').y).toBeGreaterThan(500);
   });
   it('keeps the date visible for a right-aligned signature', () => {
     expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');

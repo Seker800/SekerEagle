@@ -38,25 +38,40 @@ const painters: Record<WatermarkStyle, Painter> = {
   side(d) {
     const { layout: l, size: s, context: c } = d,
       p = l.panel;
-    // A portrait rail keeps all typography off the photo, with two independent groups.
+    const pad = Math.min(l.referenceWidth * 0.04, l.photoHeight * 0.06);
+    // Camera and date sit on the photo corners; the rail only carries parameters and website.
+    textBlock(d, [{ value: d.camera, size: s * 0.85 }], {
+      x: pad,
+      y: pad,
+      width: l.photoWidth - pad * 2,
+      height: s * 1.3,
+      vertical: 'start',
+    });
+    textBlock(d, [{ value: d.time, size: s * 0.52 }], {
+      x: pad,
+      y: l.photoHeight - pad - s * 1.3,
+      width: l.photoWidth - pad * 2,
+      height: s * 1.3,
+      vertical: 'end',
+    });
     c.save();
     c.translate(p.x + p.width / 2, p.height / 2);
     c.rotate(-Math.PI / 2);
     const railWidth = p.height * 0.88,
       railHeight = p.width * 0.8;
-    // Same two-group rhythm as the photo strip: camera/website and parameters/date
-    // stay on opposite ends of the rail instead of stacking three lines together.
-    textBlock(d, [heading(d, d.camera, s * 0.78), website(d)], {
+    textBlock(d, [{ value: fields(d).join('  /  '), size: s * 0.6 }], {
+      x: 0,
+      y: -railHeight / 2,
+      width: railWidth / 2,
+      height: railHeight,
+      align: 'right',
+    });
+    textBlock(d, [website(d)], {
       x: -railWidth / 2,
       y: -railHeight / 2,
-      width: railWidth * 0.42,
+      width: railWidth / 2,
       height: railHeight,
     });
-    textBlock(
-      d,
-      [{ value: fields(d).join('  /  '), size: s * 0.6 }, secondary(d, d.time, s * 0.48)],
-      { x: 0, y: -railHeight / 2, width: railWidth / 2, height: railHeight, align: 'right' },
-    );
     c.restore();
   },
   overlay(d) {
