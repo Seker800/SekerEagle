@@ -78,6 +78,37 @@ public class CleanupEngineTest {
   }
 
   @Test
+  public void localCheckTrustsTheConfirmedReceiptWithoutReadingTheOriginal() throws Exception {
+    receipt();
+    int[] reads = {0};
+    BackupEngine.File file =
+        new BackupEngine.File(
+            file().uri,
+            100,
+            1,
+            () -> {
+              reads[0]++;
+              return hash;
+            },
+            () -> true);
+    CleanupEngine.Candidate candidate = engine().local("owner", "PHOTO", file);
+    assertNotNull(candidate);
+    assertEquals("a".repeat(64), candidate.hash);
+    assertEquals(0, reads[0]);
+  }
+
+  @Test
+  public void localCheckStillRejectsMissingReceiptsAndChangedFiles() throws Exception {
+    assertNull(engine().local("owner", "PHOTO", file()));
+    receipt();
+    stable = false;
+    assertNull(engine().local("owner", "PHOTO", file()));
+    stable = true;
+    assertNull(engine().local("other", "PHOTO", file()));
+    assertNull(engine().local("owner", "MATERIAL", file()));
+  }
+
+  @Test
   public void revalidationAlwaysChecksServerAgainRatherThanTrustingThePlan() throws Exception {
     receipt();
     assertNotNull(engine().check("owner", "PHOTO", file()));

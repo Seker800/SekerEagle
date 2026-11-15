@@ -175,6 +175,35 @@ export class EagleUploadService {
     return { exists: found !== null };
   }
 
+  async checkContentBatch(
+    ownerId: string,
+    items: Array<{ contentSha256: string; size: number }>,
+    includePrivate = false,
+  ) {
+    if (!items.length) return { exists: [] as boolean[] };
+    const normalized = items.map((item) => ({
+      sha256: item.contentSha256.toLowerCase(),
+      size: BigInt(item.size),
+    }));
+    const values = normalized.map((item) => Prisma.sql`(${item.sha256}, ${item.size})`);
+    const rows = await this.prisma.$queryRaw<Array<{ sha256: string; byteSize: bigint }>>(
+      Prisma.sql`
+        SELECT DISTINCT a.sha256, a."byteSize"
+        FROM "EagleAsset" a
+        WHERE a."ownerId"=${ownerId}
+          AND a."libraryMode"=${this.libraryMode}::"LibraryMode"
+          AND a."deletedAt" IS NULL
+          AND a."purgeAfter" IS NULL
+          ${includePrivate ? Prisma.empty : Prisma.sql`AND a."isPrivate"=false`}
+          AND (a.sha256, a."byteSize") IN (${Prisma.join(values)})
+      `,
+    );
+    const existing = new Set(rows.map((row) => `${row.sha256}:${row.byteSize.toString()}`));
+    return {
+      exists: normalized.map((item) => existing.has(`${item.sha256}:${item.size.toString()}`)),
+    };
+  }
+
   async getSession(ownerId: string, uploadSessionId: string) {
     const session = await this.prisma.uploadSession.findFirst({
       where: { id: uploadSessionId, uploaderId: ownerId, libraryMode: this.libraryMode },

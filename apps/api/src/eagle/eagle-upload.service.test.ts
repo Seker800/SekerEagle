@@ -6,6 +6,31 @@ import { EagleUploadService } from './eagle-upload.service';
 const ownerId = '5a1fd7d1-fd57-4e42-83f7-55425ca8704a';
 const sessionId = '13e84291-8ad7-4c44-aa76-29a45ce058b2';
 
+test('batch content checks return one boolean per submitted item with one query', async () => {
+  let queries = 0;
+  const service = new EagleUploadService(
+    {
+      $queryRaw: async () => {
+        queries++;
+        return [{ sha256: 'a'.repeat(64), byteSize: 100n }];
+      },
+    } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    'PHOTO',
+  );
+
+  const result = await service.checkContentBatch(ownerId, [
+    { contentSha256: 'A'.repeat(64), size: 100 },
+    { contentSha256: 'b'.repeat(64), size: 200 },
+    { contentSha256: 'a'.repeat(64), size: 100 },
+  ]);
+
+  assert.deepEqual(result, { exists: [true, false, true] });
+  assert.equal(queries, 1);
+});
+
 test('lists uploaded multipart parts for resumable clients', async () => {
   const storage = {
     listMultipartUploadParts: async () => [

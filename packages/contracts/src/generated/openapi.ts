@@ -1220,6 +1220,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/uploads/check-content-batch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleUploadController_checkContentBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/uploads/{uploadSessionId}': {
     parameters: {
       query?: never;
@@ -3460,6 +3476,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/uploads/check-content-batch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoUploadsController_checkContentBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/uploads/{uploadSessionId}': {
     parameters: {
       query?: never;
@@ -4657,6 +4689,13 @@ export interface components {
     CheckUploadContentResultDto: {
       /** @description Content exists within the authenticated owner, library and visible scope. */
       exists: boolean;
+    };
+    CheckUploadContentBatchDto: {
+      items: components['schemas']['CheckUploadContentDto'][];
+    };
+    CheckUploadContentBatchResultDto: {
+      /** @description One result per request item, in order; content visible to the authenticated owner and library. */
+      exists: boolean[];
     };
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
@@ -6903,6 +6942,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CheckUploadContentResultDto'];
+        };
+      };
+    };
+  };
+  EagleUploadController_checkContentBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CheckUploadContentBatchDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckUploadContentBatchResultDto'];
         };
       };
     };
@@ -10421,6 +10483,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CheckUploadContentResultDto'];
+        };
+      };
+    };
+  };
+  PhotoUploadsController_checkContentBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CheckUploadContentBatchDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CheckUploadContentBatchResultDto'];
         };
       };
     };

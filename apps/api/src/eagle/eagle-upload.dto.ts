@@ -116,3 +116,22 @@ export class CheckUploadContentResultDto {
   })
   exists!: boolean;
 }
+
+export class CheckUploadContentBatchDto {
+  @ApiProperty({ type: [CheckUploadContentDto], maxItems: 500 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(500)
+  @ValidateNested({ each: true })
+  @Type(() => CheckUploadContentDto)
+  items!: CheckUploadContentDto[];
+}
+
+export class CheckUploadContentBatchResultDto {
+  @ApiProperty({
+    type: [Boolean],
+    description:
+      'One result per request item, in order; content visible to the authenticated owner and library.',
+  })
+  exists!: boolean[];
+}

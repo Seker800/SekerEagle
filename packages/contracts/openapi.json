@@ -3463,6 +3463,43 @@
         "tags": ["eagle-uploads"]
       }
     },
+    "/api/eagle/uploads/check-content-batch": {
+      "post": {
+        "operationId": "EagleUploadController_checkContentBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckUploadContentBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckUploadContentBatchResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads"]
+      }
+    },
     "/api/eagle/uploads/{uploadSessionId}": {
       "get": {
         "operationId": "EagleUploadController_getSession",
@@ -8984,6 +9021,43 @@
         "tags": ["eagle-uploads", "photo-uploads"]
       }
     },
+    "/api/photos/uploads/check-content-batch": {
+      "post": {
+        "operationId": "PhotoUploadsController_checkContentBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckUploadContentBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckUploadContentBatchResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads", "photo-uploads"]
+      }
+    },
     "/api/photos/uploads/{uploadSessionId}": {
       "get": {
         "operationId": "PhotoUploadsController_getSession",
@@ -11762,6 +11836,32 @@
           "exists": {
             "type": "boolean",
             "description": "Content exists within the authenticated owner, library and visible scope."
+          }
+        },
+        "required": ["exists"]
+      },
+      "CheckUploadContentBatchDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckUploadContentDto"
+            }
+          }
+        },
+        "required": ["items"]
+      },
+      "CheckUploadContentBatchResultDto": {
+        "type": "object",
+        "properties": {
+          "exists": {
+            "description": "One result per request item, in order; content visible to the authenticated owner and library.",
+            "type": "array",
+            "items": {
+              "type": "boolean"
+            }
           }
         },
         "required": ["exists"]

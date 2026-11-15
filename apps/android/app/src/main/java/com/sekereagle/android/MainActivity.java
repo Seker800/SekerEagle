@@ -24,6 +24,7 @@ public final class MainActivity extends Activity {
   private WebView web;
   private BackupScreen backup;
   private CleanupScreen cleanup;
+  private final CleanupSession cleanupSession = new CleanupSession();
   private String currentTab = "library", activeScope = "", pendingTreeScope = "";
   private boolean resumed, checking, autoPending, backPending;
   private final java.util.ArrayDeque<String> nativeBackStack = new java.util.ArrayDeque<>();
@@ -233,7 +234,7 @@ public final class MainActivity extends Activity {
       body.addView(backup, new LinearLayout.LayoutParams(-1, -1));
       checkIdentity();
     } else if (tab.equals("cleanup")) {
-      cleanup = new CleanupScreen(this, settings, activeScope, io);
+      cleanup = new CleanupScreen(this, settings, activeScope, io, cleanupSession);
       body.addView(cleanup, new LinearLayout.LayoutParams(-1, -1));
     } else serverScreen();
   }
@@ -317,6 +318,7 @@ public final class MainActivity extends Activity {
                 cancelBackup();
                 settings.origin(next);
                 activeScope = "";
+                cleanupSession.clear();
                 nextCheck = 0;
                 autoPending = true;
                 web.loadUrl(next);
@@ -347,6 +349,7 @@ public final class MainActivity extends Activity {
                   if (!origin.equals(settings.origin()) || !resumed) return;
                   if (!scope.equals(activeScope)) {
                     cancelBackup();
+                    cleanupSession.clear();
                     activeScope = scope;
                     settings.active(scope);
                     autoPending = true;
@@ -375,6 +378,7 @@ public final class MainActivity extends Activity {
                           && ((NativeSession.Failure) e).getStatus() == 401)) {
                     cancelBackup();
                     activeScope = "";
+                    cleanupSession.clear();
                     settings.active("");
                     if (backup != null && !backup.scope.isEmpty()) show("backup");
                   }

@@ -19,6 +19,8 @@ import { PatScopeGuard } from '../auth/pat-scope.guard';
 import { RequirePatScopes } from '../auth/required-scopes';
 import type { AuthPrincipal } from '../auth/auth.types';
 import {
+  CheckUploadContentBatchDto,
+  CheckUploadContentBatchResultDto,
   CheckUploadContentDto,
   CheckUploadContentResultDto,
   CompleteEagleUploadDto,
@@ -53,6 +55,20 @@ export class EagleUploadController {
     @Body() input: CheckUploadContentDto,
   ): Promise<CheckUploadContentResultDto> {
     return this.uploads.checkContent(principal.sub, input, principal.canViewPrivate === true);
+  }
+
+  @Post('check-content-batch')
+  @ApiCreatedResponse({ type: CheckUploadContentBatchResultDto })
+  @UseGuards(BrowserOrPatOriginGuard)
+  checkContentBatch(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: CheckUploadContentBatchDto,
+  ): Promise<CheckUploadContentBatchResultDto> {
+    return this.uploads.checkContentBatch(
+      principal.sub,
+      input.items,
+      principal.canViewPrivate === true,
+    );
   }
 
   @Get(':uploadSessionId')

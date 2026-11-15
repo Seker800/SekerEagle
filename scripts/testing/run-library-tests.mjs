@@ -270,6 +270,7 @@ try {
     'scripts/testing/workspace-change-performance.test.mjs',
     'scripts/testing/upload-recovery-performance.test.mjs',
     'scripts/testing/upload-finalization-queue.test.mjs',
+    'scripts/testing/upload-content-check-batch.test.mjs',
     'scripts/testing/empty-trash-performance.test.mjs',
     'scripts/testing/empty-trash-budget.test.mjs',
     'scripts/testing/embedding-publication-performance.test.mjs',

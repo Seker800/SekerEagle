@@ -27,17 +27,37 @@ public final class CleanupEngine {
     this.guard = guard;
   }
 
-  public Candidate check(String scope, String mode, BackupEngine.File file) throws Exception {
+  /**
+   * Fast eligibility from the confirmed backup receipt and the file's current size/modified time.
+   * It never reads the original bytes; the caller confirms server visibility in one batch.
+   */
+  public Candidate local(String scope, String mode, BackupEngine.File file) throws Exception {
     if (scope.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL")))
       throw new IllegalArgumentException("清理作用域无效");
     guard.check();
     if (file.size <= 0 || file.modified <= 0) return null;
     BackupEngine.Checkpoint cp = store.load(BackupEngine.fileKey(scope, mode, file));
     if (cp == null || !cp.confirmed || !cp.hash.matches("[a-f0-9]{64}")) return null;
+    try {
+      if (!file.stable.check()) return null;
+    } catch (Exception unstable) {
+      guard.check();
+      return null;
+    }
+    guard.check();
+    return new Candidate(file, mode, cp.hash);
+  }
+
+  public Candidate check(String scope, String mode, BackupEngine.File file) throws Exception {
+    if (scope.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL")))
+      throw new IllegalArgumentException("清理作用域无效");
+    guard.check();
+    Candidate candidate = local(scope, mode, file);
+    if (candidate == null) return null;
     String hash;
     try {
       hash = file.hash.read();
-      if (!hash.equals(cp.hash) || !file.stable.check()) return null;
+      if (!hash.equals(candidate.hash) || !file.stable.check()) return null;
     } catch (Exception unreadable) {
       // A changed, revoked or unreadable local file is retained; only the rest of the plan
       // should continue. Cancellation from the surrounding task still wins.
