@@ -332,17 +332,20 @@ export function PhotoWatermarkPanel({
           </button>
         )}
         {selected && (
-          <button
-            ref={settingsButton}
-            type="button"
-            className={styles.watermarkEditAction}
-            aria-label={t('编辑水印文字')}
-            disabled={disabled}
-            onClick={() => setSettingsOpen(true)}
-          >
-            <IconPencil size={14} />
-            {t('编辑文字')}
-          </button>
+          <>
+            <span className={styles.watermarkCapabilityDivider} aria-hidden="true" />
+            <button
+              ref={settingsButton}
+              type="button"
+              className={styles.watermarkEditAction}
+              aria-label={t('编辑水印文字')}
+              disabled={disabled}
+              onClick={() => setSettingsOpen(true)}
+            >
+              <IconPencil size={14} />
+              {t('编辑文字')}
+            </button>
+          </>
         )}
       </ScrollableToolRow>
       <ScrollableToolRow className={styles.watermarkCategories} label={t('水印分类')}>
