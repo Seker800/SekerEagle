@@ -288,6 +288,42 @@ describe('watermark typography and content hierarchy', () => {
     for (const text of ['FUJIFILM X-E5', '2026.10.19']) expect(texts).toContain(text);
     expect(texts.some((text) => text.includes('35mm'))).toBe(true);
   });
+  it('splits the vertical rail into camera/website and parameters/date ends', () => {
+    const drawn: { text: string; worldY: number }[] = [];
+    renderPhotoWatermark(
+      asHTML(createCanvas(1600, 1000)),
+      {
+        ...DEFAULT_PHOTO_EDITS,
+        watermark: 'photo-side',
+        watermarkWebsite: 'PHOTO.EXAMPLE.COM',
+        watermarkShowTime: true,
+      },
+      {
+        camera: 'FUJIFILM X-E5',
+        parameters: '35mm · f/2.8 · 1/250s · ISO 400',
+        capturedAt: '2026.10.19 10:30',
+      },
+      () => {
+        const canvas = createCanvas(1, 1),
+          context = canvas.getContext('2d');
+        const original = context.fillText.bind(context);
+        vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
+          const matrix = context.getTransform();
+          drawn.push({ text: String(text), worldY: matrix.b * x + matrix.d * y + matrix.f });
+          original(text, x, y);
+        });
+        return asHTML(canvas);
+      },
+    );
+    const worldY = (text: string) => drawn.find((entry) => entry.text.includes(text))!.worldY;
+    const camera = worldY('FUJIFILM'),
+      site = worldY('PHOTO.EXAMPLE.COM'),
+      parameters = worldY('35mm'),
+      time = worldY('2026.10.19');
+    expect(Math.abs(camera - site)).toBeLessThan(1);
+    expect(Math.abs(parameters - time)).toBeLessThan(1);
+    expect(site).toBeGreaterThan(parameters);
+  });
   it('keeps the date visible for a right-aligned signature', () => {
     expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');
   });

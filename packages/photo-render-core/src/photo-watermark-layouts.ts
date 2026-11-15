@@ -44,7 +44,9 @@ const painters: Record<WatermarkStyle, Painter> = {
     c.rotate(-Math.PI / 2);
     const railWidth = p.height * 0.88,
       railHeight = p.width * 0.8;
-    textBlock(d, [heading(d, d.camera, s * 0.78)], {
+    // Same two-group rhythm as the photo strip: camera/website and parameters/date
+    // stay on opposite ends of the rail instead of stacking three lines together.
+    textBlock(d, [heading(d, d.camera, s * 0.78), website(d)], {
       x: -railWidth / 2,
       y: -railHeight / 2,
       width: railWidth * 0.42,
@@ -52,11 +54,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     });
     textBlock(
       d,
-      [
-        { value: fields(d).join('  /  '), size: s * 0.6 },
-        secondary(d, d.time, s * 0.48),
-        website(d),
-      ],
+      [{ value: fields(d).join('  /  '), size: s * 0.6 }, secondary(d, d.time, s * 0.48)],
       { x: 0, y: -railHeight / 2, width: railWidth / 2, height: railHeight, align: 'right' },
     );
     c.restore();
