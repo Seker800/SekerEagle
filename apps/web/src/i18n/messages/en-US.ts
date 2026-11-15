@@ -1945,6 +1945,7 @@ export const enUS = {
   机型黑字: 'Black camera label',
   时间白字: 'White time label',
   时间黑字: 'Black time label',
+  点击切换: 'Click to switch',
   白底: 'White background',
   黑底: 'Black background',
   照片没有拍摄参数信息: 'This photo has no capture parameters',

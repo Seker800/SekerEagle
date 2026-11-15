@@ -139,15 +139,15 @@ it('merges signature alignment into controls instead of separate layouts', () =>
   expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
 });
 
-it('sets camera and time corner colors independently from the background theme', () => {
+it('cycles camera and time corner colors independently from the background theme', () => {
   const { props, view, onChange } = setup();
   const side = { ...props.edits, watermark: 'photo-side' };
   view.rerender(<PhotoWatermarkPanel {...props} edits={side} />);
   for (const name of ['机型白字', '时间白字', '白底'])
-    expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true');
-  fireEvent.click(screen.getByRole('button', { name: '机型黑字' }));
+    expect(screen.getByRole('button', { name })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '机型白字' }));
   expect(onChange).toHaveBeenCalledWith({ watermarkCameraColor: 'black' });
-  fireEvent.click(screen.getByRole('button', { name: '时间黑字' }));
+  fireEvent.click(screen.getByRole('button', { name: '时间白字' }));
   expect(onChange).toHaveBeenCalledWith({ watermarkTimeColor: 'black' });
   view.rerender(
     <PhotoWatermarkPanel
@@ -155,9 +155,11 @@ it('sets camera and time corner colors independently from the background theme',
       edits={{ ...side, watermarkCameraColor: 'black', watermarkTimeColor: 'white' }}
     />,
   );
-  expect(screen.getByRole('button', { name: '机型黑字' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: '时间白字' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: '白底' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '机型黑字' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '时间白字' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '白底' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '机型黑字' }));
+  expect(onChange).toHaveBeenCalledWith({ watermarkCameraColor: 'white' });
 });
 
 it('lets every watermark toggle a website and edit its text without applying a cancelled draft', () => {
@@ -308,20 +310,21 @@ it('offers exactly camera, parameters, time and website, without a signature or 
   expect(DEFAULT_PHOTO_EDITS).not.toHaveProperty('watermarkScale');
 });
 
-it('offers frosted backgrounds for framed layouts and normalizes the theme for text overlays', () => {
+it('cycles themes with one button and normalizes overlays to text colors', () => {
   const { props, view, onChange } = setup();
-  view.rerender(
-    <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-strip' }} />,
-  );
-  fireEvent.click(screen.getByRole('button', { name: '毛玻璃底' }));
+  const strip = { ...props.edits, watermark: 'photo-strip' };
+  view.rerender(<PhotoWatermarkPanel {...props} edits={strip} />);
+  expect(screen.getByRole('button', { name: '白底' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '白底' }));
+  expect(onChange).toHaveBeenLastCalledWith({ watermarkTheme: 'black' });
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...strip, watermarkTheme: 'black' }} />);
+  expect(screen.getByRole('button', { name: '黑底' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '黑底' }));
   expect(onChange).toHaveBeenLastCalledWith({ watermarkTheme: 'frosted' });
-  view.rerender(
-    <PhotoWatermarkPanel
-      {...props}
-      edits={{ ...props.edits, watermark: 'photo-strip', watermarkTheme: 'frosted' }}
-    />,
-  );
-  expect(screen.getByRole('button', { name: '毛玻璃底' })).toHaveAttribute('aria-pressed', 'true');
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...strip, watermarkTheme: 'frosted' }} />);
+  expect(screen.getByRole('button', { name: '毛玻璃底' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '毛玻璃底' }));
+  expect(onChange).toHaveBeenLastCalledWith({ watermarkTheme: 'white' });
   fireEvent.click(screen.getByRole('button', { name: '简洁叠印' }));
   expect(onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({ watermark: 'standard-left', watermarkTheme: 'white' }),
@@ -329,5 +332,15 @@ it('offers frosted backgrounds for framed layouts and normalizes the theme for t
   view.rerender(
     <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'standard-left' }} />,
   );
+  expect(screen.getByRole('button', { name: '白字' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '毛玻璃底' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '白字' }));
+  expect(onChange).toHaveBeenLastCalledWith({ watermarkTheme: 'black' });
+  view.rerender(
+    <PhotoWatermarkPanel
+      {...props}
+      edits={{ ...props.edits, watermark: 'standard-left', watermarkTheme: 'black' }}
+    />,
+  );
+  expect(screen.getByRole('button', { name: '黑字' })).toBeInTheDocument();
 });

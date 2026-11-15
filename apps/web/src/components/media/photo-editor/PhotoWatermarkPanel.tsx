@@ -6,6 +6,7 @@ import {
   IconAlignLeft,
   IconAlignCenter,
   IconAlignRight,
+  IconRefresh,
 } from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
@@ -212,72 +213,61 @@ export function PhotoWatermarkPanel({
     setSettingsOpen(false);
     settingsButton.current?.focus();
   };
+  const themeOptions: PhotoEdits['watermarkTheme'][] = selected?.theme
+    ? selected.overlay
+      ? ['white', 'black']
+      : ['white', 'black', 'frosted']
+    : [];
+  const currentTheme = themeOptions.includes(edits.watermarkTheme) ? edits.watermarkTheme : 'white';
+  const nextTheme = themeOptions[(themeOptions.indexOf(currentTheme) + 1) % themeOptions.length];
+  const themeLabel = selected?.overlay
+    ? currentTheme === 'black'
+      ? t('黑字')
+      : t('白字')
+    : currentTheme === 'frosted'
+      ? t('毛玻璃底')
+      : currentTheme === 'black'
+        ? t('黑底')
+        : t('白底');
   return (
     <>
       <ScrollableToolRow className={styles.watermarkCapabilities} label={t('水印设置')}>
         {selected?.theme && (
-          <>
-            <button
-              type="button"
-              aria-pressed={edits.watermarkTheme === 'white'}
-              disabled={disabled}
-              onClick={() => onChange({ watermarkTheme: 'white' })}
-            >
-              {selected.overlay ? t('白字') : t('白底')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={edits.watermarkTheme === 'black'}
-              disabled={disabled}
-              onClick={() => onChange({ watermarkTheme: 'black' })}
-            >
-              {selected.overlay ? t('黑字') : t('黑底')}
-            </button>
-            {!selected.overlay && (
-              <button
-                type="button"
-                aria-pressed={edits.watermarkTheme === 'frosted'}
-                disabled={disabled}
-                onClick={() => onChange({ watermarkTheme: 'frosted' })}
-              >
-                {t('毛玻璃底')}
-              </button>
-            )}
-          </>
+          <button
+            type="button"
+            disabled={disabled}
+            title={t('点击切换')}
+            onClick={() => nextTheme && onChange({ watermarkTheme: nextTheme })}
+          >
+            <IconRefresh size={14} />
+            {themeLabel}
+          </button>
         )}
         {selected?.style === 'side' && (
           <>
             <button
               type="button"
-              aria-pressed={edits.watermarkCameraColor === 'white'}
               disabled={disabled}
-              onClick={() => onChange({ watermarkCameraColor: 'white' })}
+              title={t('点击切换')}
+              onClick={() =>
+                onChange({
+                  watermarkCameraColor: edits.watermarkCameraColor === 'white' ? 'black' : 'white',
+                })
+              }
             >
-              {t('机型白字')}
+              {edits.watermarkCameraColor === 'black' ? t('机型黑字') : t('机型白字')}
             </button>
             <button
               type="button"
-              aria-pressed={edits.watermarkCameraColor === 'black'}
               disabled={disabled}
-              onClick={() => onChange({ watermarkCameraColor: 'black' })}
+              title={t('点击切换')}
+              onClick={() =>
+                onChange({
+                  watermarkTimeColor: edits.watermarkTimeColor === 'white' ? 'black' : 'white',
+                })
+              }
             >
-              {t('机型黑字')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={edits.watermarkTimeColor === 'white'}
-              disabled={disabled}
-              onClick={() => onChange({ watermarkTimeColor: 'white' })}
-            >
-              {t('时间白字')}
-            </button>
-            <button
-              type="button"
-              aria-pressed={edits.watermarkTimeColor === 'black'}
-              disabled={disabled}
-              onClick={() => onChange({ watermarkTimeColor: 'black' })}
-            >
-              {t('时间黑字')}
+              {edits.watermarkTimeColor === 'black' ? t('时间黑字') : t('时间白字')}
             </button>
           </>
         )}
