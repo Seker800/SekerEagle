@@ -470,7 +470,7 @@ final class CleanupScreen extends ScrollView {
       guard(token);
       if (request != null)
         activity.startIntentSenderForResult(request.getIntentSender(), DELETE_REQUEST, null, 0, 0, 0);
-      else deleteDocuments(token, documents, 0, new ArrayList<>());
+      else deleteDocuments(token, documents, 0, new ArrayList<>(), 0);
     } catch (Exception e) {
       fail(token, e);
     }
@@ -494,26 +494,36 @@ final class CleanupScreen extends ScrollView {
     final List<Entry> documents = new ArrayList<>(session.pendingDocuments);
     io.execute(
         () -> {
-          int trashed = 0;
+          int released = 0, movedToTrash = 0;
           List<Entry> kept = new ArrayList<>();
           for (Entry entry : media) {
             try (android.database.Cursor cursor =
                 activity
                     .getContentResolver()
                     .query(entry.item.uri, new String[] {"_id", "is_trashed"}, null, null, null)) {
-              if (cursor != null && cursor.moveToFirst() && cursor.getInt(1) == 1) trashed++;
-              else kept.add(entry);
+              if (cursor == null) {
+                kept.add(entry);
+              } else if (!cursor.moveToFirst()) {
+                // The provider removed the row: the file is already gone.
+                released++;
+              } else if (cursor.getInt(1) == 1) {
+                released++;
+                movedToTrash++;
+              } else {
+                kept.add(entry);
+              }
             } catch (Exception error) {
               kept.add(entry);
             }
           }
-          deleteDocuments(token, documents, trashed, kept);
+          deleteDocuments(token, documents, released, kept, movedToTrash);
         });
   }
 
-  private void deleteDocuments(int token, List<Entry> entries, int trashedMedia, List<Entry> keptMedia) {
+  private void deleteDocuments(
+      int token, List<Entry> entries, int releasedMedia, List<Entry> keptMedia, int movedToTrash) {
     if (entries.isEmpty()) {
-      activity.runOnUiThread(() -> finishBatch(token, trashedMedia, 0, Collections.emptyList(), keptMedia));
+      activity.runOnUiThread(() -> finishBatch(token, releasedMedia, 0, Collections.emptyList(), keptMedia, movedToTrash));
       return;
     }
     io.execute(
@@ -553,12 +563,17 @@ final class CleanupScreen extends ScrollView {
           }
           int count = deleted;
           List<Entry> keep = failed;
-          activity.runOnUiThread(() -> finishBatch(token, trashedMedia, count, keep, keptMedia));
+          activity.runOnUiThread(() -> finishBatch(token, releasedMedia, count, keep, keptMedia, movedToTrash));
         });
   }
 
   private void finishBatch(
-      int token, int releasedMedia, int releasedDocuments, List<Entry> failedDocuments, List<Entry> keptMedia) {
+      int token,
+      int releasedMedia,
+      int releasedDocuments,
+      List<Entry> failedDocuments,
+      List<Entry> keptMedia,
+      int movedToTrash) {
     if (token != generation || !isAttachedToWindow()) return;
     List<Entry> released = new ArrayList<>(session.pendingMedia);
     released.removeAll(keptMedia);
@@ -611,6 +626,7 @@ final class CleanupScreen extends ScrollView {
             + (failedDocuments.size() + keptMedia.size() > 0
                 ? "；" + (failedDocuments.size() + keptMedia.size()) + " 个未删除或已变化，已保留在计划中"
                 : "")
+            + (movedToTrash > 0 ? "；" + movedToTrash + " 个在系统回收站，清空后释放空间" : "")
             + "。可继续释放下一批。");
     action.setText("继续释放剩余 " + plan.size() + " 个");
     action.setEnabled(true);
