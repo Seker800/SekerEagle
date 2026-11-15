@@ -41,15 +41,16 @@ const painters: Record<WatermarkStyle, Painter> = {
     // Tight corner margins and one rail column: camera/time share the left edge,
     // parameters/website share the rail baseline and type size.
     const pad = Math.min(l.referenceWidth * 0.03, l.photoHeight * 0.045),
-      body = s * 0.6;
-    textBlock(d, [{ value: d.camera, size: s * 0.85 }], {
+      body = s * 0.6,
+      corner = d.edits.watermarkCornerColor === 'black' ? '#000000' : '#ffffff';
+    textBlock(d, [{ value: d.camera, size: s * 0.85, color: corner }], {
       x: pad,
       y: pad,
       width: l.photoWidth - pad * 2,
       height: s * 1.3,
       vertical: 'start',
     });
-    textBlock(d, [{ value: d.time, size: body }], {
+    textBlock(d, [{ value: d.time, size: body, color: corner }], {
       x: pad,
       y: l.photoHeight - pad - s * 1.3,
       width: l.photoWidth - pad * 2,

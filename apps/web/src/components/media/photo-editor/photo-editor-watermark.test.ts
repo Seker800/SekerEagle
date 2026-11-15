@@ -355,6 +355,46 @@ describe('watermark typography and content hierarchy', () => {
     expect(Math.abs(box('FUJIFILM').top - box('35mm').top)).toBeLessThan(8);
     expect(Math.abs(box('2026.10.19').bottom - box('PHOTO.EXAMPLE.COM').bottom)).toBeLessThan(8);
   });
+  it('keeps the vertical rail corner text white by default and switches it independently', () => {
+    const render = (corner: 'white' | 'black', theme: 'white' | 'black') => {
+      const drawn: { text: string; fill: string }[] = [];
+      renderPhotoWatermark(
+        asHTML(createCanvas(1600, 1000)),
+        {
+          ...DEFAULT_PHOTO_EDITS,
+          watermark: 'photo-side',
+          watermarkTheme: theme,
+          watermarkCornerColor: corner,
+        },
+        {
+          camera: 'FUJIFILM X-E5',
+          parameters: '35mm · f/2.8 · 1/250s · ISO 400',
+          capturedAt: '2026.10.19 10:30',
+        },
+        () => {
+          const canvas = createCanvas(1, 1),
+            context = canvas.getContext('2d');
+          vi.spyOn(context, 'fillText').mockImplementation((text) => {
+            drawn.push({
+              text: String(text),
+              fill: typeof context.fillStyle === 'string' ? context.fillStyle : '',
+            });
+          });
+          return asHTML(canvas);
+        },
+      );
+      const byText = (text: string) => drawn.find((entry) => entry.text.includes(text))!;
+      return { byText, drawn };
+    };
+    const whiteTheme = render('white', 'white');
+    for (const text of ['FUJIFILM', '2026.10.19'])
+      expect(whiteTheme.byText(text).fill).toBe('#ffffff');
+    expect(whiteTheme.byText('35mm').fill).toBe('#000000');
+    const blackTheme = render('black', 'black');
+    for (const text of ['FUJIFILM', '2026.10.19'])
+      expect(blackTheme.byText(text).fill).toBe('#000000');
+    expect(blackTheme.byText('35mm').fill).toBe('#ffffff');
+  });
   it('keeps the date visible for a right-aligned signature', () => {
     expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');
   });

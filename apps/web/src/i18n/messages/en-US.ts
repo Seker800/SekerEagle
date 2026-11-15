@@ -1911,6 +1911,8 @@ export const enUS = {
   完成: 'Done',
   白字: 'White text',
   黑字: 'Black text',
+  角标白字: 'White corner text',
+  角标黑字: 'Black corner text',
   白底: 'White background',
   黑底: 'Black background',
   照片没有拍摄参数信息: 'This photo has no capture parameters',

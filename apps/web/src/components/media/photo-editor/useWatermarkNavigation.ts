@@ -6,10 +6,16 @@ import {
   type WatermarkCategory,
 } from './photo-watermark-model';
 
-// Keep every category contiguous even if the source catalog is later reordered.
-export const ORDERED_WATERMARK_TEMPLATES = WATERMARK_CATEGORIES.flatMap((category) =>
+// The two primary layouts lead the strip; category tabs remain shortcuts to the
+// first item of each category even when the catalog order is curated.
+const templates = WATERMARK_CATEGORIES.flatMap((category) =>
   WATERMARK_TEMPLATES.filter((template) => template.category === category.id),
 );
+const leading = ['photo-strip', 'photo-side'];
+export const ORDERED_WATERMARK_TEMPLATES = [
+  ...leading.flatMap((id) => templates.filter((template) => template.id === id)),
+  ...templates.filter((template) => !leading.includes(template.id)),
+];
 
 const items = [
   { id: 'none', group: 'landscape', anchor: false },

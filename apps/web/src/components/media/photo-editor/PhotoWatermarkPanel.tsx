@@ -245,6 +245,26 @@ export function PhotoWatermarkPanel({
             )}
           </>
         )}
+        {selected?.style === 'side' && (
+          <>
+            <button
+              type="button"
+              aria-pressed={edits.watermarkCornerColor === 'white'}
+              disabled={disabled}
+              onClick={() => onChange({ watermarkCornerColor: 'white' })}
+            >
+              {t('角标白字')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={edits.watermarkCornerColor === 'black'}
+              disabled={disabled}
+              onClick={() => onChange({ watermarkCornerColor: 'black' })}
+            >
+              {t('角标黑字')}
+            </button>
+          </>
+        )}
         {selected && (
           <button
             type="button"

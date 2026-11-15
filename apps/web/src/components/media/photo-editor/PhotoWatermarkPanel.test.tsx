@@ -64,8 +64,14 @@ it('keeps every watermark layout in one row when navigating categories without e
   expect(within(row).getAllByRole('button')).toHaveLength(WATERMARK_TEMPLATES.length + 1);
   for (const template of WATERMARK_TEMPLATES)
     expect(within(row).getByRole('button', { name: template.label })).toBeInTheDocument();
+  expect(
+    within(row)
+      .getAllByRole('button')
+      .slice(1, 3)
+      .map((button) => button.getAttribute('aria-label')),
+  ).toEqual(['摄影信息条', '纵向参数栏']);
   fireEvent.click(screen.getByRole('button', { name: '适合竖图' }));
-  expect(scrollTo).toHaveBeenLastCalledWith({ left: 400, behavior: 'smooth' });
+  expect(scrollTo).toHaveBeenLastCalledWith({ left: 200, behavior: 'smooth' });
   expect(screen.getByRole('button', { name: '适合竖图' })).toHaveAttribute('aria-pressed', 'true');
   expect(within(row).getByRole('button', { name: '摄影信息条' })).toBeInTheDocument();
   expect(within(row).getByRole('button', { name: '居中留白' })).toBeInTheDocument();
@@ -87,9 +93,12 @@ it('keeps the requested category active when its scroll target is clamped on a w
 it('follows manual scrolling across categories and includes the final category at the end', () => {
   const { row, onChange } = setup(200);
   fireEvent.wheel(row, { deltaY: 1 });
-  row.scrollLeft = 400;
+  row.scrollLeft = 200;
   fireEvent.scroll(row);
   expect(screen.getByRole('button', { name: '适合竖图' })).toHaveAttribute('aria-pressed', 'true');
+  row.scrollLeft = 400;
+  fireEvent.scroll(row);
+  expect(screen.getByRole('button', { name: '适合横图' })).toHaveAttribute('aria-pressed', 'true');
   row.scrollLeft = 600;
   fireEvent.scroll(row);
   expect(screen.getByRole('button', { name: '横竖通用' })).toHaveAttribute('aria-pressed', 'true');
@@ -128,6 +137,25 @@ it('merges signature alignment into controls instead of separate layouts', () =>
   );
   fireEvent.click(screen.getByRole('button', { name: '左对齐' }));
   expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
+});
+
+it('sets the vertical rail corner text color independently from its background theme', () => {
+  const { props, view, onChange } = setup();
+  view.rerender(
+    <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-side' }} />,
+  );
+  expect(screen.getByRole('button', { name: '角标白字' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '白底' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '角标黑字' }));
+  expect(onChange).toHaveBeenCalledWith({ watermarkCornerColor: 'black' });
+  view.rerender(
+    <PhotoWatermarkPanel
+      {...props}
+      edits={{ ...props.edits, watermark: 'photo-side', watermarkCornerColor: 'black' }}
+    />,
+  );
+  expect(screen.getByRole('button', { name: '角标黑字' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '白底' })).toHaveAttribute('aria-pressed', 'true');
 });
 
 it('lets every watermark toggle a website and edit its text without applying a cancelled draft', () => {
