@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { syncAssetPrivacy } from '@sekereagle/library-persistence';
+import { normalizeEmbedding } from '@sekereagle/vector-core';
 
 export async function mergeSelectedPeople(
   tx: Prisma.TransactionClient,
@@ -14,9 +15,9 @@ export async function mergeSelectedPeople(
   if (ids.length < 2 || !versions.has(targetId))
     throw new BadRequestException('请选择要合并的人物和保留目标。');
   const people = await tx.$queryRaw<
-    Array<{ id: string; rowVersion: number; marksAssetsPrivate: boolean }>
+    Array<{ id: string; rowVersion: number; marksAssetsPrivate: boolean; prototype: number[] }>
   >`
-    SELECT p.id,p."rowVersion",p."marksAssetsPrivate" FROM "EaglePhotoPerson" p
+    SELECT p.id,p."rowVersion",p."marksAssetsPrivate",p.prototype FROM "EaglePhotoPerson" p
     WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO' AND p.id=ANY(${ids}::text[])
       AND (${includePrivate} OR NOT p."marksAssetsPrivate")
       AND (EXISTS(SELECT 1 FROM "EaglePhotoFace" f JOIN "EagleAsset" a
@@ -51,9 +52,24 @@ export async function mergeSelectedPeople(
       skipDuplicates: true,
     });
   const marksAssetsPrivate = people.some((p) => p.marksAssetsPrivate);
+  const prototypes = people
+    .map((person) => person.prototype)
+    .filter((prototype) => prototype.length === 128);
+  const prototype = prototypes.length
+    ? normalizeEmbedding(
+        Array.from(
+          { length: 128 },
+          (_, index) => prototypes.reduce((sum, row) => sum + row[index]!, 0) / prototypes.length,
+        ),
+      )
+    : undefined;
   const target = await tx.eaglePhotoPerson.update({
     where: { id: targetId },
-    data: { marksAssetsPrivate, rowVersion: { increment: 1 } },
+    data: {
+      marksAssetsPrivate,
+      rowVersion: { increment: 1 },
+      ...(prototype ? { prototype } : {}),
+    },
     select: { id: true, rowVersion: true, marksAssetsPrivate: true },
   });
   await tx.$executeRaw`UPDATE "EaglePhotoFace" SET "personId"=${targetId},"userAssigned"=true

@@ -12,16 +12,23 @@ import {
 import { t } from '../../i18n';
 import {
   getPhotoPeopleReview,
+  listPhotoPeopleOptions,
   mergeSelectedPhotoPeople,
   decidePhotoPeople,
   type PhotoPerson,
+  type PhotoPersonOption,
   type PhotoPersonReview,
 } from '../../lib/photo-management-api';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { PhotoFaceImage, representativeFace } from './PhotoFaceImage';
+import { photoPersonLabel } from './photo-person-label';
 type ReviewPage = { items: PhotoPersonReview[]; nextCursor: string | null };
 type ReviewEdits = { removed: string[]; updates: Record<string, Partial<PhotoPerson>> };
 const PAGE_SIZE = 9;
+const reviewProgress = new Map<string, { batchIndex: number; visited: Set<string> }>();
+export function clearPhotoPeopleReviewProgress() {
+  reviewProgress.clear();
+}
 const configuredPrefetch = Number(import.meta.env.VITE_PHOTO_REVIEW_PREFETCH_PAGES ?? 1);
 const PREFETCH_PAGES =
   Number.isSafeInteger(configuredPrefetch) && configuredPrefetch > 0 ? configuredPrefetch : 0;
@@ -64,18 +71,37 @@ export function PhotoPeopleReview({
     queryFn: () => Promise.resolve({ removed: [], updates: {} }),
     initialData: { removed: [], updates: {} },
   }).data;
-  const [batchIndex, setBatchIndex] = useState(0);
-  const [visited, setVisited] = useState<Set<string>>(new Set());
+  const progressKey = JSON.stringify(queryKey);
+  const [batchIndex, setBatchIndex] = useState(
+    () => reviewProgress.get(progressKey)?.batchIndex ?? 0,
+  );
+  const [visited, setVisited] = useState<Set<string>>(
+    () => new Set(reviewProgress.get(progressKey)?.visited ?? []),
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [targetId, setTargetId] = useState('');
+  const [skipArmed, setSkipArmed] = useState(false);
   const [result, setResult] = useState<string | null>(null),
     [error, setError] = useState<string | null>(null),
     [saving, setSaving] = useState(false);
   const submitting = useRef(false);
+  useEffect(() => {
+    reviewProgress.set(progressKey, { batchIndex, visited: new Set(visited) });
+  }, [progressKey, batchIndex, visited]);
+  useEffect(() => {
+    const loaded = query.data?.pages.length ?? 0;
+    if (loaded > 0 && batchIndex >= loaded) {
+      setBatchIndex(loaded - 1);
+      setSelected(new Set());
+      setTargetId('');
+    }
+  }, [query.data?.pages.length, batchIndex]);
   const people = useMemo(() => {
     const distinct = new Map<string, PhotoPerson>();
+    const similarity = new Map<string, number>();
     for (const pair of query.data?.pages[batchIndex]?.items ?? []) {
       for (const person of [pair.first, pair.second]) {
+        similarity.set(person.id, Math.max(similarity.get(person.id) ?? 0, pair.similarity));
         if (
           distinct.has(person.id) ||
           edits.removed.includes(person.id) ||
@@ -93,17 +119,42 @@ export function PhotoPeopleReview({
     }
     return [...distinct.values()]
       .filter((person) => !visited.has(person.id))
-      .sort((a, b) => (b.photoCount ?? 0) - (a.photoCount ?? 0) || a.id.localeCompare(b.id));
+      .sort(
+        (a, b) =>
+          (similarity.get(b.id) ?? 0) - (similarity.get(a.id) ?? 0) ||
+          (b.photoCount ?? 0) - (a.photoCount ?? 0) ||
+          a.id.localeCompare(b.id),
+      );
   }, [query.data, batchIndex, visited, edits]);
   const cards = people.slice(0, PAGE_SIZE);
   const chosen = cards.filter((p) => selected.has(p.id));
+  const targets = useInfiniteQuery({
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleMergeTargets(
+      includePrivate,
+      scopeRevision,
+    ),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) => listPhotoPeopleOptions(pageParam, signal, 'NAMED'),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled: chosen.length > 0,
+    staleTime: 30000,
+    retry: false,
+  });
+  const choices = [
+    ...new Map<string, PhotoPerson | PhotoPersonOption>([
+      ...chosen.map((person) => [person.id, person] as const),
+      ...(targets.data?.pages.flatMap((page) => page.people) ?? []).map(
+        (person) => [person.id, person] as const,
+      ),
+    ]).values(),
+  ];
   const preferred = [...chosen].sort(
     (a, b) =>
       Number(Boolean(b.name)) - Number(Boolean(a.name)) ||
       (b.photoCount ?? 0) - (a.photoCount ?? 0) ||
       a.id.localeCompare(b.id),
   )[0];
-  const target = chosen.find((p) => p.id === targetId) ?? preferred;
+  const target = choices.find((p) => p.id === targetId) ?? preferred;
   const busy = pending || saving;
   const { fetchNextPage, hasNextPage, isFetching, isFetchNextPageError } = query;
   useEffect(() => {
@@ -187,17 +238,21 @@ export function PhotoPeopleReview({
     setSelected(new Set());
     setTargetId('');
   }
+  const members = target
+    ? [...chosen, ...(chosen.some((person) => person.id === target.id) ? [] : [target])]
+    : chosen;
   async function commit(kind: 'MERGE' | 'DIFFERENT') {
-    if (submitting.current || chosen.length < 2 || !target) return;
+    if (submitting.current || members.length < 2 || !target) return;
     submitting.current = true;
     setSaving(true);
     setError(null);
+    setSkipArmed(false);
     try {
       let privacy = false;
       if (kind === 'MERGE') {
         const merged = await mergeSelectedPhotoPeople({
           targetId: target.id,
-          people: chosen.map((p) => ({ id: p.id, rowVersion: p.rowVersion })),
+          people: members.map((p) => ({ id: p.id, rowVersion: p.rowVersion })),
         });
         if (isAcceptedOperation(merged)) {
           if (ownerId) observeAcceptedOperation(client, ownerId, 'PHOTO', merged);
@@ -207,7 +262,7 @@ export function PhotoPeopleReview({
           return;
         }
         applyPhotoPersonMerge(client, ownerId, merged);
-        privacy = merged.marksAssetsPrivate && chosen.some((p) => !p.marksAssetsPrivate);
+        privacy = merged.marksAssetsPrivate && members.some((p) => !p.marksAssetsPrivate);
         setResult(t('人物已合并'));
       } else {
         if (chosen.length !== 2) return;
@@ -256,6 +311,7 @@ export function PhotoPeopleReview({
     <section className="photo-people-review" aria-label={t('相似人物确认')}>
       <h3>{t('相似人物确认')}</h3>
       <p>{t('选择属于同一个人的分组，合并到保留的人物。每页显示 9 个分组。')}</p>
+      <p>{t('选两个时可以标记「不是同一个人」；选两个以上可以合并。')}</p>
       {(error || query.error) && <p role="alert">{error ?? query.error?.message}</p>}
       {result && <p role="status">{result}</p>}
       {query.isPending ? (
@@ -267,9 +323,9 @@ export function PhotoPeopleReview({
       ) : cards.length ? (
         <>
           <div className="photo-people-review-grid">
-            {cards.map((person, index) => {
+            {cards.map((person) => {
               const face = representativeFace(person)!;
-              const name = person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 });
+              const name = photoPersonLabel(person);
               return (
                 <article key={person.id} data-selected={selected.has(person.id)}>
                   <label>
@@ -285,6 +341,7 @@ export function PhotoPeopleReview({
                           else next.add(person.id);
                           return next;
                         });
+                        setSkipArmed(false);
                         setError(null);
                       }}
                     />
@@ -308,22 +365,36 @@ export function PhotoPeopleReview({
                 disabled={busy}
                 onChange={(e) => setTargetId(e.target.value)}
               >
-                {chosen.map((p) => (
+                {choices.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name ??
-                      t('未命名分组 {{value1}}', {
-                        value1: cards.findIndex((card) => card.id === p.id) + 1,
-                      })}{' '}
-                    · {t('{{value1}} 张照片', { value1: p.photoCount ?? 0 })}
+                    {photoPersonLabel(p, 'photoCount' in p && p.photoCount !== undefined)}
                   </option>
                 ))}
               </select>
+              {targets.isFetching && <span role="status">{t('正在加载人物…')}</span>}
+              {targets.error && (
+                <span role="alert">
+                  {targets.error.message}
+                  <button type="button" onClick={() => void targets.refetch()}>
+                    {t('重试')}
+                  </button>
+                </span>
+              )}
+              {targets.hasNextPage && (
+                <button
+                  type="button"
+                  disabled={targets.isFetchingNextPage}
+                  onClick={() => void targets.fetchNextPage()}
+                >
+                  {t('加载更多目标人物')}
+                </button>
+              )}
             </label>
           )}
           <div className="photo-people-review-actions">
             <button
               type="button"
-              disabled={busy || chosen.length < 2}
+              disabled={busy || members.length < 2}
               onClick={() => void commit('MERGE')}
             >
               {saving ? t('正在合并…') : t('合并所选人物')}
@@ -339,6 +410,11 @@ export function PhotoPeopleReview({
               type="button"
               disabled={busy}
               onClick={() => {
+                if (!skipArmed) {
+                  setSkipArmed(true);
+                  return;
+                }
+                setSkipArmed(false);
                 setSelected(new Set());
                 setTargetId('');
                 if (
@@ -351,21 +427,26 @@ export function PhotoPeopleReview({
                 setError(null);
               }}
             >
-              {t('下一组')}
+              {skipArmed ? t('再次点击跳过本组') : t('下一组')}
             </button>
           </div>
+          {isFetchNextPageError && (
+            <button type="button" disabled={isFetching} onClick={() => void fetchNextPage()}>
+              {t('继续查找相似人物')}
+            </button>
+          )}
         </>
-      ) : query.hasNextPage ? (
+      ) : query.hasNextPage || isFetchNextPageError ? (
         <>
           <p role="status">{t('正在查找相似人物…')}</p>
-          {query.isFetchNextPageError && (
+          {isFetchNextPageError && (
             <button type="button" disabled={isFetching} onClick={() => void fetchNextPage()}>
               {t('继续查找相似人物')}
             </button>
           )}
         </>
       ) : (
-        <p>{t('暂时没有需要确认的相似人物。')}</p>
+        <p>{t('暂时没有需要确认的相似分组。如果还没分析过，请先点右上角「分析人物」。')}</p>
       )}
     </section>
   );

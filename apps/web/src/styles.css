@@ -1109,6 +1109,12 @@ select:focus-visible {
   flex-wrap: wrap;
   gap: 12px;
 }
+.photo-collections-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .photo-person-grid,
 .photo-group-grid {
   display: flex;
@@ -1159,10 +1165,53 @@ select:focus-visible {
   padding: 16px;
   border-top: 1px solid #9993;
 }
+.photo-person-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.photo-person-editor-header h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .photo-person-editor form {
   display: flex;
   gap: 10px;
   margin: 12px 0;
+}
+.photo-face-batch-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.photo-face-batch-actions > span {
+  color: #a0a3ad;
+  font-size: 12px;
+}
+.photo-face-select-card {
+  position: relative;
+  min-width: 0;
+}
+.photo-face-select-card > input {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+}
+.photo-face-select-card > button {
+  width: 100%;
+  padding: 4px;
+}
+.photo-face-select-card .photo-face-crop {
+  width: 140px;
+  height: 140px;
+  margin: auto;
+  border-radius: var(--ui-radius-control);
 }
 
 .photo-collections button {

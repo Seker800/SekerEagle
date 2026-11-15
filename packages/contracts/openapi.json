@@ -7786,6 +7786,15 @@
               "type": "string",
               "enum": ["full", "cards", "options"]
             }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7867,6 +7876,15 @@
             "schema": {
               "type": "string",
               "enum": ["full", "cards", "options"]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 120,
+              "type": "string"
             }
           }
         ],
@@ -8098,6 +8116,35 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ReassignFaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleOperationSummaryResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/faces/batch": {
+      "post": {
+        "operationId": "PhotoManagementController_batchFaces",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceBatchDto"
               }
             }
           }
@@ -12088,6 +12135,23 @@
             "nullable": true
           }
         }
+      },
+      "FaceBatchDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "action": {
+            "type": "string",
+            "enum": ["SPLIT", "REMOVE"]
+          }
+        },
+        "required": ["ids", "action"]
       },
       "GroupMembersDto": {
         "type": "object",

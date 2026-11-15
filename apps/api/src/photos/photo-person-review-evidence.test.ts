@@ -19,8 +19,13 @@ const sample = (
   embedding: vector(cosine, axis),
 });
 const pair = { firstId: 'a', secondId: 'b' };
-test('low similarity and conflicting evidence are ranked rather than discarded', () => {
-  for (const score of [0.25, 0.3, 0.4, 0.55, 0.599, 0.7])
+test('implausible splits are discarded and conflicting evidence cannot corroborate', () => {
+  for (const score of [0.25, 0.299])
+    assert.equal(
+      qualifyPersonReviewPairs([pair], [sample('a', 'a', 1), sample('b', 'b', score)]).length,
+      0,
+    );
+  for (const score of [0.3, 0.4, 0.55, 0.599, 0.7])
     assert.equal(
       qualifyPersonReviewPairs([pair], [sample('a', 'a', 1), sample('b', 'b', score)]).length,
       1,
@@ -67,7 +72,7 @@ test('invalid, unsupported, same-photo and duplicate samples never create corrob
     1,
   );
 });
-test('photo count outranks similarity without discarding other candidates', () => {
+test('similarity ranks before photo count and weaker candidates remain available', () => {
   const rows = qualifyPersonReviewPairs(
     [
       { ...pair, firstCount: 9999n },
@@ -76,7 +81,7 @@ test('photo count outranks similarity without discarding other candidates', () =
     [sample('a', 'a', 1), sample('b', 'b', 0.7), sample('c', 'c', 0.9)],
   );
   assert.equal(rows.length, 2);
-  assert.equal(rows[0]?.secondId, 'b');
+  assert.equal(rows[0]?.secondId, 'c');
 });
 
 test('confidence and photo volume improve the rank without hiding weaker pairs', () => {

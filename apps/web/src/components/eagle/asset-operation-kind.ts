@@ -38,6 +38,7 @@ const commandTitles = new Map<string, () => string>([
   ['PHOTO_PEOPLE_MERGE_SELECTED', () => t('合并所选分组')],
   ['PHOTO_PEOPLE_REVIEW', () => t('相似人物确认')],
   ['PHOTO_FACE_REASSIGN', () => t('人物')],
+  ['PHOTO_FACE_BATCH', () => t('整理人脸')],
   ['PHOTO_GROUPS_SCAN', () => t('照片')],
   ['PHOTO_GROUP_CREATE', () => t('照片')],
   ['PHOTO_GROUP_REMOVE_MEMBERS', () => t('照片')],

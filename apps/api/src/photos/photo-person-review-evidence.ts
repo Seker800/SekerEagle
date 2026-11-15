@@ -3,6 +3,11 @@ import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
 import { normalizeEmbedding } from '@sekereagle/vector-core';
 
 export const PERSON_REVIEW_SAMPLE_LIMIT = 3;
+/** Review only plausible splits; named people are merged manually from the directory. */
+export const PERSON_REVIEW_MIN_SIMILARITY = (() => {
+  const raw = Number(process.env.PHOTO_PEOPLE_REVIEW_MIN_SIMILARITY ?? 0.3);
+  return Number.isFinite(raw) && raw >= 0 && raw <= 1 ? raw : 0.3;
+})();
 
 type ReviewPair = { firstId: string; secondId: string; firstCount?: bigint; secondCount?: bigint };
 export type ReviewFaceEvidence = {
@@ -63,6 +68,7 @@ export function qualifyPersonReviewPairs<T extends ReviewPair>(
     const best = Math.max(...aScores);
     const mean = (scores: number[]) => scores.reduce((sum, s) => sum + s, 0) / scores.length;
     const similarity = Math.min(mean(aScores), mean(bScores));
+    if (similarity < PERSON_REVIEW_MIN_SIMILARITY) continue;
     const firstIndex = aScores.indexOf(best),
       secondIndex = matrix[firstIndex]!.indexOf(best);
     const confidence = Math.min(a[firstIndex]!.confidence ?? 0, b[secondIndex]!.confidence ?? 0);
@@ -77,9 +83,10 @@ export function qualifyPersonReviewPairs<T extends ReviewPair>(
   }
   qualified.sort(
     (a, b) =>
+      b.similarity - a.similarity ||
+      b.rank - a.rank ||
       Number((b.firstCount ?? 0n) - (a.firstCount ?? 0n)) ||
       Number((b.secondCount ?? 0n) - (a.secondCount ?? 0n)) ||
-      b.rank - a.rank ||
       a.firstId.localeCompare(b.firstId) ||
       a.secondId.localeCompare(b.secondId),
   );

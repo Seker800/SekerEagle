@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cosineSimilarity, validateFaceResult } from './photo-faces';
+import { blendFacePrototype, cosineSimilarity, validateFaceResult } from './photo-faces';
+test('a matched person prototype moves toward the confirmed face instead of freezing', () => {
+  const old = [1, 0];
+  const next = blendFacePrototype(old, [0, 1]);
+  assert.ok(next[1]! > 0 && next[1]! < 0.5);
+  assert.ok(next[0]! > 0.5);
+  assert.ok(Math.abs(next[0]! ** 2 + next[1]! ** 2 - 1) < 1e-9);
+  assert.deepEqual(blendFacePrototype([], [1, 0]), [1, 0]);
+});
 test('face model output must be bounded, finite and versioned', () => {
   assert.throws(() => validateFaceResult({ version: 'wrong', faces: [] }), /FACE/);
   assert.throws(

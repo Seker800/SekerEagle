@@ -56,6 +56,11 @@ export class PeopleQueryDto extends PeopleCursorDto {
   @IsOptional()
   @IsIn(['full', 'cards', 'options'])
   projection?: 'full' | 'cards' | 'options';
+  @ApiPropertyOptional({ maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 }
 export class PersonReviewDto {
   @ApiProperty({ format: 'uuid' }) @IsUUID('4') firstId!: string;
@@ -93,6 +98,16 @@ class ReassignFaceDto {
   @IsOptional()
   @IsUUID('4')
   personId?: string | null;
+}
+export class FaceBatchDto {
+  @ApiProperty({ type: [String], minItems: 1 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  ids!: string[];
+  @ApiProperty({ enum: ['SPLIT', 'REMOVE'] })
+  @IsIn(['SPLIT', 'REMOVE'])
+  action!: 'SPLIT' | 'REMOVE';
 }
 class GroupMembersDto {
   @ApiProperty({ type: [String], minItems: 1 })
@@ -137,7 +152,14 @@ export class PhotoManagementController {
     return this.photos.facets(p.sub, p.canViewPrivate);
   }
   @Get('people') people(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PeopleQueryDto) {
-    return this.photos.people(p.sub, p.canViewPrivate, query.after, query.view, query.projection);
+    return this.photos.people(
+      p.sub,
+      p.canViewPrivate,
+      query.after,
+      query.view,
+      query.projection,
+      query.search,
+    );
   }
   @Get('people/:id/faces')
   personFaces(
@@ -242,6 +264,16 @@ export class PhotoManagementController {
     return this.operations.enqueueCommand(p, {
       type: 'PHOTO_FACE_REASSIGN',
       payload: libraryCommandPayload({ id, personId: dto.personId ?? null }),
+    });
+  }
+  @Post('faces/batch')
+  @HttpCode(202)
+  @ApiAcceptedResponse({ type: EagleOperationSummaryResponseDto })
+  @UseGuards(BrowserOriginGuard)
+  batchFaces(@CurrentPrincipal() p: AuthPrincipal, @Body() dto: FaceBatchDto) {
+    return this.operations.enqueueCommand(p, {
+      type: 'PHOTO_FACE_BATCH',
+      payload: libraryCommandPayload(dto),
     });
   }
   @Get('groups') groups(@CurrentPrincipal() p: AuthPrincipal) {

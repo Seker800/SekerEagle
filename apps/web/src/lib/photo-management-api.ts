@@ -41,9 +41,10 @@ export const listPhotoPeople = (
   after?: string,
   signal?: AbortSignal,
   view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
+  search = '',
 ) =>
   request<{ runtimeConfigured: boolean; people: PhotoPerson[]; nextCursor: string | null }>(
-    `${base}/people?view=${view}&projection=cards${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+    `${base}/people?view=${view}&projection=cards${after ? `&after=${encodeURIComponent(after)}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`,
     { signal },
   );
 export type PhotoPersonOption = Pick<
@@ -54,9 +55,10 @@ export const listPhotoPeopleOptions = (
   after?: string,
   signal?: AbortSignal,
   view: 'ALL' | 'NAMED' = 'ALL',
+  search = '',
 ) =>
   request<{ people: PhotoPersonOption[]; nextCursor: string | null }>(
-    `${base}/people?view=${view === 'NAMED' ? 'NAMED&projection=options' : 'options'}${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+    `${base}/people?view=${view === 'NAMED' ? 'NAMED&projection=options' : 'options'}${after ? `&after=${encodeURIComponent(after)}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`,
     { signal },
   );
 export const listPhotoPersonFaces = (personId: string, after?: string, signal?: AbortSignal) =>
@@ -102,6 +104,11 @@ export const splitPhotoFace = (id: string) =>
   request<AssetOperationSummary>(`${base}/faces/${encodeURIComponent(id)}/person`, {
     method: 'PATCH',
     body: JSON.stringify({ personId: null }),
+  });
+export const batchPhotoFaces = (ids: string[], action: 'SPLIT' | 'REMOVE') =>
+  request<AssetOperationSummary>(`${base}/faces/batch`, {
+    method: 'POST',
+    body: JSON.stringify({ ids, action }),
   });
 export const listPhotoGroups = () => request<PhotoGroup[]>(`${base}/groups`);
 export const scanPhotoGroups = () =>

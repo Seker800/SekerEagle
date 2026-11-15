@@ -51,7 +51,9 @@ it('配置完成但没有人物结果时提示分析现有图库', async () => {
   mocks.list.mockResolvedValue({ runtimeConfigured: true, people: [] });
   showPeople();
   expect(
-    await screen.findByText('还没有已命名人物。可从所有人中命名，或先确认相似人物。'),
+    await screen.findByText(
+      '还没有已命名分组。可先点「分析人物」，再到「所有分组」命名，或从「待确认」开始合并。',
+    ),
   ).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '分析人物' })).toBeEnabled();
   expect(screen.queryByText(/尚未配置/)).not.toBeInTheDocument();

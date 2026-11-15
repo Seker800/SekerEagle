@@ -2,7 +2,7 @@ import { createEagleQueryKeys } from '../eagle/eagle-query-keys';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getPhotoFacets, listPhotoPeopleOptions } from '../../lib/photo-management-api';
-import { t } from '../../i18n';
+import { photoPersonLabel } from './photo-person-label';
 export function usePhotoFilterOptions(includePrivate: boolean, enabled = true) {
   const { ownerId, libraryMode } = useLibraryWorkspace();
   const facets = useQuery({
@@ -28,9 +28,9 @@ export function usePhotoFilterOptions(includePrivate: boolean, enabled = true) {
       PERSON:
         people.data?.pages
           .flatMap((page) => page.people)
-          .map((person, index) => ({
+          .map((person) => ({
             value: person.id,
-            label: person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 }),
+            label: photoPersonLabel(person),
           })) ?? [],
     },
   };

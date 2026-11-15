@@ -28,8 +28,33 @@ import {
   serializePersonPreview,
 } from './photo-person-scope';
 import { mergeSelectedPeople } from './photo-person-merge';
+import { normalizeEmbedding } from '@sekereagle/vector-core';
 
 const visible = visiblePhotoAssets;
+
+async function refreshPersonPrototype(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  personId: string,
+) {
+  const faces = await tx.eaglePhotoFace.findMany({
+    where: { ownerId, libraryMode: 'PHOTO', personId, isCurrent: true },
+    select: { embedding: true },
+    orderBy: { confidence: 'desc' },
+    take: 32,
+  });
+  const embeddings = faces
+    .map((face) => face.embedding)
+    .filter((embedding) => embedding.length === 128);
+  if (!embeddings.length) return;
+  const prototype = normalizeEmbedding(
+    Array.from(
+      { length: 128 },
+      (_, index) => embeddings.reduce((sum, row) => sum + row[index]!, 0) / embeddings.length,
+    ),
+  );
+  await tx.eaglePhotoPerson.update({ where: { id: personId }, data: { prototype } });
+}
 
 @Injectable()
 export class PhotoManagementService {
@@ -76,6 +101,22 @@ export class PhotoManagementService {
       }))
     )
       throw new NotFoundException('人脸不存在。');
+    if (type === 'PHOTO_FACE_BATCH') {
+      const faceIds = [...new Set((p.ids as string[] | undefined) ?? [])];
+      for (const { rows } of databaseBatches(faceIds, DATABASE_STATEMENTS.operationAssetLookup))
+        if (
+          (await this.prisma.eaglePhotoFace.count({
+            where: {
+              ownerId,
+              libraryMode: 'PHOTO',
+              isCurrent: true,
+              id: { in: rows },
+              asset: visible(ownerId, includePrivate),
+            },
+          })) !== rows.length
+        )
+          throw new NotFoundException('人脸不存在。');
+    }
     const groupIds =
       type === 'PHOTO_GROUP_MERGE'
         ? [p.id, p.targetId]
@@ -179,8 +220,10 @@ export class PhotoManagementService {
     after?: string,
     view: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options' = 'ALL',
     projection: 'full' | 'cards' | 'options' = 'full',
+    search?: string,
   ) {
     const category = view === 'NAMED' || view === 'UNNAMED' ? view : 'ALL';
+    const query = search?.trim();
     const representation =
       view === 'cards' || view === 'options' || view === 'full' ? view : projection;
     // The explicit card projection has a ranked cursor; legacy full/options keep their protocol.
@@ -251,7 +294,11 @@ export class PhotoManagementService {
       where: {
         ownerId,
         libraryMode: 'PHOTO' as const,
-        ...(category === 'NAMED' ? { name: { not: null } } : {}),
+        ...(category === 'NAMED'
+          ? query
+            ? { name: { contains: query, mode: 'insensitive' as const } }
+            : { name: { not: null } }
+          : {}),
         ...(cursor
           ? {
               AND: [
@@ -390,8 +437,8 @@ export class PhotoManagementService {
     includePrivate: boolean,
     beforePublish?: (tx: Prisma.TransactionClient) => Promise<void>,
   ) {
-    if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
-      throw new BadRequestException('本地人物模型尚未配置，请按照片功能文档安装模型运行环境。');
+    // The scan only admits durable face jobs. Inference runs on the current media
+    // fleet, so the background executor must not require a local model install.
     return queuePhotoFaceScan(this.prisma, ownerId, includePrivate, beforePublish);
   }
   private async requirePerson(
@@ -518,8 +565,93 @@ export class PhotoManagementService {
         },
         data: { rowVersion: { increment: 1 } },
       });
+      if (face.personId && face.personId !== person.id) {
+        const remaining = await tx.eaglePhotoFace.count({
+          where: {
+            ownerId,
+            libraryMode: 'PHOTO',
+            personId: face.personId,
+            isCurrent: true,
+          },
+        });
+        // Keep an empty identity for undo; it is hidden from every people projection
+        // because those require a current face.
+        if (remaining > 0) await refreshPersonPrototype(tx, ownerId, face.personId);
+      }
+      if (targetId) await refreshPersonPrototype(tx, ownerId, person.id);
       await syncAssetPrivacy(tx, ownerId, [face.assetId], 'PHOTO');
       return { id: person.id };
+    });
+  }
+  async batchFaces(
+    ownerId: string,
+    ids: readonly string[],
+    action: 'SPLIT' | 'REMOVE',
+    includePrivate: boolean,
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    const unique = [...new Set(ids)];
+    return runLibraryTransaction(db, async (tx) => {
+      await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
+      const faces = await tx.eaglePhotoFace.findMany({
+        where: {
+          id: { in: unique },
+          ownerId,
+          libraryMode: 'PHOTO',
+          isCurrent: true,
+          asset: visible(ownerId, includePrivate),
+        },
+        select: {
+          id: true,
+          personId: true,
+          assetId: true,
+          embedding: true,
+          modelVersion: true,
+        },
+      });
+      if (faces.length !== unique.length) throw new NotFoundException('人脸不存在。');
+      const people = new Set(faces.flatMap((face) => (face.personId ? [face.personId] : [])));
+      const assetIds = [...new Set(faces.map((face) => face.assetId))];
+      if (action === 'REMOVE') {
+        await tx.eaglePhotoFace.updateMany({
+          where: { ownerId, libraryMode: 'PHOTO', id: { in: unique } },
+          data: { isCurrent: false, personId: null, userAssigned: true },
+        });
+      } else {
+        for (const face of faces) {
+          const person = await tx.eaglePhotoPerson.create({
+            data: {
+              ownerId,
+              libraryMode: 'PHOTO',
+              prototype: face.embedding,
+              modelVersion: face.modelVersion,
+            },
+          });
+          await tx.eaglePhotoFace.update({
+            where: { id: face.id },
+            data: { personId: person.id, userAssigned: true },
+          });
+        }
+      }
+      if (people.size) {
+        await tx.eaglePhotoPerson.updateMany({
+          where: { ownerId, libraryMode: 'PHOTO', id: { in: [...people] } },
+          data: { rowVersion: { increment: 1 } },
+        });
+        for (const personId of people) {
+          const remaining = await tx.eaglePhotoFace.count({
+            where: { ownerId, libraryMode: 'PHOTO', personId, isCurrent: true },
+          });
+          if (remaining === 0)
+            await tx.eaglePhotoPerson.deleteMany({
+              where: { ownerId, libraryMode: 'PHOTO', id: personId },
+            });
+          else await refreshPersonPrototype(tx, ownerId, personId);
+        }
+      }
+      await syncAssetPrivacy(tx, ownerId, assetIds, 'PHOTO');
+      return { changed: faces.length, privacyChanged: true };
     });
   }
   async groups(ownerId: string, includePrivate: boolean) {

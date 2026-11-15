@@ -4,7 +4,11 @@ import type { LibraryCommandRegistry } from '../eagle/eagle-library-command';
 import type { PhotoManagementService } from './photo-management.service';
 import type { PhotoPersonReviewService } from './photo-person-review.service';
 import type { PhotoAgentService } from './photo-agent.service';
-import type { PersonReviewDto, MergeSelectedPeopleDto } from './photo-management.controller';
+import type {
+  PersonReviewDto,
+  MergeSelectedPeopleDto,
+  FaceBatchDto,
+} from './photo-management.controller';
 import type {
   ManualPhotoActionDto,
   ReviewPhotoRequestDto,
@@ -86,6 +90,9 @@ export function registerPhotoLibraryCommands(
   );
   metadata<{ id: string; personId: string | null }>('PHOTO_FACE_REASSIGN', (tx, c, p) =>
     photos.reassignFace(c.ownerId, p.id, p.personId, c.includePrivate, tx),
+  );
+  metadata<FaceBatchDto>('PHOTO_FACE_BATCH', (tx, c, p) =>
+    photos.batchFaces(c.ownerId, p.ids, p.action, c.includePrivate, tx),
   );
   metadata<PersonReviewDto>('PHOTO_PEOPLE_REVIEW', (tx, c, p) =>
     review.decide(c.ownerId, c.includePrivate, p, tx),

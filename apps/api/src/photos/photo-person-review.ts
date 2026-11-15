@@ -72,6 +72,7 @@ WITH visible_faces AS MATERIALIZED (
  SELECT p.id,p.name,p.prototype::vector AS prototype,p."modelVersion",f.photos,f.confidence
  FROM "EaglePhotoPerson" p JOIN face_counts f ON f."personId"=p.id AND f."modelVersion"=p."modelVersion"
  WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO' AND p."modelVersion"=${PHOTO_FACE_MODEL_VERSION}
+ AND p.name IS NULL
  AND (${includePrivate} OR NOT p."marksAssetsPrivate") AND cardinality(p.prototype)=128
  AND NOT EXISTS (SELECT 1 FROM unnest(p.prototype) v WHERE v IS NULL OR v NOT BETWEEN -1.001 AND 1.001)
  AND EXISTS (SELECT 1 FROM unnest(p.prototype) v WHERE abs(v)>0.000001)

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { ApiError } from '../../lib/api-error';
+import { photoPersonLabel } from './photo-person-label';
 import {
   listPhotoPeopleOptions,
   mergeSelectedPhotoPeople,
@@ -33,11 +34,17 @@ export function PhotoPersonMergeSelection({
 }) {
   const client = useQueryClient();
   const [targetId, setTargetId] = useState('');
+  const [search, setSearch] = useState('');
+  const [targetSearch, setTargetSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflicted, setConflicted] = useState(false);
   const submitting = useRef(false);
   const active = useRef(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setTargetSearch(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -48,9 +55,13 @@ export function PhotoPersonMergeSelection({
     queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleMergeTargets(
       includePrivate,
       scopeRevision,
+      targetSearch,
     ),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) => listPhotoPeopleOptions(pageParam, signal, 'NAMED'),
+    queryFn: ({ pageParam, signal }) =>
+      targetSearch
+        ? listPhotoPeopleOptions(pageParam, signal, 'NAMED', targetSearch)
+        : listPhotoPeopleOptions(pageParam, signal, 'NAMED'),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: selected.length > 0,
     staleTime: 30000,
@@ -111,14 +122,19 @@ export function PhotoPersonMergeSelection({
         >
           {choices.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name ??
-                t('未命名分组 {{value1}}', {
-                  value1: selected.findIndex((s) => s.id === p.id) + 1,
-                })}
+              {photoPersonLabel(p)}
             </option>
           ))}
         </select>
       </label>
+      <input
+        type="search"
+        aria-label={t('搜索目标人物')}
+        placeholder={t('搜索目标人物')}
+        value={search}
+        onChange={(event) => setSearch(event.currentTarget.value)}
+        disabled={saving}
+      />
       {targets.isFetching && <p role="status">{t('正在加载人物…')}</p>}
       {targets.error && (
         <p role="alert">

@@ -23,7 +23,7 @@ it('never invents a comparison when the server has no candidate', async () => {
       />
     </QueryClientProvider>,
   );
-  await screen.findByText('暂时没有需要确认的相似人物。');
+  await screen.findByText('暂时没有需要确认的相似分组。如果还没分析过，请先点右上角「分析人物」。');
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
   expect(mocks.suggest).toHaveBeenCalled();
 });

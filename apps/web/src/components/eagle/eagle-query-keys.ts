@@ -19,14 +19,27 @@ export function createEagleQueryKeys(
       [...root, 'agent', visible, 'history', id] as const,
     photoAgentInstructions: [...root, 'agent', 'instructions'] as const,
     photoPeople: [...root, 'people'] as const,
-    photoPeopleDirectory: (visible: boolean, view: 'ALL' | 'NAMED' | 'UNNAMED') =>
-      [...root, 'people', visible, view, view === 'ALL' ? 'cards-ranked-v2' : 'cards'] as const,
+    photoPeopleDirectory: (visible: boolean, view: 'ALL' | 'NAMED' | 'UNNAMED', search = '') =>
+      [
+        ...root,
+        'people',
+        visible,
+        view,
+        view === 'ALL' ? 'cards-ranked-v2' : 'cards',
+        ...(search ? [search] : []),
+      ] as const,
     photoPeopleMergeTargetRoot: [...root, 'people-merge-targets'] as const,
     photoPeopleSummary: [...root, 'people-summary'] as const,
     photoPeopleSummaryScope: (visible: boolean) => [...root, 'people-summary', visible] as const,
     photoPeopleOptions: (visible: boolean) => [...root, 'people', 'options', visible] as const,
-    photoPeopleMergeTargets: (visible: boolean, revision: string) =>
-      [...root, 'people-merge-targets', visible, revision] as const,
+    photoPeopleMergeTargets: (visible: boolean, revision: string, search = '') =>
+      [
+        ...root,
+        'people-merge-targets',
+        visible,
+        revision,
+        ...(search ? [search] : []),
+      ] as const,
     photoPersonReview: [...root, 'person-review'] as const,
     photoPersonReviewScope: (visible: boolean, revision?: string) =>
       [...root, 'person-review', visible, revision, 'count-first-v3'] as const,

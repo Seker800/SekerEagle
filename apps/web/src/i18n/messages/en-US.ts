@@ -935,6 +935,36 @@ export const enUS = {
     'People recognition is not configured. Photo analysis is currently unavailable.',
   '正在加载人物…': 'Loading people…',
   '未命名分组 {{value1}}': 'Unnamed group {{value1}}',
+  '未命名 · {{value1}} 张 · #{{value2}}': 'Unnamed · {{value1}} photos · #{{value2}}',
+  '未命名 · #{{value1}}': 'Unnamed · #{{value1}}',
+  人物分组: 'People groups',
+  已命名分组: 'Named groups',
+  所有分组: 'All groups',
+  '正在分析人物…': 'Analyzing people…',
+  '正在分析人物，新的分组会陆续出现；可在任务中心查看进度。':
+    'Analyzing people. New groups will appear gradually; see the task center for progress.',
+  '已开始分析人物，可在任务中心查看进度。':
+    'People analysis started. See the task center for progress.',
+  '还没有人物分组。点右上角「分析人物」开始第一次分析。':
+    'There are no people groups yet. Select “Analyze people” in the top right to start.',
+  '还没有已命名分组。可先点「分析人物」，再到「所有分组」命名，或从「待确认」开始合并。':
+    'There are no named groups yet. Analyze people, then name groups in All groups or start merging in Review.',
+  '暂时没有需要确认的相似分组。如果还没分析过，请先点右上角「分析人物」。':
+    'There are no similar groups to review. If you have not analyzed yet, select “Analyze people” in the top right.',
+  '选两个时可以标记「不是同一个人」；选两个以上可以合并。':
+    'Select two to mark “not the same person”; select two or more to merge.',
+  再次点击跳过本组: 'Click again to skip this batch',
+  整理人脸: 'Organize faces',
+  '已选 {{value1}} 张人脸': '{{value1}} faces selected',
+  全选本页: 'Select this page',
+  分开为不同人物: 'Split into different people',
+  确认分开所选人脸: 'Confirm splitting selected faces',
+  不是人脸: 'Not a face',
+  确认不是人脸: 'Confirm not a face',
+  '选择人脸 {{value1}}': 'Select face {{value1}}',
+  搜索已命名分组: 'Search named groups',
+  搜索目标人物: 'Search target people',
+  '没有匹配的已命名分组。': 'No matching named groups.',
   '暂无人物。可点击“分析人物”扫描图库中的照片。':
     'No people yet. Select “Analyze people” to scan photos in your library.',
   '清晰度只作参考，所有原片都会保留。': 'Sharpness is a reference. All originals are retained.',

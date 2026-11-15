@@ -3,6 +3,7 @@ import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/librar
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { EagleAssetProcessingJob, PrismaClient } from '@prisma/client';
+import { normalizeEmbedding } from '@sekereagle/vector-core';
 import { FACE_MODEL_VERSION, type FaceDetection } from './face-inference';
 export {
   cosineSimilarity,
@@ -16,16 +17,32 @@ interface FacePublication {
   job: EagleAssetProcessingJob;
   detections: FaceDetection[];
 }
+/** A person's prototype follows confirmed-looking faces instead of freezing the first one. */
+const PROTOTYPE_BLEND = 0.2;
+export function blendFacePrototype(
+  prototype: readonly number[],
+  embedding: readonly number[],
+): number[] {
+  if (!prototype.length || prototype.length !== embedding.length)
+    return normalizeEmbedding(embedding);
+  return normalizeEmbedding(
+    prototype.map(
+      (value, index) => value * (1 - PROTOTYPE_BLEND) + embedding[index]! * PROTOTYPE_BLEND,
+    ),
+  );
+}
 /** pgvector nearest prototype inside the same transaction, excluding already assigned people. */
 async function nearestPersonId(
   tx: Prisma.TransactionClient,
   ownerId: string,
   embedding: number[],
   assigned: ReadonlySet<string>,
-): Promise<string | undefined> {
+): Promise<{ id: string; prototype: number[]; score: number } | undefined> {
   const vector = `[${embedding.join(',')}]`;
-  const rows = await tx.$queryRaw<Array<{ id: string; score: number }>>(Prisma.sql`
-    SELECT id, 1 - (prototype::vector <=> ${vector}::vector) AS score
+  const rows = await tx.$queryRaw<
+    Array<{ id: string; prototype: number[]; score: number }>
+  >(Prisma.sql`
+    SELECT id, prototype, 1 - (prototype::vector <=> ${vector}::vector) AS score
     FROM "EaglePhotoPerson"
     WHERE "ownerId"=${ownerId} AND "libraryMode"='PHOTO'::"LibraryMode"
       AND "modelVersion"=${FACE_MODEL_VERSION}
@@ -34,7 +51,7 @@ async function nearestPersonId(
     ORDER BY prototype::vector <=> ${vector}::vector
     LIMIT 32
   `);
-  return rows[0] && rows[0].score >= 0.45 ? rows[0].id : undefined;
+  return rows[0] && rows[0].score >= 0.45 ? rows[0] : undefined;
 }
 const publishers = new WeakMap<
   PrismaClient,
@@ -56,8 +73,13 @@ export async function persistPhotoFaces(
     publisher = new FacePublicationBatcher<FacePublication>(
       async (entries) => {
         await prisma.$transaction(async (tx) => {
+          const prototypes = new Map<string, number[]>();
           for (const entry of entries)
-            await persistPhotoFacesInTransaction(tx, entry.job, entry.detections);
+            await persistPhotoFacesInTransaction(tx, entry.job, entry.detections, prototypes);
+          // One statement per matched person per publication batch; the workspace
+          // change trigger must not fire once for every detected face.
+          for (const [id, prototype] of prototypes)
+            await tx.eaglePhotoPerson.update({ where: { id }, data: { prototype } });
         });
       },
       (entry) => entry.job.ownerId,
@@ -75,6 +97,7 @@ async function persistPhotoFacesInTransaction(
   tx: Prisma.TransactionClient,
   job: EagleAssetProcessingJob,
   detections: FaceDetection[],
+  prototypes: Map<string, number[]>,
 ) {
   await lockOwnerPrivacyProjection(tx, job.ownerId, 'PHOTO');
   // Serialize automatic assignments against human merges/corrections for this owner.
@@ -131,9 +154,9 @@ async function persistPhotoFacesInTransaction(
       if (existing.personId) assigned.add(existing.personId);
       continue;
     }
-    const nearestId = await nearestPersonId(tx, job.ownerId, face.embedding, assigned);
-    const person = nearestId
-      ? { id: nearestId }
+    const nearest = await nearestPersonId(tx, job.ownerId, face.embedding, assigned);
+    const person = nearest
+      ? { id: nearest.id }
       : await tx.eaglePhotoPerson.create({
           data: {
             ownerId: job.ownerId,
@@ -142,6 +165,10 @@ async function persistPhotoFacesInTransaction(
             modelVersion: FACE_MODEL_VERSION,
           },
         });
+    if (nearest) {
+      const current = prototypes.get(nearest.id) ?? nearest.prototype;
+      prototypes.set(nearest.id, blendFacePrototype(current, face.embedding));
+    }
     assigned.add(person.id);
     await tx.eaglePhotoFace.create({
       data: {

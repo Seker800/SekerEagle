@@ -143,6 +143,8 @@ test('manual face reassignment invalidates review versions of both affected iden
     eaglePhotoFace: {
       findFirst: async () => ({ id: 'face', personId: 'source', assetId: 'photo' }),
       update: async () => ({}),
+      count: async () => 1,
+      findMany: async () => [{ embedding: [1, ...Array(127).fill(0)] }],
     },
     eaglePhotoPerson: {
       findFirst: async () => ({ id: 'target', rowVersion: 1 }),
@@ -150,6 +152,7 @@ test('manual face reassignment invalidates review versions of both affected iden
         changed.push(...where.id.in);
         return { count: 2 };
       },
+      update: async () => ({}),
     },
   };
   const service = new PhotoManagementService({

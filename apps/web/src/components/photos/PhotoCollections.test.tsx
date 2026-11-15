@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   privacy: vi.fn(),
   rename: vi.fn(),
   clear: vi.fn(),
+  batch: vi.fn(),
 }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
@@ -22,12 +23,16 @@ vi.mock('../../lib/photo-management-api', () => ({
   renamePhotoPerson: mocks.rename,
   mergePhotoPeople: vi.fn(),
   splitPhotoFace: vi.fn(),
+  batchPhotoFaces: mocks.batch,
 }));
 vi.mock('../../lib/media-resolver', () => ({
   getDesktopCacheBridge: () => ({ clearCache: mocks.clear }),
 }));
 vi.mock('../../lib/library-workspace', () => ({
-  useLibraryWorkspace: () => ({ ownerId: 'owner', api: {} }),
+  useLibraryWorkspace: () => ({
+    ownerId: 'owner',
+    api: { getEagleRenditionContentUrl: (id: string) => `/${id}` },
+  }),
 }));
 function wrapper(
   node: React.ReactNode,
@@ -46,6 +51,68 @@ beforeEach(() => {
   mocks.faces.mockResolvedValue({ faces: [], nextCursor: null });
   mocks.privacy.mockResolvedValue({});
   mocks.clear.mockResolvedValue(undefined);
+  mocks.batch.mockResolvedValue({});
+});
+it('searches named groups on the server after a short debounce', async () => {
+  wrapper(
+    <PhotoCollections
+      includePrivate={false}
+      onPrivacyRulesChange={vi.fn()}
+      onOpen={vi.fn()}
+      onPerson={vi.fn()}
+    />,
+  );
+  fireEvent.change(await screen.findByRole('searchbox', { name: '搜索已命名分组' }), {
+    target: { value: '测试' },
+  });
+  await waitFor(() =>
+    expect(mocks.list).toHaveBeenCalledWith(undefined, expect.any(AbortSignal), 'NAMED', '测试'),
+  );
+});
+it('splits selected faces in one batch command instead of one request per face', async () => {
+  mocks.faces.mockResolvedValue({
+    faces: [
+      {
+        id: 'face-1',
+        box: [0.2, 0.2, 0.3, 0.3],
+        confidence: 0.99,
+        assetId: 'photo',
+        asset: {
+          id: 'photo',
+          displayName: 'photo',
+          mimeType: 'image/jpeg',
+          mediaRevision: 1,
+          width: 1600,
+          height: 1200,
+          renditions: [
+            {
+              id: 'preview',
+              kind: 'PREVIEW',
+              variant: 'default',
+              revision: 1,
+              mimeType: 'image/jpeg',
+              width: 1600,
+              height: 1200,
+            },
+          ],
+        },
+      },
+    ],
+    nextCursor: null,
+  });
+  wrapper(
+    <PhotoCollections
+      includePrivate={false}
+      onPrivacyRulesChange={vi.fn()}
+      onOpen={vi.fn()}
+      onPerson={vi.fn()}
+    />,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: '测试人物' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: '选择人脸 photo' }));
+  fireEvent.click(screen.getByRole('button', { name: '分开为不同人物' }));
+  fireEvent.click(screen.getByRole('button', { name: '确认分开所选人脸' }));
+  await waitFor(() => expect(mocks.batch).toHaveBeenCalledWith(['face-1'], 'SPLIT'));
 });
 it('人物私密写入当前版本，清除缓存并刷新整个隐私范围', async () => {
   const changed = vi.fn();

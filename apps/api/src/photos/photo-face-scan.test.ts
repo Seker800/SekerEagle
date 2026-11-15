@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PhotoManagementService } from './photo-management.service';
 
+test('scan queues durable face jobs without a local executor model runtime', async () => {
+  const previous = [process.env.PHOTO_FACE_PYTHON, process.env.PHOTO_FACE_MODEL_DIR];
+  delete process.env.PHOTO_FACE_PYTHON;
+  delete process.env.PHOTO_FACE_MODEL_DIR;
+  const tx = {
+    $queryRaw: async (query: { sql: string }) =>
+      query.sql.includes('INSERT INTO') ? [{ queued: 7n }] : [],
+    $executeRaw: async () => 0,
+  };
+  const db = {
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(tx),
+  };
+  try {
+    const result = await new PhotoManagementService(db as never).scanFaces('owner', false);
+    assert.equal(result.queued, 7);
+  } finally {
+    for (const [i, key] of ['PHOTO_FACE_PYTHON', 'PHOTO_FACE_MODEL_DIR'].entries()) {
+      if (previous[i] === undefined) delete process.env[key];
+      else process.env[key] = previous[i];
+    }
+  }
+});
+
 test('scan enqueues the whole visible photo library on the background lane without a 500-photo ceiling', async () => {
   const previous = [process.env.PHOTO_FACE_PYTHON, process.env.PHOTO_FACE_MODEL_DIR];
   process.env.PHOTO_FACE_PYTHON = 'python3';

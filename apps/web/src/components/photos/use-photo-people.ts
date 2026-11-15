@@ -6,17 +6,26 @@ export function usePhotoPeople(
   ownerId: string | null,
   includePrivate: boolean,
   enabled = true,
-  _poll = false,
+  poll = false,
   view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
+  search = '',
 ) {
   const query = useInfiniteQuery({
-    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleDirectory(includePrivate, view),
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoPeopleDirectory(
+      includePrivate,
+      view,
+      search,
+    ),
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) => listPhotoPeople(pageParam, signal, view),
+    queryFn: ({ pageParam, signal }) =>
+      search
+        ? listPhotoPeople(pageParam, signal, view, search)
+        : listPhotoPeople(pageParam, signal, view),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled,
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    refetchInterval: poll ? 5000 : false,
   });
   return {
     ...query,

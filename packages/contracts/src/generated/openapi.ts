@@ -3076,6 +3076,22 @@ export interface paths {
     patch: operations['PhotoManagementController_assign'];
     trace?: never;
   };
+  '/api/photos/photography/faces/batch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoManagementController_batchFaces'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/photography/groups': {
     parameters: {
       query?: never;
@@ -4801,6 +4817,11 @@ export interface components {
     ReassignFaceDto: {
       /** Format: uuid */
       personId?: string | null;
+    };
+    FaceBatchDto: {
+      ids: string[];
+      /** @enum {string} */
+      action: 'SPLIT' | 'REMOVE';
     };
     GroupMembersDto: {
       assetIds: string[];
@@ -9632,6 +9653,7 @@ export interface operations {
         after?: string;
         view?: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options';
         projection?: 'full' | 'cards' | 'options';
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -9691,6 +9713,7 @@ export interface operations {
         after?: string;
         view?: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options';
         projection?: 'full' | 'cards' | 'options';
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -9875,6 +9898,29 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['ReassignFaceDto'];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
+        };
+      };
+    };
+  };
+  PhotoManagementController_batchFaces: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FaceBatchDto'];
       };
     };
     responses: {
