@@ -20,6 +20,7 @@ import {
 } from './photo-watermark-model';
 import styles from './PhotoEditor.module.css';
 import { useWatermarkNavigation, ORDERED_WATERMARK_TEMPLATES } from './useWatermarkNavigation';
+import { selectWatermarkTemplate } from './photo-watermark-variants';
 import { ScrollableToolRow } from './ScrollableToolRow';
 
 function WatermarkPreview({
@@ -36,7 +37,8 @@ function WatermarkPreview({
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!canvas.current || !source) return;
-    const result = renderPhotoWatermark(source, { ...edits, watermark: id }, metadata);
+    const preview = { ...edits, ...selectWatermarkTemplate(edits, id) };
+    const result = renderPhotoWatermark(source, preview, metadata);
     canvas.current.width = result.width;
     canvas.current.height = result.height;
     canvas.current.getContext('2d')?.drawImage(result, 0, 0);
@@ -375,7 +377,7 @@ export function PhotoWatermarkPanel({
           disabled={disabled}
           ref={navigation.templateRef('none')}
           aria-pressed={edits.watermark === 'none'}
-          onClick={() => onChange({ watermark: 'none' })}
+          onClick={() => onChange(selectWatermarkTemplate(edits, 'none'))}
         >
           <IconBan size={28} />
           <span>{t('无水印')}</span>
@@ -393,17 +395,7 @@ export function PhotoWatermarkPanel({
             disabled={disabled}
             aria-pressed={selected?.id === template.id}
             aria-label={template.label}
-            onClick={() =>
-              onChange({
-                watermark: template.id,
-                watermarkTheme: template.theme
-                  ? template.overlay && edits.watermarkTheme === 'frosted'
-                    ? 'white'
-                    : edits.watermarkTheme
-                  : 'black',
-                watermarkShowTime: template.time && edits.watermarkShowTime,
-              })
-            }
+            onClick={() => onChange(selectWatermarkTemplate(edits, template.id))}
           >
             <WatermarkPreview
               source={thumbnail}

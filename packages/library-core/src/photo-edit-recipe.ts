@@ -46,6 +46,7 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermarkShowWebsite: boolean;
   watermarkShowTime: boolean;
   watermarkShowParameters: boolean;
+  watermarkVariants: Record<string, WatermarkVariant>;
   filter: PhotoFilter;
   filterStrength: number;
   rotation: number;
@@ -57,6 +58,20 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   cropX: number;
   cropY: number;
 }
+export const WATERMARK_VARIANT_FIELDS = [
+  'watermarkAlign',
+  'watermarkTheme',
+  'watermarkCameraColor',
+  'watermarkTimeColor',
+  'watermarkCamera',
+  'watermarkParameters',
+  'watermarkCapturedAt',
+  'watermarkWebsite',
+  'watermarkShowWebsite',
+  'watermarkShowTime',
+  'watermarkShowParameters',
+] as const;
+export type WatermarkVariant = Pick<PhotoEdits, (typeof WATERMARK_VARIANT_FIELDS)[number]>;
 export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   ...DEFAULT_ADVANCED_EDITS,
   dehaze: 0,
@@ -92,6 +107,7 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermarkShowWebsite: true,
   watermarkShowTime: true,
   watermarkShowParameters: true,
+  watermarkVariants: {},
   filter: 'original',
   filterStrength: 100,
   rotation: 0,
@@ -114,20 +130,94 @@ export interface PhotoEditRecipe {
   version: 1;
   edits: PhotoEdits;
 }
-/** Omit straighten at its default so older clients can still read untouched recipes. */
+/** Omit defaults so older clients can still read untouched recipes. */
 export function photoEditRecipe(edits: PhotoEdits): PhotoEditRecipe {
-  if (edits.straighten === 0) {
-    const compatible: Partial<PhotoEdits> = { ...edits };
-    delete compatible.straighten;
-    return { version: 1, edits: compatible as PhotoEdits };
-  }
-  return { version: 1, edits };
+  const compatible: Partial<PhotoEdits> = { ...edits };
+  if (compatible.straighten === 0) delete compatible.straighten;
+  if (Object.keys(compatible.watermarkVariants ?? {}).length === 0)
+    delete compatible.watermarkVariants;
+  return { version: 1, edits: compatible as PhotoEdits };
 }
 export interface PhotoEditParts {
   adjustments: boolean;
   filter: boolean;
   watermark: boolean;
   crop: boolean;
+}
+
+const WATERMARK_TEXT_NULLABLE = new Set([
+  'watermarkCamera',
+  'watermarkParameters',
+  'watermarkCapturedAt',
+]);
+function readWatermarkVariant(value: unknown): WatermarkVariant {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('INVALID_EDIT_RECIPE');
+  const record = value as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (!(WATERMARK_VARIANT_FIELDS as readonly string[]).includes(key))
+      throw new Error('INVALID_EDIT_RECIPE');
+  }
+  const variant: Record<string, unknown> = {
+    watermarkAlign: DEFAULT_PHOTO_EDITS.watermarkAlign,
+    watermarkTheme: DEFAULT_PHOTO_EDITS.watermarkTheme,
+    watermarkCameraColor: DEFAULT_PHOTO_EDITS.watermarkCameraColor,
+    watermarkTimeColor: DEFAULT_PHOTO_EDITS.watermarkTimeColor,
+    watermarkCamera: DEFAULT_PHOTO_EDITS.watermarkCamera,
+    watermarkParameters: DEFAULT_PHOTO_EDITS.watermarkParameters,
+    watermarkCapturedAt: DEFAULT_PHOTO_EDITS.watermarkCapturedAt,
+    watermarkWebsite: DEFAULT_PHOTO_EDITS.watermarkWebsite,
+    watermarkShowWebsite: DEFAULT_PHOTO_EDITS.watermarkShowWebsite,
+    watermarkShowTime: DEFAULT_PHOTO_EDITS.watermarkShowTime,
+    watermarkShowParameters: DEFAULT_PHOTO_EDITS.watermarkShowParameters,
+  };
+  for (const key of WATERMARK_VARIANT_FIELDS) {
+    if (!Object.hasOwn(record, key)) continue;
+    const field = record[key];
+    if (
+      key === 'watermarkAlign' ||
+      key === 'watermarkTheme' ||
+      key === 'watermarkCameraColor' ||
+      key === 'watermarkTimeColor'
+    ) {
+      const allowed =
+        key === 'watermarkAlign'
+          ? ['left', 'center', 'right']
+          : key === 'watermarkTheme'
+            ? ['white', 'black', 'frosted']
+            : ['white', 'black'];
+      if (typeof field !== 'string' || !allowed.includes(field))
+        throw new Error('INVALID_EDIT_RECIPE');
+    } else if (
+      key === 'watermarkShowWebsite' ||
+      key === 'watermarkShowTime' ||
+      key === 'watermarkShowParameters'
+    ) {
+      if (typeof field !== 'boolean') throw new Error('INVALID_EDIT_RECIPE');
+    } else if (key === 'watermarkWebsite') {
+      if (typeof field !== 'string' || field.length > 2000) throw new Error('INVALID_EDIT_RECIPE');
+    } else if (
+      WATERMARK_TEXT_NULLABLE.has(key) &&
+      field !== null &&
+      (typeof field !== 'string' || field.length > 2000)
+    ) {
+      throw new Error('INVALID_EDIT_RECIPE');
+    }
+    variant[key] = field;
+  }
+  return variant as unknown as WatermarkVariant;
+}
+function readWatermarkVariants(value: unknown): Record<string, WatermarkVariant> {
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('INVALID_EDIT_RECIPE');
+  const entries = Object.entries(value);
+  if (entries.length > 20) throw new Error('INVALID_EDIT_RECIPE');
+  const variants: Record<string, WatermarkVariant> = {};
+  for (const [id, variant] of entries) {
+    if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(id)) throw new Error('INVALID_EDIT_RECIPE');
+    variants[id] = readWatermarkVariant(variant);
+  }
+  return variants;
 }
 export function readPhotoEditRecipe(value: unknown): PhotoEditRecipe {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -145,6 +235,10 @@ export function readPhotoEditRecipe(value: unknown): PhotoEditRecipe {
   const edits = { ...DEFAULT_PHOTO_EDITS };
   for (const [key, value] of Object.entries(input)) {
     if (!Object.hasOwn(DEFAULT_PHOTO_EDITS, key)) throw new Error('INVALID_EDIT_RECIPE');
+    if (key === 'watermarkVariants') {
+      edits.watermarkVariants = readWatermarkVariants(value);
+      continue;
+    }
     const initial = DEFAULT_PHOTO_EDITS[key as keyof PhotoEdits];
     if (typeof initial === 'number') {
       const [min, max] =
@@ -207,6 +301,7 @@ export function selectPhotoEditParts(
 ): PhotoEdits {
   const edits = { ...target };
   for (const key of Object.keys(DEFAULT_PHOTO_EDITS) as (keyof PhotoEdits)[]) {
+    if (key === 'watermarkVariants') continue;
     const enabled = CROP_KEYS.has(key)
       ? parts.crop
       : key.startsWith('watermark')

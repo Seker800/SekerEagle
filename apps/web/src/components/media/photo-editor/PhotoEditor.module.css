@@ -943,7 +943,7 @@
 .watermarkCapabilities {
   min-height: 46px;
   justify-content: safe center;
-  gap: 6px;
+  gap: 4px;
 }
 .editor .watermarkCapabilities button {
   flex-shrink: 0;
@@ -957,9 +957,9 @@
 .watermarkCapabilityDivider {
   flex: none;
   width: 1px;
-  height: 22px;
-  margin: 0 8px;
-  background: #555;
+  height: 24px;
+  margin: 0 12px;
+  background: #666;
 }
 .editor .watermarkCapabilities .watermarkEditAction {
   border-color: transparent;

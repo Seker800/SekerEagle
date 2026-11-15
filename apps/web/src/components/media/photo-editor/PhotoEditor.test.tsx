@@ -725,6 +725,8 @@ it('uses a fixed glass preset without blur or darkness controls', async () => {
   await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '水印' }));
   fireEvent.click(screen.getByRole('button', { name: '居中留白' }));
+  fireEvent.click(screen.getByRole('button', { name: '白底' }));
+  fireEvent.click(screen.getByRole('button', { name: '黑底' }));
   expect(screen.getByRole('button', { name: '毛玻璃底' })).toBeInTheDocument();
   expect(screen.queryByRole('slider')).not.toBeInTheDocument();
   expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();

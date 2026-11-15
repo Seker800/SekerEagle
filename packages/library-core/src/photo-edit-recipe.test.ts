@@ -117,3 +117,97 @@ test('batch selection preserves target crop and uses its own camera metadata', (
   assert.equal(edits.watermarkCapturedAt, null);
   assert.equal(edits.watermarkWebsite, 'example.com');
 });
+
+test('per-template watermark variants round trip and stay bounded', () => {
+  const variant = {
+    watermarkAlign: 'left' as const,
+    watermarkTheme: 'black' as const,
+    watermarkCameraColor: 'black' as const,
+    watermarkTimeColor: 'white' as const,
+    watermarkCamera: 'FUJIFILM X-T5',
+    watermarkParameters: null,
+    watermarkCapturedAt: null,
+    watermarkWebsite: 'PHOTO.EXAMPLE.COM',
+    watermarkShowWebsite: false,
+    watermarkShowTime: true,
+    watermarkShowParameters: false,
+  };
+  const recipe = {
+    version: 1 as const,
+    edits: {
+      ...DEFAULT_PHOTO_EDITS,
+      watermarkVariants: { 'photo-side': variant },
+    },
+  };
+  const read = readPhotoEditRecipe(recipe).edits;
+  assert.deepEqual(read.watermarkVariants['photo-side'], variant);
+  assert.equal('watermarkVariants' in photoEditRecipe(DEFAULT_PHOTO_EDITS).edits, false);
+  assert.deepEqual(photoEditRecipe(recipe.edits).edits.watermarkVariants?.['photo-side'], variant);
+  for (const invalid of [
+    { ...recipe, edits: { ...recipe.edits, watermarkVariants: [] } },
+    {
+      ...recipe,
+      edits: { ...recipe.edits, watermarkVariants: { '../../../x': variant } },
+    },
+    {
+      ...recipe,
+      edits: {
+        ...recipe.edits,
+        watermarkVariants: { 'photo-side': { ...variant, watermarkTheme: 'red' } },
+      },
+    },
+    {
+      ...recipe,
+      edits: {
+        ...recipe.edits,
+        watermarkVariants: { 'photo-side': { ...variant, watermarkShowTime: 'yes' } },
+      },
+    },
+    {
+      ...recipe,
+      edits: {
+        ...recipe.edits,
+        watermarkVariants: { 'photo-side': { ...variant, ownerId: 'victim' } },
+      },
+    },
+    {
+      ...recipe,
+      edits: {
+        ...recipe.edits,
+        watermarkVariants: Object.fromEntries(
+          Array.from({ length: 21 }, (_, index) => [`template-${index}`, variant]),
+        ),
+      },
+    },
+  ]) {
+    assert.throws(() => readPhotoEditRecipe(invalid), /INVALID_EDIT_RECIPE/);
+  }
+});
+
+test('batch watermark copy keeps each target template memory', () => {
+  const variant = {
+    watermarkAlign: 'left' as const,
+    watermarkTheme: 'black' as const,
+    watermarkCameraColor: 'white' as const,
+    watermarkTimeColor: 'white' as const,
+    watermarkCamera: null,
+    watermarkParameters: null,
+    watermarkCapturedAt: null,
+    watermarkWebsite: 'SOURCE',
+    watermarkShowWebsite: true,
+    watermarkShowTime: true,
+    watermarkShowParameters: true,
+  };
+  const source = { ...DEFAULT_PHOTO_EDITS, watermarkVariants: { 'photo-side': variant } };
+  const targetVariant = { ...variant, watermarkTheme: 'frosted' as const };
+  const target = { ...DEFAULT_PHOTO_EDITS, watermarkVariants: { 'photo-strip': targetVariant } };
+  assert.deepEqual(
+    selectPhotoEditParts(source, target, {
+      adjustments: true,
+      filter: true,
+      watermark: true,
+      crop: false,
+    }).watermarkVariants,
+    target.watermarkVariants,
+  );
+});
