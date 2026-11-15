@@ -25,10 +25,8 @@ export function PhotoMapMarkers({
   names,
   selectedId,
   onSelect,
-  viewport,
 }: {
   map: L.Map | null;
-  viewport: object;
   clusters: readonly PhotoMapCluster[];
   names: ReadonlyMap<string, { label: string; shortLabel: string; regional?: boolean }>;
   selectedId?: string;
@@ -59,6 +57,16 @@ export function PhotoMapMarkers({
         value2: group.cluster.count,
       });
       const radius = Math.min(3.6, 2.2 + Math.log10(group.cluster.count + 1) * 0.3);
+      if (group.presentation === 'photo')
+        L.circleMarker(photoMapPosition(group.cluster), {
+          pane: 'photoDistribution',
+          renderer,
+          radius: radius + 2.8,
+          stroke: false,
+          fillColor: '#c8e0ff',
+          fillOpacity: 0.16,
+          interactive: false,
+        }).addTo(layer);
       const point = L.circleMarker(photoMapPosition(group.cluster), {
         pane: 'photoDistribution',
         renderer,
@@ -136,7 +144,7 @@ export function PhotoMapMarkers({
       layer.remove();
       renderer.remove();
     };
-  }, [map, clusters, names, onSelect, viewport]);
+  }, [map, clusters, names, onSelect]);
   useEffect(() => {
     for (const { id, point, radius } of activeDots.current) {
       const active = id === selectedId;

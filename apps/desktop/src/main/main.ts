@@ -1,6 +1,6 @@
 import { registerLibraryReadIpc } from './library-read-ipc';
 import { LibraryMediaSnapshot } from './library-media-snapshot';
-import { createReadStream } from 'node:fs';
+import { appendFileSync, createReadStream, mkdirSync } from 'node:fs';
 import { copyFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -799,6 +799,19 @@ function assertConnectionPageSender(event: IpcMainInvokeEvent): void {
   }
 }
 
+function logRendererFailure(kind: string, details: unknown): void {
+  try {
+    const directory = app.getPath('userData');
+    mkdirSync(directory, { recursive: true });
+    appendFileSync(
+      path.join(directory, 'renderer-failures.log'),
+      `${new Date().toISOString()} ${kind} ${JSON.stringify(details)}\n`,
+    );
+  } catch {
+    // Crash reporting must never prevent recovery.
+  }
+}
+
 function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
   const window = new BrowserWindow({
     width: 1440,
@@ -824,6 +837,50 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
   if (process.platform === 'win32') {
     window.removeMenu();
   }
+  let recoveryDialogOpen = false;
+  window.webContents.on('render-process-gone', (_event, details) => {
+    logRendererFailure('render-process-gone', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+      url: window.webContents.getURL(),
+    });
+    if (shuttingDown || details.reason === 'clean-exit' || recoveryDialogOpen) return;
+    recoveryDialogOpen = true;
+    setTimeout(() => {
+      recoveryDialogOpen = false;
+      if (window.isDestroyed() || shuttingDown) return;
+      const choice = dialog.showMessageBoxSync(window, {
+        type: 'error',
+        title: '页面已停止运行',
+        message: '地图或页面渲染进程意外退出，客户端已记录诊断信息。',
+        detail:
+          '可以重新加载页面继续使用；如再次发生，请把用户数据目录下的 renderer-failures.log 提供给维护者。',
+        buttons: ['重新加载', '退出'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      });
+      if (choice === 0) window.webContents.reload();
+      else app.quit();
+    }, 0);
+  });
+  window.on('unresponsive', () => {
+    logRendererFailure('unresponsive', { url: window.webContents.getURL() });
+    if (shuttingDown || recoveryDialogOpen) return;
+    recoveryDialogOpen = true;
+    const choice = dialog.showMessageBoxSync(window, {
+      type: 'warning',
+      title: '页面无响应',
+      message: '页面长时间没有响应，可能正在处理大图或地图。',
+      detail: '可以继续等待，或重新加载页面；诊断信息已写入 renderer-failures.log。',
+      buttons: ['继续等待', '重新加载'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    recoveryDialogOpen = false;
+    if (choice === 1) window.webContents.reload();
+  });
   window.once('ready-to-show', () => window.show());
   window.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
     if (isMainFrame && !isInPlace) librarySnapshot?.reset();

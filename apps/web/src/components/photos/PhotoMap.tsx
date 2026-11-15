@@ -62,14 +62,25 @@ export function PhotoMap({
     zoom: 3,
   });
   const [selected, setSelected] = useState<PhotoMapCluster | null>(null);
+  const queryViewport = useMemo(
+    () => ({
+      west: Math.round(viewport.west * 1000) / 1000,
+      east: Math.round(viewport.east * 1000) / 1000,
+      south: Math.round(viewport.south * 1000) / 1000,
+      north: Math.round(viewport.north * 1000) / 1000,
+      zoom: viewport.zoom,
+    }),
+    [viewport],
+  );
   const progressInterval = useProgressQueryInterval<Awaited<ReturnType<typeof getPhotoMap>>>(
     (value) => value.status === 'PENDING' || value.status === 'UPDATING',
     (value) => [value.status, value.snapshotId],
   );
   const locations = useQuery({
-    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoMap(includePrivate, viewport),
-    queryFn: ({ signal }) => getPhotoMap(viewport, signal),
+    queryKey: createEagleQueryKeys(ownerId, 'PHOTO').photoMap(includePrivate, queryViewport),
+    queryFn: ({ signal }) => getPhotoMap(queryViewport, signal),
     staleTime: 30000,
+    gcTime: 60_000,
     refetchInterval: progressInterval,
     retry: false,
     refetchOnWindowFocus: false,
@@ -123,13 +134,25 @@ export function PhotoMap({
       clearTimeout(moveTimer);
       moveTimer = setTimeout(() => {
         const current = map.getBounds();
-        setViewport({
+        const next = {
           west: Math.max(-180, current.getWest()),
           east: Math.min(180, current.getEast()),
           south: Math.max(-90, current.getSouth()),
           north: Math.min(90, current.getNorth()),
           zoom: Math.min(16, Math.round(map.getZoom())),
-        });
+        };
+        // Leaflet markers follow the map transform. Only publish a new viewport when
+        // the rounded bounds or zoom really changed; avoids rebuilding the marker layer,
+        // React portals and query keys for sub-pixel moves.
+        setViewport((previous) =>
+          Math.abs(previous.west - next.west) < 1e-6 &&
+          Math.abs(previous.east - next.east) < 1e-6 &&
+          Math.abs(previous.south - next.south) < 1e-6 &&
+          Math.abs(previous.north - next.north) < 1e-6 &&
+          previous.zoom === next.zoom
+            ? previous
+            : next,
+        );
       }, 180);
     };
     map.on('moveend', updateViewport);
@@ -145,7 +168,6 @@ export function PhotoMap({
     map.createPane('photoLocations').style.zIndex = '600';
     const distributionPane = map.createPane('photoDistribution');
     distributionPane.style.zIndex = '550';
-    distributionPane.classList.add(styles.distributionGlow);
     const labels = L.layerGroup().addTo(map),
       controller = new AbortController();
     const palette = getComputedStyle(container.current);
@@ -253,7 +275,6 @@ export function PhotoMap({
           </div>
           <div className={styles.frame} ref={container} aria-label={t('照片地图')} />
           <PhotoMapMarkers
-            viewport={viewport}
             map={mapInstance}
             clusters={points}
             names={placeNames}
