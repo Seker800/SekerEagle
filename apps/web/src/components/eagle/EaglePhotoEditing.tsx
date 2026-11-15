@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconEdit } from '@tabler/icons-react';
-import { isCameraRawMime } from '@sekereagle/library-core';
+import { isCameraHeifMime, isCameraRawMime } from '@sekereagle/library-core';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
@@ -116,6 +116,10 @@ export function useEaglePhotoEditing({
     const source = getEagleEditContentUrl(asset);
     if (!source || (asset.libraryMode && asset.libraryMode !== libraryMode)) return null;
     const cameraRaw = isCameraRawMime(asset.mimeType);
+    // HEIC/HEIF cannot be decoded by most browsers; edit a bounded preview and
+    // render the full-size PNG from the untouched original on the server.
+    const cameraHeif = isCameraHeifMime(asset.mimeType);
+    const serverRender = cameraRaw || cameraHeif;
     const exportMedia = cameraRaw
       ? asset.renditions.find(
           (row) =>
@@ -129,8 +133,14 @@ export function useEaglePhotoEditing({
       height = exportMedia?.height;
     const previewSource = getEaglePreviewContentUrl(asset);
     // Legacy material imports may need their original EXIF; do not lose watermark metadata.
+    // HEIF always uses the browse preview (browser-decodable) with the original pixel size.
     const preview =
-      asset.photoMetadata && previewSource && width && height && width > 0 && height > 0
+      (asset.photoMetadata || cameraHeif) &&
+      previewSource &&
+      width &&
+      height &&
+      width > 0 &&
+      height > 0
         ? { previewSource, sourceSize: { width, height } }
         : {};
     const sourceId = asset.id,
@@ -167,7 +177,7 @@ export function useEaglePhotoEditing({
         }
         return { id: result.asset.id, name: file.name };
       },
-      ...(cameraRaw
+      ...(serverRender
         ? {
             onSaveRecipe: async (
               recipe: PhotoEditRecipe,

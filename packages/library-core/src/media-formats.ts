@@ -87,6 +87,10 @@ export function isCameraRawMime(mimeType: string): boolean {
     (format) => format.kind === 'raw' && format.mimeType === mimeType,
   );
 }
+/** HEIC/HEIF needs native decoding; browsers other than Safari cannot decode it. */
+export function isCameraHeifMime(mimeType: string): boolean {
+  return mimeType === 'image/heic' || mimeType === 'image/heif';
+}
 export function isCameraVideoMime(mimeType: string): boolean {
   return CAMERA_MEDIA_FORMATS.some(
     (format) => format.kind === 'video' && format.mimeType === mimeType,

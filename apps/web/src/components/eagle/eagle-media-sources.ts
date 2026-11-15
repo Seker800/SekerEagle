@@ -1,5 +1,5 @@
 import { selectEagleBrowseRendition } from '../../lib/eagle-browse-rendition';
-import { isCameraRawMime } from '@sekereagle/library-core';
+import { isCameraHeifMime, isCameraRawMime } from '@sekereagle/library-core';
 import { libraryApiPath } from '../../lib/library-api-scope';
 import { getEagleAssetContentUrl, getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { type EagleAssetListItem, type EaglePyramidDescriptor } from '../../lib/eagle-api';
@@ -30,11 +30,13 @@ export function getEagleViewerHighResolutionUrl(asset: EagleAssetListItem): stri
   return null;
 }
 
-/** Explicit editing may use originals only for browser-native formats. RAW uses bounded sRGB. */
+/** Explicit editing may use originals only for browser-native formats. RAW uses bounded sRGB;
+ *  HEIC/HEIF previews in the current browse rendition and is rendered from the original on save. */
 export function getEagleEditContentUrl(asset: EagleAssetListItem): string | null {
   if (asset.lifecycleStatus !== 'READY' || asset.deletedAt) return null;
   if (['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType))
     return getEagleAssetContentUrl(asset.id, asset.libraryMode);
+  if (isCameraHeifMime(asset.mimeType)) return getEaglePreviewContentUrl(asset);
   if (!isCameraRawMime(asset.mimeType)) return null;
   const edit = asset.renditions.find(
     (row) =>

@@ -56,6 +56,23 @@ const raw = {
     { id: 'edit', kind: 'PREVIEW', variant: 'edit', revision: 2, mimeType: 'image/webp' },
   ],
 } as EagleAssetListItem;
+const heif = {
+  ...asset,
+  mimeType: 'image/heic',
+  width: 4032,
+  height: 3024,
+  renditions: [
+    {
+      id: 'preview',
+      kind: 'PREVIEW',
+      variant: 'default',
+      revision: 2,
+      mimeType: 'image/webp',
+      width: 1600,
+      height: 1200,
+    },
+  ],
+} as EagleAssetListItem;
 function harness() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -122,6 +139,37 @@ describe('shared library photo editing', () => {
     });
     view.rerender({ scopeKey: 'owner:PHOTO' });
     expect(view.result.current.session).toBeNull();
+  });
+  it('shows the edit entry for HEIC/HEIF only with a current preview', () => {
+    const edit = vi.fn();
+    const view = render(<EagleEditPhotoButton asset={heif} onEdit={edit} />);
+    fireEvent.click(screen.getByRole('button', { name: '编辑照片' }));
+    expect(edit).toHaveBeenCalledWith(heif);
+    view.rerender(<EagleEditPhotoButton asset={{ ...heif, renditions: [] }} onEdit={edit} />);
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+  it('edits HEIF from the bounded preview and renders the full-size PNG on the server', async () => {
+    const { wrapper } = harness();
+    const { result } = renderHook(
+      () => useEaglePhotoEditing({ accessToken: 'token', ownerId: 'owner', scopeKey: 'scope' }),
+      { wrapper },
+    );
+    act(() => result.current.open(heif));
+    expect(result.current.session?.source).toBe('/api/eagle/assets/source/renditions/preview');
+    expect(result.current.session?.previewSource).toBe(
+      '/api/eagle/assets/source/renditions/preview',
+    );
+    expect(result.current.session?.sourceSize).toEqual({ width: 4032, height: 3024 });
+    const recipe = { version: 1 as const, edits: DEFAULT_PHOTO_EDITS };
+    expect(await result.current.session!.onSaveRecipe!(recipe)).toEqual({
+      id: 'copy',
+      name: 'copy.png',
+    });
+    expect(state.createRender).toHaveBeenCalledWith(
+      'source',
+      expect.objectContaining({ mediaRevision: 2, rowVersion: 7, recipe }),
+    );
+    expect(state.upload).not.toHaveBeenCalled();
   });
   it('opens a current RAW rendition in PHOTO and rejects foreign-mode and unavailable sources', async () => {
     state.mode = 'PHOTO';

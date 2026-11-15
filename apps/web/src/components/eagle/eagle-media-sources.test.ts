@@ -143,6 +143,37 @@ it('edits camera RAW from a current dedicated derivative, never from the sensor 
   expect(getEagleEditContentUrl({ ...raw, lifecycleStatus: 'FAILED' })).toBeNull();
 });
 
+it('edits HEIC/HEIF from the current preview because browsers cannot decode the original', () => {
+  const heif = {
+    ...asset,
+    libraryMode: 'PHOTO',
+    lifecycleStatus: 'READY',
+    width: 4032,
+    height: 3024,
+    mimeType: 'image/heic',
+    renditions: [
+      {
+        id: 'preview-current',
+        kind: 'PREVIEW',
+        variant: 'default',
+        revision: 3,
+        mimeType: 'image/webp',
+        width: 1600,
+        height: 1200,
+      },
+    ],
+  } as EagleAssetListItem;
+  expect(getEagleEditContentUrl(heif)).toBe(
+    '/api/photos/assets/asset-1/renditions/preview-current',
+  );
+  expect(getEagleEditContentUrl({ ...heif, mimeType: 'image/heif' })).toBe(
+    '/api/photos/assets/asset-1/renditions/preview-current',
+  );
+  expect(getEagleEditContentUrl({ ...heif, renditions: [] })).toBeNull();
+  expect(getEagleEditContentUrl({ ...heif, lifecycleStatus: 'FAILED' })).toBeNull();
+  expect(getEagleEditContentUrl({ ...heif, deletedAt: 'today' })).toBeNull();
+});
+
 it('new video posters never trigger original download while playback is deferred; legacy playback stays compatible', () => {
   const movie = {
     ...asset,

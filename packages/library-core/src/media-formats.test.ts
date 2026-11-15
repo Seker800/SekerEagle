@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   cameraMediaFormat,
+  isCameraHeifMime,
   normalizeCameraMimeType,
   CAMERA_MAX_VIDEO_BYTES,
 } from './media-formats';
@@ -44,4 +45,7 @@ test('HEIC and HEIF container MIME aliases are consistent with content inspectio
   assert.equal(normalizeCameraMimeType('camera.heif', 'image/heic'), 'image/heif');
   assert.equal(normalizeCameraMimeType('camera.heic', 'image/heif'), 'image/heic');
   assert.equal(normalizeCameraMimeType('camera.heic', 'image/jpeg'), null);
+  assert.equal(isCameraHeifMime('image/heic'), true);
+  assert.equal(isCameraHeifMime('image/heif'), true);
+  assert.equal(isCameraHeifMime('image/jpeg'), false);
 });
