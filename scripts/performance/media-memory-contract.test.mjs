@@ -29,7 +29,10 @@ test('desktop media paths stay single-stream and gesture-driven', async () => {
   ]);
   assert.doesNotMatch(controller, /\.tee\(\)/u);
   assert.doesNotMatch(page, /onPointerEnter=.*AssetDrag|onFocus=.*AssetDrag/u);
-  assert.match(page, /onDragStart=.*handleAssetDragStart/u);
+  assert.match(
+    page,
+    /dragStart: \(event, assetId\) =>\s*cardActionsRef\.current\.handleAssetDragStart\(event, assetId\)/u,
+  );
   assert.match(scripts, /"performance:desktop-cache:100k"/u);
   assert.match(scripts, /"performance:verify"/u);
 });

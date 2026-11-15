@@ -24,7 +24,7 @@ test('full-library face scan gets a bounded admission timeout without widening o
 
 test('original-file confirmation has a bounded deadline scoped to valid upload routes', async () => {
   const gateway = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
-  const upload = gateway.match(/location ~ "([^"]+)" \{([\s\S]*?)\n {2}\}/u);
+  const upload = gateway.match(/location ~ "([^"]*uploads[^"]*)" \{([\s\S]*?)\n {2}\}/u);
   assert.ok(upload);
   const route = new RegExp(upload[1]);
   for (const mode of ['eagle', 'photos']) {
