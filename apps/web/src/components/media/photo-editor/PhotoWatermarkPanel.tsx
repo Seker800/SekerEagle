@@ -249,19 +249,35 @@ export function PhotoWatermarkPanel({
           <>
             <button
               type="button"
-              aria-pressed={edits.watermarkCornerColor === 'white'}
+              aria-pressed={edits.watermarkCameraColor === 'white'}
               disabled={disabled}
-              onClick={() => onChange({ watermarkCornerColor: 'white' })}
+              onClick={() => onChange({ watermarkCameraColor: 'white' })}
             >
-              {t('角标白字')}
+              {t('机型白字')}
             </button>
             <button
               type="button"
-              aria-pressed={edits.watermarkCornerColor === 'black'}
+              aria-pressed={edits.watermarkCameraColor === 'black'}
               disabled={disabled}
-              onClick={() => onChange({ watermarkCornerColor: 'black' })}
+              onClick={() => onChange({ watermarkCameraColor: 'black' })}
             >
-              {t('角标黑字')}
+              {t('机型黑字')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={edits.watermarkTimeColor === 'white'}
+              disabled={disabled}
+              onClick={() => onChange({ watermarkTimeColor: 'white' })}
+            >
+              {t('时间白字')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={edits.watermarkTimeColor === 'black'}
+              disabled={disabled}
+              onClick={() => onChange({ watermarkTimeColor: 'black' })}
+            >
+              {t('时间黑字')}
             </button>
           </>
         )}

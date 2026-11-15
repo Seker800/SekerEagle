@@ -139,22 +139,24 @@ it('merges signature alignment into controls instead of separate layouts', () =>
   expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
 });
 
-it('sets the vertical rail corner text color independently from its background theme', () => {
+it('sets camera and time corner colors independently from the background theme', () => {
   const { props, view, onChange } = setup();
-  view.rerender(
-    <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-side' }} />,
-  );
-  expect(screen.getByRole('button', { name: '角标白字' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: '白底' })).toHaveAttribute('aria-pressed', 'true');
-  fireEvent.click(screen.getByRole('button', { name: '角标黑字' }));
-  expect(onChange).toHaveBeenCalledWith({ watermarkCornerColor: 'black' });
+  const side = { ...props.edits, watermark: 'photo-side' };
+  view.rerender(<PhotoWatermarkPanel {...props} edits={side} />);
+  for (const name of ['机型白字', '时间白字', '白底'])
+    expect(screen.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '机型黑字' }));
+  expect(onChange).toHaveBeenCalledWith({ watermarkCameraColor: 'black' });
+  fireEvent.click(screen.getByRole('button', { name: '时间黑字' }));
+  expect(onChange).toHaveBeenCalledWith({ watermarkTimeColor: 'black' });
   view.rerender(
     <PhotoWatermarkPanel
       {...props}
-      edits={{ ...props.edits, watermark: 'photo-side', watermarkCornerColor: 'black' }}
+      edits={{ ...side, watermarkCameraColor: 'black', watermarkTimeColor: 'white' }}
     />,
   );
-  expect(screen.getByRole('button', { name: '角标黑字' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '机型黑字' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '时间白字' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: '白底' })).toHaveAttribute('aria-pressed', 'true');
 });
 

@@ -12,12 +12,13 @@ test('recipe round trips every adjustment and rejects unsupported or unsafe data
     edits: { ...DEFAULT_PHOTO_EDITS, exposure: 25, watermark: 'bottom', filter: 'lut:personal' },
   };
   assert.equal(readPhotoEditRecipe(recipe).edits.exposure, 25);
-  assert.equal(readPhotoEditRecipe(recipe).edits.watermarkCornerColor, 'white');
+  assert.equal(readPhotoEditRecipe(recipe).edits.watermarkCameraColor, 'white');
+  assert.equal(readPhotoEditRecipe(recipe).edits.watermarkTimeColor, 'white');
   assert.equal(
     readPhotoEditRecipe({
       ...recipe,
-      edits: { ...recipe.edits, watermarkCornerColor: 'black' },
-    }).edits.watermarkCornerColor,
+      edits: { ...recipe.edits, watermarkCameraColor: 'black', watermarkTimeColor: 'black' },
+    }).edits.watermarkCameraColor,
     'black',
   );
   for (const invalid of [
@@ -25,7 +26,8 @@ test('recipe round trips every adjustment and rejects unsupported or unsafe data
     { ...recipe, edits: { ...recipe.edits, exposure: Infinity } },
     { ...recipe, edits: { ...recipe.edits, ownerId: 'victim' } },
     { ...recipe, edits: { ...recipe.edits, watermarkWebsite: 'x'.repeat(2001) } },
-    { ...recipe, edits: { ...recipe.edits, watermarkCornerColor: 'red' } },
+    { ...recipe, edits: { ...recipe.edits, watermarkCameraColor: 'red' } },
+    { ...recipe, edits: { ...recipe.edits, watermarkTimeColor: 'red' } },
   ]) {
     assert.throws(() => readPhotoEditRecipe(invalid));
   }

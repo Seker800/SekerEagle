@@ -355,8 +355,12 @@ describe('watermark typography and content hierarchy', () => {
     expect(Math.abs(box('FUJIFILM').top - box('35mm').top)).toBeLessThan(8);
     expect(Math.abs(box('2026.10.19').bottom - box('PHOTO.EXAMPLE.COM').bottom)).toBeLessThan(8);
   });
-  it('keeps the vertical rail corner text white by default and switches it independently', () => {
-    const render = (corner: 'white' | 'black', theme: 'white' | 'black') => {
+  it('sets camera and time corner colors independently from each other and the rail', () => {
+    const render = (
+      cameraColor: 'white' | 'black',
+      timeColor: 'white' | 'black',
+      theme: 'white' | 'black',
+    ) => {
       const drawn: { text: string; fill: string }[] = [];
       renderPhotoWatermark(
         asHTML(createCanvas(1600, 1000)),
@@ -364,7 +368,8 @@ describe('watermark typography and content hierarchy', () => {
           ...DEFAULT_PHOTO_EDITS,
           watermark: 'photo-side',
           watermarkTheme: theme,
-          watermarkCornerColor: corner,
+          watermarkCameraColor: cameraColor,
+          watermarkTimeColor: timeColor,
         },
         {
           camera: 'FUJIFILM X-E5',
@@ -384,16 +389,16 @@ describe('watermark typography and content hierarchy', () => {
         },
       );
       const byText = (text: string) => drawn.find((entry) => entry.text.includes(text))!;
-      return { byText, drawn };
+      return byText;
     };
-    const whiteTheme = render('white', 'white');
-    for (const text of ['FUJIFILM', '2026.10.19'])
-      expect(whiteTheme.byText(text).fill).toBe('#ffffff');
-    expect(whiteTheme.byText('35mm').fill).toBe('#000000');
-    const blackTheme = render('black', 'black');
-    for (const text of ['FUJIFILM', '2026.10.19'])
-      expect(blackTheme.byText(text).fill).toBe('#000000');
-    expect(blackTheme.byText('35mm').fill).toBe('#ffffff');
+    const mixed = render('white', 'black', 'white');
+    expect(mixed('FUJIFILM').fill).toBe('#ffffff');
+    expect(mixed('2026.10.19').fill).toBe('#000000');
+    expect(mixed('35mm').fill).toBe('#000000');
+    const reversed = render('black', 'white', 'black');
+    expect(reversed('FUJIFILM').fill).toBe('#000000');
+    expect(reversed('2026.10.19').fill).toBe('#ffffff');
+    expect(reversed('35mm').fill).toBe('#ffffff');
   });
   it('keeps the date visible for a right-aligned signature', () => {
     expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');

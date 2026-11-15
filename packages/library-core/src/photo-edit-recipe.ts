@@ -37,7 +37,8 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermark: string;
   watermarkAlign: 'left' | 'center' | 'right';
   watermarkTheme: 'white' | 'black' | 'frosted';
-  watermarkCornerColor: 'white' | 'black';
+  watermarkCameraColor: 'white' | 'black';
+  watermarkTimeColor: 'white' | 'black';
   watermarkCamera: string | null;
   watermarkParameters: string | null;
   watermarkCapturedAt: string | null;
@@ -82,7 +83,8 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermark: 'none',
   watermarkAlign: 'left',
   watermarkTheme: 'white',
-  watermarkCornerColor: 'white',
+  watermarkCameraColor: 'white',
+  watermarkTimeColor: 'white',
   watermarkCamera: null,
   watermarkParameters: null,
   watermarkCapturedAt: null,
@@ -180,7 +182,8 @@ export function readPhotoEditRecipe(value: unknown): PhotoEditRecipe {
   if (
     !['left', 'center', 'right'].includes(edits.watermarkAlign) ||
     !['white', 'black', 'frosted'].includes(edits.watermarkTheme) ||
-    !['white', 'black'].includes(edits.watermarkCornerColor) ||
+    !['white', 'black'].includes(edits.watermarkCameraColor) ||
+    !['white', 'black'].includes(edits.watermarkTimeColor) ||
     !['free', ...FIXED_CROP_RATIOS].includes(edits.cropRatio) ||
     !/^(original|vintage|oceanic|monochrome|lut:[\w-]+)$/.test(edits.filter)
   )
