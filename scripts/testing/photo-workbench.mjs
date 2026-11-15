@@ -518,7 +518,12 @@ try {
       const state = await api(`/${mode}/uploads/${session.id}`);
       if (state.status === 'COMPLETED' && state.eagleAssetId)
         return { assetId: state.eagleAssetId, duplicate: state.objectCleanupPending };
-      if (state.status === 'FAILED' || state.status === 'ABORTED')
+      if (state.status === 'ABORTED')
+        throw new Error(state.lastError || 'upload validation was cancelled');
+      if (
+        state.status === 'FAILED' &&
+        ((state.finalizationAttempts ?? 0) >= 10 || state.objectCleanupPending)
+      )
         throw new Error(state.lastError || 'upload validation failed');
       await sleep(500);
     }

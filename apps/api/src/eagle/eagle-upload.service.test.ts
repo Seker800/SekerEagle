@@ -577,6 +577,67 @@ test('a retried completion does not requeue a job the worker already owns', asyn
   assert.equal(upserts, 0);
 });
 
+test('complete refuses a terminal finalization and preserves the retry budget on a transient retry', async () => {
+  const terminal = {
+    id: sessionId,
+    uploaderId: ownerId,
+    status: 'FAILED',
+    finalizationAttempts: 10,
+    objectCleanupPending: true,
+    completionParts: [{ PartNumber: 1, ETag: 'etag-1' }],
+    eagleState: {},
+  };
+  const refusing = new EagleUploadService(
+    { uploadSession: { findFirst: async () => terminal, count: async () => 1 } } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    'PHOTO',
+  );
+  await assert.rejects(
+    refusing.complete(ownerId, sessionId, { parts: [{ partNumber: 1, etag: 'etag-1' }] }),
+    /已被服务器拒绝/,
+  );
+
+  let sessionWrite: Record<string, unknown> | undefined;
+  let jobWrite: Record<string, unknown> | undefined;
+  const retryable = { ...terminal, finalizationAttempts: 2, objectCleanupPending: false };
+  const transaction = {
+    uploadSession: {
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        sessionWrite = data;
+        return { count: 1 };
+      },
+    },
+    uploadFinalizationJob: {
+      findUnique: async () => null,
+      upsert: async ({ update }: { update: Record<string, unknown> }) => {
+        jobWrite = update;
+      },
+    },
+    $executeRaw: async () => 1,
+  };
+  const service = new EagleUploadService(
+    {
+      uploadSession: {
+        findFirst: async () => retryable,
+        count: async () => 1,
+        updateMany: async () => ({ count: 1 }),
+      },
+      $transaction: async (callback: (value: unknown) => unknown) => callback(transaction),
+    } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    'PHOTO',
+  );
+  await service.complete(ownerId, sessionId, {
+    parts: [{ partNumber: 1, etag: 'etag-1' }],
+  });
+  assert.equal('finalizationAttempts' in (sessionWrite ?? {}), false);
+  assert.equal('attempts' in (jobWrite ?? {}), false);
+});
+
 test('transient inspection failure increments finalization attempts exactly once', async () => {
   const { ServiceUnavailableException } = await import('@nestjs/common');
   const updates: Record<string, unknown>[] = [];

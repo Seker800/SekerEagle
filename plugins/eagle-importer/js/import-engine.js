@@ -410,7 +410,11 @@ class ImportEngine {
           assetId: session.eagleAssetId,
           duplicate: Boolean(session.objectCleanupPending),
         };
-      if (session.status === 'FAILED' || session.status === 'ABORTED')
+      if (session.status === 'ABORTED') throw new Error(session.lastError || '服务器校验已取消。');
+      if (
+        session.status === 'FAILED' &&
+        (Number(session.finalizationAttempts ?? 0) >= 10 || session.objectCleanupPending)
+      )
         throw new Error(session.lastError || '服务器校验失败。');
       if (Date.now() >= deadline) throw new Error('服务器仍在确认入库，请稍后重试该文件。');
       await new Promise((resolve) => setTimeout(resolve, 1000));

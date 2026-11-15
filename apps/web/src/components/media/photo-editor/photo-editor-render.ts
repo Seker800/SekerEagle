@@ -46,6 +46,8 @@ export function composePhoto(
   const composed = renderPhotoWatermark(photo, edits, metadata);
   target.width = composed.width;
   target.height = composed.height;
+  if (target.width !== composed.width || target.height !== composed.height)
+    throw new Error('CANVAS_UNAVAILABLE');
   const context = target.getContext('2d');
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
   context.drawImage(composed, 0, 0);

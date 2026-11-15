@@ -182,10 +182,24 @@ describe('EagleImageViewer', () => {
   });
 
   it('labels a large preview until the high-resolution source opens', async () => {
-    render(<EagleImageViewer image={image} previewLimited onClose={vi.fn()} />);
+    render(
+      <EagleImageViewer
+        image={image}
+        previewLimited
+        highResolutionSrc="/api/photos/assets/id/original"
+        onClose={vi.fn()}
+      />,
+    );
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
     expect(screen.getByText('预览图 · 放大加载高清')).toBeInTheDocument();
+  });
+
+  it('does not promise high-resolution loading when the format has no viewer source', async () => {
+    render(<EagleImageViewer image={image} previewLimited onClose={vi.fn()} />);
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.queryByText('预览图 · 放大加载高清')).not.toBeInTheDocument();
   });
 
   it('loads high-resolution tiles only after zooming and reports real tile progress', async () => {

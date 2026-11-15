@@ -187,7 +187,7 @@ final class CleanupScreen extends ScrollView {
   private CleanupEngine engine(BackupJournal journal, int token) {
     // local() trusts the confirmed receipt and the file's size/modified time; the batch
     // request below confirms server visibility without reading every original twice.
-    return new CleanupEngine(journal, (mode, hash, size) -> false, () -> guard(token));
+    return new CleanupEngine(journal, (mode, hash, size) -> true, () -> guard(token));
   }
 
   private BackupEngine.File source(MediaCatalog catalog, MediaCatalog.Item item, int token) {
@@ -390,8 +390,10 @@ final class CleanupScreen extends ScrollView {
               int skipped = 0;
               for (Entry entry : batch) {
                 guard(token);
+                // Read the current batch once and verify its content hash before asking
+                // the system to delete anything. The plan itself never reads whole files.
                 CleanupEngine.Candidate checked =
-                    engine.local(scope, entry.mode, source(catalog, entry.item, token));
+                    engine.check(scope, entry.mode, source(catalog, entry.item, token));
                 if (checked != null
                     && checked.hash.equals(entry.hash)
                     && writableDocument(entry.item)

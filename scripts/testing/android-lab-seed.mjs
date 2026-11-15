@@ -237,7 +237,12 @@ async function seed(config) {
           id = sessionState.eagleAssetId;
           break;
         }
-        if (sessionState.status === 'FAILED' || sessionState.status === 'ABORTED')
+        if (sessionState.status === 'ABORTED')
+          throw new Error(sessionState.lastError || 'Test upload validation was cancelled');
+        if (
+          sessionState.status === 'FAILED' &&
+          ((sessionState.finalizationAttempts ?? 0) >= 10 || sessionState.objectCleanupPending)
+        )
           throw new Error(sessionState.lastError || 'Test upload validation failed');
         await pause(500);
       }

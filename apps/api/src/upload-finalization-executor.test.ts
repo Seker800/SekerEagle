@@ -16,9 +16,10 @@ function executor(options: {
   onJobUpdate?: (data: Record<string, unknown>) => void;
 }) {
   const updates: Array<Record<string, unknown>> = [];
+  const sessionUpdates: Array<Record<string, unknown>> = [];
   const finalized: unknown[] = [];
   let claimed = false;
-  const prisma = {
+  const prisma: any = {
     $queryRaw: async () => {
       if (claimed) return [];
       claimed = true;
@@ -26,6 +27,10 @@ function executor(options: {
     },
     uploadSession: {
       findFirst: async () => options.session ?? null,
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        sessionUpdates.push(data);
+        return { count: 1 };
+      },
     },
     uploadFinalizationJob: {
       update: async ({ data }: { data: Record<string, unknown> }) => {
@@ -35,6 +40,7 @@ function executor(options: {
       },
     },
   };
+  prisma.$transaction = async (callback: (transaction: unknown) => unknown) => callback(prisma);
   const uploads = {
     MATERIAL: { recoverUploadSession: async () => options.recover?.() },
     PHOTO: { recoverUploadSession: async () => options.recover?.() },
@@ -47,6 +53,7 @@ function executor(options: {
   return {
     executor: new UploadFinalizationExecutor(prisma as never, uploads as never, imports as never),
     updates,
+    sessionUpdates,
     finalized,
   };
 }
@@ -70,8 +77,12 @@ test('claimed uploads publish once and complete their durable job', async () => 
   assert.deepEqual(updates[0], { status: 'COMPLETED', lockedAt: null, lastError: null });
 });
 
-test('a terminal session failure fails the job instead of retrying forever', async () => {
-  const { executor: run, updates } = executor({
+test('a terminal session failure fails the job and projects the terminal state onto the session', async () => {
+  const {
+    executor: run,
+    updates,
+    sessionUpdates,
+  } = executor({
     session: { status: 'FAILED', uploaderId: 'owner-1', finalizationAttempts: 10 },
     recover: async () => {
       throw new Error('INVALID_MEDIA');
@@ -79,6 +90,8 @@ test('a terminal session failure fails the job instead of retrying forever', asy
   });
   await run.tick();
   assert.equal(updates[0]?.status, 'FAILED');
+  assert.equal(sessionUpdates[0]?.status, 'FAILED');
+  assert.equal(sessionUpdates[0]?.finalizationAttempts, 10);
 });
 
 test('a transient failure returns the job to the durable queue with backoff', async () => {
@@ -100,6 +113,48 @@ test('an aborted session leaves no queued upload behind', async () => {
   });
   await run.tick();
   assert.equal(updates[0]?.status, 'COMPLETED');
+});
+
+test('a completed publication with a permanently rejected import stops after the attempt cap', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  let claimed = false;
+  const prisma: any = {
+    $queryRaw: async () => {
+      if (claimed) return [];
+      claimed = true;
+      return [{ ...job, attempts: 10 }];
+    },
+    uploadSession: {
+      findFirst: async () => ({
+        status: 'COMPLETED',
+        uploaderId: 'owner-1',
+        finalizationAttempts: 10,
+        eagleAssetId: 'asset-1',
+      }),
+      updateMany: async () => ({ count: 0 }),
+    },
+    uploadFinalizationJob: {
+      update: async ({ data }: { data: Record<string, unknown> }) => {
+        updates.push(data);
+        return data;
+      },
+    },
+  };
+  prisma.$transaction = async (callback: (transaction: unknown) => unknown) => callback(prisma);
+  const failing = new UploadFinalizationExecutor(
+    prisma as never,
+    {
+      PHOTO: { recoverUploadSession: async () => null },
+      MATERIAL: { recoverUploadSession: async () => null },
+    } as never,
+    {
+      finalizeUpload: async () => {
+        throw new Error('IMPORT_ALREADY_CANCELLED');
+      },
+    } as never,
+  );
+  await failing.tick();
+  assert.equal(updates[0]?.status, 'FAILED');
 });
 
 test('an idle queue does not touch the database beyond the claim', async () => {

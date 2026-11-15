@@ -75,7 +75,8 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
       db.execSQL("DELETE FROM scan_progress");
       db.execSQL("DELETE FROM scan_runs");
     }
-    if (oldVersion < 5) {
+    // createProgress() already created the current schema for v1/v2; only v3/v4 need ALTERs.
+    if (oldVersion >= 3 && oldVersion < 5) {
       db.execSQL("ALTER TABLE scan_progress ADD COLUMN uri TEXT NOT NULL DEFAULT ''");
       db.execSQL("ALTER TABLE scan_progress ADD COLUMN name TEXT NOT NULL DEFAULT ''");
       db.execSQL("ALTER TABLE scan_progress ADD COLUMN size INTEGER NOT NULL DEFAULT 0");

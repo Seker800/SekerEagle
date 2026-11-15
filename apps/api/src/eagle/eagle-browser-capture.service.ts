@@ -173,6 +173,7 @@ function serializeCapture(
     size: Number(capture.uploadSession.size),
     partSize,
     duplicate: capture.uploadSession.objectCleanupPending,
+    finalizationAttempts: capture.uploadSession.finalizationAttempts,
     lastError: capture.uploadSession.lastError,
     replayed,
     completedAt: capture.completedAt,

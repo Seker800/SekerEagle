@@ -1820,6 +1820,9 @@ export const enUS = {
   '请求来源不受信任。': 'This request origin is not trusted.',
   '上传文件完整性校验失败。': 'The uploaded file failed integrity verification.',
   '上传文件校验失败。': 'The uploaded file failed validation.',
+  '上传文件校验已取消。': 'Upload validation was cancelled.',
+  '服务器仍在确认入库，请稍后在图库中查看。':
+    'The server is still finishing validation. Check the library again shortly.',
   '导入清单声明不一致。': 'The import manifest does not match its declaration.',
   '导入清单缺少文件夹定义。': 'The import manifest is missing a folder definition.',
   全选: 'Select all',

@@ -98,3 +98,10 @@ HEIC／RAW／视频原本就是临时文件路径，保持不变。并发预算�
 4. 固定测试图库上传大 PNG（约 100MP）、20–40MB JPEG、HEIC、MP4：任务中心显示排队／进行，API 容器内存保持平稳，operations 峰值有界。
 5. 安卓实机与网页／桌面各跑一次批量上传，确认“校验中”与失败提示；旧客户端兼容路径单独验证。
 6. 低峰发布后按已知大文件批次复测 30 分钟，记录 API／operations 内存与 504 数量。
+
+## 2026-11-15 二次审查修复
+
+- 终结任务耗尽 10 次时，`failJob` 在同一事务内把 `UploadFinalizationJob` 与会话一起置为 `FAILED`（`finalizationAttempts=10`），不再留下永远 `ASSEMBLED` 的会话；`COMPLETED` 会话不因导入收敛失败被改状态。
+- `finalizeImport` 也受 10 次上限约束，导入项被取消等永久冲突不会再无限重试。
+- `complete` 对 `FAILED` 且 attempts≥10 或 `objectCleanupPending` 的会话返回 400 终态；重试不再把 `finalizationAttempts` 和 job attempts 重置为 0，客户端重试不会清空退避预算。
+- 网页轮询增加 10 分钟上限，并只在 `attempts>=10` 或 `objectCleanupPending` 时把 FAILED 当终态；importer、浏览器采集和测试脚本使用同一判断。

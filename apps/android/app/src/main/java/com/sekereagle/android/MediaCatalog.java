@@ -184,6 +184,31 @@ final class MediaCatalog {
         document);
   }
 
+  /** The currently selected mode for one file, or null when no current rule covers it. */
+  static String selectedMode(JSONArray rules, Item item) {
+    String selected = null;
+    int best = -1;
+    for (int i = 0; i < rules.length(); i++) {
+      JSONObject rule = rules.optJSONObject(i);
+      if (rule == null) continue;
+      String type = rule.optString("type");
+      String path = rule.optString("path");
+      String mode = rule.optString("mode");
+      if (path.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL"))) continue;
+      boolean matches =
+          item.document
+              ? type.equals("tree") && item.uri.toString().startsWith(path)
+              : type.equals("media")
+                  && BackupPolicy.inFolder(
+                      path, item.path, rule.optBoolean("recursive", true));
+      if (matches && path.length() >= best) {
+        best = path.length();
+        selected = mode;
+      }
+    }
+    return selected;
+  }
+
   void scan(JSONArray rules, Visitor visitor, BackupEngine.Guard guard) throws Exception {
     scan(rules, visitor, guard, -1, 0, -1);
   }

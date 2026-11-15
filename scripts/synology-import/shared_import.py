@@ -370,6 +370,25 @@ class Api:
             connection.close()
 
 
+def await_finalization(api, session_id, timeout=600):
+    deadline = time.monotonic() + timeout
+    while not STOP:
+        session = api.request('GET', '/photos/uploads/'+session_id)
+        status = session.get('status')
+        if status == 'COMPLETED' and session.get('eagleAssetId'):
+            return session
+        if status == 'ABORTED':
+            raise ApiError(400)
+        if status == 'FAILED':
+            attempts = session.get('finalizationAttempts') or 0
+            if attempts >= 10 or session.get('objectCleanupPending'):
+                raise ApiError(400)
+        if time.monotonic() >= deadline:
+            raise ApiError(408)
+        time.sleep(1)
+    raise ApiError(408)
+
+
 def upload_one(root, journal, row, api):
     started = time.monotonic()
     path = row['path']
@@ -401,7 +420,12 @@ def upload_one(root, journal, row, api):
                 if not parts:
                     raise ValueError('ASSEMBLED_PARTS_MISSING')
                 result = api.request('POST', '/photos/uploads/'+session_id+'/complete', {'parts': [{'partNumber': p['partNumber'], 'etag': p['etag']} for p in parts]})
-                journal.update(path, status='IMPORTED', asset_id=result['assetId'], media_status='PROCESSING', error=None)
+                if isinstance(result.get('assetId'), str):
+                    asset_id, media_status = result['assetId'], 'PROCESSING'
+                else:
+                    finished = await_finalization(api, session_id)
+                    asset_id, media_status = finished['eagleAssetId'], finished.get('assetStatus')
+                journal.update(path, status='IMPORTED', asset_id=asset_id, media_status=media_status, error=None)
                 return
             if session['status'] == 'ABORTED':
                 session_id = None
@@ -431,7 +455,12 @@ def upload_one(root, journal, row, api):
             raise ValueError('SOURCE_CHANGED')
         transferred = time.monotonic()
         result = api.request('POST', '/photos/uploads/'+session_id+'/complete', {'parts': parts})
-        journal.update(path, status='IMPORTED', asset_id=result['assetId'], media_status='PROCESSING', error=None)
+        if isinstance(result.get('assetId'), str):
+            asset_id, media_status = result['assetId'], 'PROCESSING'
+        else:
+            finished = await_finalization(api, session_id)
+            asset_id, media_status = finished['eagleAssetId'], finished.get('assetStatus')
+        journal.update(path, status='IMPORTED', asset_id=asset_id, media_status=media_status, error=None)
         log('original_ingest_timing', mime=row['mime'], sourceBytes=row['size'],
             hashSeconds=round(hashed-started, 3), transferSeconds=round(transferred-hashed, 3),
             finalizeSeconds=round(time.monotonic()-transferred, 3))

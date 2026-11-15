@@ -6,8 +6,11 @@ export function drawPhoto(
   crop = true,
 ) {
   const region = photoCrop(source.width, source.height, edits);
-  target.width = crop ? region.width : region.orientedWidth;
-  target.height = crop ? region.height : region.orientedHeight;
+  const width = crop ? region.width : region.orientedWidth;
+  const height = crop ? region.height : region.orientedHeight;
+  target.width = width;
+  target.height = height;
+  if (target.width !== width || target.height !== height) throw new Error('CANVAS_UNAVAILABLE');
   const context = target.getContext('2d');
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
   context.save();

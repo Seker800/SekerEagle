@@ -252,14 +252,30 @@ class NativeTransferManager private constructor(context: Context) {
                     .takeWhile { progress ->
                         // State collection remains on Main; persistence/control is serialized by
                         // commands.
-                        val entries =
-                            batch.entries.map { old ->
-                                progress.entries.firstOrNull { it.uri == old.uri } ?: old
-                            }
-                        update(batch.id) {
-                            it.copy(
+                        // Merge into the batch as it exists now; a retry may have removed an
+                        // entry while this observer still holds the snapshot captured at start.
+                        var entries = batch.entries
+                        update(batch.id) { current ->
+                            entries =
+                                current.entries.map { old ->
+                                    progress.entries.firstOrNull { it.uri == old.uri } ?: old
+                                }
+                            val allowed = entries.map { it.uri.toString() }.toSet()
+                            val projection =
+                                progress.copy(
+                                    entries = entries,
+                                    issues =
+                                        progress.issues.filter {
+                                            it.entry.uri.toString() in allowed
+                                        },
+                                    remaining =
+                                        progress.remaining.filter {
+                                            it.uri.toString() in allowed
+                                        },
+                                )
+                            current.copy(
                                 entries = entries,
-                                progress = progress.copy(entries = entries),
+                                progress = projection,
                                 message =
                                     when (progress.phase) {
                                         NativeUploadPhase.PREPARING -> "读取所选文件"
@@ -268,8 +284,8 @@ class NativeTransferManager private constructor(context: Context) {
                                             progress.stage.ifEmpty { "正在上传" }
                                         NativeUploadPhase.FINISHED ->
                                             if (progress.cancelled)
-                                                it.message.takeIf { _ -> it.paused } ?: "已暂停"
-                                            else if (progress.issues.isNotEmpty()) "部分文件失败"
+                                                current.message.takeIf { _ -> current.paused } ?: "已暂停"
+                                            else if (projection.issues.isNotEmpty()) "部分文件失败"
                                             else if (progress.completedEntries.size < entries.size)
                                                 progress.current.ifEmpty { "传输未完成，请继续或重新登录" }
                                             else "上传完成"
@@ -459,6 +475,7 @@ class NativeTransferManager private constructor(context: Context) {
         if (drop.isEmpty()) return
         mutable.value =
             mutable.value.copy(batches = mutable.value.batches.filterNot { it.id in drop.map { b -> b.id } })
+        persist()
         withContext(Dispatchers.IO) {
             BackupJournal(app).use { journal ->
                 drop.forEach { journal.forget("manual:${it.scope}:${it.id}") }

@@ -279,6 +279,14 @@ export class EagleUploadService {
         duplicate: session.objectCleanupPending,
       };
     }
+    if (
+      session.status === 'FAILED' &&
+      (session.finalizationAttempts >= 10 || session.objectCleanupPending)
+    )
+      throw new BadRequestException({
+        code: 'UPLOAD_FINALIZATION_TERMINAL',
+        message: '该文件已被服务器拒绝，请修复后重新上传。',
+      });
     const parts =
       session.status === 'INITIATED'
         ? requestedParts
@@ -318,7 +326,7 @@ export class EagleUploadService {
           status: 'ASSEMBLED',
           assembledAt: now,
           completionParts: parts,
-          finalizationAttempts: 0,
+          // Keep the retry budget: a client retry must not reset the executor's backoff.
           finalizationStartedAt: null,
           lastError: null,
         },
@@ -330,13 +338,14 @@ export class EagleUploadService {
       });
       // A worker may already own this session; a retried complete must not requeue it.
       if (job?.status === 'PROCESSING') return;
+      if (job?.status === 'COMPLETED' || job?.status === 'FAILED')
+        throw new ConflictException('上传校验已终止，请重新上传该文件。');
       await transaction.uploadFinalizationJob.upsert({
         where: { uploadSessionId: session.id },
         create: { uploadSessionId: session.id, status: 'PENDING', availableAt: now },
         update: {
           status: 'PENDING',
           availableAt: now,
-          attempts: 0,
           lockedAt: null,
           lastError: null,
         },

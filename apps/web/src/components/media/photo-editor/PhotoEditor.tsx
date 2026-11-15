@@ -73,7 +73,8 @@ function saveProgressPercent(progress: { stage: PhotoSaveStage; percent?: number
     case 'preview':
       return 78;
     case 'uploading':
-      return progress.percent ?? 60;
+      // The preview stage already owns 78%; finish the remaining 22% during upload.
+      return 78 + Math.round(((progress.percent ?? 0) / 100) * 22);
   }
 }
 

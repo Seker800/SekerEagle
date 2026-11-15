@@ -593,18 +593,26 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   async function waitForUploadFinalization(sessionId: string, signal: AbortSignal) {
+    const deadline = Date.now() + 10 * 60_000;
     for (;;) {
       signal.throwIfAborted();
       const session = await api<{
         status: string;
         eagleAssetId: string | null;
         objectCleanupPending: boolean;
+        finalizationAttempts: number | null;
         lastError: string | null;
       }>(`/eagle/uploads/${sessionId}`, { signal });
       if (session.status === 'COMPLETED' && session.eagleAssetId)
         return { assetId: session.eagleAssetId, duplicate: session.objectCleanupPending };
-      if (session.status === 'FAILED' || session.status === 'ABORTED')
+      if (session.status === 'ABORTED')
+        throw new Error(session.lastError || t('上传文件校验已取消。'));
+      if (
+        session.status === 'FAILED' &&
+        ((session.finalizationAttempts ?? 0) >= 10 || session.objectCleanupPending)
+      )
         throw new Error(session.lastError || t('上传文件校验失败。'));
+      if (Date.now() >= deadline) throw new Error(t('服务器仍在确认入库，请稍后在图库中查看。'));
       await sleep(1000, signal);
     }
   }

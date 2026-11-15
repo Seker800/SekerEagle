@@ -257,8 +257,13 @@ async function awaitServerCompletion(api, clientCaptureId) {
   for (;;) {
     const capture = await api.get(clientCaptureId);
     if (capture.status === 'COMPLETED' && capture.assetId) return capture;
-    if (capture.status === 'FAILED' || capture.status === 'ABORTED')
-      throw new CaptureApiError(capture.lastError || '服务器校验失败。');
+    if (capture.status === 'ABORTED')
+      throw new CaptureApiError(capture.lastError || '服务器校验已取消。', { kind: 'PERMANENT' });
+    if (
+      capture.status === 'FAILED' &&
+      (Number(capture.finalizationAttempts ?? 0) >= 10 || capture.duplicate)
+    )
+      throw new CaptureApiError(capture.lastError || '服务器校验失败。', { kind: 'PERMANENT' });
     if (Date.now() >= deadline) throw new CaptureApiError('服务器仍在确认入库，稍后自动重试。');
     await new Promise((resolve) => globalThis.setTimeout(resolve, 1000));
   }

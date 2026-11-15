@@ -202,14 +202,10 @@ public final class BackupService extends Service {
       // Files that failed before this run stay queued for after the scan; new photos must never
       // wait behind a multi-gigabyte retry backlog. Incremental scans never revisit them.
       final Set<String> retriedKeys = new HashSet<>();
+      final Set<String> visitedKeys = new HashSet<>();
       final List<PendingRetry> pendingRetries = new ArrayList<>();
       for (BackupJournal.Retry retry : store.failures(scope)) {
         guard();
-        // A known failure is never re-submitted by the scan, even after automatic retries stop;
-        // only the explicit retry action resets its attempt count.
-        retriedKeys.add(
-            retry.mode + ":" + com.sekereagle.android.core.BackupPolicy.digest(retry.uri));
-        if (retry.attempts >= UploadRetryPolicy.MAX_ATTEMPTS) continue;
         MediaCatalog.Item pending;
         try {
           // The file may have been edited since it failed; use the provider's current metadata.
@@ -222,11 +218,19 @@ public final class BackupService extends Service {
             continue;
           }
         }
+        // A failure outside the current rules, or whose folder changed mode, must not upload
+        // into the old library. Re-evaluate it against the rules the user has now.
+        String currentMode = MediaCatalog.selectedMode(rules, pending);
+        if (currentMode == null) continue;
         String fileKey =
-            retry.mode + ":" + com.sekereagle.android.core.BackupPolicy.digest(retry.uri);
+            currentMode + ":" + com.sekereagle.android.core.BackupPolicy.digest(retry.uri);
+        // A known failure is never re-submitted by the scan, even after automatic retries stop;
+        // only the explicit retry action resets its attempt count.
+        retriedKeys.add(fileKey);
+        if (retry.attempts >= UploadRetryPolicy.MAX_ATTEMPTS) continue;
         pendingRetries.add(
             new PendingRetry(
-                pending, retry.mode, fileKey, pending.size + ":" + pending.modified));
+                pending, currentMode, fileKey, pending.size + ":" + pending.modified));
       }
       long scanStarted = System.currentTimeMillis() / 1000;
       long[] state = store.scanState(scope);
@@ -244,6 +248,7 @@ public final class BackupService extends Service {
                     + ":"
                     + com.sekereagle.android.core.BackupPolicy.digest(item.uri.toString());
             String fingerprint = item.size + ":" + item.modified;
+            if (!visitedKeys.add(fileKey)) return;
             if (retriedKeys.contains(fileKey)) return;
             if (item.modified > 0) {
               if (store.scanCompleted(scope, fileKey, fingerprint)) {
@@ -276,7 +281,7 @@ public final class BackupService extends Service {
             visit,
             this::guard,
             scanStarted - 24 * 3600,
-            state[0] >= 0 ? state[0] : Long.MAX_VALUE);
+            Long.MAX_VALUE);
       }
       for (PendingRetry retry : pendingRetries) {
         guard();

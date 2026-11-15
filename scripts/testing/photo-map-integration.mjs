@@ -451,6 +451,26 @@ try {
   const afterDelete = await rawService.clusters(owner, false, world);
   assert.notEqual(afterDelete.snapshotId, beforeDelete.snapshotId);
   assert.equal(afterDelete.total, beforeDelete.total - 1);
+  // Deleting the only location row (for example undoing an agent city suggestion)
+  // removes coordinates and must revoke the visible generation immediately.
+  const removedLocation = await make({}, 46, 111);
+  await refresh(owner);
+  const beforeLocationDelete = await rawService.clusters(owner, false, world);
+  const versionBeforeLocationDelete = (
+    await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })
+  ).visibilityVersion;
+  await prisma.eaglePhotoMetadata.delete({ where: { assetId: removedLocation } });
+  const stateAfterLocationDelete = await prisma.eaglePhotoMapState.findUniqueOrThrow({
+    where: stateKey,
+  });
+  assert.ok(stateAfterLocationDelete.visibilityVersion > versionBeforeLocationDelete);
+  const duringLocationDelete = await rawService.clusters(owner, false, world);
+  assert.equal(duringLocationDelete.status, 'PENDING');
+  assert.equal(duringLocationDelete.total, 0);
+  await refresh(owner);
+  const afterLocationDelete = await rawService.clusters(owner, false, world);
+  assert.equal(afterLocationDelete.total, beforeLocationDelete.total - 1);
+
   // A media revision bump (edit or replacement) keeps the visible generation too;
   // re-analysis without a coordinate change must not revoke it.
   const revised = await make({}, 45, 110);

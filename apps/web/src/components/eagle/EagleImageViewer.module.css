@@ -70,6 +70,7 @@
 
 .loadState {
   position: absolute;
+  z-index: 3;
   inset: 0;
   display: grid;
   place-content: center;

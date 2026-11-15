@@ -8,6 +8,7 @@ import { IconAdjustments, IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
+import { fetchWithBrowserSession } from '../../lib/api-client';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
 import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleLocateAssetButton } from './EagleLocateAssetButton';
@@ -194,10 +195,11 @@ export function EagleImageViewer({
     setOriginalPercent(null);
     void (async () => {
       try {
-        const response = await fetch(highResolutionSrc, {
-          credentials: 'include',
-          signal: controller.signal,
-        });
+        const response = await fetchWithBrowserSession(
+          highResolutionSrc,
+          { signal: controller.signal },
+          120_000,
+        );
         if (!response.ok) throw new Error('HIGH_RES_LOAD_FAILED');
         const total = Number(response.headers.get('content-length') ?? 0);
         const contentType = response.headers.get('content-type') ?? 'image/jpeg';
@@ -226,6 +228,8 @@ export function EagleImageViewer({
         if (!cancelled && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setOriginalLoading(false);
           setOriginalPercent(null);
+          // Allow the next zoom gesture to retry instead of leaving the effect dormant.
+          setZoomActivated(false);
         }
       }
     })();
@@ -583,7 +587,8 @@ export function EagleImageViewer({
     tileProgress.loaded < tileProgress.total;
   const showOriginalProgress = originalLoading;
   const showOriginalBar = showOriginalProgress && originalPercent !== null;
-  const showPreviewHint = previewLimited && !detailSettled;
+  const canLoadDetail = Boolean(descriptor || highResolutionSrc);
+  const showPreviewHint = previewLimited && canLoadDetail && !detailSettled;
   const qualityNotice =
     displayStatus === 'ready' && !loading
       ? descriptor

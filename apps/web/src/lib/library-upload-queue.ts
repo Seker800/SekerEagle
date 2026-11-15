@@ -102,7 +102,7 @@ export class LibraryUploadQueue {
       const job = this.#jobs.get(id);
       if (!job || job.pending) return false;
       job.pending = true;
-      this.#update(id, { state: 'queued', percent: 0, error: undefined });
+      this.#update(id, { state: 'queued', percent: 0, phase: undefined, error: undefined });
       return true;
     });
     if (!ready.length) return Promise.resolve();

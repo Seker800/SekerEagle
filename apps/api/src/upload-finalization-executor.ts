@@ -112,7 +112,7 @@ export class UploadFinalizationExecutor {
       if (completed || current?.status === 'COMPLETED' || current?.status === 'ABORTED') {
         await this.completeJob(job.id);
       } else if (current?.status === 'FAILED' && current.finalizationAttempts >= MAX_ATTEMPTS) {
-        await this.failJob(job.id, current.finalizationAttempts, current.lastError);
+        await this.failJob(job, current.finalizationAttempts, current.lastError);
       } else {
         await this.retryJob(job.id, job.attempts, current?.lastError ?? 'FINALIZATION_IN_PROGRESS');
       }
@@ -129,7 +129,7 @@ export class UploadFinalizationExecutor {
         job.attempts >= MAX_ATTEMPTS ||
         (current?.status === 'FAILED' && current.finalizationAttempts >= MAX_ATTEMPTS)
       ) {
-        await this.failJob(job.id, job.attempts, current?.lastError ?? error);
+        await this.failJob(job, job.attempts, current?.lastError ?? error);
       } else {
         await this.retryJob(job.id, job.attempts, current?.lastError ?? error);
       }
@@ -147,6 +147,10 @@ export class UploadFinalizationExecutor {
       try {
         await this.imports.finalizeUpload(uploaderId, job.uploadSessionId, assetId);
       } catch (error) {
+        if (job.attempts >= MAX_ATTEMPTS) {
+          await this.failJob(job, job.attempts, error);
+          return;
+        }
         await this.retryJob(job.id, job.attempts, error);
         return;
       }
@@ -161,15 +165,35 @@ export class UploadFinalizationExecutor {
     });
   }
 
-  private async failJob(id: string, attempts: number, detail?: unknown) {
-    await this.prisma.uploadFinalizationJob.update({
-      where: { id },
-      data: {
-        status: 'FAILED',
-        lockedAt: null,
-        attempts,
-        lastError: jobError(detail),
-      },
+  private async failJob(job: ClaimedJob, attempts: number, detail?: unknown) {
+    const lastError = jobError(detail) ?? 'UPLOAD_FINALIZATION_FAILED';
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.uploadFinalizationJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'FAILED',
+          lockedAt: null,
+          attempts,
+          lastError,
+        },
+      });
+      // A terminal job must also terminate the session clients poll. COMPLETED sessions
+      // are left alone: publication succeeded and only import convergence failed.
+      await transaction.uploadSession.updateMany({
+        where: {
+          id: job.uploadSessionId,
+          status: { in: ['ASSEMBLED', 'FAILED', 'FINALIZING'] },
+        },
+        data: {
+          status: 'FAILED',
+          finalizationAttempts: MAX_ATTEMPTS,
+          finalizationStartedAt: null,
+          lastError,
+          // Terminal: the assembled object is not going to be published; the cleanup
+          // outbox may remove it. A COMPLETED session is excluded by the where clause.
+          objectCleanupPending: true,
+        },
+      });
     });
   }
 

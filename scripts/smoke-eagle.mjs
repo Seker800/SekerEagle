@@ -44,7 +44,12 @@ async function waitForUpload(uploadId, auth) {
     const state = await api(`/api/eagle/uploads/${uploadId}`, auth);
     if (state.payload?.status === 'COMPLETED' && state.payload.eagleAssetId)
       return state.payload.eagleAssetId;
-    if (state.payload?.status === 'FAILED' || state.payload?.status === 'ABORTED')
+    if (state.payload?.status === 'ABORTED')
+      throw new Error(state.payload.lastError || '上传校验已取消');
+    if (
+      state.payload?.status === 'FAILED' &&
+      ((state.payload.finalizationAttempts ?? 0) >= 10 || state.payload.objectCleanupPending)
+    )
       throw new Error(state.payload.lastError || '上传校验失败');
     await delay(500);
   }

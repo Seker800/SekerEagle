@@ -178,7 +178,13 @@ export function useEaglePhotoEditing({
               onStage?.('submitting');
               // Reuse the same request id when retrying an unchanged recipe, so an
               // ambiguous network failure cannot publish two edited copies.
-              const recipeKey = JSON.stringify({ recipe, lut: lut ?? null });
+              const recipeKey = JSON.stringify({
+                sourceId,
+                mediaRevision: asset.mediaRevision,
+                rowVersion: sourceVersion,
+                recipe,
+                lut: lut ?? null,
+              });
               const requestId =
                 renderRequest.current?.key === recipeKey
                   ? renderRequest.current.id
