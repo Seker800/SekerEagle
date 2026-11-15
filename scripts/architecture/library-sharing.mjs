@@ -30,6 +30,7 @@ export function readLibrarySources(root) {
 }
 
 const page = 'apps/web/src/components/eagle/SekerEaglePage.tsx';
+const card = 'apps/web/src/components/eagle/EagleAssetCard.tsx';
 const photoModule = 'apps/api/src/photos/photo-library.module.ts';
 const neutralCore = [
   'eagle-masonry-layout.ts',
@@ -47,10 +48,12 @@ const composition = {
     useEagleAssetViewport: './eagle-asset-viewport',
     useEagleUploadController: './useEagleUploadController',
     useEagleMutations: './useEagleMutations',
-    EagleAssetThumbnail: './EagleAssetThumbnail',
+    CachedEagleAssetThumbnail: './EagleAssetThumbnail',
+    EagleAssetCard: './EagleAssetCard',
     EagleQuickFilterBar: './EagleQuickFilterBar',
     EagleImageViewer: './EagleImageViewer',
   },
+  [card]: { EagleAssetThumbnail: './EagleAssetThumbnail' },
   'apps/web/src/App.tsx': { SekerEaglePage: './components/eagle/SekerEaglePage' },
 };
 const controllers = {
@@ -524,7 +527,7 @@ export function checkLibrarySharing(sources) {
       }
     }
   }
-  const pageTree = trees.get(page);
+  const pageTree = trees.get(card);
   if (pageTree) {
     let cards = 0;
     walk(pageTree, (node) => {
@@ -557,7 +560,7 @@ export function checkLibrarySharing(sources) {
         );
     });
     if (cards !== 1)
-      report(page, 'shared-card', 'Keep one shared card composition for both libraries.');
+      report(card, 'shared-card', 'Keep one shared card composition for both libraries.');
   }
   for (const [file, tree] of trees) {
     if (!file.startsWith('apps/api/src/photos/') || file === photoModule) continue;

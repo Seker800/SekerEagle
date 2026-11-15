@@ -7,6 +7,7 @@ import { checkLibrarySharing, readLibrarySources } from './library-sharing.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const baseline = readLibrarySources(root);
 const page = 'apps/web/src/components/eagle/SekerEaglePage.tsx';
+const card = 'apps/web/src/components/eagle/EagleAssetCard.tsx';
 const photoModule = 'apps/api/src/photos/photo-library.module.ts';
 function rejectsMutation(file, mutate, rule) {
   const sources = new Map(baseline);
@@ -31,7 +32,7 @@ test('current architecture shares generic paths and permits photography extensio
 });
 test('rejects a second thumbnail renderer even when imported with an alias', () => {
   rejectsMutation(
-    page,
+    card,
     (s) =>
       s
         .replace(
@@ -45,7 +46,7 @@ test('rejects a second thumbnail renderer even when imported with an alias', () 
 });
 test('rejects mode-conditional generic rendering', () => {
   rejectsMutation(
-    page,
+    card,
     (s) =>
       s.replace(
         /<EagleAssetThumbnail\b[\s\S]*?\/>/,
@@ -178,11 +179,11 @@ test('rejects malformed source instead of accepting a partial syntax tree', () =
 
 test('rejects photo-only overlays inside the shared card', () => {
   rejectsMutation(
-    page,
+    card,
     (s) =>
       s.replace(
-        '{(selectionMode || isBatchSelection) && (',
-        "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{(selectionMode || isBatchSelection) && (",
+        '{(selectionMode || batchSelection) && (',
+        "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{(selectionMode || batchSelection) && (",
       ),
     'shared-card',
   );
@@ -195,10 +196,10 @@ test('rejects generic rendering guarded by mode aliases and alias chains', () =>
     "const first = libraryMode !== 'MATERIAL'; const photoFlag = first;",
   ]) {
     rejectsMutation(
-      page,
+      card,
       (s) =>
         s
-          .replace('  return (\n    <main', `  ${declarations}\n  return (\n    <main`)
+          .replace('  return (\n    <button', `  ${declarations}\n  return (\n    <button`)
           .replace(
             /<EagleAssetThumbnail\b[\s\S]*?\/>/,
             (thumbnail) => `{photoFlag && ${thumbnail}}`,
