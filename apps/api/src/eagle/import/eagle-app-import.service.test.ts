@@ -5,7 +5,10 @@ import { EagleImportsService } from './eagle-app-import.service';
 import { PrismaEagleImportsRepository } from './adapters/prisma/eagle-app-import.repository';
 
 const createRepository = (prisma: unknown) =>
-  new PrismaEagleImportsRepository(prisma as never, { applyMetadata: async () => undefined });
+  new PrismaEagleImportsRepository(prisma as never, {
+    applyMetadata: async () => undefined,
+    applyMetadataBatch: async () => undefined,
+  });
 const createService = (prisma: unknown) => new EagleImportsService(createRepository(prisma));
 
 test('creates an owner-scoped import run and replays the same idempotency key safely', async () => {
@@ -131,6 +134,7 @@ test('recovers a concurrent create-run replay from the database uniqueness bound
 
 test('preflight refuses incomplete manifests before allowing any upload', async () => {
   let rawCall = 0;
+  let syncCalls = 0;
   const transaction = {
     $queryRaw: async () => {
       rawCall += 1;
@@ -171,9 +175,25 @@ test('preflight refuses incomplete manifests before allowing any upload', async 
   const service = createService({
     $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
       work(transaction),
+    $queryRaw: async () => [{ itemCount: 1n, byteSize: 100n, missingFolderIds: [] }],
+    eagleImportRun: {
+      findFirst: async () => ({
+        id: 'run-1',
+        status: 'DRAFT',
+        declaredItemCount: 2,
+        declaredByteSize: 300n,
+      }),
+    },
+    eagleImportRunItem: {
+      findMany: async () => {
+        syncCalls += 1;
+        return [];
+      },
+    },
   } as never);
 
   await assert.rejects(service.preflight('owner-a', 'run-1'), BadRequestException);
+  assert.equal(syncCalls, 0, 'invalid declarations must be rejected before metadata sync');
 });
 
 test('preflight locks the run and summarizes a large manifest inside one transaction', async () => {
@@ -213,7 +233,7 @@ test('preflight locks the run and summarizes a large manifest inside one transac
     },
     eagleImportRunItem: {
       findMany: async (args: { take?: number }) => {
-        assert.equal(args.take, 200);
+        assert.equal(args.take, 100);
         return [];
       },
     },
@@ -221,6 +241,21 @@ test('preflight locks the run and summarizes a large manifest inside one transac
   const service = createService({
     $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
       work(transaction),
+    $queryRaw: async () => [{ itemCount: 100_000n, byteSize: 500_000n, missingFolderIds: [] }],
+    eagleImportRun: {
+      findFirst: async () => ({
+        id: 'run-1',
+        status: 'DRAFT',
+        declaredItemCount: 100_000,
+        declaredByteSize: 500_000n,
+      }),
+    },
+    eagleImportRunItem: {
+      findMany: async (args: { take?: number }) => {
+        assert.equal(args.take, 100);
+        return [];
+      },
+    },
   } as never);
 
   const result = await service.preflight('owner-a', 'run-1');

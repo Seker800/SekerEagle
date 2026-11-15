@@ -61,6 +61,7 @@ export class EagleMaintenanceService {
       const plans = await tx.$queryRaw<EagleLibraryTransfer[]>`
         SELECT * FROM "EagleLibraryTransfer"
         WHERE status IN ('PENDING', 'ABANDONED') AND "updatedAt" < ${cutoff}
+          AND "cleanupAttempts" < 30
         ORDER BY "updatedAt", id LIMIT 100 FOR UPDATE SKIP LOCKED
       `;
       for (const plan of plans) {
@@ -99,7 +100,7 @@ export class EagleMaintenanceService {
         });
         await tx.eagleLibraryTransfer.update({
           where: { id: plan.id, ownerId: plan.ownerId, sourceMode: plan.sourceMode },
-          data: { status: 'ABANDONED', updatedAt: now },
+          data: { status: 'ABANDONED', updatedAt: now, cleanupAttempts: { increment: 1 } },
         });
         if (objectKeys.length || prefixes.length)
           await tx.eagleObjectDeletion.create({

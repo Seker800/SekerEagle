@@ -553,52 +553,80 @@ export class PhotoManagementService {
       rows.map((row) => ({ ...row, id: row.assetId, mimeType: row.asset.mimeType })),
     );
     const revisions = new Map(rows.map((row) => [row.assetId, row.assetRevision]));
-    return this.prisma.$transaction(async (tx) => {
-      await beforePublish?.(tx);
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
-      const manualMembers = await tx.eaglePhotoGroupMember.findMany({
-        where: { ownerId, libraryMode: 'PHOTO', group: {} },
-        select: { assetId: true },
-      });
-      const protectedAssets = new Set(manualMembers.map((row) => row.assetId));
-      let created = 0;
-      for (const suggestion of suggestions) {
-        if (suggestion.assetIds.some((assetId) => protectedAssets.has(assetId))) continue;
-        const sourceKey =
-          'auto-v1:' +
-          createHash('sha256')
-            .update(
-              [...suggestion.assetIds]
-                .sort()
-                .map((id) => `${id}:${revisions.get(id) ?? 0}`)
-                .join(':'),
-            )
-            .digest('hex');
-        const exists = await tx.eaglePhotoGroup.findUnique({
-          where: { ownerId_libraryMode_sourceKey: { ownerId, libraryMode: 'PHOTO', sourceKey } },
+    return this.prisma.$transaction(
+      async (tx) => {
+        await beforePublish?.(tx);
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
+        const manualMembers = await tx.eaglePhotoGroupMember.findMany({
+          where: { ownerId, libraryMode: 'PHOTO', group: {} },
+          select: { assetId: true },
         });
-        if (exists) continue; // Human choices, including dismissed suggestions, survive rescans.
-        const group = await tx.eaglePhotoGroup.create({
-          data: {
+        const protectedAssets = new Set(manualMembers.map((row) => row.assetId));
+        const candidates = suggestions
+          .filter(
+            (suggestion) => !suggestion.assetIds.some((assetId) => protectedAssets.has(assetId)),
+          )
+          .map((suggestion) => ({
+            ...suggestion,
+            sourceKey:
+              'auto-v1:' +
+              createHash('sha256')
+                .update(
+                  [...suggestion.assetIds]
+                    .sort()
+                    .map((id) => `${id}:${revisions.get(id) ?? 0}`)
+                    .join(':'),
+                )
+                .digest('hex'),
+          }));
+        const existingKeys = new Set<string>();
+        for (const { rows: keys } of databaseBatches(
+          candidates.map((candidate) => candidate.sourceKey),
+          { fixedParameters: 4, parametersPerRow: 1, targetRows: 500 },
+        )) {
+          const found = await tx.eaglePhotoGroup.findMany({
+            where: { ownerId, libraryMode: 'PHOTO', sourceKey: { in: keys } },
+            select: { sourceKey: true },
+          });
+          for (const row of found) existingKeys.add(row.sourceKey);
+        }
+        const createdGroups = candidates
+          .filter((candidate) => !existingKeys.has(candidate.sourceKey))
+          .map((candidate) => ({
+            id: randomUUID(),
             ownerId,
-            libraryMode: 'PHOTO',
-            sourceKey,
-            kind: suggestion.kind,
-            bestAssetId: suggestion.bestAssetId,
-          },
-        });
-        await tx.eaglePhotoGroupMember.createMany({
-          data: suggestion.assetIds.map((assetId) => ({
+            libraryMode: 'PHOTO' as const,
+            sourceKey: candidate.sourceKey,
+            kind: candidate.kind,
+            bestAssetId: candidate.bestAssetId,
+            assetIds: candidate.assetIds,
+          }));
+        for (const { rows: batch } of databaseBatches(createdGroups, {
+          fixedParameters: 0,
+          parametersPerRow: 6,
+          targetRows: 500,
+        }))
+          await tx.eaglePhotoGroup.createMany({
+            data: batch.map(({ assetIds: _assetIds, ...group }) => group),
+          });
+        const members = createdGroups.flatMap((group) =>
+          group.assetIds.map((assetId) => ({
             ownerId,
-            libraryMode: 'PHOTO',
+            libraryMode: 'PHOTO' as const,
             groupId: group.id,
             assetId,
           })),
-        });
-        created++;
-      }
-      return { created, scanned: rows.length };
-    });
+        );
+        for (const { rows: batch } of databaseBatches(members, {
+          fixedParameters: 0,
+          parametersPerRow: 4,
+          targetRows: 500,
+        }))
+          await tx.eaglePhotoGroupMember.createMany({ data: batch });
+        return { created: createdGroups.length, scanned: rows.length };
+      },
+      { timeout: 120_000, maxWait: 5_000 },
+    );
   }
   async createGroup(
     ownerId: string,

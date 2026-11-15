@@ -55,6 +55,7 @@ test('relative tag commands use current membership inside the supplied transacti
   const commands = registry({
     batchChangeManualTags: async (...args: unknown[]) => {
       calls.push(args);
+      return { privacyChangedAssetCount: 0 };
     },
   });
   const definition = commands.get('ASSET_TAGS');

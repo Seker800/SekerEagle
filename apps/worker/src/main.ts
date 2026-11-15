@@ -34,6 +34,7 @@ import {
   videoTranscodingEnabled,
 } from './video-processing-policy';
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
+import type { BackgroundSchedule } from '@sekereagle/library-core';
 import {
   lockOwnerPrivacyProjection,
   syncAssetPrivacy,
@@ -75,7 +76,7 @@ import {
   availableProcessingJobKinds,
   terminalAssetFailure,
 } from './processing-policy';
-import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
+import { inferPhotoFaces, persistPhotoFaces, stopFaceInference } from './photo-faces';
 import { inspectJpegLivePhoto, inspectLivePhotoStream } from './live-photo';
 import { readOwnedImageRange } from './image-range';
 import { selectImageJobSource } from './image-job-source';
@@ -92,13 +93,18 @@ import {
 } from './media-validation-error';
 import { EmbeddingClient, type EmbeddingClientError } from './embedding-client';
 import { embeddingRetry, embeddingBackoff } from './embedding-retry';
-import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
+import { buildPrototypePlanOffThread, parsePgVector } from './tag-semantic-build';
 import {
   JobWakeScheduler,
   nextEligibleWakeAt,
   PostgresWakeListener,
   type ProcessingWakeSettings,
 } from './job-wakeup';
+
+const SETTINGS_CACHE_MS = 1_000;
+const settingsCache = new Map<string, { at: number; settings: BackgroundSchedule | null }>();
+const inFlightJobs = new Map<string, EagleAssetProcessingJob>();
+const STOP_GRACE_MS = 20_000;
 
 const databaseUrl = process.env.DATABASE_URL ?? '';
 const s3Endpoint = process.env.S3_ENDPOINT ?? '';
@@ -316,9 +322,19 @@ async function canClaimBackgroundForOwner(
   if (processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION && !runVideoTranscoding) return false;
   if (!runBackgroundProcessing) return false;
   if (kind === 'GENERATE_EMBEDDING' && embeddingReadiness !== 'READY') return false;
-  const settings = await prisma.eagleProcessingSetting.findUnique({
-    where: { ownerId_libraryMode: { ownerId, libraryMode } },
-  });
+  const key = `${ownerId}:${libraryMode}`;
+  const cached = settingsCache.get(key);
+  let settings: BackgroundSchedule | null;
+  if (cached && Date.now() - cached.at < SETTINGS_CACHE_MS) {
+    settings = cached.settings;
+  } else {
+    settings = await prisma.eagleProcessingSetting.findUnique({
+      where: { ownerId_libraryMode: { ownerId, libraryMode } },
+    });
+    if (settingsCache.size >= 16 && !settingsCache.has(key))
+      settingsCache.delete(settingsCache.keys().next().value!);
+    settingsCache.set(key, { at: Date.now(), settings });
+  }
   return mediaBackgroundAllowed(settings, kind);
 }
 
@@ -789,7 +805,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
     ORDER BY md5(link."assetId")
     LIMIT ${sampleLimit}
   `);
-  const prototypePlan = buildPrototypePlan(
+  const prototypePlan = await buildPrototypePlanOffThread(
     sample.map((row) => ({
       assetId: row.assetId,
       embedding: parsePgVector(row.embedding, embeddingDimensions),
@@ -1049,6 +1065,31 @@ async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown
   });
 }
 
+async function runBoundedWork<T>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  let failed = false;
+  let failure: unknown;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (!failed) {
+        const index = cursor++;
+        if (index >= items.length) return;
+        try {
+          await work(items[index]!);
+        } catch (error) {
+          failed = true;
+          failure = error;
+        }
+      }
+    }),
+  );
+  if (failed) throw failure;
+}
+
 async function generateImagePyramid(
   job: EagleAssetProcessingJob,
   asset: {
@@ -1080,7 +1121,7 @@ async function generateImagePyramid(
     const tilePaths = output.files.map((name) => join(tileDirectory, name));
     let byteSize = 0n;
     await outputAttempt.prepare();
-    for (const filePath of tilePaths) {
+    await runBoundedWork(tilePaths, 4, async (filePath) => {
       const relativePath = filePath.slice(tileDirectory.length + 1);
       const tile = parseDeepZoomTilePath(relativePath);
       const details = await stat(filePath);
@@ -1093,7 +1134,7 @@ async function generateImagePyramid(
           ContentType: 'image/webp',
         }),
       );
-    }
+    });
 
     published = await publishPyramid(prisma, {
       job,
@@ -1442,6 +1483,7 @@ async function processClaimedJob(
 ): Promise<void> {
   const startedRss = process.memoryUsage().rss;
   const startedAt = Date.now();
+  inFlightJobs.set(job.id, job);
   let leaseHeld = true;
   let renewing = false;
   const renewal = setInterval(() => {
@@ -1482,6 +1524,7 @@ async function processClaimedJob(
     const message = error instanceof Error ? error.message : 'unknown media error';
     process.stderr.write(`failed media job ${job.id}: ${message}\n`);
   } finally {
+    inFlightJobs.delete(job.id);
     clearInterval(renewal);
     wakeScheduler?.wakeNow();
   }
@@ -1496,6 +1539,33 @@ function assertExpectedHash(expected: string | null | undefined, actual: string)
     throw new PermanentMediaValidationError('CONTENT_SHA256_MISMATCH');
 }
 
+function hasActiveWork(): boolean {
+  return (
+    resourcePool.activeCount > 0 ||
+    activeTagBuildCount > 0 ||
+    buildingSmartFolder ||
+    buildingPhotoMap ||
+    checkingHeartbeat ||
+    Boolean(objectDeletionRunner?.active)
+  );
+}
+
+/** Hand unfinished media jobs back to the queue instead of waiting for the 10-minute lease. */
+async function releaseInFlightJobs(): Promise<void> {
+  const jobs = [...inFlightJobs.values()];
+  if (!jobs.length) return;
+  await prisma.eagleAssetProcessingJob
+    .updateMany({
+      where: {
+        OR: jobs.map(({ id, leaseVersion }) => ({ id, leaseVersion })),
+        status: 'PROCESSING',
+      },
+      data: { status: 'PENDING', lockedAt: null, leaseVersion: { increment: 1 } },
+    })
+    .catch(reportLoopError);
+  process.stderr.write(`released ${jobs.length} media jobs after the shutdown deadline\n`);
+}
+
 async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
@@ -1505,19 +1575,26 @@ async function stop(signal: string): Promise<void> {
   objectDeletionRunner?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
-  while (
-    resourcePool.activeCount > 0 ||
-    activeTagBuildCount > 0 ||
-    buildingSmartFolder ||
-    buildingPhotoMap ||
-    checkingHeartbeat ||
-    objectDeletionRunner?.active
-  )
+  const deadline = Date.now() + STOP_GRACE_MS;
+  let forced = false;
+  while (hasActiveWork()) {
+    if (Date.now() >= deadline) {
+      forced = true;
+      break;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (forced) await releaseInFlightJobs();
+  stopFaceInference();
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
   await prisma.$disconnect();
   storage.destroy();
   process.exitCode = 0;
+  // Never let ffmpeg/sharp outlive the deployment grace period after jobs are released.
+  if (forced) {
+    process.stderr.write('worker forced exit after releasing in-flight media jobs\n');
+    process.exit(0);
+  }
 }
 
 async function main(): Promise<void> {

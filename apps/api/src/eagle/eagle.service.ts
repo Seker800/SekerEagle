@@ -345,18 +345,20 @@ export class EagleService {
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
     if (newer) page.reverse();
+    const [items, photoStacks] = await Promise.all([
+      this.withLivePhotoMotions(ownerId, page, includePrivate),
+      this.libraryMode === 'PHOTO' && !trash
+        ? this.readPhotoStacks(
+            ownerId,
+            page.map(({ id }) => id),
+            queryWhere,
+            includePrivate,
+          )
+        : Promise.resolve(null),
+    ]);
     return {
-      items: await this.withLivePhotoMotions(ownerId, page, includePrivate),
-      ...(this.libraryMode === 'PHOTO' && !trash
-        ? {
-            photoStacks: await this.readPhotoStacks(
-              ownerId,
-              page.map(({ id }) => id),
-              queryWhere,
-              includePrivate,
-            ),
-          }
-        : {}),
+      items,
+      ...(photoStacks ? { photoStacks } : {}),
       previousCursor: colorPage
         ? colorPage.previousCursor
         : page.length && (newer ? hasMore : Boolean(cursor))
@@ -602,34 +604,36 @@ export class EagleService {
             }),
           ])
         : [0, 0];
-    return {
-      items: await this.withLivePhotoMotions(
+    const [items, photoStacks] = await Promise.all([
+      this.withLivePhotoMotions(
         ownerId,
         page.map(({ row }) => row),
         includePrivate,
       ),
-      ...(this.libraryMode === 'PHOTO' && !trash
-        ? {
-            photoStacks: await this.readPhotoStacks(
-              ownerId,
-              page.map(({ row }) => row.id),
-              where,
-              includePrivate,
-              (ids) =>
-                this.imageSearch!.rankPage(
-                  ownerId,
-                  search,
-                  context,
-                  undefined,
-                  ids.length,
-                  includePrivate,
-                  trash,
-                  ids,
-                  query.sort,
-                ).then((rows) => rows.map((row) => row.assetId)),
-            ),
-          }
-        : {}),
+      this.libraryMode === 'PHOTO' && !trash
+        ? this.readPhotoStacks(
+            ownerId,
+            page.map(({ row }) => row.id),
+            where,
+            includePrivate,
+            (ids) =>
+              this.imageSearch!.rankPage(
+                ownerId,
+                search,
+                context,
+                undefined,
+                ids.length,
+                includePrivate,
+                trash,
+                ids,
+                query.sort,
+              ).then((rows) => rows.map((row) => row.assetId)),
+          )
+        : Promise.resolve(null),
+    ]);
+    return {
+      items,
+      ...(photoStacks ? { photoStacks } : {}),
       nextCursor:
         ranked.length > query.limit && page.length
           ? encodeImageSearchCursor(searchKey, page.at(-1)!.position, {
@@ -683,29 +687,31 @@ export class EagleService {
           ...options,
         }),
     );
+    const [items, photoStacks] = await Promise.all([
+      this.withLivePhotoMotions(ownerId, page.rows, includePrivate),
+      this.libraryMode === 'PHOTO' && !trash
+        ? this.readPhotoStacks(
+            ownerId,
+            page.rows.map((row) => row.id),
+            where,
+            includePrivate,
+            (ids) =>
+              rankSmartFolderMatches(
+                this.prisma,
+                scope,
+                folderIds,
+                undefined,
+                ids.length,
+                includePrivate,
+                trash,
+                ids,
+              ).then((rows) => rows.map((row) => row.assetId)),
+          )
+        : Promise.resolve(null),
+    ]);
     return {
-      items: await this.withLivePhotoMotions(ownerId, page.rows, includePrivate),
-      ...(this.libraryMode === 'PHOTO' && !trash
-        ? {
-            photoStacks: await this.readPhotoStacks(
-              ownerId,
-              page.rows.map((row) => row.id),
-              where,
-              includePrivate,
-              (ids) =>
-                rankSmartFolderMatches(
-                  this.prisma,
-                  scope,
-                  folderIds,
-                  undefined,
-                  ids.length,
-                  includePrivate,
-                  trash,
-                  ids,
-                ).then((rows) => rows.map((row) => row.assetId)),
-            ),
-          }
-        : {}),
+      items,
+      ...(photoStacks ? { photoStacks } : {}),
       nextCursor: page.nextCursor,
       colorCoverage: null,
     };
@@ -1077,13 +1083,27 @@ export class EagleService {
         throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
       }
       if (annotation) {
-        for (const { assetId } of input.assets) {
-          await transaction.eagleAssetAnnotation.upsert({
-            where: { ownerId_assetId: { ownerId, assetId }, libraryMode: this.libraryMode },
-            create: { ownerId, assetId, ...annotation, libraryMode: this.libraryMode },
-            update: annotation,
+        const assetIds = input.assets.map(({ assetId }) => assetId);
+        const existing = await transaction.eagleAssetAnnotation.findMany({
+          where: { ownerId, assetId: { in: assetIds }, libraryMode: this.libraryMode },
+          select: { assetId: true },
+        });
+        const existingIds = new Set(existing.map(({ assetId }) => assetId));
+        const missing = assetIds.filter((assetId) => !existingIds.has(assetId));
+        if (missing.length)
+          await transaction.eagleAssetAnnotation.createMany({
+            data: missing.map((assetId) => ({
+              ownerId,
+              assetId,
+              ...annotation,
+              libraryMode: this.libraryMode,
+            })),
+            skipDuplicates: true,
           });
-        }
+        await transaction.eagleAssetAnnotation.updateMany({
+          where: { ownerId, assetId: { in: assetIds }, libraryMode: this.libraryMode },
+          data: annotation,
+        });
       }
       return current.map(({ id, rowVersion }) => ({ assetId: id, rowVersion: rowVersion + 1 }));
     });

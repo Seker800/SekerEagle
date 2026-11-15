@@ -1,4 +1,5 @@
 import { cosineDistance, normalizeEmbedding, sphericalKMeans } from '@sekereagle/vector-core';
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 
 export interface SampleEmbedding {
   assetId: string;
@@ -33,6 +34,39 @@ export function parsePgVector(value: string, dimensions: number): number[] {
   return normalizeEmbedding(parsed);
 }
 
+/** Keep the CPU-bound clustering off the worker's lease/heartbeat event loop. */
+export function buildPrototypePlanOffThread(
+  samples: SampleEmbedding[],
+  options: { maxK?: number; minimumRelativeImprovement?: number } = {},
+): Promise<PrototypePlan> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { prototypePlan: true, samples, options },
+      execArgv: process.execArgv,
+    });
+    let settled = false;
+    const timer = setTimeout(() => {
+      void worker.terminate();
+      reject(new Error('TAG_PROTOTYPE_TIMEOUT'));
+    }, 120_000);
+    worker.once('message', (reply: { plan?: PrototypePlan; error?: string }) => {
+      settled = true;
+      clearTimeout(timer);
+      void worker.terminate();
+      if (reply.plan) resolve(reply.plan);
+      else reject(new Error(reply.error ?? 'TAG_PROTOTYPE_FAILED'));
+    });
+    worker.once('error', (error) => {
+      clearTimeout(timer);
+      if (!settled) reject(error instanceof Error ? error : new Error(String(error)));
+    });
+    worker.once('exit', (code) => {
+      clearTimeout(timer);
+      if (!settled) reject(new Error(`TAG_PROTOTYPE_EXIT:${code}`));
+    });
+  });
+}
+
 export function buildPrototypePlan(
   samples: SampleEmbedding[],
   options: { maxK?: number; minimumRelativeImprovement?: number } = {},
@@ -45,6 +79,13 @@ export function buildPrototypePlan(
       minimumRelativeImprovement: options.minimumRelativeImprovement ?? 0.12,
     },
   );
+  return prototypePlan(samples, clustered);
+}
+
+function prototypePlan(
+  samples: SampleEmbedding[],
+  clustered: ReturnType<typeof sphericalKMeans>,
+): PrototypePlan {
   return {
     prototypes: clustered.centers.map((center, rank) => {
       const members = samples
@@ -71,4 +112,19 @@ export function buildPrototypePlan(
       };
     }),
   };
+}
+
+const workerTask = workerData as {
+  prototypePlan?: boolean;
+  samples?: SampleEmbedding[];
+  options?: { maxK?: number; minimumRelativeImprovement?: number };
+} | null;
+if (!isMainThread && workerTask?.prototypePlan) {
+  try {
+    parentPort!.postMessage({ plan: buildPrototypePlan(workerTask.samples!, workerTask.options) });
+  } catch (error) {
+    parentPort!.postMessage({
+      error: error instanceof Error ? error.message : 'TAG_PROTOTYPE_FAILED',
+    });
+  }
 }

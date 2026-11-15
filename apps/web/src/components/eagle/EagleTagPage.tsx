@@ -34,7 +34,7 @@ import styles from './EagleTagPage.module.css';
 type TagScope = 'ALL' | 'UNCATEGORIZED' | 'STARRED' | 'USED' | 'UNUSED' | `GROUP:${string}`;
 type SortMode = 'NAME_ASC' | 'COUNT_DESC' | 'COUNT_ASC';
 type LayoutMode = 'GRID' | 'LIST';
-const AI_TAG_PAGE_SIZE = 120;
+const TAG_PAGE_SIZE = 120;
 export interface EagleManualTagChanges {
   name?: string;
   color?: string | null;
@@ -134,14 +134,11 @@ export function EagleTagPage({
       return compareEagleTagIndexes(leftIndex, rightIndex);
     });
   }, [allTags, isManual, query, scope, sort, tagIndexes]);
-  const pageCount = isManual ? 1 : Math.max(1, Math.ceil(visibleTags.length / AI_TAG_PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(visibleTags.length / TAG_PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const pageTags = useMemo(
-    () =>
-      isManual
-        ? visibleTags
-        : visibleTags.slice(currentPage * AI_TAG_PAGE_SIZE, (currentPage + 1) * AI_TAG_PAGE_SIZE),
-    [currentPage, isManual, visibleTags],
+    () => visibleTags.slice(currentPage * TAG_PAGE_SIZE, (currentPage + 1) * TAG_PAGE_SIZE),
+    [currentPage, visibleTags],
   );
   useEffect(() => {
     setPage(0);
@@ -620,7 +617,7 @@ export function EagleTagPage({
               </li>
             ))}
           </ul>
-          {!isManual && pageCount > 1 && (
+          {pageCount > 1 && (
             <nav className={styles.pagination} aria-label={t('AI 标签分页')}>
               <button
                 type="button"

@@ -72,21 +72,29 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const selectionRevision = useRef<string | undefined>(undefined);
   const cache = getEagleWorkspaceCache(client, ownerId, libraryMode);
   const changes = cache.operations;
-  useSyncExternalStore(changes.subscribe, changes.getSnapshot, changes.getSnapshot);
+  const changesRevision = useSyncExternalStore(
+    changes.subscribe,
+    changes.getSnapshot,
+    changes.getSnapshot,
+  );
   const action = useAssetOperationActions();
-  const priorChoices = new Map(
-    changes.entries.flatMap(
-      (row) =>
-        row.duplicateInput?.groups?.map((choice) => [choice.signature, choice] as const) ?? [],
-    ),
-  );
-  const submitted = Object.fromEntries(
-    changes.entries
-      .filter((row) => row.pending)
-      .flatMap((row) => (row.groupSignatures ?? []).map((signature) => [signature, row.id])),
-  );
+  const { priorChoices, submitted } = useMemo(() => {
+    const priorChoices = new Map(
+      changes.entries.flatMap(
+        (row) =>
+          row.duplicateInput?.groups?.map((choice) => [choice.signature, choice] as const) ?? [],
+      ),
+    );
+    const submitted = Object.fromEntries(
+      changes.entries
+        .filter((row) => row.pending)
+        .flatMap((row) => (row.groupSignatures ?? []).map((signature) => [signature, row.id])),
+    );
+    return { priorChoices, submitted };
+  }, [changes, changesRevision]);
   const dialog = useRef<HTMLDialogElement>(null),
     scanId = useRef<string | null>(null);
+  useEffect(() => () => scheduler.clear({ abortActive: true }), [scheduler]);
   useEffect(() => {
     const el = dialog.current,
       previous = document.activeElement as HTMLElement | null;
@@ -134,32 +142,38 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       ([key, value]) => key !== 'protectEdits' && key !== 'sameVisual' && !!value,
     );
   const data = results.data?.pages[0],
-    allGroups = results.data?.pages.flatMap((p) => p.groups) ?? [];
-  const groupBySignature = new Map(allGroups.map((group) => [group.signature, group]));
-  const hiddenGroups = new Set(
-    changes.entries.flatMap((row) =>
-      row.pending
-        ? (row.groupSignatures ?? [])
-        : (row.completedAt ?? 0) > results.dataUpdatedAt
-          ? (row.finishedGroups ?? [])
-          : [],
-    ),
-  );
-  const pendingGlobal = changes.entries.filter(
-    (row) => row.pending && row.kind === 'DUPLICATE_CLEANUP',
-  );
-  const groups = allGroups.filter(
-    (group) =>
-      !hiddenGroups.has(group.signature) &&
-      (showIgnored ||
-        !pendingGlobal.some(
-          (row) =>
-            (row.duplicateInput?.allVerified &&
-              JSON.stringify(row.duplicateInput.filters ?? {}) ===
-                JSON.stringify({ ...filters, kind })) ||
-            (row.duplicateInput?.allExact && group.kind === 'EXACT'),
-        )),
-  );
+    allGroups = useMemo(
+      () => results.data?.pages.flatMap((page) => page.groups) ?? [],
+      [results.data],
+    );
+  const filterSignature = useMemo(() => JSON.stringify({ ...filters, kind }), [filters, kind]);
+  const { groupBySignature, pendingGlobal, groups } = useMemo(() => {
+    const groupBySignature = new Map(allGroups.map((group) => [group.signature, group]));
+    const hiddenGroups = new Set(
+      changes.entries.flatMap((row) =>
+        row.pending
+          ? (row.groupSignatures ?? [])
+          : (row.completedAt ?? 0) > results.dataUpdatedAt
+            ? (row.finishedGroups ?? [])
+            : [],
+      ),
+    );
+    const pendingGlobal = changes.entries.filter(
+      (row) => row.pending && row.kind === 'DUPLICATE_CLEANUP',
+    );
+    const groups = allGroups.filter(
+      (group) =>
+        !hiddenGroups.has(group.signature) &&
+        (showIgnored ||
+          !pendingGlobal.some(
+            (row) =>
+              (row.duplicateInput?.allVerified &&
+                JSON.stringify(row.duplicateInput.filters ?? {}) === filterSignature) ||
+              (row.duplicateInput?.allExact && group.kind === 'EXACT'),
+          )),
+    );
+    return { groupBySignature, pendingGlobal, groups };
+  }, [allGroups, changes, changesRevision, filterSignature, results.dataUpdatedAt, showIgnored]);
   const operationQueries = useAssetOperationList(includePrivate),
     operations = operationQueries
       .flatMap((q) => q.data ?? [])

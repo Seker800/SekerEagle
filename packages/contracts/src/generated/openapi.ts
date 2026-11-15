@@ -36,6 +36,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/security/csp-report': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['CspReportController_report'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/auth/login': {
     parameters: {
       query?: never;
@@ -4192,6 +4208,7 @@ export interface components {
     EagleOperationSummaryResponseDto: {
       undoOf?: string;
       commandType?: string;
+      privacyChanged?: boolean;
       id: string;
       /** @enum {string} */
       kind:
@@ -4898,6 +4915,23 @@ export interface operations {
         content: {
           'application/json': components['schemas']['WorkspaceChangesResponseDto'];
         };
+      };
+    };
+  };
+  CspReportController_report: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

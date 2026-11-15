@@ -50,7 +50,7 @@ export type LibraryCommandDefinition = CommandBase &
           context: LibraryCommandContext,
           payload: Prisma.InputJsonObject,
           assetIds: string[],
-        ) => Promise<void>;
+        ) => Promise<void | { privacyChanged?: boolean }>;
       }
     | {
         protocol: 'BACKGROUND';

@@ -1,6 +1,5 @@
 import i18next, { type TOptions } from 'i18next';
-import { enUS } from './messages/en-US';
-import { zhCN } from './messages/zh-CN';
+import type { zhCN } from './messages/zh-CN';
 import {
   LOCALE_STORAGE_KEY,
   resolveLocale,
@@ -11,15 +10,30 @@ import {
 export type MessageId = keyof typeof zhCN;
 
 const initialLocale = resolveLocale().locale;
+// Only the active locale enters the first load; switching locales reloads the page.
+// Tests and dev exercise both locales through tForLocale.
+const resources =
+  import.meta.env.MODE === 'test' || import.meta.env.DEV
+    ? await Promise.all([import('./messages/zh-CN'), import('./messages/en-US')]).then(
+        ([zh, en]) => ({
+          'zh-CN': { translation: zh.zhCN },
+          'en-US': { translation: en.enUS },
+        }),
+      )
+    : {
+        [initialLocale]: {
+          translation:
+            initialLocale === 'en-US'
+              ? (await import('./messages/en-US')).enUS
+              : (await import('./messages/zh-CN')).zhCN,
+        },
+      };
 
-void i18next.init({
+await i18next.init({
   lng: initialLocale,
   fallbackLng: 'zh-CN',
   supportedLngs: ['zh-CN', 'en-US'],
-  resources: {
-    'zh-CN': { translation: zhCN },
-    'en-US': { translation: enUS },
-  },
+  resources,
   keySeparator: false,
   nsSeparator: false,
   interpolation: { escapeValue: false },

@@ -1,7 +1,7 @@
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { InfiniteQueryObserver, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { expect, it, vi } from 'vitest';
-import { AssetOperationRefresher } from './asset-operation-refresh';
+import { AssetOperationRefresher, requiresPrivacyCacheClear } from './asset-operation-refresh';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import type { AssetOperationSummary } from '@sekereagle/library-core';
 const mocks = vi.hoisted(() => ({ results: vi.fn() }));
@@ -19,6 +19,15 @@ const summary = (kind: AssetOperationSummary['kind'] = 'TRASH'): AssetOperationS
   state: 'STOPPED',
   errors: [{ code: 'ASSET_CHANGED', count: 1 }],
 });
+it('flushes the desktop cache only when a command can change visibility', () => {
+  expect(requiresPrivacyCacheClear('TAG_UPDATE', undefined)).toBe(false);
+  expect(requiresPrivacyCacheClear('TAG_DELETE', undefined)).toBe(false);
+  expect(requiresPrivacyCacheClear('ASSET_TAGS', false)).toBe(false);
+  expect(requiresPrivacyCacheClear('ASSET_TAGS', true)).toBe(true);
+  expect(requiresPrivacyCacheClear('PRIVACY_SETTINGS', false)).toBe(true);
+  expect(requiresPrivacyCacheClear('PHOTO_PERSON_PRIVACY', false)).toBe(true);
+});
+
 function fixture(view = 'ACTIVE') {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, retryDelay: 0, staleTime: Infinity } },
@@ -732,6 +741,7 @@ it('clears scoped photo privacy projections before a denied refetch while preser
   const completed = {
     ...summary('METADATA_COMMAND'),
     commandType: 'ASSET_TAGS',
+    privacyChanged: true,
     completed: 1,
     failed: 0,
     errors: [],

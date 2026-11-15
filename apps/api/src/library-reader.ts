@@ -1,6 +1,6 @@
 import { photoStatisticsFactFieldsSql } from './photos/photo-statistics-query';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
-import { setTimeout as delay } from 'node:timers/promises';
+import { Client } from 'pg';
 import { createLibraryReaderServer } from './eagle/eagle-memory-server';
 import { createLibraryReadPool, LibraryReadStore } from './eagle/eagle-memory-store';
 import {
@@ -50,10 +50,30 @@ export async function startLibraryReader(env = process.env) {
     },
   );
   let stopping = false;
+  let listener: Client | undefined;
+  let wake: (() => void) | undefined;
+  let pendingWake = false;
   const stop = () => {
     stopping = true;
+    wake?.();
     server.close();
     server.closeAllConnections();
+  };
+  const listenerUrl = new URL(url.toString());
+  listenerUrl.searchParams.delete('connection_limit');
+  const connectListener = async () => {
+    const client = new Client({ connectionString: listenerUrl.toString() });
+    client.on('error', () => {
+      if (listener === client) listener = undefined;
+      void client.end().catch(() => undefined);
+    });
+    client.on('notification', () => {
+      pendingWake = true;
+      wake?.();
+    });
+    await client.connect();
+    await client.query('LISTEN "eagle_library_read"');
+    listener = client;
   };
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
@@ -78,6 +98,13 @@ export async function startLibraryReader(env = process.env) {
       prime(await store.synchronize(scope));
     }
     while (!stopping) {
+      if (!listener) {
+        try {
+          await connectListener();
+        } catch {
+          console.error('Library reader notification listener unavailable; polling retained');
+        }
+      }
       for (const scope of (
         await db.query<{ ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }>(
           'SELECT "ownerId","libraryMode" FROM "EagleLibraryReadState" WHERE enabled',
@@ -90,10 +117,29 @@ export async function startLibraryReader(env = process.env) {
           console.error('Library reader synchronization failed; API retains SQL fallback');
         }
       }
-      await delay(1000);
+      if (stopping) break;
+      await new Promise<void>((resolve) => {
+        if (pendingWake) {
+          pendingWake = false;
+          resolve();
+          return;
+        }
+        const timer = setTimeout(() => {
+          wake = undefined;
+          resolve();
+        }, 30_000);
+        timer.unref();
+        wake = () => {
+          clearTimeout(timer);
+          wake = undefined;
+          pendingWake = false;
+          resolve();
+        };
+      });
     }
   } finally {
     stop();
+    if (listener) await listener.end().catch(() => undefined);
     await db.end();
     process.off('SIGTERM', stop);
     process.off('SIGINT', stop);

@@ -182,6 +182,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       declaration: string;
     }
   >();
+  const ADMISSION_TIMEOUT_MS = 150_000;
   async function api<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
     return requestJson<T>(
       libraryApiPath(`/api${path}`, libraryMode),
@@ -508,10 +509,14 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         affectedAssetCount: number;
         privacyChangedAssetCount: number;
       }>
-    >('/eagle/assets/batch/manual-tags', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    >(
+      '/eagle/assets/batch/manual-tags',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      ADMISSION_TIMEOUT_MS,
+    );
   }
 
   async function batchTrashEagleAssets(_token: string, assetIds: string[]) {
@@ -566,17 +571,25 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         assets: EagleAssetVersion[];
         predecessorOperationIds?: string[];
       }>
-    >('/eagle/assets/batch', {
-      method: 'PATCH',
-      body: JSON.stringify(input),
-    });
+    >(
+      '/eagle/assets/batch',
+      {
+        method: 'PATCH',
+        body: JSON.stringify(input),
+      },
+      ADMISSION_TIMEOUT_MS,
+    );
   }
 
   function getBatchEaglePhotoEditContext(assetIds: readonly string[]) {
-    return api<{ preservedFilterIds: string[] }>('/eagle/assets/batch/edit-render-context', {
-      method: 'POST',
-      body: JSON.stringify({ assetIds }),
-    });
+    return api<{ preservedFilterIds: string[] }>(
+      '/eagle/assets/batch/edit-render-context',
+      {
+        method: 'POST',
+        body: JSON.stringify({ assetIds }),
+      },
+      ADMISSION_TIMEOUT_MS,
+    );
   }
 
   function batchEditEaglePhotos(
@@ -590,10 +603,14 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       preservedLuts?: Record<string, string>;
     },
   ) {
-    return api<AssetOperationSummary>('/eagle/assets/batch/edit-renders', {
-      method: 'POST',
-      body: JSON.stringify(input),
-    });
+    return api<AssetOperationSummary>(
+      '/eagle/assets/batch/edit-renders',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      ADMISSION_TIMEOUT_MS,
+    );
   }
 
   async function waitForUploadFinalization(sessionId: string, signal: AbortSignal) {

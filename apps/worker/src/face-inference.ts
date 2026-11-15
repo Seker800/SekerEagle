@@ -1,11 +1,12 @@
 import { PermanentMediaValidationError } from './media-validation-error';
 import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 export const FACE_MODEL_VERSION = PHOTO_FACE_MODEL_VERSION;
+const INFERENCE_TIMEOUT_MS = 120_000;
+const IDLE_TIMEOUT_MS = 10 * 60_000;
 export interface FaceDetection {
   box: number[];
   confidence: number;
@@ -52,9 +53,142 @@ export function validateFaceResult(value: unknown): FaceDetection[] {
     return face;
   });
 }
-export async function inferPhotoFaces(bytes: Buffer): Promise<FaceDetection[]> {
+
+interface PendingInference {
+  resolve: (faces: FaceDetection[]) => void;
+  reject: (error: unknown) => void;
+  timer: NodeJS.Timeout;
+}
+interface InferenceServer {
+  child: ChildProcessWithoutNullStreams;
+  key: string;
+  nextId: number;
+  buffer: string;
+  stderr: string;
+  pending: Map<number, PendingInference>;
+  idle?: NodeJS.Timeout;
+}
+let server: InferenceServer | undefined;
+
+function configuration() {
   if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
     throw new Error('PHOTO_FACE_RUNTIME_NOT_CONFIGURED');
+  return {
+    python: process.env.PHOTO_FACE_PYTHON,
+    modelDir: resolve(process.env.PHOTO_FACE_MODEL_DIR),
+    script: resolve(process.env.PHOTO_FACE_SCRIPT ?? 'services/photo-face/infer.py'),
+  };
+}
+
+function settle(state: InferenceServer, id: number, message: Record<string, unknown>) {
+  const pending = state.pending.get(id);
+  if (!pending) return;
+  state.pending.delete(id);
+  clearTimeout(pending.timer);
+  if (typeof message.error === 'string') {
+    pending.reject(
+      message.error === 'PHOTO_FACE_INPUT_INVALID'
+        ? new PermanentMediaValidationError('IMAGE_DECODE_FAILED')
+        : message.error === 'PHOTO_FACE_INPUT_TOO_LARGE'
+          ? new PermanentMediaValidationError('IMAGE_PIXEL_LIMIT_EXCEEDED')
+          : new Error(message.error),
+    );
+  } else {
+    try {
+      pending.resolve(validateFaceResult(message));
+    } catch (error) {
+      pending.reject(error);
+    }
+  }
+  if (!state.pending.size) {
+    if (state.idle) clearTimeout(state.idle);
+    state.idle = setTimeout(() => {
+      if (server === state && !state.pending.size) stopFaceInference();
+    }, IDLE_TIMEOUT_MS);
+    state.idle.unref();
+  }
+}
+
+function drain(state: InferenceServer) {
+  let index: number;
+  while ((index = state.buffer.indexOf('\n')) >= 0) {
+    const line = state.buffer.slice(0, index).trim();
+    state.buffer = state.buffer.slice(index + 1);
+    if (!line) continue;
+    let message: Record<string, unknown>;
+    try {
+      message = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (typeof message.id === 'number') settle(state, message.id, message);
+  }
+}
+
+function ensureServer(config: ReturnType<typeof configuration>): InferenceServer {
+  const key = JSON.stringify([config.python, config.modelDir, config.script]);
+  if (server && server.key === key && !server.child.killed) return server;
+  stopFaceInference();
+  const child = spawn(config.python, [config.script, config.modelDir], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      PATH: process.env.PATH,
+      OPENCV_IO_MAX_IMAGE_PIXELS: '40000000',
+      OMP_NUM_THREADS: '1',
+    },
+  });
+  const created: InferenceServer = {
+    child,
+    key,
+    nextId: 1,
+    buffer: '',
+    stderr: '',
+    pending: new Map(),
+  };
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => {
+    created.buffer += chunk;
+    drain(created);
+  });
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => {
+    created.stderr = (created.stderr + chunk).slice(-4096);
+  });
+  const fail = (error: unknown) => {
+    for (const pending of created.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    created.pending.clear();
+    if (created.idle) clearTimeout(created.idle);
+    if (server === created) server = undefined;
+  };
+  child.once('error', fail);
+  child.once('exit', (code, signal) => {
+    const detail =
+      created.stderr.trim() || `PHOTO_FACE_RUNTIME_EXIT_${code ?? signal ?? 'UNKNOWN'}`;
+    fail(new Error(detail));
+  });
+  server = created;
+  return created;
+}
+
+/** Stop the shared inference process; the next call starts a fresh one. */
+export function stopFaceInference(): void {
+  const state = server;
+  server = undefined;
+  if (!state) return;
+  if (state.idle) clearTimeout(state.idle);
+  for (const pending of state.pending.values()) {
+    clearTimeout(pending.timer);
+    pending.reject(new Error('PHOTO_FACE_RUNTIME_STOPPED'));
+  }
+  state.pending.clear();
+  state.child.kill();
+}
+
+export async function inferPhotoFaces(bytes: Buffer): Promise<FaceDetection[]> {
+  const config = configuration();
   if (bytes.length > 20 * 1024 * 1024)
     throw new PermanentMediaValidationError(
       'IMAGE_PIXEL_LIMIT_EXCEEDED',
@@ -64,34 +198,27 @@ export async function inferPhotoFaces(bytes: Buffer): Promise<FaceDetection[]> {
   try {
     const image = join(directory, 'preview.jpg');
     await writeFile(image, bytes, { flag: 'wx' });
-    const { stdout } = await promisify(execFile)(
-      process.env.PHOTO_FACE_PYTHON,
-      [
-        resolve(process.env.PHOTO_FACE_SCRIPT ?? 'services/photo-face/infer.py'),
-        resolve(process.env.PHOTO_FACE_MODEL_DIR),
-        image,
-      ],
-      {
-        timeout: 120000,
-        maxBuffer: 2 * 1024 * 1024,
-        env: {
-          PATH: process.env.PATH,
-          OPENCV_IO_MAX_IMAGE_PIXELS: '40000000',
-          OMP_NUM_THREADS: '1',
-        },
-      },
-    );
-    return validateFaceResult(JSON.parse(stdout) as unknown);
-  } catch (error) {
-    const failure = error as { code?: unknown; stderr?: unknown };
-    if (failure?.code === 2 && typeof failure.stderr === 'string') {
-      const marker = failure.stderr.trim();
-      if (marker === 'PHOTO_FACE_INPUT_INVALID')
-        throw new PermanentMediaValidationError('IMAGE_DECODE_FAILED');
-      if (marker === 'PHOTO_FACE_INPUT_TOO_LARGE')
-        throw new PermanentMediaValidationError('IMAGE_PIXEL_LIMIT_EXCEEDED');
-    }
-    throw error;
+    const state = ensureServer(config);
+    return await new Promise<FaceDetection[]>((resolveInference, rejectInference) => {
+      const id = state.nextId++;
+      const timer = setTimeout(() => {
+        if (!state.pending.delete(id)) return;
+        rejectInference(new Error('PHOTO_FACE_TIMEOUT'));
+        // One slow photo must not fail the rest of the batch; retire the shared
+        // process only once nothing else is waiting on it.
+        if (server === state && !state.pending.size) stopFaceInference();
+      }, INFERENCE_TIMEOUT_MS);
+      timer.unref();
+      state.pending.set(id, { resolve: resolveInference, reject: rejectInference, timer });
+      state.child.stdin.write(`${JSON.stringify({ id, path: image })}\n`, (error) => {
+        if (!error) return;
+        const pending = state.pending.get(id);
+        if (!pending) return;
+        state.pending.delete(id);
+        clearTimeout(pending.timer);
+        pending.reject(error);
+      });
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

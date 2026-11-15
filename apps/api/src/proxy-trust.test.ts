@@ -8,6 +8,7 @@ void test('API trusts exactly one gateway hop and gateway replaces untrusted for
   const gateway = readFileSync(path.join(__dirname, '../../../deploy/gateway/nginx.conf'), 'utf8');
 
   assert.match(main, /app\.set\('trust proxy', 1\)/u);
+  assert.match(main, /server\.keepAliveTimeout = 65_000;/u);
   assert.doesNotMatch(main, /trust proxy', 'loopback'/u);
   assert.match(gateway, /proxy_set_header X-Forwarded-For \$remote_addr;/u);
   assert.doesNotMatch(gateway, /proxy_add_x_forwarded_for/u);
@@ -17,6 +18,9 @@ void test('API trusts exactly one gateway hop and gateway replaces untrusted for
   assert.match(gateway, /location \/api\/[\s\S]*proxy_read_timeout 15s;/u);
   assert.match(gateway, /location \/api\/[\s\S]*proxy_send_timeout 15s;/u);
   assert.match(gateway, /location \/api\/[\s\S]*proxy_buffering off;/u);
+  assert.match(gateway, /assets\/batch\|assets\/batch\/manual-tags/u);
+  assert.match(gateway, /assets\/batch\/edit-renders\|assets\/batch\/edit-render-context/u);
+  assert.match(gateway, /preflight\$" \{[\s\S]*?proxy_read_timeout 660s;/u);
 });
 
 void test('gateway re-resolves replaceable compose services without a manual restart', () => {

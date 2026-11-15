@@ -22,7 +22,7 @@ import { EagleMobileMore, isAndroidClient } from './EagleMobileMore';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import { EagleResponsiveTools } from './EagleResponsiveTools';
 import { EagleResponsiveDetails } from './EagleResponsiveDetails';
-import { EagleStackBadge } from './EagleStackBadge';
+import { EagleAssetCard, type AssetCardActions } from './EagleAssetCard';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
 import { EagleLibraryNavigation } from './EagleLibraryNavigation';
@@ -57,6 +57,7 @@ import {
   useState,
   useSyncExternalStore,
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react';
@@ -120,7 +121,7 @@ import {
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useEagleAssetLocation, useEagleAssetLocationFocus } from './useEagleAssetLocation';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
-import { CachedEagleAssetThumbnail, EagleAssetThumbnail } from './EagleAssetThumbnail';
+import { CachedEagleAssetThumbnail } from './EagleAssetThumbnail';
 import {
   getEaglePreviewContentUrl,
   getEagleEditContentUrl,
@@ -767,6 +768,15 @@ export function SekerEaglePage({
       return cover ? [{ ...stack, assetIds, cover }] : [];
     });
   }, [assetsQuery.data, workspaceCache, assetStore, operationRevision, assetStoreRevision]);
+  const photoStacksByCover = useMemo(
+    () => new Map(photoStacks.map((stack) => [stack.cover.id, stack])),
+    [photoStacks],
+  );
+  const photoStacksByAsset = useMemo(() => {
+    const map = new Map<string, (typeof photoStacks)[number]>();
+    for (const stack of photoStacks) for (const id of stack.assetIds) map.set(id, stack);
+    return map;
+  }, [photoStacks]);
   const assets = useMemo(
     () =>
       libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH'
@@ -794,7 +804,7 @@ export function SekerEaglePage({
     workspaceCache,
     operationRevision,
   ]);
-  const previewStack = photoStacks.find((stack) => stack.assetIds.includes(previewAssetId ?? ''));
+  const previewStack = previewAssetId ? photoStacksByAsset.get(previewAssetId) : undefined;
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   useEffect(() => {
     if (
@@ -1355,7 +1365,7 @@ export function SekerEaglePage({
   };
   const locationId = assetLocator.location?.assetId;
   const locationCoverId =
-    photoStacks.find((stack) => locationId && stack.assetIds.includes(locationId))?.cover.id ??
+    (locationId ? photoStacksByAsset.get(locationId)?.cover.id : undefined) ??
     loadedAssets.find((asset) => asset.livePhotoMotion?.assetId === locationId)?.id ??
     locationId;
   useEagleAssetLocationFocus({
@@ -1368,15 +1378,58 @@ export function SekerEaglePage({
   });
   const openAssetPreview = (asset: EagleAssetListItem, context?: EagleAssetListItem[]) => {
     const items = context ?? (assetsById.has(asset.id) ? [] : [asset]);
-    if (
-      imagePreview.open(
-        asset,
-        items,
-        photoStacks.some((stack) => stack.assetIds.includes(asset.id)),
-      ) === 'image'
-    )
+    if (imagePreview.open(asset, items, photoStacksByAsset.has(asset.id)) === 'image')
       preloadEagleImageViewer();
   };
+  const handleAssetDragEnd = () => {
+    assetDragSession?.end();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+  };
+  const handleAssetDoubleClick = (asset: EagleAssetListItem) => {
+    if (!selectionMode) openAssetPreview(asset);
+  };
+  const handleAssetKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    asset: EagleAssetListItem,
+  ) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (selectionMode) selectAsset(asset.id, 'toggle');
+      else {
+        selectAsset(asset.id, 'single');
+        openAssetPreview(asset);
+      }
+    }
+  };
+  const cardActionsRef = useRef({
+    handleAssetClick,
+    handleAssetContextMenu,
+    handleAssetDragStart,
+    handleAssetDragEnd,
+    handleAssetDoubleClick,
+    handleAssetKeyDown,
+  });
+  cardActionsRef.current = {
+    handleAssetClick,
+    handleAssetContextMenu,
+    handleAssetDragStart,
+    handleAssetDragEnd,
+    handleAssetDoubleClick,
+    handleAssetKeyDown,
+  };
+  const cardActions = useMemo<AssetCardActions>(
+    () => ({
+      click: (event, assetId) => cardActionsRef.current.handleAssetClick(event, assetId),
+      contextMenu: (event, assetId) =>
+        cardActionsRef.current.handleAssetContextMenu(event, assetId),
+      dragStart: (event, assetId) => cardActionsRef.current.handleAssetDragStart(event, assetId),
+      dragEnd: () => cardActionsRef.current.handleAssetDragEnd(),
+      doubleClick: (asset) => cardActionsRef.current.handleAssetDoubleClick(asset),
+      keyDown: (event, asset) => cardActionsRef.current.handleAssetKeyDown(event, asset),
+    }),
+    [],
+  );
   const previewNavigation = useEaglePreviewNavigation(
     previewAssets,
     imagePreview.previewImage,
@@ -2405,87 +2458,22 @@ export function SekerEaglePage({
                       {visibleMasonryItems.map((masonryItem) => {
                         const asset = assetsById.get(masonryItem.id);
                         if (!asset) return null;
-                        const isSelected = selectedAssetSet.has(asset.id);
-                        const stack = photoStacks.find((entry) => entry.cover.id === asset.id);
                         return (
-                          <button
+                          <EagleAssetCard
                             key={asset.id}
+                            asset={asset}
+                            stack={photoStacksByCover.get(asset.id)}
+                            selected={selectedAssetSet.has(asset.id)}
                             disabled={filterInputsPending || assetsQuery.isPlaceholderData}
-                            data-asset-id={asset.id}
-                            type="button"
-                            className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
-                            aria-pressed={isSelected}
-                            aria-label={`${asset.displayName}，${asset.format.toUpperCase()}${stack ? `，${t('照片组，共 {{value1}} 张', { value1: stack.assetIds.length })}` : ''}`}
-                            draggable={Boolean(desktopAssetDragBridge) && libraryView !== 'TRASH'}
-                            style={
-                              masonryItem
-                                ? {
-                                    height: masonryItem.height,
-                                    transform: `translate3d(${masonryItem.left}px, ${masonryItem.top}px, 0)`,
-                                    width: masonryItem.width,
-                                  }
-                                : undefined
-                            }
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleAssetClick(event, asset.id);
-                            }}
-                            onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
-                            onDragStart={(event) => handleAssetDragStart(event, asset.id)}
-                            onDragEnd={() => {
-                              assetDragSession?.end();
-                              dragDepthRef.current = 0;
-                              setIsDragging(false);
-                            }}
-                            onDoubleClick={() => {
-                              if (!selectionMode) openAssetPreview(asset);
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter' || event.key === ' ') {
-                                event.preventDefault();
-                                if (selectionMode) selectAsset(asset.id, 'toggle');
-                                else {
-                                  selectAsset(asset.id, 'single');
-                                  openAssetPreview(asset);
-                                }
-                              }
-                            }}
-                          >
-                            <span
-                              className={styles.preview}
-                              style={{ height: masonryItem.previewHeight }}
-                            >
-                              {getEagleLivePhotoContentUrl(asset) && (
-                                <span className={styles.livePhotoBadge}>{t('实况')}</span>
-                              )}
-                              <EagleStackBadge count={stack?.assetIds.length ?? 0} />
-                              {(selectionMode || isBatchSelection) && (
-                                <span className={styles.selectionMark}>
-                                  {isSelected && <IconCheck size={13} />}
-                                </span>
-                              )}
-                              <EagleAssetThumbnail
-                                asset={asset}
-                                scheduler={thumbnailScheduler}
-                                loadService={thumbnailLoadService}
-                                order={-masonryItem.top}
-                                displayWidth={Math.ceil(masonryItem.width)}
-                              />
-                              {asset.lifecycleStatus !== 'READY' && (
-                                <span className={styles.processing}>
-                                  {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}
-                                </span>
-                              )}
-                              {asset.isPrivate && (
-                                <span
-                                  className={styles.privateMark}
-                                  title={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
-                                >
-                                  <IconLock size={12} />
-                                </span>
-                              )}
-                            </span>
-                          </button>
+                            selectionMode={selectionMode}
+                            batchSelection={isBatchSelection}
+                            dragEnabled={Boolean(desktopAssetDragBridge) && libraryView !== 'TRASH'}
+                            libraryMode={libraryMode}
+                            layout={masonryItem}
+                            scheduler={thumbnailScheduler}
+                            loadService={thumbnailLoadService}
+                            actions={cardActions}
+                          />
                         );
                       })}
                     </div>

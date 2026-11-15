@@ -8,6 +8,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   ListPartsCommand,
   S3Client,
   UploadPartCommand,
@@ -54,6 +55,20 @@ export class ObjectStorageService implements OnModuleDestroy {
 
   async assertReady(): Promise<void> {
     await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+  }
+
+  async listObjectSizes(prefix: string): Promise<Map<string, bigint>> {
+    const sizes = new Map<string, bigint>();
+    let token: string | undefined;
+    do {
+      const page = await this.client.send(
+        new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, ContinuationToken: token }),
+      );
+      for (const item of page.Contents ?? [])
+        if (item.Key && item.Size !== undefined) sizes.set(item.Key, BigInt(item.Size));
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+    return sizes;
   }
 
   async createMultipartUpload(key: string, contentType: string): Promise<string> {

@@ -3,7 +3,16 @@ import { getEagleVideoContentUrl } from './eagle-media-sources';
 import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { canUseThumbnailMemoryCache } from '../../lib/media-resolver';
 import { t } from '../../i18n';
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
@@ -80,7 +89,7 @@ export function CachedEagleAssetThumbnail({
   return cached?.identity === identity ? <img src={cached.url} alt="" /> : null;
 }
 
-export function EagleAssetThumbnail({
+function EagleAssetThumbnailView({
   asset,
   scheduler,
   loadService,
@@ -387,3 +396,5 @@ export function EagleAssetThumbnail({
     </span>
   );
 }
+
+export const EagleAssetThumbnail = memo(EagleAssetThumbnailView);

@@ -22,7 +22,10 @@ async function bootstrap(): Promise<void> {
     new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
   );
   app.setGlobalPrefix('api');
-  await app.listen(config.getOrThrow<number>('PORT'), '0.0.0.0');
+  const server = await app.listen(config.getOrThrow<number>('PORT'), '0.0.0.0');
+  // nginx reuses upstream connections for 60s; Node's 5s default closes them first.
+  server.keepAliveTimeout = 65_000;
+  server.headersTimeout = 66_000;
 }
 
 void bootstrap();

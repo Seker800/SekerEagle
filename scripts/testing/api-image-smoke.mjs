@@ -147,6 +147,8 @@ try {
     bucketSetup,
     '--network',
     prefix,
+    '--workdir',
+    '/sekereagle/apps/api',
     ...envArgs,
     image,
     'node',

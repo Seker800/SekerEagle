@@ -30,41 +30,30 @@ test('pyramid migration copies bounded independent tiles and checks counts, byte
   };
   const plan = planTransferPyramid('owner', 'target', 1, [row] as never)!;
   assert.deepEqual(transferPyramidTiles(plan), ['0/0_0.webp']);
+  const sourcePrefix = 'users/owner/assets/source/pyramid/';
+  const sourceKey = `${sourcePrefix}0/0_0.webp`;
+  const targetKey = `${plan.targetPrefix}0/0_0.webp`;
   const copies: string[][] = [];
-  await copyTransferPyramid(
-    {
-      copyObject: async (a: string, b: string) => {
-        copies.push([a, b]);
-      },
-      headObject: async () => ({ ContentLength: 3 }),
-    } as never,
-    'owner',
-    plan,
-  );
+  const storage = (sourceSize: bigint | null, targetSize: bigint | null) => ({
+    copyObject: async (source: string, target: string) => {
+      copies.push([source, target]);
+    },
+    listObjectSizes: async (prefix: string) => {
+      if (prefix === sourcePrefix)
+        return sourceSize === null ? new Map() : new Map([[sourceKey, sourceSize]]);
+      if (prefix === plan.targetPrefix)
+        return targetSize === null ? new Map() : new Map([[targetKey, targetSize]]);
+      return new Map();
+    },
+  });
+  await copyTransferPyramid(storage(3n, 3n) as never, 'owner', plan);
   assert.equal(copies.length, 1);
   assert.ok(copies[0]![1]!.startsWith('users/owner/assets/target/'));
   assert.equal(planTransferPyramid('owner', 'target', 2, [row] as never), undefined);
   assert.throws(() => planTransferPyramid('other', 'target', 1, [row] as never));
   assert.throws(() => transferPyramidTiles({ ...plan, tileCount: 2 }));
   assert.throws(() => transferPyramidTiles({ ...plan, maxLevel: 21 }));
-  await assert.rejects(
-    copyTransferPyramid(
-      { copyObject: async () => {}, headObject: async () => ({ ContentLength: 2 }) } as never,
-      'owner',
-      plan,
-    ),
-    /总大小/,
-  );
-  let reads = 0;
-  await assert.rejects(
-    copyTransferPyramid(
-      {
-        copyObject: async () => {},
-        headObject: async () => ({ ContentLength: ++reads === 1 ? 3 : 2 }),
-      } as never,
-      'owner',
-      plan,
-    ),
-    /复制校验/,
-  );
+  await assert.rejects(copyTransferPyramid(storage(2n, 2n) as never, 'owner', plan), /总大小/);
+  await assert.rejects(copyTransferPyramid(storage(null, 3n) as never, 'owner', plan), /读取校验/);
+  await assert.rejects(copyTransferPyramid(storage(3n, 2n) as never, 'owner', plan), /复制校验/);
 });

@@ -42,7 +42,7 @@ export function registerSharedLibraryCommands(
         ...strings(payload.removeTagIds),
       ]),
     apply: async (tx, context, payload, assetIds) => {
-      await eagle.batchChangeManualTags(
+      const result = await eagle.batchChangeManualTags(
         context.ownerId,
         {
           assetIds,
@@ -53,6 +53,7 @@ export function registerSharedLibraryCommands(
         context.includePrivate,
         tx,
       );
+      return { privacyChanged: result.privacyChangedAssetCount > 0 };
     },
   });
   registry.register('ASSET_TAGS_REPLACE', {
@@ -60,14 +61,18 @@ export function registerSharedLibraryCommands(
     partition: assetPartitions,
     admit: (context, payload) => eagle.assertCommandTags(context.ownerId, strings(payload.tagIds)),
     apply: async (tx, context, payload, assetIds) => {
-      for (const assetId of assetIds)
-        await eagle.replaceAssetTags(
+      let privacyChanged = false;
+      for (const assetId of assetIds) {
+        const result = await eagle.replaceAssetTags(
           context.ownerId,
           assetId,
           strings(payload.tagIds),
           context.includePrivate,
           tx,
         );
+        privacyChanged ||= result.privacyChangedAssetCount > 0;
+      }
+      return { privacyChanged };
     },
   });
   registry.register('ASSET_UPDATE', {
@@ -113,6 +118,7 @@ export function registerSharedLibraryCommands(
         context.includePrivate,
         tx,
       );
+      return { privacyChanged: false };
     },
   });
   registry.register('TAG_DELETE', {

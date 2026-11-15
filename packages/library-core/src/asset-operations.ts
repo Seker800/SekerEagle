@@ -122,6 +122,8 @@ export function assetOperationProtocol(kind: string) {
 
 export interface AssetOperationSummary {
   commandType?: string;
+  /** Present only when the terminal command changed privacy visibility. */
+  privacyChanged?: boolean;
   undoOf?: string;
   id: string;
   kind: AssetOperationKind;

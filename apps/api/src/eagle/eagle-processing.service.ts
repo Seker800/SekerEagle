@@ -40,6 +40,7 @@ export class EagleProcessingService {
           FROM "EagleMediaJob" j JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode"
           WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${this.libraryMode}::"LibraryMode"
             AND j.kind<>'GENERATE_AI_TAGS' AND j."assetRevision"=a."mediaRevision"
+            AND (j.status<>'COMPLETED' OR j."completedAt">=${since})
             AND (a."deletedAt" IS NULL OR j.kind='PURGE_ASSET') AND (${includePrivate} OR NOT a."isPrivate")
           GROUP BY j.lane,j.status
         `),

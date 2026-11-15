@@ -95,7 +95,10 @@ test('accepted and retried commands wake the local processor only after commit',
       findFirst: async () => operation,
       update: async () => operation,
     },
-    eagleAssetOperationItem: { updateMany: async () => ({ count: 0 }) },
+    eagleAssetOperationItem: {
+      updateMany: async () => ({ count: 0 }),
+      groupBy: async () => [{ status: 'PENDING', errorCode: null, _sum: { weight: 1 } }],
+    },
   };
   const db = {
     $transaction: async (run: (transaction: typeof tx) => Promise<unknown>) => {

@@ -40,6 +40,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg python3-venv
           python3 -m venv .omx/camera-media/venv
           .omx/camera-media/venv/bin/pip install -r scripts/testing/camera-requirements.txt
+      - name: Install photo face test runtime
+        run: |
+          python3 -m venv .omx/photo-face/venv
+          .omx/photo-face/venv/bin/pip install -r services/photo-face/requirements.txt
+      - name: Verify face inference line protocol
+        run: .omx/photo-face/venv/bin/python -m unittest discover -s services/photo-face -p 'test_*.py'
       - name: Verify real database isolation, migrations and full restore
         run: npm run test:library-integration
       - name: Verify RAW decoding and camera video playback
@@ -49,6 +55,8 @@ jobs:
       - run: docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet
       - name: Verify private backup files never enter Docker context
         run: SEKEREAGLE_TEST_DOCKER_CONTEXT=1 node --test scripts/backup-build-context.test.mjs
-      - run: docker build -f apps/api/Dockerfile .
+      - run: docker build -f apps/api/Dockerfile -t sekereagle/api:ci .
       - run: docker build -f apps/worker/Dockerfile .
       - run: docker build -f apps/web/Dockerfile .
+      - name: Verify the API image starts, migrates and serves
+        run: npm run test:api-image -- sekereagle/api:ci

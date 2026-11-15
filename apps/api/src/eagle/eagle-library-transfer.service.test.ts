@@ -25,6 +25,7 @@ test('unauthorized or mixed source IDs fail before any object copy or operation 
     copyObject: async () => {
       copied++;
     },
+    listObjectSizes: async () => ({ get: () => 1n }) as never,
   } as never;
   await assert.rejects(
     () =>
@@ -53,6 +54,7 @@ test('approval snapshot mismatch fails before a transfer plan or any object copy
     copyObject: async () => {
       writes++;
     },
+    listObjectSizes: async () => ({ get: () => 1n }) as never,
   } as never;
   await assert.rejects(
     new EagleLibraryTransferService(db, storage, 'PHOTO').send(
@@ -97,6 +99,7 @@ test('an edit between approval validation and plan creation cannot silently repl
         copyObject: async () => {
           writes++;
         },
+        listObjectSizes: async () => ({ get: () => 1n }) as never,
       } as never,
       'PHOTO',
     ).send(
@@ -286,6 +289,7 @@ for (const sourceMode of ['PHOTO', 'MATERIAL'] as const)
           copyObject: async (a: string, b: string) => {
             copies.push([a, b]);
           },
+          listObjectSizes: async () => ({ get: () => 1n }) as never,
           headObject: async () => {
             heads++;
             return { ContentLength: 1 };

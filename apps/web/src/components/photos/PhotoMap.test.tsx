@@ -76,6 +76,20 @@ function mount(onOpen = vi.fn()) {
   const view = render(renderMap());
   return { ...view, client, renderMap, onOpen };
 }
+function pointDotCalls() {
+  return mocks.dots.mock.calls.filter(
+    ([, options]) => (options as { fillColor?: string }).fillColor === '#ffffff',
+  );
+}
+function pointDotResults() {
+  return mocks.dots.mock.results
+    .filter(
+      (_, index) =>
+        (mocks.dots.mock.calls[index]?.[1] as { fillColor?: string } | undefined)?.fillColor ===
+        '#ffffff',
+    )
+    .map((result) => result.value);
+}
 function markerButtons() {
   return mocks.icons.mock.calls
     .map(([options]) => (options as { html: HTMLElement }).html)
@@ -165,7 +179,7 @@ describe('whole-library location map', () => {
     mount();
     await screen.findByText('全库 48 张带位置照片');
     await waitFor(() => expect(markerButtons()).toHaveLength(9));
-    expect(mocks.dots).toHaveBeenCalledTimes(48);
+    expect(pointDotCalls()).toHaveLength(48);
     expect(markerButtons().every((button) => button.textContent?.includes('1'))).toBe(true);
   });
 
@@ -350,17 +364,16 @@ it('keeps every dense position as an interactive canvas dot when thumbnail cards
   mocks.getMap.mockResolvedValue({ total: 120, level: 12, clusters: points });
   mount();
   await screen.findByText('全库 120 张带位置照片');
-  await waitFor(() => expect(mocks.dots).toHaveBeenCalledTimes(120));
+  await waitFor(() => expect(pointDotCalls()).toHaveLength(120));
   expect(
-    mocks.dots.mock.calls.every(
+    pointDotCalls().every(
       ([, options]) =>
-        (options as { radius: number; fillColor: string; fillOpacity: number }).radius >= 2.2 &&
-        (options as { fillColor: string }).fillColor === '#ffffff' &&
+        (options as { radius: number }).radius >= 2.2 &&
         (options as { fillOpacity: number }).fillOpacity === 1,
     ),
   ).toBe(true);
   expect(markerButtons()).toHaveLength(9);
-  const point = mocks.dots.mock.results[70].value as { on: ReturnType<typeof vi.fn> };
+  const point = pointDotResults()[70] as { on: ReturnType<typeof vi.fn> };
   const click = point.on.mock.calls.find(([event]) => event === 'click')![1] as () => void;
   act(click);
   await screen.findByRole('region', { name: '此位置的照片' });

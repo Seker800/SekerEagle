@@ -148,6 +148,9 @@ test('a command committed during an empty probe is picked up without waiting for
         items: [item],
       }),
     },
+    eagleAssetOperationItem: {
+      groupBy: async () => [{ status: 'PENDING', errorCode: null, _sum: { weight: 1 } }],
+    },
   };
   const service = new EagleAssetOperationService(
     {
@@ -333,6 +336,9 @@ test('a repeated selected ID is canonicalized without duplicating work or reject
   const tx = {
     $queryRaw: async () => [],
     eagleAssetOperation: { findUnique: async () => existing },
+    eagleAssetOperationItem: {
+      groupBy: async () => [{ status: 'PENDING', errorCode: null, _sum: { weight: 1 } }],
+    },
   };
   const service = new EagleAssetOperationService(
     { $transaction: async (work: (tx: unknown) => unknown) => work(tx) } as never,
@@ -409,11 +415,20 @@ test('operation result receipts reject foreign, wrong-mode and locked private op
       where: { id: 'operation', ownerId: 'owner', libraryMode, isPrivate: false },
       select: {
         id: true,
+        ownerId: true,
         kind: true,
         libraryMode: true,
         undoOfId: true,
         updatedAt: true,
         inputIds: true,
+        privacyChanged: true,
+        queuedWeight: true,
+        runningWeight: true,
+        completedWeight: true,
+        skippedWeight: true,
+        failedWeight: true,
+        cancelledWeight: true,
+        errorCounts: true,
       },
     })),
   );
@@ -422,10 +437,17 @@ test('operation result receipts reject foreign, wrong-mode and locked private op
 test('receipts expose only scoped membership and versions, page by ordinal, and reject a changed revision', async () => {
   const operation = {
     id: 'op',
+    ownerId: 'owner',
     kind: 'TRASH',
     libraryMode: 'PHOTO',
     inputIds: [],
     updatedAt: new Date('2026-10-31T00:00:00Z'),
+    queuedWeight: 0,
+    runningWeight: 0,
+    completedWeight: 513,
+    skippedWeight: 0,
+    failedWeight: 0,
+    cancelledWeight: 0,
   };
   const calls: unknown[] = [];
   const rows = Array.from({ length: 513 }, (_, ordinal) => ({
@@ -447,7 +469,7 @@ test('receipts expose only scoped membership and versions, page by ordinal, and 
     $queryRaw: async () => [{ id: 'asset-0', rowVersion: 7, state: 'ACTIVE' }],
     eagleAssetOperation: { findFirst: async () => operation },
     eagleAssetOperationItem: {
-      groupBy: async () => [{ status: 'COMPLETED', errorCode: null, _sum: { weight: 513 } }],
+      groupBy: async () => [],
       findMany: async (query: { where: { ordinal: { gte: number } } }) => {
         calls.push(query);
         return rows.slice(query.where.ordinal.gte);
@@ -492,13 +514,20 @@ test('in-flight results never pretend the queued selection is completed', async 
       eagleAssetOperation: {
         findFirst: async () => ({
           id: 'op',
+          ownerId: 'owner',
           kind: 'TRASH',
           libraryMode: 'PHOTO',
           updatedAt: new Date(),
+          queuedWeight: 0,
+          runningWeight: 3,
+          completedWeight: 0,
+          skippedWeight: 0,
+          failedWeight: 0,
+          cancelledWeight: 0,
         }),
       },
       eagleAssetOperationItem: {
-        groupBy: async () => [{ status: 'RUNNING', errorCode: null, _sum: { weight: 3 } }],
+        groupBy: async () => [],
         findMany: () => {
           throw Error('No premature resource receipts');
         },
@@ -555,14 +584,19 @@ for (const timeout of [false, true])
       : new Error('secret-path-and-credentials');
     const writes: unknown[] = [];
     const logs: unknown[] = [];
+    const tx = {
+      $executeRaw: async () => 0,
+      eagleAssetOperationItem: {
+        updateMany: async (input: unknown) => {
+          writes.push(input);
+          return { count: 1 };
+        },
+      },
+    };
     const service = new EagleAssetOperationService(
       {
-        eagleAssetOperationItem: {
-          updateMany: async (input: unknown) => {
-            writes.push(input);
-            return { count: 1 };
-          },
-        },
+        ...tx,
+        $transaction: async (work: (client: typeof tx) => unknown) => work(tx),
       } as never,
       {
         send: async () => {

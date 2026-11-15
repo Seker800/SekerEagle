@@ -14,6 +14,7 @@ export class EagleOperationErrorResponseDto {
 export class EagleOperationSummaryResponseDto implements AssetOperationSummary {
   @ApiPropertyOptional() undoOf?: string;
   @ApiPropertyOptional() commandType?: string;
+  @ApiPropertyOptional() privacyChanged?: boolean;
   @ApiProperty() id!: string;
   @ApiProperty({ enum: [...ASSET_OPERATION_KINDS] }) kind!: AssetOperationSummary['kind'];
   @ApiProperty({ enum: ['MATERIAL', 'PHOTO'] }) libraryMode!: AssetOperationSummary['libraryMode'];

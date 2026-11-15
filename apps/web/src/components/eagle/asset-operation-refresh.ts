@@ -40,6 +40,38 @@ const PRIVACY_COMMAND_TYPES = new Set([
 
 type AssetListView = 'ACTIVE' | 'PRIVATE' | 'TRASH';
 
+const TAG_COMMAND_TYPES = new Set([
+  'ASSET_TAGS',
+  'ASSET_TAGS_REPLACE',
+  'TAG_UPDATE',
+  'TAG_DELETE',
+  'TAG_GROUP_DELETE',
+]);
+
+/** Only commands that can change asset visibility need the whole disk cache flushed. */
+export function requiresPrivacyCacheClear(
+  commandType: string | undefined,
+  privacyChanged: boolean | undefined,
+): boolean {
+  if (privacyChanged === true) return true;
+  return (
+    !!commandType && PRIVACY_COMMAND_TYPES.has(commandType) && !TAG_COMMAND_TYPES.has(commandType)
+  );
+}
+
+/** Only facts that can change a cached derived file invalidate the desktop cache. */
+function mediaCacheSignature(asset: {
+  mediaRevision: number;
+  isPrivate?: boolean;
+  renditions?: ReadonlyArray<{ id: string; revision: number; byteSize: number }>;
+}) {
+  return JSON.stringify([
+    asset.mediaRevision,
+    asset.isPrivate === true,
+    (asset.renditions ?? []).map(({ id, revision, byteSize }) => [id, revision, byteSize]),
+  ]);
+}
+
 const coordinators = new WeakMap<QueryClient, Map<string, AssetOperationRefresher>>();
 export function getAssetOperationRefresher(client: QueryClient, ownerId: string) {
   let owners = coordinators.get(client);
@@ -198,9 +230,10 @@ export class AssetOperationRefresher {
         cursor = result.nextCursor ?? undefined;
       } while (cursor !== undefined);
       if (actual.kind === 'METADATA_COMMAND' || actual.kind === 'BACKGROUND_COMMAND') {
-        const privacyChanged =
-          !!actual.commandType && PRIVACY_COMMAND_TYPES.has(actual.commandType);
-        if (privacyChanged && mode === 'PHOTO') await this.clearPhotoPrivacyProjections(epoch);
+        // Tag commands report whether they actually changed visibility; a plain tag
+        // rename, color change or deletion must not flush the whole account's disk cache.
+        const privacyTouched = requiresPrivacyCacheClear(actual.commandType, actual.privacyChanged);
+        if (privacyTouched && mode === 'PHOTO') await this.clearPhotoPrivacyProjections(epoch);
 
         if (actual.commandType !== 'DUPLICATE_IGNORE') await this.refreshLoadedFacts(mode, epoch);
         if (
@@ -209,7 +242,7 @@ export class AssetOperationRefresher {
             actual.commandType === 'BATCH_EDIT_RENDER')
         )
           await this.refreshPhotoStacks(mode, epoch, actual.commandType === 'BATCH_EDIT_RENDER');
-        if (privacyChanged) await getDesktopCacheBridge()?.clearCache();
+        if (privacyTouched) await getDesktopCacheBridge()?.clearCache();
         if (changes.epoch !== epoch || this.disposed) return;
       }
       changes.finish(
@@ -361,6 +394,7 @@ export class AssetOperationRefresher {
     // remains one durable command, with no manual splitting or pagination reset.
     for (let offset = 0; offset < ids.length; offset += 100) {
       const batch = ids.slice(offset, offset + 100);
+      const previous = new Map(batch.map((id) => [id, cache.store.get(id)]));
       const facts = await api.listEagleAssetFacts('', batch);
       if (this.disposed || cache.operations.epoch !== epoch) return;
       cache.store.upsertMany(facts);
@@ -398,7 +432,13 @@ export class AssetOperationRefresher {
                 : data,
           );
       }
-      await invalidateDesktopAssets(batch);
+      const changed = batch.filter((id) => {
+        const before = previous.get(id);
+        const after = cache.store.get(id);
+        return !!before && !!after && mediaCacheSignature(before) !== mediaCacheSignature(after);
+      });
+      const expired = [...missing, ...changed];
+      if (expired.length) await invalidateDesktopAssets(expired);
     }
   }
   private addDestination(mode: LibraryMode, views: readonly AssetListView[]) {

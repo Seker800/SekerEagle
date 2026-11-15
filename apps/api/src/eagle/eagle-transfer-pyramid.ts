@@ -86,27 +86,35 @@ export function transferPyramidTiles(p: TransferPyramid) {
   return tiles;
 }
 export async function copyTransferPyramid(
-  storage: Pick<ObjectStorageService, 'headObject' | 'copyObject'>,
+  storage: Pick<ObjectStorageService, 'copyObject' | 'listObjectSizes'>,
   ownerId: string,
   p: TransferPyramid,
 ) {
   assertOwnedObjectKey(ownerId, p.storagePrefix);
   assertOwnedObjectKey(ownerId, p.targetPrefix);
   const tiles = transferPyramidTiles(p);
+  const sourcePrefix = `${pyramidStoragePrefix(p.storagePrefix)}/`;
+  // One bounded listing replaces a HEAD per tile; source renditions are immutable once READY.
+  const sourceSizes = await storage.listObjectSizes(sourcePrefix);
   let total = 0n;
+  for (const relative of tiles) {
+    const size = sourceSizes.get(sourcePrefix + relative);
+    if (size === undefined) throw new ConflictException('切片读取校验失败。');
+    total += size;
+  }
+  if (total !== BigInt(p.size)) throw new ConflictException('切片总大小校验失败。');
   await runTransferWork(tiles, async (relative) =>
     transferCopyBudget.run(async () => {
-      const sourceKey = `${pyramidStoragePrefix(p.storagePrefix)}/${relative}`,
-        targetKey = p.targetPrefix + relative;
-      const before = await storage.headObject(sourceKey);
-      const size = BigInt(before.ContentLength ?? -1);
-      if (size < 0n) throw new ConflictException('切片读取校验失败。');
-      await storage.copyObject(sourceKey, targetKey);
-      const after = await storage.headObject(targetKey);
-      if (BigInt(after.ContentLength ?? -1) !== size)
-        throw new ConflictException('切片复制校验失败。');
-      total += size;
+      await storage.copyObject(sourcePrefix + relative, p.targetPrefix + relative);
     }),
   );
-  if (total !== BigInt(p.size)) throw new ConflictException('切片总大小校验失败。');
+  // One bounded target listing verifies the copied set without two HEADs per tile.
+  const targetSizes = await storage.listObjectSizes(p.targetPrefix);
+  let copied = 0n;
+  for (const relative of tiles) {
+    const size = targetSizes.get(p.targetPrefix + relative);
+    if (size === undefined) throw new ConflictException('切片复制校验失败。');
+    copied += size;
+  }
+  if (copied !== total) throw new ConflictException('切片复制校验失败。');
 }

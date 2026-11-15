@@ -26,6 +26,7 @@ test('cancel persists operation intent before cancelling pending items so claime
         events.push('items');
         return { count: 0 };
       },
+      groupBy: async () => [{ status: 'RUNNING', errorCode: null, _sum: { weight: 1 } }],
     },
   };
   const service = new EagleAssetOperationService(

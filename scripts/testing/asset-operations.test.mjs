@@ -753,6 +753,7 @@ test('an expired metadata batch cannot publish or overwrite its replacement gene
   let intercepted = false;
   const delayed = {
     eagleAssetOperationItem: prisma.eagleAssetOperationItem,
+    $executeRaw: prisma.$executeRaw.bind(prisma),
     async $transaction(...args) {
       const result = await prisma.$transaction(...args);
       // Pause after the claim commits and before the write transaction begins;
@@ -1108,6 +1109,7 @@ test('a live metadata batch excludes other executors from claiming its waiting t
   let paused = false;
   const adapter = {
     eagleAssetOperationItem: prisma.eagleAssetOperationItem,
+    $executeRaw: prisma.$executeRaw.bind(prisma),
     async $transaction(...args) {
       const result = await prisma.$transaction(...args);
       if (!paused && Array.isArray(result) && result[0]?.operation?.kind === 'TRASH') {

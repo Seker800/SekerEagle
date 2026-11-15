@@ -1,18 +1,40 @@
 import { FacePublicationBatcher } from './face-publication-batcher';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { createHash } from 'node:crypto';
-import type { EagleAssetProcessingJob, PrismaClient, Prisma } from '@prisma/client';
-import { cosineSimilarity, FACE_MODEL_VERSION, type FaceDetection } from './face-inference';
+import { Prisma } from '@prisma/client';
+import type { EagleAssetProcessingJob, PrismaClient } from '@prisma/client';
+import { FACE_MODEL_VERSION, type FaceDetection } from './face-inference';
 export {
   cosineSimilarity,
   FACE_MODEL_VERSION,
   validateFaceResult,
   inferPhotoFaces,
+  stopFaceInference,
   type FaceDetection,
 } from './face-inference';
 interface FacePublication {
   job: EagleAssetProcessingJob;
   detections: FaceDetection[];
+}
+/** pgvector nearest prototype inside the same transaction, excluding already assigned people. */
+async function nearestPersonId(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  embedding: number[],
+  assigned: ReadonlySet<string>,
+): Promise<string | undefined> {
+  const vector = `[${embedding.join(',')}]`;
+  const rows = await tx.$queryRaw<Array<{ id: string; score: number }>>(Prisma.sql`
+    SELECT id, 1 - (prototype::vector <=> ${vector}::vector) AS score
+    FROM "EaglePhotoPerson"
+    WHERE "ownerId"=${ownerId} AND "libraryMode"='PHOTO'::"LibraryMode"
+      AND "modelVersion"=${FACE_MODEL_VERSION}
+      AND cardinality(prototype)=128
+      AND NOT (id = ANY(${[...assigned]}::text[]))
+    ORDER BY prototype::vector <=> ${vector}::vector
+    LIMIT 32
+  `);
+  return rows[0] && rows[0].score >= 0.45 ? rows[0].id : undefined;
 }
 const publishers = new WeakMap<
   PrismaClient,
@@ -83,12 +105,6 @@ async function persistPhotoFacesInTransaction(
     },
     data: { isCurrent: false },
   });
-  const people = detections.length
-    ? await tx.eaglePhotoPerson.findMany({
-        where: { ownerId: job.ownerId, libraryMode: 'PHOTO', modelVersion: FACE_MODEL_VERSION },
-        take: 10000,
-      })
-    : [];
   const corrected = detections.length
     ? await tx.eaglePhotoFace.findMany({
         where: {
@@ -115,22 +131,17 @@ async function persistPhotoFacesInTransaction(
       if (existing.personId) assigned.add(existing.personId);
       continue;
     }
-    const nearest = people
-      .filter((person) => !assigned.has(person.id))
-      .map((person) => ({ person, score: cosineSimilarity(person.prototype, face.embedding) }))
-      .sort((a, b) => b.score - a.score)[0];
-    const person =
-      nearest && nearest.score >= 0.45
-        ? nearest.person
-        : await tx.eaglePhotoPerson.create({
-            data: {
-              ownerId: job.ownerId,
-              libraryMode: 'PHOTO',
-              prototype: face.embedding,
-              modelVersion: FACE_MODEL_VERSION,
-            },
-          });
-    if (!people.some((row) => row.id === person.id)) people.push(person);
+    const nearestId = await nearestPersonId(tx, job.ownerId, face.embedding, assigned);
+    const person = nearestId
+      ? { id: nearestId }
+      : await tx.eaglePhotoPerson.create({
+          data: {
+            ownerId: job.ownerId,
+            libraryMode: 'PHOTO',
+            prototype: face.embedding,
+            modelVersion: FACE_MODEL_VERSION,
+          },
+        });
     assigned.add(person.id);
     await tx.eaglePhotoFace.create({
       data: {

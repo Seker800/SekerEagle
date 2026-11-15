@@ -32,6 +32,18 @@
         "tags": ["library"]
       }
     },
+    "/api/security/csp-report": {
+      "post": {
+        "operationId": "CspReportController_report",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": ["CspReport"]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -10227,6 +10239,9 @@
           },
           "commandType": {
             "type": "string"
+          },
+          "privacyChanged": {
+            "type": "boolean"
           },
           "id": {
             "type": "string"

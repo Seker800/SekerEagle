@@ -8,7 +8,9 @@ export function installEditRequestBodyParser(app: Pick<NestExpressApplication, '
     /^\/api\/(eagle|photos)\/assets\/(?:[0-9a-f-]{36}|batch)\/edit-renders\/?$/i,
     function editRenderJson(req: Request, res: Response, next: NextFunction) {
       if (req.method === 'POST') {
-        if (/\/assets\/batch\/edit-renders\/?$/i.test(req.path)) parseBatch(req, res, next);
+        // app.use(regex) strips the matched prefix from req.path; originalUrl keeps it.
+        const pathname = req.originalUrl.split('?', 1)[0] ?? '';
+        if (/\/assets\/batch\/edit-renders\/?$/i.test(pathname)) parseBatch(req, res, next);
         else parse(req, res, next);
       } else next();
     },

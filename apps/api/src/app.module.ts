@@ -1,6 +1,7 @@
 import { WorkspaceChangesController } from './workspace-changes.controller';
 import { WorkspaceChangesService } from './workspace-changes.service';
 import { BackupController } from './backup/backup.controller';
+import { CspReportController } from './security/csp-report.controller';
 import { securityResponse } from './security-response';
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -22,7 +23,7 @@ import { StorageModule } from './storage/storage.module';
     PhotoLibraryModule,
     HealthModule,
   ],
-  controllers: [BackupController, WorkspaceChangesController],
+  controllers: [BackupController, WorkspaceChangesController, CspReportController],
   providers: [WorkspaceChangesService],
 })
 export class AppModule implements NestModule {

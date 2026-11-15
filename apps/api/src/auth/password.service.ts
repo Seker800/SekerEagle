@@ -12,6 +12,32 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const BCRYPT_ROUNDS = 12;
 const DUMMY_HASH = bcrypt.hashSync('sekereagle-invalid-password', BCRYPT_ROUNDS);
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60_000;
+const LOGIN_LOCK_THRESHOLD = 5;
+const LOGIN_MAX_DELAY_MS = 60_000;
+const loginFailures = new Map<string, { count: number; firstAt: number; until: number }>();
+
+/** Consecutive password failures back off per normalized email; this is not a request quota. */
+function loginDelayRemaining(email: string): number {
+  const entry = loginFailures.get(email);
+  return entry && entry.until > Date.now() ? entry.until - Date.now() : 0;
+}
+
+function recordLoginFailure(email: string): void {
+  const now = Date.now();
+  const current = loginFailures.get(email);
+  const entry =
+    current && now - current.firstAt < LOGIN_FAILURE_WINDOW_MS
+      ? current
+      : { count: 0, firstAt: now, until: 0 };
+  entry.count++;
+  if (entry.count >= LOGIN_LOCK_THRESHOLD)
+    entry.until =
+      now + Math.min(LOGIN_MAX_DELAY_MS, 1_000 * 2 ** (entry.count - LOGIN_LOCK_THRESHOLD));
+  if (loginFailures.size >= 1_024 && !loginFailures.has(email))
+    loginFailures.delete(loginFailures.keys().next().value!);
+  loginFailures.set(email, entry);
+}
 
 @Injectable()
 export class PasswordService {
@@ -19,15 +45,23 @@ export class PasswordService {
 
   async login(email: string, password: string): Promise<User> {
     const normalized = normalizeEmail(email);
-    let user = await this.prisma.user.findUnique({ where: { email: normalized } });
-    if (user) {
-      if (!(await bcrypt.compare(password, user.passwordHash))) {
-        throw new UnauthorizedException('邮箱或密码错误。');
+    if (loginDelayRemaining(normalized) > 0)
+      throw new UnauthorizedException('登录尝试过于频繁，请稍后再试。');
+    let user: User | null;
+    try {
+      user = await this.prisma.user.findUnique({ where: { email: normalized } });
+      if (user) {
+        if (!(await bcrypt.compare(password, user.passwordHash)))
+          throw new UnauthorizedException('邮箱或密码错误。');
+      } else {
+        user = await this.claimSoleLegacyAdminEmail(normalized, password);
+        if (!user) throw new UnauthorizedException('邮箱或密码错误。');
       }
-    } else {
-      user = await this.claimSoleLegacyAdminEmail(normalized, password);
-      if (!user) throw new UnauthorizedException('邮箱或密码错误。');
+    } catch (error) {
+      if (error instanceof UnauthorizedException) recordLoginFailure(normalized);
+      throw error;
     }
+    loginFailures.delete(normalized);
     if (user.disabledAt) throw new ForbiddenException('该账号已停用。');
     return user;
   }

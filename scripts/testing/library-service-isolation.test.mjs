@@ -3171,3 +3171,112 @@ test('handoff adopts freshly published immutable derivatives without changing th
     }
   }
 });
+
+test('metadata batches apply tags, annotations and privacy with bounded set statements', async () => {
+  const { PrismaSekerEagleIngestionAdapter } =
+    await import('../../apps/api/dist/eagle/adapters/prisma/seker-eagle-ingestion.adapter.js');
+  const f = await fixtures();
+  const second = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'second.jpg',
+      displayName: 'second',
+      normalizedDisplayName: 'second',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1,
+      originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original.jpg`,
+      lifecycleStatus: 'READY',
+    },
+  });
+  const tag = await prisma.eagleManualTag.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      name: '私密导入标签',
+      normalizedName: '私密导入标签',
+      marksAssetsPrivate: true,
+    },
+  });
+  const tagInput = {
+    name: tag.name,
+    normalizedName: tag.normalizedName,
+    color: null,
+    isStarred: false,
+    groups: [],
+  };
+  const adapter = new PrismaSekerEagleIngestionAdapter();
+  const firstCommand = {
+    sourceKey: `eagle-app:${randomUUID()}`,
+    ownerId: f.ownerId,
+    assetId: f.material.id,
+    displayName: '批量一',
+    rating: 5,
+    libraryAddedAt: new Date('2020-01-02T00:00:00Z'),
+    description: '新描述',
+    sourceUrl: 'https://example.invalid/a',
+    tags: [tagInput],
+  };
+  const secondCommand = {
+    sourceKey: `eagle-app:${randomUUID()}`,
+    ownerId: f.ownerId,
+    assetId: second.id,
+    displayName: '批量二',
+    rating: null,
+    libraryAddedAt: null,
+    description: null,
+    sourceUrl: null,
+    tags: [tagInput],
+  };
+  await prisma.$transaction((tx) => adapter.applyMetadataBatch([firstCommand, secondCommand], tx));
+
+  const firstAsset = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } });
+  assert.equal(firstAsset.displayName, '批量一');
+  assert.equal(firstAsset.normalizedDisplayName, '批量一');
+  assert.equal(firstAsset.rating, 5);
+  assert.equal(firstAsset.isPrivate, true);
+  const annotation = await prisma.eagleAssetAnnotation.findFirstOrThrow({
+    where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', assetId: f.material.id },
+  });
+  assert.equal(annotation.description, '新描述');
+  assert.equal(annotation.sourceUrl, 'https://example.invalid/a');
+  assert.equal(
+    await prisma.eagleAssetManualTag.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', tagId: tag.id },
+    }),
+    2,
+  );
+  assert.equal(
+    await prisma.eagleAssetManualTagIngestion.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', tagId: tag.id },
+    }),
+    2,
+  );
+
+  await prisma.$transaction((tx) =>
+    adapter.applyMetadataBatch([{ ...secondCommand, displayName: '批量二改', tags: [] }], tx),
+  );
+  assert.equal(
+    await prisma.eagleAssetManualTag.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', assetId: second.id, tagId: tag.id },
+    }),
+    0,
+  );
+  assert.equal(
+    await prisma.eagleAssetManualTagIngestion.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', assetId: second.id, tagId: tag.id },
+    }),
+    0,
+  );
+  assert.equal(
+    await prisma.eagleAssetManualTag.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', assetId: f.material.id, tagId: tag.id },
+    }),
+    1,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: second.id } })).isPrivate,
+    false,
+  );
+});

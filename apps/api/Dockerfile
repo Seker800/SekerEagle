@@ -25,6 +25,10 @@ COPY packages/eagle-filter-core packages/eagle-filter-core
 COPY packages/vector-core packages/vector-core
 RUN npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/photo-render-core && npm run build --workspace @sekereagle/library-persistence && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api
 
+# Runtime dependencies only; the migrate service installs just the Prisma CLI on top.
+FROM build AS production-deps
+RUN npm prune --omit=dev
+
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && printf '%s\n' 'deb https://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/sekereagle-media.list && apt-get update && apt-get install -y --no-install-recommends ffmpeg python3 python3-venv libimage-exiftool-perl openssl && apt-get install -y --no-install-recommends -t bookworm-backports libheif-examples libheif-plugin-libde265 && rm -rf /var/lib/apt/lists/*
 COPY packages/media-core/python/requirements.txt /tmp/camera-media-requirements.txt
@@ -32,7 +36,7 @@ RUN python3 -m venv /opt/camera-media && /opt/camera-media/bin/pip install --no-
 ENV CAMERA_RAW_PYTHON=/opt/camera-media/bin/python
 ENV NODE_ENV=production
 WORKDIR /sekereagle
-COPY --from=build /sekereagle/node_modules ./node_modules
+COPY --from=production-deps /sekereagle/node_modules ./node_modules
 COPY --from=build /sekereagle/apps/api ./apps/api
 COPY --from=build /sekereagle/packages/config ./packages/config
 COPY --from=build /sekereagle/packages/library-core ./packages/library-core
@@ -43,6 +47,8 @@ COPY --from=build /sekereagle/packages/eagle-filter-core ./packages/eagle-filter
 COPY --from=build /sekereagle/packages/vector-core ./packages/vector-core
 COPY scripts ./scripts
 COPY package.json package-lock.json prisma.config.ts ./
+# Migration is a short-lived job; keep only its CLI instead of all devDependencies.
+RUN npm install --no-save --omit=dev prisma@7.10.1 && npm cache clean --force
 USER node
 # Check the compiled entry dependency in the actual runtime filesystem.
 RUN node -e "require('./apps/api/dist/eagle/eagle-edit-request-body.js')"

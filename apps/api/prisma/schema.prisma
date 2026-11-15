@@ -171,6 +171,7 @@ model EagleLibraryTransfer {
   sourceIds String[]
   plan Json
   status String @default("PENDING")
+  cleanupAttempts Int @default(0)
   result Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -193,6 +194,14 @@ model EagleAssetOperation {
   authVersion Int
   privateUntil DateTime?
   isPrivate Boolean @default(false)
+  privacyChanged Boolean @default(false)
+  queuedWeight Int @default(0)
+  runningWeight Int @default(0)
+  completedWeight Int @default(0)
+  skippedWeight Int @default(0)
+  failedWeight Int @default(0)
+  cancelledWeight Int @default(0)
+  errorCounts Json @default("{}")
   lastClaimedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -222,6 +231,7 @@ model EagleAssetOperationItem {
   operation EagleAssetOperation @relation(fields: [ownerId, libraryMode, operationId], references: [ownerId, libraryMode, id], onDelete: Cascade, map: "EagleAssetOperationItem_scope_fkey")
   @@unique([operationId, ordinal])
   @@index([libraryMode, status, leaseUntil])
+  @@index([operationId, status, errorCode, weight])
 }
 
 model User {
@@ -1263,6 +1273,7 @@ model EagleAssetProcessingJob {
   @@index([status, lockedAt])
   @@index([ownerId, libraryMode, assetId])
   @@index([ownerId, libraryMode, status, kind, processorVersion])
+  @@index([ownerId, libraryMode, createdAt, id])
   @@index([dependsOnJobId, status])
   @@map("EagleMediaJob")
 }

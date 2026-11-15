@@ -123,7 +123,26 @@ interface ImportMetadataSource {
   description: string | null;
   sourceUrl: string | null;
   tagNames: string[];
+  assetId: string | null;
 }
+const MAPPED_ITEM_SELECT = {
+  id: true,
+  runId: true,
+  externalAssetId: true,
+  displayName: true,
+  sourceImportedAt: true,
+  sourceModifiedAt: true,
+  metadataHash: true,
+  contentSha256: true,
+  sourceFileModifiedAt: true,
+  byteSize: true,
+  rating: true,
+  description: true,
+  sourceUrl: true,
+  tagNames: true,
+  assetId: true,
+} as const;
+const activePreflights = new Set<string>();
 
 @Injectable()
 export class PrismaEagleImportsRepository implements EagleImportsRepository {
@@ -502,26 +521,88 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
   }
 
   async preflight(ownerId: string, runId: string) {
-    return this.prisma.$transaction(
-      async (transaction) => {
-        await lockImportRun(transaction, ownerId, runId);
-        const run = await transaction.eagleImportRun.findFirst({
-          where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
-          select: {
-            id: true,
-            status: true,
-            declaredItemCount: true,
-            declaredByteSize: true,
+    const preflightKey = `${ownerId}:${runId}`;
+    if (activePreflights.has(preflightKey))
+      throw new ConflictException('该导入任务的预检正在进行。');
+    activePreflights.add(preflightKey);
+    try {
+      const initial = await this.prisma.eagleImportRun.findFirst({
+        where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
+        select: {
+          id: true,
+          status: true,
+          declaredItemCount: true,
+          declaredByteSize: true,
+        },
+      });
+      if (!initial) throw new NotFoundException('Eagle 导入任务不存在。');
+      if (!canPreflightEagleImport(initial.status))
+        throw new ConflictException('当前 Eagle 导入任务不能执行预检。');
+      // Validate the declaration before any metadata page is allowed to commit.
+      const [declaration] = await this.prisma.$queryRaw<
+        Array<{ itemCount: bigint; byteSize: bigint; missingFolderIds: string[] }>
+      >(Prisma.sql`
+        SELECT
+          COUNT(*)::bigint AS "itemCount",
+          COALESCE(SUM(item."byteSize"), 0)::bigint AS "byteSize",
+          COALESCE((
+            SELECT array_agg(DISTINCT folder_id ORDER BY folder_id)
+            FROM "EagleImportRunItem" referenced_item
+            CROSS JOIN LATERAL unnest(referenced_item."folderSourceIds") AS folder_id
+            LEFT JOIN "EagleImportFolderDefinition" folder
+              ON folder."ownerId" = referenced_item."ownerId"
+             AND folder."runId" = referenced_item."runId"
+             AND folder."sourceFolderId" = folder_id
+            WHERE referenced_item."ownerId" = ${ownerId} AND referenced_item."libraryMode" = 'MATERIAL'::"LibraryMode"
+              AND referenced_item."runId" = ${runId}
+              AND folder."id" IS NULL
+          ), ARRAY[]::text[]) AS "missingFolderIds"
+        FROM "EagleImportRunItem" item
+        WHERE item."ownerId" = ${ownerId} AND item."libraryMode" = 'MATERIAL'::"LibraryMode" AND item."runId" = ${runId}
+      `);
+      if (!declaration) throw new Error('Eagle 导入预检声明聚合未返回结果。');
+      if (
+        Number(declaration.itemCount) !== initial.declaredItemCount ||
+        declaration.byteSize !== initial.declaredByteSize
+      )
+        throw new BadRequestException({
+          code: 'MANIFEST_DECLARATION_MISMATCH',
+          message: 'Eagle 清单数量或总字节数与导入声明不一致。',
+          expected: {
+            itemCount: initial.declaredItemCount,
+            byteSize: Number(initial.declaredByteSize),
+          },
+          actual: {
+            itemCount: Number(declaration.itemCount),
+            byteSize: Number(declaration.byteSize),
           },
         });
-        if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
-        if (!canPreflightEagleImport(run.status)) {
-          throw new ConflictException('当前 Eagle 导入任务不能执行预检。');
-        }
-
-        await this.synchronizeMappedItems(transaction, ownerId, runId);
-        const [summary] = await transaction.$queryRaw<ImportPreflightSummary[]>(
-          Prisma.sql`
+      if (declaration.missingFolderIds.length)
+        throw new BadRequestException({
+          code: 'MISSING_FOLDER_DEFINITION',
+          message: 'Eagle 清单引用了未声明的文件夹。',
+          missingFolderIds: declaration.missingFolderIds,
+        });
+      // Metadata sync commits page by page; the final short transaction publishes the summary.
+      await this.synchronizeMappedItems(ownerId, runId);
+      return await this.prisma.$transaction(
+        async (transaction) => {
+          await lockImportRun(transaction, ownerId, runId);
+          const run = await transaction.eagleImportRun.findFirst({
+            where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
+            select: {
+              id: true,
+              status: true,
+              declaredItemCount: true,
+              declaredByteSize: true,
+            },
+          });
+          if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
+          if (!canPreflightEagleImport(run.status)) {
+            throw new ConflictException('当前 Eagle 导入任务不能执行预检。');
+          }
+          const [summary] = await transaction.$queryRaw<ImportPreflightSummary[]>(
+            Prisma.sql`
             SELECT
               COUNT(*)::bigint AS "itemCount",
               COALESCE(SUM(item."byteSize"), 0)::bigint AS "byteSize",
@@ -551,63 +632,72 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
             FROM "EagleImportRunItem" item
             WHERE item."ownerId" = ${ownerId} AND item."libraryMode" = 'MATERIAL'::"LibraryMode" AND item."runId" = ${runId}
           `,
-        );
-        if (!summary) throw new Error('Eagle 导入预检聚合未返回结果。');
-        const actualItemCount = Number(summary.itemCount);
-        if (
-          actualItemCount !== run.declaredItemCount ||
-          summary.byteSize !== run.declaredByteSize
-        ) {
-          throw new BadRequestException({
-            code: 'MANIFEST_DECLARATION_MISMATCH',
-            message: 'Eagle 清单数量或总字节数与导入声明不一致。',
-            expected: { itemCount: run.declaredItemCount, byteSize: Number(run.declaredByteSize) },
-            actual: { itemCount: actualItemCount, byteSize: Number(summary.byteSize) },
-          });
-        }
-        if (summary.missingFolderIds.length) {
-          throw new BadRequestException({
-            code: 'MISSING_FOLDER_DEFINITION',
-            message: 'Eagle 清单引用了未声明的文件夹。',
-            missingFolderIds: summary.missingFolderIds,
-          });
-        }
+          );
+          if (!summary) throw new Error('Eagle 导入预检聚合未返回结果。');
+          const actualItemCount = Number(summary.itemCount);
+          if (
+            actualItemCount !== run.declaredItemCount ||
+            summary.byteSize !== run.declaredByteSize
+          ) {
+            throw new BadRequestException({
+              code: 'MANIFEST_DECLARATION_MISMATCH',
+              message: 'Eagle 清单数量或总字节数与导入声明不一致。',
+              expected: {
+                itemCount: run.declaredItemCount,
+                byteSize: Number(run.declaredByteSize),
+              },
+              actual: { itemCount: actualItemCount, byteSize: Number(summary.byteSize) },
+            });
+          }
+          if (summary.missingFolderIds.length) {
+            throw new BadRequestException({
+              code: 'MISSING_FOLDER_DEFINITION',
+              message: 'Eagle 清单引用了未声明的文件夹。',
+              missingFolderIds: summary.missingFolderIds,
+            });
+          }
 
-        const readyItemCount = Number(summary.readyItemCount);
-        const nextStatus =
-          readyItemCount === 0 ? EagleImportRunStatus.COMPLETED : EagleImportRunStatus.PREFLIGHTED;
-        await transaction.eagleImportRun.update({
-          where: { id: runId, libraryMode: 'MATERIAL' },
-          data: {
-            stagedItemCount: readyItemCount,
-            importedItemCount: Number(summary.alreadyImportedItemCount),
-            skippedItemCount:
-              Number(summary.skippedDeletedItemCount) + Number(summary.skippedUnsupportedItemCount),
-            failedItemCount: 0,
+          const readyItemCount = Number(summary.readyItemCount);
+          const nextStatus =
+            readyItemCount === 0
+              ? EagleImportRunStatus.COMPLETED
+              : EagleImportRunStatus.PREFLIGHTED;
+          await transaction.eagleImportRun.update({
+            where: { id: runId, libraryMode: 'MATERIAL' },
+            data: {
+              stagedItemCount: readyItemCount,
+              importedItemCount: Number(summary.alreadyImportedItemCount),
+              skippedItemCount:
+                Number(summary.skippedDeletedItemCount) +
+                Number(summary.skippedUnsupportedItemCount),
+              failedItemCount: 0,
+              status: nextStatus,
+              completedAt: nextStatus === EagleImportRunStatus.COMPLETED ? new Date() : null,
+            },
+          });
+          return {
+            runId,
             status: nextStatus,
-            completedAt: nextStatus === EagleImportRunStatus.COMPLETED ? new Date() : null,
-          },
-        });
-        return {
-          runId,
-          status: nextStatus,
-          itemCount: actualItemCount,
-          byteSize: Number(summary.byteSize),
-          readyItemCount,
-          alreadyImportedItemCount: Number(summary.alreadyImportedItemCount),
-          skippedDeletedItemCount: Number(summary.skippedDeletedItemCount),
-          skippedUnsupportedItemCount: Number(summary.skippedUnsupportedItemCount),
-          warningCount: Number(summary.warningCount),
-          newItemCount: Number(summary.newItemCount),
-          unchangedItemCount: Number(summary.unchangedItemCount),
-          metadataUpdateItemCount: Number(summary.metadataUpdateItemCount),
-          contentReplaceItemCount: Number(summary.contentReplaceItemCount),
-          uploadItemCount: Number(summary.uploadItemCount),
-          uploadByteSize: Number(summary.uploadByteSize),
-        };
-      },
-      { timeout: 120_000 },
-    );
+            itemCount: actualItemCount,
+            byteSize: Number(summary.byteSize),
+            readyItemCount,
+            alreadyImportedItemCount: Number(summary.alreadyImportedItemCount),
+            skippedDeletedItemCount: Number(summary.skippedDeletedItemCount),
+            skippedUnsupportedItemCount: Number(summary.skippedUnsupportedItemCount),
+            warningCount: Number(summary.warningCount),
+            newItemCount: Number(summary.newItemCount),
+            unchangedItemCount: Number(summary.unchangedItemCount),
+            metadataUpdateItemCount: Number(summary.metadataUpdateItemCount),
+            contentReplaceItemCount: Number(summary.contentReplaceItemCount),
+            uploadItemCount: Number(summary.uploadItemCount),
+            uploadByteSize: Number(summary.uploadByteSize),
+          };
+        },
+        { timeout: 120_000 },
+      );
+    } finally {
+      activePreflights.delete(preflightKey);
+    }
   }
 
   async getRun(ownerId: string, runId: string) {
@@ -859,6 +949,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
 
   async cancel(ownerId: string, runId: string) {
     return this.prisma.$transaction(async (transaction) => {
+      await lockImportRun(transaction, ownerId, runId);
       const run = await transaction.eagleImportRun.findFirst({
         where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
         select: { id: true, status: true },
@@ -1726,6 +1817,121 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     );
   }
 
+  private async applyImportMetadataBatch(
+    transaction: Prisma.TransactionClient,
+    ownerId: string,
+    items: ImportMetadataSource[],
+  ) {
+    const mapped = items.filter((item): item is ImportMetadataSource & { assetId: string } =>
+      Boolean(item.assetId),
+    );
+    if (!mapped.length) return;
+    const normalizedNames = [
+      ...new Set(mapped.flatMap((item) => item.tagNames.map(normalizeIdentity))),
+    ];
+    const definitions = normalizedNames.length
+      ? await transaction.eagleImportTagDefinition.findMany({
+          where: {
+            ownerId,
+            runId: mapped[0]!.runId,
+            normalizedName: { in: normalizedNames },
+            libraryMode: 'MATERIAL',
+          },
+        })
+      : [];
+    const groupSourceIds = [
+      ...new Set(definitions.flatMap((definition) => definition.groupSourceIds)),
+    ];
+    const groupDefinitions = groupSourceIds.length
+      ? await transaction.eagleImportTagGroupDefinition.findMany({
+          where: {
+            ownerId,
+            runId: mapped[0]!.runId,
+            sourceGroupId: { in: groupSourceIds },
+            libraryMode: 'MATERIAL',
+          },
+        })
+      : [];
+    const definitionByName = new Map(
+      definitions.map((definition) => [definition.normalizedName, definition]),
+    );
+    const groupBySourceId = new Map(groupDefinitions.map((group) => [group.sourceGroupId, group]));
+    await this.ingestion.applyMetadataBatch(
+      mapped.map((item) => ({
+        sourceKey: `eagle-app:${item.externalAssetId}`,
+        ownerId,
+        assetId: item.assetId,
+        displayName: item.displayName,
+        rating: item.rating,
+        libraryAddedAt: item.sourceImportedAt,
+        description: item.description,
+        sourceUrl: item.sourceUrl,
+        tags: item.tagNames.map((name) => {
+          const normalizedName = normalizeIdentity(name);
+          const definition = definitionByName.get(normalizedName);
+          return {
+            name,
+            normalizedName,
+            color: definition?.color ?? null,
+            isStarred: definition?.isStarred ?? false,
+            groups: (definition?.groupSourceIds ?? [])
+              .map((sourceGroupId) => groupBySourceId.get(sourceGroupId))
+              .filter((group) => group !== undefined)
+              .map((group) => ({
+                name: group.name,
+                normalizedName: group.normalizedName,
+                color: group.color,
+                description: group.description,
+              })),
+          };
+        }),
+      })),
+      transaction,
+    );
+  }
+
+  private async markImportMetadataItemsImported(
+    transaction: Prisma.TransactionClient,
+    items: Array<ImportMetadataSource & { assetId: string; externalAssetId: string }>,
+  ) {
+    const completedAt = new Date();
+    const externalRows = items.map(
+      (item) =>
+        Prisma.sql`(${item.externalAssetId}::text, ${item.sourceImportedAt}::timestamp(3), ${item.sourceModifiedAt}::timestamp(3), ${item.metadataHash}::text, ${item.contentSha256}::text, ${item.sourceFileModifiedAt}::timestamp(3), ${item.byteSize}::bigint, ${completedAt}::timestamp(3))`,
+    );
+    const externalUpdated = await transaction.$executeRaw(Prisma.sql`
+      UPDATE "EagleExternalAsset" e
+      SET "sourceImportedAt" = v."sourceImportedAt",
+          "sourceModifiedAt" = v."sourceModifiedAt",
+          "metadataHash" = v."metadataHash",
+          "sourceContentSha256" = COALESCE(v."sourceContentSha256", e."sourceContentSha256"),
+          "sourceFileModifiedAt" = COALESCE(v."sourceFileModifiedAt", e."sourceFileModifiedAt"),
+          "sourceByteSize" = v."sourceByteSize",
+          "lastSeenAt" = v."completedAt",
+          "lastImportedAt" = v."completedAt",
+          "updatedAt" = CURRENT_TIMESTAMP
+      FROM (VALUES ${Prisma.join(externalRows)}) AS v("id", "sourceImportedAt", "sourceModifiedAt", "metadataHash", "sourceContentSha256", "sourceFileModifiedAt", "sourceByteSize", "completedAt")
+      WHERE e."id" = v."id" AND e."libraryMode" = 'MATERIAL'::"LibraryMode"
+    `);
+    if (externalUpdated !== items.length) throw new Error('Eagle 导入来源批量更新不完整。');
+    const itemRows = items.map(
+      (item) => Prisma.sql`(${item.id}::text, ${completedAt}::timestamp(3))`,
+    );
+    const itemUpdated = await transaction.$executeRaw(Prisma.sql`
+      UPDATE "EagleImportRunItem" i
+      SET "status" = 'IMPORTED'::"EagleImportItemStatus",
+          "errorCode" = NULL,
+          "errorMessage" = NULL,
+          "terminalProgressAppliedAt" = v."completedAt",
+          "completedAt" = v."completedAt",
+          "updatedAt" = CURRENT_TIMESTAMP
+      FROM (VALUES ${Prisma.join(itemRows)}) AS v("id", "completedAt")
+      WHERE i."id" = v."id" AND i."libraryMode" = 'MATERIAL'::"LibraryMode"
+        AND i."status" = 'STAGED'::"EagleImportItemStatus"
+    `);
+    if (itemUpdated !== items.length) throw new Error('Eagle 导入条目批量更新不完整。');
+  }
+
   private async applyTerminalItemDelta(
     transaction: Prisma.TransactionClient,
     ownerId: string,
@@ -1942,14 +2148,10 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     ]);
   }
 
-  private async synchronizeMappedItems(
-    transaction: Prisma.TransactionClient,
-    ownerId: string,
-    runId: string,
-  ) {
+  private async synchronizeMappedItems(ownerId: string, runId: string) {
     let cursorId: string | undefined;
     while (true) {
-      const items = await transaction.eagleImportRunItem.findMany({
+      const items = await this.prisma.eagleImportRunItem.findMany({
         where: {
           ownerId,
           runId,
@@ -1959,55 +2161,40 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           libraryMode: 'MATERIAL',
         },
         orderBy: { id: 'asc' },
-        take: 200,
+        take: 100,
         ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
-        select: {
-          id: true,
-          runId: true,
-          externalAssetId: true,
-          displayName: true,
-          sourceImportedAt: true,
-          sourceModifiedAt: true,
-          metadataHash: true,
-          contentSha256: true,
-          sourceFileModifiedAt: true,
-          byteSize: true,
-          rating: true,
-          description: true,
-          sourceUrl: true,
-          tagNames: true,
-          assetId: true,
-        },
+        select: MAPPED_ITEM_SELECT,
       });
       if (!items.length) return;
-      for (const item of items) {
-        if (!item.assetId) continue;
-        await this.applyImportMetadata(transaction, ownerId, item, item.assetId);
-        const completedAt = new Date();
-        await transaction.eagleExternalAsset.update({
-          where: { id: item.externalAssetId, libraryMode: 'MATERIAL' },
-          data: {
-            sourceImportedAt: item.sourceImportedAt,
-            sourceModifiedAt: item.sourceModifiedAt,
-            metadataHash: item.metadataHash,
-            sourceContentSha256: item.contentSha256 ?? undefined,
-            sourceFileModifiedAt: item.sourceFileModifiedAt ?? undefined,
-            sourceByteSize: item.byteSize,
-            lastSeenAt: completedAt,
-            lastImportedAt: completedAt,
-          },
-        });
-        await transaction.eagleImportRunItem.update({
-          where: { id: item.id, libraryMode: 'MATERIAL' },
-          data: {
-            status: EagleImportItemStatus.IMPORTED,
-            errorCode: null,
-            errorMessage: null,
-            terminalProgressAppliedAt: completedAt,
-            completedAt,
-          },
-        });
-      }
+      await this.prisma.$transaction(
+        async (transaction) => {
+          // Cancel takes the same run row lock, so a page either commits before the
+          // cancellation or observes it before touching any asset.
+          await lockImportRun(transaction, ownerId, runId);
+          const run = await transaction.eagleImportRun.findFirst({
+            where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
+            select: { status: true },
+          });
+          if (!run || run.status === EagleImportRunStatus.CANCELLED) return;
+          const staged = await transaction.eagleImportRunItem.findMany({
+            where: {
+              id: { in: items.map((item) => item.id) },
+              ownerId,
+              runId,
+              status: EagleImportItemStatus.STAGED,
+              libraryMode: 'MATERIAL',
+            },
+            select: MAPPED_ITEM_SELECT,
+          });
+          if (!staged.length) return;
+          await this.applyImportMetadataBatch(transaction, ownerId, staged);
+          const mapped = staged.filter(
+            (item): item is (typeof staged)[number] & { assetId: string } => Boolean(item.assetId),
+          );
+          if (mapped.length) await this.markImportMetadataItemsImported(transaction, mapped);
+        },
+        { timeout: 60_000 },
+      );
       cursorId = items.at(-1)!.id;
     }
   }

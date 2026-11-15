@@ -56,10 +56,24 @@ import type { CleanupSnapshot, ScanSnapshot } from './eagle-duplicate-model';
 import type { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
 
 type Snapshot = { id: string; rowVersion: number; mediaRevision: number };
-type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode'> & {
+type OperationWithItems = Pick<
+  EagleAssetOperation,
+  | 'id'
+  | 'ownerId'
+  | 'kind'
+  | 'libraryMode'
+  | 'privacyChanged'
+  | 'queuedWeight'
+  | 'runningWeight'
+  | 'completedWeight'
+  | 'skippedWeight'
+  | 'failedWeight'
+  | 'cancelledWeight'
+  | 'errorCounts'
+> & {
   undoOfId?: string | null;
   inputIds?: string[];
-  items: Array<Pick<EagleAssetOperationItem, 'status' | 'weight' | 'errorCode'>>;
+  items?: Array<Pick<EagleAssetOperationItem, 'status' | 'weight' | 'errorCode'>>;
 };
 const LEASE_MS = 120_000;
 const METADATA_BATCH_SIZE = OPERATION_METADATA_BATCH_SIZE;
@@ -96,7 +110,10 @@ type AuthorizedBatch<K extends AssetOperationKind> = Array<
 >;
 type MetadataHandler<K extends MetadataOperationKind> = {
   protocol: 'METADATA';
-  apply: (tx: Prisma.TransactionClient, batch: AuthorizedBatch<K>) => Promise<'SKIPPED' | void>;
+  apply: (
+    tx: Prisma.TransactionClient,
+    batch: AuthorizedBatch<K>,
+  ) => Promise<'SKIPPED' | void | { privacyChanged?: boolean }>;
 };
 type HandlerFor<K extends AssetOperationKind> = K extends MetadataOperationKind
   ? MetadataHandler<K>
@@ -164,45 +181,86 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       ...(includePrivate ? {} : { isPrivate: false }),
     };
   }
-  private summary(operation: OperationWithItems): AssetOperationSummary {
+  private summary(
+    operation: OperationWithItems,
+    errors?: Array<{ code: string; count: number }>,
+  ): AssetOperationSummary {
+    const items = operation.items;
     const count = (status: string) =>
-      operation.items
+      (items ?? [])
         .filter((item) => item.status === status)
         .reduce((sum, item) => sum + item.weight, 0);
-    const counts = {
-      queued: count('PENDING'),
-      running: count('RUNNING'),
-      completed: count('COMPLETED') + count('SKIPPED'),
-      failed: count('FAILED'),
-      cancelled: count('CANCELLED'),
-    };
-    const errors = new Map<string, number>();
-    for (const item of operation.items)
-      if (item.status === 'FAILED' && item.errorCode)
-        errors.set(item.errorCode, (errors.get(item.errorCode) ?? 0) + item.weight);
+    const counts = items
+      ? {
+          queued: count('PENDING'),
+          running: count('RUNNING'),
+          completed: count('COMPLETED') + count('SKIPPED'),
+          failed: count('FAILED'),
+          cancelled: count('CANCELLED'),
+        }
+      : {
+          queued: operation.queuedWeight,
+          running: operation.runningWeight,
+          completed: operation.completedWeight + operation.skippedWeight,
+          failed: operation.failedWeight,
+          cancelled: operation.cancelledWeight,
+        };
+    const skipped = items ? count('SKIPPED') : operation.skippedWeight;
+    const total = items
+      ? items.reduce((n, item) => n + item.weight, 0)
+      : counts.queued + counts.running + counts.completed + counts.failed + counts.cancelled;
+    const errorList =
+      errors ??
+      (() => {
+        if (items) {
+          const errorMap = new Map<string, number>();
+          for (const item of items)
+            if (item.status === 'FAILED' && item.errorCode)
+              errorMap.set(item.errorCode, (errorMap.get(item.errorCode) ?? 0) + item.weight);
+          return [...errorMap].map(([code, count]) => ({ code, count }));
+        }
+        const stored = operation.errorCounts;
+        if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return [];
+        return Object.entries(stored)
+          .flatMap(([code, count]) =>
+            typeof count === 'number' && count > 0 ? [{ code, count }] : [],
+          )
+          .sort((left, right) => left.code.localeCompare(right.code));
+      })();
     return {
       ...(['METADATA_COMMAND', 'BACKGROUND_COMMAND'].includes(operation.kind) &&
       operation.inputIds?.[1]
         ? { commandType: operation.inputIds[1] }
         : {}),
+      ...(operation.privacyChanged ? { privacyChanged: true } : {}),
       ...(operation.undoOfId ? { undoOf: operation.undoOfId } : {}),
       id: operation.id,
       kind: operation.kind as AssetOperationKind,
       libraryMode: operation.libraryMode,
-      total: operation.items.reduce((n, item) => n + item.weight, 0),
+      total,
       ...counts,
-      ...(count('SKIPPED') ? { skipped: count('SKIPPED') } : {}),
+      ...(skipped ? { skipped } : {}),
       state: assetOperationState(counts),
-      errors: [...errors].map(([code, count]) => ({ code, count })),
+      errors: errorList,
     };
   }
+
   async list(ownerId: string, includePrivate = false) {
     const select = {
       id: true,
+      ownerId: true,
       kind: true,
       libraryMode: true,
       undoOfId: true,
       inputIds: true,
+      privacyChanged: true,
+      queuedWeight: true,
+      runningWeight: true,
+      completedWeight: true,
+      skippedWeight: true,
+      failedWeight: true,
+      cancelledWeight: true,
+      errorCounts: true,
     } as const;
     const [active, recent] = await Promise.all([
       this.prisma.eagleAssetOperation.findMany({
@@ -222,27 +280,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     ]);
     // Recent history must never push a still-running operation out of the visible window.
     const operations = [...new Map([...active, ...recent].map((row) => [row.id, row])).values()];
-    const counts = await this.prisma.eagleAssetOperationItem.groupBy({
-      by: ['operationId', 'status', 'errorCode'],
-      where: {
-        operationId: { in: operations.map((row) => row.id) },
-        ownerId,
-        libraryMode: this.libraryMode,
-      },
-      _sum: { weight: true },
-    });
-    return operations.map((operation) =>
-      this.summary({
-        ...operation,
-        items: counts
-          .filter((row) => row.operationId === operation.id)
-          .map((row) => ({
-            status: row.status,
-            errorCode: row.errorCode,
-            weight: row._sum.weight ?? 0,
-          })),
-      }),
-    );
+    return operations.map((operation) => this.summary(operation as OperationWithItems));
   }
 
   async results(
@@ -254,32 +292,36 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       where: { id, ...this.libraryModeWhere(principal.sub, principal.canViewPrivate) },
       select: {
         id: true,
+        ownerId: true,
         kind: true,
         libraryMode: true,
         undoOfId: true,
         updatedAt: true,
         inputIds: true,
+        privacyChanged: true,
+        queuedWeight: true,
+        runningWeight: true,
+        completedWeight: true,
+        skippedWeight: true,
+        failedWeight: true,
+        cancelledWeight: true,
+        errorCounts: true,
       },
     });
     if (!operation) throw new NotFoundException('操作不存在。');
     const scope = { operationId: id, ownerId: principal.sub, libraryMode: this.libraryMode };
-    const counts = await this.prisma.eagleAssetOperationItem.groupBy({
-      by: ['status', 'errorCode'],
-      where: { ...scope, libraryMode: this.libraryMode },
-      _sum: { weight: true },
-    });
-    counts.sort((a, b) =>
-      `${a.status}:${a.errorCode ?? ''}`.localeCompare(`${b.status}:${b.errorCode ?? ''}`),
-    );
-    const summary = this.summary({
-      ...operation,
-      items: counts.map((row) => ({ ...row, weight: row._sum.weight ?? 0 })),
-    });
-    const revision = JSON.stringify([operation.updatedAt.toISOString(), summary]);
+    const operationSummary = this.summary(operation);
+    const revision = JSON.stringify([operation.updatedAt.toISOString(), operationSummary]);
     if (query.revision && query.revision !== revision)
       throw new ConflictException('操作结果已变化，请重新读取。');
-    if (summary.running || summary.queued)
-      return { operation: summary, revision, receipts: [], membership: [], nextCursor: null };
+    if (operationSummary.running || operationSummary.queued)
+      return {
+        operation: operationSummary,
+        revision,
+        receipts: [],
+        membership: [],
+        nextCursor: null,
+      };
     const rows = await this.prisma.eagleAssetOperationItem.findMany({
       where: {
         ...scope,
@@ -313,7 +355,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       );
     }
     return {
-      operation: summary,
+      operation: operationSummary,
       revision,
       membership,
       receipts: page.map((row) => ({
@@ -370,7 +412,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
               existing.undoOfId !== id
             )
               throw new NotFoundException('操作不存在。');
-            return this.summary(
+            return this.summarize(
               await this.owned(tx, operationId, principal.sub, principal.canViewPrivate),
             );
           }
@@ -382,7 +424,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             },
           });
           if (priorUndo)
-            return this.summary(
+            return this.summarize(
               await this.owned(tx, priorUndo.id, principal.sub, principal.canViewPrivate),
             );
           await tx.eagleAssetOperationItem.updateMany({
@@ -512,11 +554,24 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         isPrivate: true,
         privateUntil: true,
         undoOfId: true,
-        items: { select: { status: true, weight: true, errorCode: true } },
+        inputIds: true,
+        privacyChanged: true,
+        queuedWeight: true,
+        runningWeight: true,
+        completedWeight: true,
+        skippedWeight: true,
+        failedWeight: true,
+        cancelledWeight: true,
+        errorCounts: true,
       },
     });
     if (!operation) throw new NotFoundException('操作不存在。');
     return operation;
+  }
+
+  /** Counter columns and errorCounts are the full progress projection. */
+  private summarize(operation: OperationWithItems): AssetOperationSummary {
+    return this.summary(operation);
   }
   /** Accept an immutable command without waiting for any domain publication lock. */
   async enqueueCommand(
@@ -535,11 +590,6 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       includePrivate: principal.canViewPrivate,
       beforePublish: () => Promise.reject(new Error('Admission cannot publish domain writes')),
     };
-    const isPrivate = principal.canViewPrivate;
-    const privateUntil =
-      isPrivate && principal.privacyVisibleUntil ? new Date(principal.privacyVisibleUntil) : null;
-    if (isPrivate && (!privateUntil || privateUntil <= new Date()))
-      throw new NotFoundException('私密授权已失效。');
     const kind = definition.protocol === 'METADATA' ? 'METADATA_COMMAND' : 'BACKGROUND_COMMAND';
     // Store a compact canonical digest with the intent, including all parameters.
     const intent = createHash('sha256')
@@ -551,7 +601,6 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-admission:${principal.sub}:${this.libraryMode}:${operationId}`}, 0))::text`;
           const existing = await tx.eagleAssetOperation.findUnique({
             where: { id: operationId, ownerId: principal.sub, libraryMode: this.libraryMode },
-            include: { items: { select: { status: true, weight: true, errorCode: true } } },
           });
           if (existing) {
             if (existing.isPrivate && !principal.canViewPrivate)
@@ -562,9 +611,12 @@ export class EagleAssetOperationService implements OnModuleDestroy {
                 canonicalLibraryCommand([intent, input.type])
             )
               throw new ConflictException('操作标识与请求不一致。');
-            return this.summary(existing);
+            return this.summarize(existing);
           }
-          const resources = new Map<string, { id: string; mediaRevision: number }>();
+          const resources = new Map<
+            string,
+            { id: string; mediaRevision: number; isPrivate: boolean }
+          >();
           for (const { rows: ids } of databaseBatches(
             assetIds,
             DATABASE_STATEMENTS.operationAssetLookup,
@@ -578,11 +630,23 @@ export class EagleAssetOperationService implements OnModuleDestroy {
                 purgeAfter: null,
                 ...(principal.canViewPrivate ? {} : { isPrivate: false }),
               },
-              select: { id: true, mediaRevision: true },
+              select: { id: true, mediaRevision: true, isPrivate: true },
             });
             if (rows.length !== ids.length) throw new NotFoundException('一个或多个资源不存在。');
             rows.forEach((row) => resources.set(row.id, row));
           }
+          // Public-only selections stay public even when the caller can also view private items.
+          // Commands without asset membership keep the conservative principal-based scope.
+          const isPrivate =
+            principal.canViewPrivate &&
+            (resources.size === 0 ||
+              [...resources.values()].some((resource) => resource.isPrivate));
+          const privateUntil =
+            isPrivate && principal.privacyVisibleUntil
+              ? new Date(principal.privacyVisibleUntil)
+              : null;
+          if (isPrivate && (!privateUntil || privateUntil <= new Date()))
+            throw new NotFoundException('私密授权已失效。');
           await definition.admit?.(context, payload, assetIds);
           const prepared = (await definition.prepare?.(context, payload, assetIds, tx)) ?? payload;
           const parts = definition.partition?.(prepared, assetIds) ?? [
@@ -795,7 +859,6 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`asset-operation-admission:${principal.sub}:${this.libraryMode}:${input.operationId}`}, 0))::text`;
           const existing = await tx.eagleAssetOperation.findUnique({
             where: { id: input.operationId, ownerId: principal.sub, libraryMode: this.libraryMode },
-            include: { items: { select: { status: true, weight: true, errorCode: true } } },
           });
           if (existing) {
             if (
@@ -809,7 +872,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
               JSON.stringify(existing.inputIds) !== JSON.stringify(ids)
             )
               throw new ConflictException('操作标识与选择不一致。');
-            return this.summary(existing);
+            return this.summarize(existing);
           }
           const resourcesById = new Map<
             string,
@@ -1038,7 +1101,12 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         throw new NotFoundException('操作不存在。');
       await tx.eagleAssetOperation.update({
         where: { id: operation.id, ownerId: principal.sub, libraryMode: this.libraryMode },
-        data: { authVersion: principal.authVersion, privateUntil, cancelRequestedAt: null },
+        data: {
+          authVersion: principal.authVersion,
+          privateUntil,
+          cancelRequestedAt: null,
+          errorCounts: {},
+        },
       });
       await tx.eagleAssetOperationItem.updateMany({
         where: {
@@ -1064,7 +1132,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
           data: { status: 'PENDING', errorCode: null, leaseUntil: null },
         });
       await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
-      return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
+      return this.summarize(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
     this.wake();
     return result;
@@ -1090,7 +1158,7 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         },
         data: { status: 'CANCELLED', leaseUntil: null },
       });
-      return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
+      return this.summarize(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
   }
   private wake() {
@@ -1545,7 +1613,9 @@ export class EagleAssetOperationService implements OnModuleDestroy {
   /** One lifecycle for metadata commands; handlers supply only their domain mutation. */
   private async publishMetadataBatch(
     items: ClaimedItem[],
-    mutate: (tx: Prisma.TransactionClient) => Promise<'SKIPPED' | void>,
+    mutate: (
+      tx: Prisma.TransactionClient,
+    ) => Promise<'SKIPPED' | void | { privacyChanged?: boolean }>,
   ) {
     const operation = items[0]!.operation;
     if (
@@ -1563,7 +1633,16 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       async (tx) => {
         await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
         await this.assertActor(tx, operation, items);
-        const status = await mutate(tx);
+        const outcome = await mutate(tx);
+        if (outcome && typeof outcome === 'object' && outcome.privacyChanged)
+          await tx.eagleAssetOperation.update({
+            where: {
+              id: operation.id,
+              ownerId: operation.ownerId,
+              libraryMode: this.libraryMode,
+            },
+            data: { privacyChanged: true },
+          });
         // Lock waits and business writes can outlive a grant or lease. Publish all facts together.
         await this.assertActor(tx, operation, items);
         const result = await tx.eagleAssetOperationItem.updateMany({
@@ -1572,7 +1651,10 @@ export class EagleAssetOperationService implements OnModuleDestroy {
             ...this.leaseWhere(items),
             leaseUntil: { gt: new Date() },
           },
-          data: { status: status ?? 'COMPLETED', leaseUntil: null },
+          data: {
+            status: outcome === 'SKIPPED' ? 'SKIPPED' : 'COMPLETED',
+            leaseUntil: null,
+          },
         });
         if (result.count !== items.length) throw new OperationAccessError('LEASE_LOST');
       },
@@ -1622,20 +1704,88 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       databaseCode: error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined,
       errorType: error instanceof Error ? error.constructor.name : 'Unknown',
     });
-    await this.prisma.eagleAssetOperationItem.updateMany({
-      where: { ...libraryModeIdentity },
-      data: { status: 'FAILED', errorCode: code, leaseUntil: null },
-    });
-    if (code === 'AUTH_REQUIRED' || code === 'PRIVATE_LOCKED') {
+    // Unknown persisted kinds fail closed without opening a resource transaction.
+    if (code === 'UNSUPPORTED_OPERATION_KIND') {
       await this.prisma.eagleAssetOperationItem.updateMany({
-        where: {
-          operationId: operation.id,
-          ownerId: operation.ownerId,
-          libraryMode: this.libraryMode,
-          status: 'PENDING',
-        },
-        data: { status: 'FAILED', errorCode: code },
+        where: { ...libraryModeIdentity },
+        data: { status: 'FAILED', errorCode: code, leaseUntil: null },
       });
+      return;
     }
+    await this.prisma.$transaction(
+      async (transaction) => {
+        const failed = await transaction.eagleAssetOperationItem.updateMany({
+          where: { ...libraryModeIdentity },
+          data: { status: 'FAILED', errorCode: code, leaseUntil: null },
+        });
+        if (code === 'AUTH_REQUIRED' || code === 'PRIVATE_LOCKED') {
+          await transaction.eagleAssetOperationItem.updateMany({
+            where: {
+              operationId: operation.id,
+              ownerId: operation.ownerId,
+              libraryMode: this.libraryMode,
+              status: 'PENDING',
+            },
+            data: { status: 'FAILED', errorCode: code },
+          });
+          await this.recomputeErrorCounts(transaction, operation);
+        } else if (failed.count === items.length) {
+          await this.addErrorWeight(
+            transaction,
+            operation,
+            code,
+            items.reduce((sum, item) => sum + item.weight, 0),
+          );
+        } else {
+          await this.recomputeErrorCounts(transaction, operation);
+        }
+      },
+      { timeout: METADATA_TRANSACTION_TIMEOUT_MS },
+    );
+  }
+
+  private async addErrorWeight(
+    client: Prisma.TransactionClient | PrismaService,
+    operation: Pick<EagleAssetOperation, 'id' | 'ownerId'>,
+    code: string,
+    weight: number,
+  ) {
+    if (weight <= 0) return;
+    await client.$executeRaw(Prisma.sql`
+      UPDATE "EagleAssetOperation"
+      SET "errorCounts" = jsonb_set(
+        "errorCounts",
+        ARRAY[${code}]::text[],
+        to_jsonb(COALESCE(("errorCounts"->>${code})::int, 0) + ${weight})
+      )
+      WHERE "id" = ${operation.id}
+        AND "ownerId" = ${operation.ownerId}
+        AND "libraryMode" = ${this.libraryMode}::"LibraryMode"
+    `);
+  }
+
+  private async recomputeErrorCounts(
+    client: Prisma.TransactionClient | PrismaService,
+    operation: Pick<EagleAssetOperation, 'id' | 'ownerId'>,
+  ) {
+    await client.$executeRaw(Prisma.sql`
+      UPDATE "EagleAssetOperation" o
+      SET "errorCounts" = COALESCE((
+        SELECT jsonb_object_agg("errorCode", weight)
+        FROM (
+          SELECT "errorCode", sum("weight")::int AS weight
+          FROM "EagleAssetOperationItem"
+          WHERE "operationId" = o."id"
+            AND "ownerId" = o."ownerId"
+            AND "libraryMode" = o."libraryMode"
+            AND "status" = 'FAILED'
+            AND "errorCode" IS NOT NULL
+          GROUP BY "errorCode"
+        ) x
+      ), '{}'::jsonb)
+      WHERE o."id" = ${operation.id}
+        AND o."ownerId" = ${operation.ownerId}
+        AND o."libraryMode" = ${this.libraryMode}::"LibraryMode"
+    `);
   }
 }
