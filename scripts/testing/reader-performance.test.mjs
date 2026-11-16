@@ -13,12 +13,12 @@ import { requireApi } from './api-dependencies.mjs';
 import {
   LibraryReadStore,
   createLibraryReadPool,
-} from '../../apps/api/dist/eagle/eagle-memory-store.js';
-import { createLibraryReaderServer } from '../../apps/api/dist/eagle/eagle-memory-server.js';
+} from '../../apps/api/dist/eagle/reader-store.js';
+import { createLibraryReaderServer } from '../../apps/api/dist/eagle/reader-server.js';
 import {
   DEFAULT_LIBRARY_READ_ACTIONS,
   libraryReadObserver,
-} from '../../apps/api/dist/eagle/eagle-memory-observability.js';
+} from '../../apps/api/dist/eagle/reader-observability.js';
 import { photoStatisticsFactFieldsSql } from '../../apps/api/dist/photos/photo-statistics-query.js';
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 import { readResidentPhotoFacets } from '../../apps/api/dist/photos/photo-facets-memory.js';
@@ -26,7 +26,7 @@ import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-me
 import {
   readResidentSmartFolderPage,
   withResidentSemanticGraph,
-} from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
+} from '../../apps/api/dist/eagle/reader-semantic-store.js';
 import { COLOR_PALETTE_VERSION, hexColorLab } from '../../packages/library-core/dist/index.js';
 
 assertSafeRuntimeTarget({

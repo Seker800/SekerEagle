@@ -66,6 +66,13 @@ export interface EagleImportItemCounts {
   failedItemCount: number;
 }
 
+export interface EagleImportUploadItem {
+  originalFileName: string;
+  mimeType: string;
+  byteSize: bigint;
+  contentSha256: string | null;
+}
+
 export interface EagleImportsRepository {
   createRun(ownerId: string, input: CreateEagleImportRunInput): Promise<EagleImportRunView>;
   stageManifestChunk(
@@ -112,6 +119,11 @@ export interface EagleImportsRepository {
       lastImportedAt: Date | null;
     }>;
   }>;
+  getUploadItem(
+    ownerId: string,
+    runId: string,
+    itemId: string,
+  ): Promise<EagleImportUploadItem | null>;
   listItems(
     ownerId: string,
     runId: string,

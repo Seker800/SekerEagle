@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ForbiddenException, GoneException } from '@nestjs/common';
 import { PatScopeGuard } from '../auth/pat-scope.guard';
-import { EagleImportService } from './eagle-import.service';
+import { retiredImportFinish } from './eagle-import.controller';
 import { ListEagleImportItemsDto, ListEagleImportRunsDto } from './eagle-import.dto';
 import { validateSync } from 'class-validator';
 
@@ -17,16 +17,8 @@ test('PAT endpoints deny missing scope declarations while browser principals sti
   assert.throws(() => guard.canActivate(context('pat') as never), ForbiddenException);
   assert.equal(guard.canActivate(context('browser') as never), true);
 });
-test('legacy import finish cannot accept a client-supplied resource or modify a cancelled run', async () => {
-  await assert.rejects(
-    new EagleImportService({} as never).finishItem(
-      'owner',
-      'cancelled',
-      'item',
-      'arbitrary-private-asset',
-    ),
-    GoneException,
-  );
+test('legacy import finish stays retired', async () => {
+  await assert.rejects(retiredImportFinish(), GoneException);
 });
 test('invalid import statuses fail DTO validation rather than reaching Prisma as invalid enums', () => {
   for (const Type of [ListEagleImportItemsDto, ListEagleImportRunsDto]) {

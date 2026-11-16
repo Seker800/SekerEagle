@@ -1,17 +1,17 @@
 import { photoStatisticsFactFieldsSql } from './photos/photo-statistics-query';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
 import { Client } from 'pg';
-import { createLibraryReaderServer } from './eagle/eagle-memory-server';
-import { createLibraryReadPool, LibraryReadStore } from './eagle/eagle-memory-store';
+import { createLibraryReaderServer } from './eagle/reader-server';
+import { createLibraryReadPool, LibraryReadStore } from './eagle/reader-store';
 import {
   readResidentPhotoStatistics,
   residentStatisticsDaily,
 } from './photos/photo-statistics-memory';
-import type { LibraryMemoryIndex } from './eagle/eagle-memory-index';
+import type { LibraryMemoryIndex } from './eagle/reader-index';
 import {
   readResidentSmartFolderPage,
   withResidentSemanticGraph,
-} from './eagle/eagle-memory-semantic-store';
+} from './eagle/reader-semantic-store';
 import { readResidentPhotoFacets, residentPhotoFacets } from './photos/photo-facets-memory';
 import { residentPersonCounts } from './photos/photo-people-memory';
 

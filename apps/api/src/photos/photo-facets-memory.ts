@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import type { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
-import type { MemoryAsset } from '../eagle/eagle-memory-predicate';
+import type { LibraryMemoryIndex } from '../eagle/reader-index';
+import type { MemoryAsset } from '../eagle/reader-predicate';
 
 export interface PhotoReadFacets {
   cameras: string[];

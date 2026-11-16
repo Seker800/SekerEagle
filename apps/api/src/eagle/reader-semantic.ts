@@ -1,7 +1,7 @@
 import { smartFolderMatchWhere } from '@sekereagle/library-persistence';
-import type { LibraryMemoryIndex } from './eagle-memory-index';
-import { memoryDateTime } from './eagle-memory-index';
-import type { MemorySearchContext } from './eagle-memory-predicate';
+import type { LibraryMemoryIndex } from './reader-index';
+import { memoryDateTime } from './reader-index';
+import type { MemorySearchContext } from './reader-predicate';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import type { ImageSearchPosition } from './eagle-image-search.service';
 import { assetDateField } from './eagle-asset-order';

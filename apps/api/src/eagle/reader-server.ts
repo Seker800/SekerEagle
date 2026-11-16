@@ -1,20 +1,20 @@
-import type { memoryStatisticsSummary, memoryPhotoFacets } from './eagle-memory-protocol';
-import { residentColorPage } from './eagle-memory-color';
+import type { memoryStatisticsSummary, memoryPhotoFacets } from './reader-protocol';
+import { residentColorPage } from './reader-color';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import type { LibraryReadStore } from './eagle-memory-store';
+import type { LibraryReadStore } from './reader-store';
 import type { AssetSearchWhere } from './eagle-search-predicate';
-import type { LibraryMemoryIndex } from './eagle-memory-index';
-import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
+import type { LibraryMemoryIndex } from './reader-index';
+import type { ResidentSmartFolderOptions } from './reader-semantic';
 import type { ImageSearchPosition } from './eagle-image-search.service';
-import { semanticFolderIds } from './eagle-memory-semantic';
-import type { MemorySearchContext } from './eagle-memory-predicate';
+import { semanticFolderIds } from './reader-semantic';
+import type { MemorySearchContext } from './reader-predicate';
 import {
   memorySemanticOptions,
   memoryStatisticsQuery,
   memoryColorOptions,
-} from './eagle-memory-protocol';
+} from './reader-protocol';
 
 const querySchema = z
   .object({
@@ -42,7 +42,7 @@ const querySchema = z
   })
   .strict();
 
-import { decodeMemoryQuery } from './eagle-memory-protocol';
+import { decodeMemoryQuery } from './reader-protocol';
 
 async function body(request: IncomingMessage, maxBytes: number) {
   const chunks: Buffer[] = [];

@@ -1,8 +1,8 @@
-import { memoryPaletteKey } from '../../apps/api/dist/eagle/eagle-memory-color-score.js';
+import { memoryPaletteKey } from '../../apps/api/dist/eagle/reader-color-score.js';
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
 import { performance } from 'node:perf_hooks';
-import { LibraryMemoryIndex } from '../../apps/api/dist/eagle/eagle-memory-index.js';
+import { LibraryMemoryIndex } from '../../apps/api/dist/eagle/reader-index.js';
 
 const count = Number(process.argv.find((value) => /^\d+$/.test(value)) ?? 127549);
 assert.ok(Number.isSafeInteger(count) && count > 0);

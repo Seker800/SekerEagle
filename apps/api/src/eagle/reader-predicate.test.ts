@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compileMemorySearchPredicate } from './eagle-memory-predicate';
+import { compileMemorySearchPredicate } from './reader-predicate';
 import { buildEagleFilterWhere } from './eagle-filter-query';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { COLOR_PALETTE_VERSION } from '@sekereagle/library-core';

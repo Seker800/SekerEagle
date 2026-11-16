@@ -61,7 +61,7 @@ export function createAssetOperationExecutors(
       registerPhotoLibraryCommands(commands, {
         photos,
         review: new PhotoPersonReviewService(prisma, photos),
-        agent: new PhotoAgentService(prisma, undefined as never, transfers),
+        agent: new PhotoAgentService(prisma, undefined, transfers),
       });
     }
     return new EagleAssetOperationService(prisma, transfers, eagle, mode, duplicates, commands);

@@ -1,9 +1,9 @@
-import type { LibraryMemoryIndex, MemoryDateField } from './eagle-memory-index';
-import { memoryDateTime } from './eagle-memory-index';
+import type { LibraryMemoryIndex, MemoryDateField } from './reader-index';
+import { memoryDateTime } from './reader-index';
 import type { AssetSearchWhere } from './eagle-search-predicate';
-import type { MemorySearchContext } from './eagle-memory-predicate';
-import { createMemoryColorScorer } from './eagle-memory-color-score';
-export { createMemoryColorScorer } from './eagle-memory-color-score';
+import type { MemorySearchContext } from './reader-predicate';
+import { createMemoryColorScorer } from './reader-color-score';
+export { createMemoryColorScorer } from './reader-color-score';
 
 export interface MemoryColorPosition {
   id: string;

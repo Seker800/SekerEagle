@@ -1,4 +1,4 @@
-import type { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
+import type { LibraryMemoryIndex } from '../eagle/reader-index';
 import { Prisma } from '@prisma/client';
 import type { Pool } from 'pg';
 import type { PhotoStatisticsQueryDto } from './photo-statistics.dto';

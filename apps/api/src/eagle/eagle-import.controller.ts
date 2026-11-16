@@ -3,6 +3,7 @@ import {
   ConflictException,
   Controller,
   Get,
+  GoneException,
   Param,
   ParseUUIDPipe,
   Post,
@@ -19,11 +20,9 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import {
   CreateEagleImportRunDto,
   EagleImportManifestChunkDto,
-  FinishEagleImportItemDto,
   ListEagleImportItemsDto,
   ListEagleImportRunsDto,
 } from './eagle-import.dto';
-import { EagleImportService } from './eagle-import.service';
 import { EagleUploadService } from './eagle-upload.service';
 import { EagleImportsService } from './import/eagle-app-import.service';
 import { UPLOAD_PART_SIZE_BYTES } from './import/upload-limits';
@@ -35,7 +34,6 @@ import { UPLOAD_PART_SIZE_BYTES } from './import/upload-limits';
 @UseGuards(AccessAuthGuard, PatScopeGuard)
 export class EagleImportController {
   constructor(
-    private readonly legacyImports: EagleImportService,
     private readonly imports: EagleImportsService,
     private readonly uploads: EagleUploadService,
   ) {}
@@ -143,7 +141,7 @@ export class EagleImportController {
     if (start.kind === 'IMPORTED') {
       throw new ConflictException('导入项已经完成。');
     }
-    const item = await this.legacyImports.getUploadItem(principal.sub, runId, itemId);
+    const item = await this.imports.getUploadItem(principal.sub, runId, itemId);
     const session = await this.uploads.initiate(principal.sub, {
       originalName: item.originalFileName,
       mimeType: item.mimeType,
@@ -171,13 +169,8 @@ export class EagleImportController {
   @Post(':runId/items/:itemId/finish')
   @RequirePatScopes('import:write', 'asset:write')
   @UseGuards(BrowserOrPatOriginGuard)
-  finishItem(
-    @CurrentPrincipal() principal: AuthPrincipal,
-    @Param('runId', new ParseUUIDPipe({ version: '4' })) runId: string,
-    @Param('itemId', new ParseUUIDPipe({ version: '4' })) itemId: string,
-    @Body() input: FinishEagleImportItemDto,
-  ) {
-    return this.legacyImports.finishItem(principal.sub, runId, itemId, input.assetId);
+  finishItem() {
+    return retiredImportFinish();
   }
 
   @Post(':runId/cancel')
@@ -198,4 +191,13 @@ export class EagleImportController {
   ) {
     return this.imports.reconcile(principal.sub, runId);
   }
+}
+
+/** Old clients still receive an explicit 410 instead of a silent 404. */
+export function retiredImportFinish(): Promise<never> {
+  return Promise.reject(
+    new GoneException(
+      'Legacy import finish is retired; complete the server-bound upload session instead.',
+    ),
+  );
 }

@@ -163,7 +163,7 @@ test('notifications invalidate only the resource that gains work; reconnect and 
   let nas = 0,
     embedding = 0;
   const selectors = {
-    NAS: {
+    LOCAL: {
       invalidate: () => {
         nas++;
       },
@@ -177,7 +177,7 @@ test('notifications invalidate only the resource that gains work; reconnect and 
   invalidateMediaCandidates(selectors, 'media-progress');
   invalidateMediaCandidates(selectors, 'EagleTagSemanticBuild');
   assert.equal(nas + embedding, 0);
-  invalidateMediaCandidates(selectors, 'media-ready:NAS');
+  invalidateMediaCandidates(selectors, 'media-ready:LOCAL');
   invalidateMediaCandidates(selectors, 'media-ready:EMBEDDING');
   assert.deepEqual([nas, embedding], [1, 1]);
   for (const payload of [undefined, 'EagleMediaJob', 'EagleTaskPolicy', 'EagleProcessingSetting'])
@@ -219,7 +219,7 @@ test('empty windows expire, retained windows are bounded and supported lane/kind
       },
     } as never,
     () => true,
-    'NAS',
+    'LOCAL',
   );
   const input = {
     where: {
@@ -397,7 +397,7 @@ test('remote image selection excludes video before the window and leaves NAS vid
   const local = createScheduledMediaSelector(
     client,
     () => false,
-    'NAS',
+    'LOCAL',
     () => ['GENERATE_RENDITIONS'],
   );
   await local({ where: { lane: 'INTERACTIVE' }, take: 50 } as ClaimFindManyInput);
@@ -432,7 +432,7 @@ test('video delegation is explicit, mode guarded and invalidates the cached clai
   const local = createScheduledMediaSelector(
     client,
     () => false,
-    'NAS',
+    'LOCAL',
     () => [],
     () => videos,
   );

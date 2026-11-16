@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { smartFolderMatchWhere } from '@sekereagle/library-persistence';
-import { LibraryMemoryIndex } from './eagle-memory-index';
-import { residentSmartFolderPage, type SemanticReadGraph } from './eagle-memory-semantic';
+import { LibraryMemoryIndex } from './reader-index';
+import { residentSmartFolderPage, type SemanticReadGraph } from './reader-semantic';
 
 const scope = { ownerId: 'owner', libraryMode: 'PHOTO' as const };
 const snapshot = { id: 'snapshot', ...scope, folderId: 'folder', isActive: true };
@@ -109,7 +109,7 @@ test('ready-state, privacy and media-version guards are retained with no model i
 });
 
 test('semantic scope discovery follows registered relation models and rejects unbounded graph queries', async () => {
-  const { semanticFolderIds } = await import('./eagle-memory-semantic');
+  const { semanticFolderIds } = await import('./reader-semantic');
   assert.deepEqual(semanticFolderIds({ AND: [membership, { NOT: membership }] }), ['folder']);
   assert.deepEqual(semanticFolderIds({ rating: 4 }), []);
   assert.throws(

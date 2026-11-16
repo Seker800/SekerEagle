@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
+import { LibraryMemoryIndex } from '../eagle/reader-index';
 import { residentPhotoFacets } from './photo-facets-memory';
 
 test('resident facets retain raw values and original visibility without treating whitespace as empty', () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { extractRepresentativeColors } from './color-palette';
+import { extractSearchColors as extractRepresentativeColors } from '@sekereagle/library-core';
 
 test('shared Eagle quantization ignores alpha below 170 and preserves occupied area', () => {
   const pixels = Buffer.from(

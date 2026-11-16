@@ -30,7 +30,7 @@ test('photo browsing uses compact bounded outputs while RAW detail and material 
 
 test('remote faces reserve only bounded transport while local inference keeps its decoder budget', () => {
   assert.equal(mediaMemoryMiB('REMOTE_MEDIA', { kind: 'ANALYZE_PHOTO_FACES' }), 64);
-  assert.equal(mediaMemoryMiB('NAS', { kind: 'ANALYZE_PHOTO_FACES' }), 384);
+  assert.equal(mediaMemoryMiB('LOCAL', { kind: 'ANALYZE_PHOTO_FACES' }), 384);
 });
 
 test('initial material video and later playback both use streamed artifact reservations', () => {

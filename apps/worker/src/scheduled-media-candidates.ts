@@ -26,7 +26,7 @@ export function selectScheduledMediaCandidates(
   preferPriority = true,
   embeddingUnavailable = false,
   options: {
-    resource?: 'NAS' | 'EMBEDDING' | 'REMOTE_MEDIA';
+    resource?: 'LOCAL' | 'EMBEDDING' | 'REMOTE_MEDIA';
     freshOnly?: boolean;
     historyOnly?: boolean;
     candidateIds?: readonly string[];
@@ -67,10 +67,10 @@ export function selectScheduledMediaCandidates(
       AND current_upload."uploaderId"=a."ownerId" AND current_upload."libraryMode"=a."libraryMode" AND current_upload.status='COMPLETED'
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
     WHERE ${options.candidateIds ? Prisma.sql`job.id IN (${Prisma.join(options.candidateIds)}) AND` : Prisma.empty}
-      ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'NAS' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
+      ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'LOCAL' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
       ${options.resource === 'REMOTE_MEDIA' ? (options.delegatedVideoKinds?.length ? Prisma.sql`((a."mimeType" LIKE 'image/%' AND ${options.delegatedImageKinds?.length ? Prisma.sql`job.kind IN (${Prisma.join(options.delegatedImageKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})` : Prisma.sql`false`}) OR ((a."mimeType" LIKE 'video/%' OR a."mimeType"='application/mxf') AND job.kind IN (${Prisma.join(options.delegatedVideoKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))}))) AND` : Prisma.sql`a."mimeType" LIKE 'image/%' AND`) : Prisma.empty}
-      ${options.resource === 'NAS' && options.delegatedImageKinds?.length ? Prisma.sql`NOT (a."mimeType" LIKE 'image/%' AND job.kind IN (${Prisma.join(options.delegatedImageKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
-      ${options.resource === 'NAS' && options.delegatedVideoKinds?.length ? Prisma.sql`NOT ((a."mimeType" LIKE 'video/%' OR a."mimeType"='application/mxf') AND job.kind IN (${Prisma.join(options.delegatedVideoKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
+      ${options.resource === 'LOCAL' && options.delegatedImageKinds?.length ? Prisma.sql`NOT (a."mimeType" LIKE 'image/%' AND job.kind IN (${Prisma.join(options.delegatedImageKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
+      ${options.resource === 'LOCAL' && options.delegatedVideoKinds?.length ? Prisma.sql`NOT ((a."mimeType" LIKE 'video/%' OR a."mimeType"='application/mxf') AND job.kind IN (${Prisma.join(options.delegatedVideoKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
       ${options.freshOnly ? Prisma.sql`${freshness}>=now()-interval '24 hours' AND` : Prisma.empty}
       ${options.historyOnly ? Prisma.sql`${freshness}<now()-interval '24 hours' AND` : Prisma.empty}
       job.kind<>'GENERATE_AI_TAGS' AND
@@ -106,7 +106,7 @@ export function selectScheduledMediaCandidates(
 export function createScheduledMediaSelector(
   client: Pick<PrismaClient, '$queryRaw'>,
   embeddingUnavailable: () => boolean,
-  resource?: 'NAS' | 'EMBEDDING' | 'REMOTE_MEDIA',
+  resource?: 'LOCAL' | 'EMBEDDING' | 'REMOTE_MEDIA',
   delegatedImages: () => readonly EagleMediaJobKind[] = () => [],
   delegatedVideos: () => readonly EagleMediaJobKind[] = () => [],
 ) {
@@ -209,7 +209,7 @@ export function createScheduledMediaSelector(
 
 /** Only new eligible work or policy changes invalidate discovery; leases/heartbeats merely wake. */
 export function invalidateMediaCandidates(
-  selectors: Record<'NAS' | 'EMBEDDING', { invalidate(): void }> &
+  selectors: Record<'LOCAL' | 'EMBEDDING', { invalidate(): void }> &
     Partial<Record<'REMOTE_MEDIA', { invalidate(): void }>>,
   payload?: string,
 ) {
@@ -217,11 +217,11 @@ export function invalidateMediaCandidates(
     !payload ||
     ['EagleMediaJob', 'EagleProcessingSetting', 'EagleTaskPolicy'].includes(payload)
   ) {
-    selectors.NAS.invalidate();
+    selectors.LOCAL.invalidate();
     selectors.REMOTE_MEDIA?.invalidate();
     selectors.EMBEDDING.invalidate();
-  } else if (payload === 'media-ready:NAS') {
-    selectors.NAS.invalidate();
+  } else if (payload === 'media-ready:LOCAL') {
+    selectors.LOCAL.invalidate();
     selectors.REMOTE_MEDIA?.invalidate();
   } else if (payload === 'media-ready:EMBEDDING') selectors.EMBEDDING.invalidate();
 }

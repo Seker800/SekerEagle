@@ -779,6 +779,25 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     };
   }
 
+  async getUploadItem(ownerId: string, runId: string, itemId: string) {
+    return this.prisma.eagleImportRunItem.findFirst({
+      where: {
+        ownerId,
+        runId,
+        id: itemId,
+        status: 'STAGED',
+        action: { in: ['NEW', 'CONTENT_REPLACE'] },
+        libraryMode: 'MATERIAL',
+      },
+      select: {
+        originalFileName: true,
+        mimeType: true,
+        byteSize: true,
+        contentSha256: true,
+      },
+    });
+  }
+
   async listItems(
     ownerId: string,
     runId: string,

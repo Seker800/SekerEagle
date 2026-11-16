@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryMemoryIndex } from './eagle-memory-index';
+import { LibraryMemoryIndex } from './reader-index';
 
 const row = (id: string, date = '2026-11-01T00:00:00Z') => ({
   id,

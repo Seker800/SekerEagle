@@ -86,7 +86,7 @@ const serialize = (a: Photo) => ({
 export class PhotoAgentService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly search: EagleImageSearchService,
+    @Optional() private readonly search?: EagleImageSearchService,
     @Optional() private readonly transfer?: EagleLibraryTransferService,
   ) {}
   /** Admission checks visibility without taking the task or library publication locks. */
@@ -631,8 +631,8 @@ export class PhotoAgentService {
   }
   async scores(ownerId: string, id: string, description: string, includePrivate: boolean) {
     const { assets } = await this.detail(ownerId, id, includePrivate);
-    const context = await this.search.prepare(ownerId, description);
-    if (context.status !== 'READY')
+    const context = this.search ? await this.search.prepare(ownerId, description) : null;
+    if (context?.status !== 'READY')
       return {
         status: 'UNAVAILABLE',
         items: assets.map((a) => ({ assetId: a.id, filenameSignals: a.filenameSignals })),

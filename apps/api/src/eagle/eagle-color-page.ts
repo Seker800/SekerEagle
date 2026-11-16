@@ -1,4 +1,4 @@
-import { readMemoryColorPage, rejectLibraryRead } from './eagle-memory-client';
+import { readMemoryColorPage, rejectLibraryRead } from './reader-client';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';

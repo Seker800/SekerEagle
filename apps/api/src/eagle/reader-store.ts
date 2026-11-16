@@ -1,14 +1,14 @@
-import { memoryPaletteKey } from './eagle-memory-color-score';
+import { memoryPaletteKey } from './reader-color-score';
 import type { SearchColorSwatch } from '@sekereagle/library-core';
 import { Prisma } from '@prisma/client';
 import { Pool, type PoolClient } from 'pg';
-import { LibraryMemoryIndex } from './eagle-memory-index';
-import type { MemoryAsset } from './eagle-memory-predicate';
+import { LibraryMemoryIndex } from './reader-index';
+import type { MemoryAsset } from './reader-predicate';
 import type { LibraryIdentity } from './library-mode';
 import {
   loadResidentSemanticFolders,
   SemanticMemoryBudgetError,
-} from './eagle-memory-semantic-store';
+} from './reader-semantic-store';
 
 async function execute<T extends MemoryAsset>(
   connection: Pick<PoolClient, 'query'>,

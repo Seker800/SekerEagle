@@ -8,7 +8,6 @@ import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { EagleImageSearchService } from './eagle-image-search.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
 import { EagleBrowserCaptureService } from './eagle-browser-capture.service';
-import { EagleImportService } from './eagle-import.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMaintenanceService } from './eagle-maintenance.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
@@ -105,7 +104,6 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
     modes: ['MATERIAL', 'PHOTO'],
     providers: [
       EagleBrowserCaptureService,
-      EagleImportService,
       EagleImportsService,
       PrismaEagleImportsRepository,
       PrismaSekerEagleIngestionAdapter,
@@ -173,6 +171,3 @@ export function libraryProviders(mode: LibraryMode): Provider[] {
     (capability.modes as readonly LibraryMode[]).includes(mode),
   ).flatMap((capability) => [...capability.providers]);
 }
-
-/** Compatibility name for runtime identity checks; both modules use libraryProviders(mode). */
-export const EAGLE_LIBRARY_PROVIDERS = libraryProviders('MATERIAL');

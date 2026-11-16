@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
+import { LibraryMemoryIndex } from '../eagle/reader-index';
 import { residentStatisticsDaily } from './photo-statistics-memory';
 
 test('resident daily counts preserve private visibility, image scope and unknown metadata', () => {

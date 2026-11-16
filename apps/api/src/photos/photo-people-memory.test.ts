@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
+import { LibraryMemoryIndex } from '../eagle/reader-index';
 import { residentPersonCounts } from './photo-people-memory';
 
 test('person counts include each visible current photo once and update without counting stale faces', () => {

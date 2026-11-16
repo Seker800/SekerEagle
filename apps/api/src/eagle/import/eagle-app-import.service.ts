@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
 import {
   canonicalizeEagleImportManifestChunk,
   EagleImportManifestValidationError,
@@ -93,6 +93,12 @@ export class EagleImportsService {
 
   listLibraries(ownerId: string) {
     return this.repository.listLibraries(ownerId);
+  }
+
+  async getUploadItem(ownerId: string, runId: string, itemId: string) {
+    const item = await this.repository.getUploadItem(ownerId, runId, itemId);
+    if (!item) throw new ConflictException('导入项当前不可上传。');
+    return item;
   }
 
   listItems(

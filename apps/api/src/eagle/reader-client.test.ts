@@ -9,7 +9,7 @@ import {
   readMemoryColorPage,
   requestLibraryRead,
   libraryReadMetrics,
-} from './eagle-memory-client';
+} from './reader-client';
 
 test('reader client requires a canonical scope and preserves page size and direction', async () => {
   const oldActions = process.env.EAGLE_READER_ACTIONS;

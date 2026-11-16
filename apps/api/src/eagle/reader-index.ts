@@ -1,9 +1,9 @@
-import type { ResidentSemanticGraph } from './eagle-memory-semantic';
+import type { ResidentSemanticGraph } from './reader-semantic';
 import {
   compileMemorySearchPredicate,
   type MemoryAsset,
   type MemorySearchContext,
-} from './eagle-memory-predicate';
+} from './reader-predicate';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { isDeepStrictEqual } from 'node:util';
 

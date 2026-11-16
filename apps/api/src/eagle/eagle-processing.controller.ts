@@ -1,7 +1,7 @@
 import { EagleOperationSummaryResponseDto } from './eagle-operation-response.dto';
 import { ApiAcceptedResponse } from '@nestjs/swagger';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
-import { libraryReadObserver } from './eagle-memory-observability';
+import { libraryReadObserver } from './reader-observability';
 import {
   Body,
   HttpCode,

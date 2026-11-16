@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryReadObserver, readerActionEnabled } from './eagle-memory-observability';
+import { LibraryReadObserver, readerActionEnabled } from './reader-observability';
 
 test('default policy leaves indexed pages and counts to SQL and keeps aggregate acceleration', () => {
   assert.equal(readerActionEnabled('page', undefined), false);

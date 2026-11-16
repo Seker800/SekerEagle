@@ -1,4 +1,4 @@
-import { rejectLibraryRead } from '../eagle/eagle-memory-client';
+import { rejectLibraryRead } from '../eagle/reader-client';
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { readMemoryPeopleCounts } from './photo-memory-client';

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryMemoryIndex } from './eagle-memory-index';
-import { residentColorPage, createMemoryColorScorer } from './eagle-memory-color';
+import { LibraryMemoryIndex } from './reader-index';
+import { residentColorPage, createMemoryColorScorer } from './reader-color';
 import { COLOR_PALETTE_VERSION, paletteColorScore } from '@sekereagle/library-core';
 
 const palette = [{ hex: '#69696a', weight: 1 }];

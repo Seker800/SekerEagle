@@ -29,7 +29,6 @@ import {
   scheduleSmartFolderSnapshot,
   smartFolderMatchWhere,
 } from '@sekereagle/library-persistence';
-import { setEagleTrash } from './eagle-trash';
 import {
   readEagleEditRecipe,
   saveEagleEditRecipe,
@@ -956,37 +955,6 @@ export class EagleService {
     };
   }
 
-  async updateAsset(
-    ownerId: string,
-    assetId: string,
-    input: UpdateEagleAssetDto,
-    includePrivate = false,
-  ) {
-    const { data, annotation } = buildAssetChanges(input);
-    await this.prisma.$transaction(async (transaction) => {
-      const updated = await transaction.eagleAsset.updateMany({
-        where: {
-          ownerId,
-          id: assetId,
-          deletedAt: null,
-          rowVersion: input.rowVersion,
-          ...privateVisibilityWhere(includePrivate),
-          libraryMode: this.libraryMode,
-        },
-        data: { ...data, rowVersion: { increment: 1 } },
-      });
-      if (updated.count !== 1) await this.throwAssetWriteError(transaction, ownerId, assetId);
-      if (annotation) {
-        await transaction.eagleAssetAnnotation.upsert({
-          where: { ownerId_assetId: { ownerId, assetId }, libraryMode: this.libraryMode },
-          create: { ownerId, assetId, ...annotation, libraryMode: this.libraryMode },
-          update: annotation,
-        });
-      }
-    });
-    return this.getAsset(ownerId, assetId, { includePrivate });
-  }
-
   listUpdates(ownerId: string, assetIds: string[], includePrivate = false) {
     return this.prisma.eagleAsset
       .findMany({
@@ -1217,19 +1185,6 @@ export class EagleService {
       return syncAssetPrivacy(transaction, ownerId, input.assetIds, this.libraryMode);
     });
     return { affectedAssetCount: input.assetIds.length, privacyChangedAssetCount };
-  }
-
-  async setTrash(ownerId: string, assetIds: string[], restore: boolean, includePrivate = false) {
-    const affectedAssetCount = await this.prisma.$transaction((transaction) =>
-      setEagleTrash(
-        transaction,
-        { ownerId, libraryMode: this.libraryMode },
-        assetIds,
-        restore,
-        includePrivate,
-      ),
-    );
-    return { affectedAssetCount };
   }
 
   async emptyTrashBatch(

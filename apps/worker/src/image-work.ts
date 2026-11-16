@@ -5,7 +5,7 @@ import { isCameraRawMime } from '@sekereagle/library-core';
 import { withProcessableImage } from './image-media';
 import { renderImageRenditions, imageRenditionSpecs } from './image-renditions';
 import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
-import { extractRepresentativeColors } from './color-palette';
+import { extractSearchColors as extractRepresentativeColors } from '@sekereagle/library-core';
 import { inspectLivePhotoImage } from './live-photo';
 import { taskBlocksAssetReady } from './processing-policy';
 import { IMAGE_WORK_MAX_RESPONSE_BYTES, imageWorkResponseLimit } from './image-work-budget';

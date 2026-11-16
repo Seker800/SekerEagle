@@ -4,8 +4,8 @@ import {
   readerActionEnabled,
   libraryReadObserver,
   type LibraryReadAction,
-} from './eagle-memory-observability';
-import type { MemoryColorPageOptions } from './eagle-memory-color';
+} from './reader-observability';
+import type { MemoryColorPageOptions } from './reader-color';
 import type { Prisma } from '@prisma/client';
 import {
   encodeMemoryQuery,
@@ -14,8 +14,8 @@ import {
   memoryStatisticsSummary,
   memoryPersonCounts,
   memoryPhotoFacets,
-} from './eagle-memory-protocol';
-import type { ResidentSmartFolderOptions } from './eagle-memory-semantic';
+} from './reader-protocol';
+import type { ResidentSmartFolderOptions } from './reader-semantic';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 
 /** Diagnostic counters only: never retain predicates, names, owner IDs or tokens. */

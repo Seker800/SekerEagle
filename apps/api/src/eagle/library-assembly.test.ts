@@ -4,6 +4,7 @@ import test from 'node:test';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplicationContext } from '@nestjs/common';
 import * as assembly from './eagle.module';
+import { libraryProviders } from './library-capabilities';
 import { EagleImageSearchService } from './eagle-image-search.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,7 +47,7 @@ test('every shared provider has exactly one capability owner and explicit mode e
   const providers = capabilities.flatMap((entry) => entry.providers);
   assert.equal(new Set(capabilities.map((entry) => entry.id)).size, capabilities.length);
   assert.equal(new Set(providers).size, providers.length, 'no provider may have two owners');
-  assert.deepEqual(new Set(providers), new Set(assembly.EAGLE_LIBRARY_PROVIDERS));
+  assert.deepEqual(new Set(providers), new Set(libraryProviders('MATERIAL')));
   const tables = capabilities.flatMap((entry) => entry.tables);
   assert.equal(new Set(tables).size, tables.length, 'each durable table has one capability owner');
   for (const entry of capabilities) {

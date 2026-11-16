@@ -1,5 +1,5 @@
-import type { LibraryMemoryIndex } from '../eagle/eagle-memory-index';
-import type { MemoryAsset } from '../eagle/eagle-memory-predicate';
+import type { LibraryMemoryIndex } from '../eagle/reader-index';
+import type { MemoryAsset } from '../eagle/reader-predicate';
 
 /** COUNT(DISTINCT asset.id) over the same current/visible face membership as the original SQL. */
 export function residentPersonCounts(

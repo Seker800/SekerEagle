@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { LibraryMemoryIndex } from './eagle-memory-index';
+import { LibraryMemoryIndex } from './reader-index';
 import {
   loadResidentSemanticFolders,
   withResidentSemanticGraph,
-} from './eagle-memory-semantic-store';
+} from './reader-semantic-store';
 
 const scope = { ownerId: 'owner', libraryMode: 'PHOTO' as const };
 function source(abort?: AbortController) {
@@ -72,7 +72,7 @@ test('repeated semantic reads reuse prepared memberships with no database I/O', 
 });
 
 test('semantic reads retain empty readiness, workspace and explicit folder scope guards', async () => {
-  const { readResidentSmartFolderPage } = await import('./eagle-memory-semantic-store');
+  const { readResidentSmartFolderPage } = await import('./reader-semantic-store');
   const { smartFolderMatchWhere } = await import('@sekereagle/library-persistence');
   const index = new LibraryMemoryIndex(scope.ownerId, scope.libraryMode);
   index.replace('1', []);

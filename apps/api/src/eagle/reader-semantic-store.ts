@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
-import type { MemoryAsset } from './eagle-memory-predicate';
-import type { LibraryMemoryIndex } from './eagle-memory-index';
+import type { MemoryAsset } from './reader-predicate';
+import type { LibraryMemoryIndex } from './reader-index';
 import type { LibraryIdentity } from './library-mode';
 import {
   residentSmartFolderPage,
@@ -8,7 +8,7 @@ import {
   type ResidentSmartFolderOptions,
   type SemanticReadGraph,
   type ResidentSemanticGraph,
-} from './eagle-memory-semantic';
+} from './reader-semantic';
 
 export class SemanticMemoryBudgetError extends Error {
   constructor() {

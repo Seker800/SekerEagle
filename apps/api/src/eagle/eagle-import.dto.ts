@@ -122,7 +122,3 @@ export class ListEagleImportRunsDto {
   limit = 100;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
 }
-
-export class FinishEagleImportItemDto {
-  @ApiProperty() @IsString() @Matches(/^[0-9a-f-]{36}$/i) assetId!: string;
-}

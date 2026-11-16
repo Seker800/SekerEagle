@@ -9,12 +9,12 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import {
   createLibraryReadPool,
   LibraryReadStore,
-} from '../../apps/api/dist/eagle/eagle-memory-store.js';
+} from '../../apps/api/dist/eagle/reader-store.js';
 import { compileSearchPredicate } from '../../apps/api/dist/eagle/eagle-search-predicate.js';
 import { buildEagleFilterWhere } from '../../apps/api/dist/eagle/eagle-filter-query.js';
-import { createLibraryReaderServer } from '../../apps/api/dist/eagle/eagle-memory-server.js';
+import { createLibraryReaderServer } from '../../apps/api/dist/eagle/reader-server.js';
 import { findSearchAssets } from '../../apps/api/dist/eagle/eagle-asset-search.js';
-import { libraryReadMetrics } from '../../apps/api/dist/eagle/eagle-memory-client.js';
+import { libraryReadMetrics } from '../../apps/api/dist/eagle/reader-client.js';
 import { once } from 'node:events';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
@@ -24,11 +24,11 @@ import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statist
 import { readResidentPhotoStatistics } from '../../apps/api/dist/photos/photo-statistics-memory.js';
 import { residentPersonCounts } from '../../apps/api/dist/photos/photo-people-memory.js';
 import { readSmartFolderPage } from '../../apps/api/dist/eagle/eagle-smart-folder-page.js';
-import { readMemoryCount } from '../../apps/api/dist/eagle/eagle-memory-client.js';
+import { readMemoryCount } from '../../apps/api/dist/eagle/reader-client.js';
 import {
   readResidentSmartFolderPage,
   withResidentSemanticGraph,
-} from '../../apps/api/dist/eagle/eagle-memory-semantic-store.js';
+} from '../../apps/api/dist/eagle/reader-semantic-store.js';
 import { rankSmartFolderMatches } from '../../apps/api/dist/eagle/eagle-smart-folder-ranking.js';
 import { smartFolderMatchWhere } from '../../packages/library-persistence/dist/index.js';
 import { readPeopleCountPage } from '../../apps/api/dist/photos/photo-person-count-page.js';

@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { smartFolderMatchWhere } from '@sekereagle/library-persistence';
 import { assetDateField } from './eagle-asset-order';
 import { decodeImageSearchCursor, encodeImageSearchCursor } from './eagle-search-cursor';
-import { readMemorySmartFolderPage, rejectLibraryRead } from './eagle-memory-client';
+import { readMemorySmartFolderPage, rejectLibraryRead } from './reader-client';
 import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
 import type { ImageSearchPosition } from './eagle-image-search.service';
 import type { LibraryIdentity } from './library-mode';

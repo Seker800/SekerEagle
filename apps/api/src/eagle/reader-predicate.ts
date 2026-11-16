@@ -1,4 +1,4 @@
-import { createMemoryColorScorer } from './eagle-memory-color-score';
+import { createMemoryColorScorer } from './reader-color-score';
 import { searchPredicateModels, type AssetSearchWhere } from './eagle-search-predicate';
 
 export type MemoryAsset = Record<string, unknown>;

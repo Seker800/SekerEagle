@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { EagleService } from './eagle.service';
+import { setEagleTrash } from './eagle-trash';
 
 test('batch asset update rejects a stale member before mutating any asset', async () => {
   let writes = 0;
@@ -297,31 +298,30 @@ test('a tag used as a privacy rule cannot be deleted before the rule is removed 
 
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {
   let rejectionWasInsideTransaction = false;
-  const service = new EagleService(
-    {
-      $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => {
-        try {
-          return await callback({
-            eagleAsset: {
-              findMany: async () => [
-                { id: 'asset-1', mediaRevision: 1 },
-                { id: 'asset-2', mediaRevision: 1 },
-              ],
-              updateMany: async () => ({ count: 1 }),
-            },
-          });
-        } catch (error) {
-          rejectionWasInsideTransaction = true;
-          throw error;
-        }
-      },
-    } as never,
-    undefined,
-    'MATERIAL',
-  );
+  const transaction = {
+    eagleAsset: {
+      findMany: async () => [
+        { id: 'asset-1', mediaRevision: 1 },
+        { id: 'asset-2', mediaRevision: 1 },
+      ],
+      updateMany: async () => ({ count: 1 }),
+    },
+  };
 
   await assert.rejects(
-    service.setTrash('owner-1', ['asset-1', 'asset-2'], false),
+    (async () => {
+      try {
+        await setEagleTrash(
+          transaction as never,
+          { ownerId: 'owner-1', libraryMode: 'MATERIAL' },
+          ['asset-1', 'asset-2'],
+          false,
+        );
+      } catch (error) {
+        rejectionWasInsideTransaction = true;
+        throw error;
+      }
+    })(),
     /一个或多个素材不存在/,
   );
   assert.equal(rejectionWasInsideTransaction, true);

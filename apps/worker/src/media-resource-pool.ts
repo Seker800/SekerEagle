@@ -1,19 +1,19 @@
-export type MediaResource = 'NAS' | 'EMBEDDING' | 'REMOTE_MEDIA';
+export type MediaResource = 'LOCAL' | 'EMBEDDING' | 'REMOTE_MEDIA';
 
 /** Independent bounded execution slots over the existing durable, lease-fenced job queue. */
 export class MediaResourcePool {
   private readonly occupied: Record<MediaResource, number> = {
-    NAS: 0,
+    LOCAL: 0,
     EMBEDDING: 0,
     REMOTE_MEDIA: 0,
   };
   private readonly claiming: Record<MediaResource, number> = {
-    NAS: 0,
+    LOCAL: 0,
     EMBEDDING: 0,
     REMOTE_MEDIA: 0,
   };
   private readonly pendingWake: Record<MediaResource, boolean> = {
-    NAS: false,
+    LOCAL: false,
     EMBEDDING: false,
     REMOTE_MEDIA: false,
   };
@@ -23,7 +23,7 @@ export class MediaResourcePool {
   private memoryUsedMiB = 0;
   private readonly memoryWaits = new Map<MediaResource, { cost: number; readyAt: number }>();
   private readonly deferredUntil: Record<MediaResource, number> = {
-    NAS: 0,
+    LOCAL: 0,
     EMBEDDING: 0,
     REMOTE_MEDIA: 0,
   };
@@ -62,7 +62,7 @@ export class MediaResourcePool {
   }
   get activeCount() {
     return (
-      this.occupied.NAS +
+      this.occupied.LOCAL +
       this.occupied.EMBEDDING +
       this.occupied.REMOTE_MEDIA +
       Number(this.maintaining && !this.maintenanceUsesEmbedding)
@@ -117,7 +117,7 @@ export class MediaResourcePool {
       return;
     // Reserve before awaiting the claim; concurrent wake-ups cannot overfill either resource.
     const limit =
-      resource === 'NAS'
+      resource === 'LOCAL'
         ? this.nasConcurrency
         : resource === 'REMOTE_MEDIA'
           ? this.remoteMediaConcurrency

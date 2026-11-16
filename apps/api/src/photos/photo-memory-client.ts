@@ -1,9 +1,9 @@
-import { requestLibraryRead } from '../eagle/eagle-memory-client';
+import { requestLibraryRead } from '../eagle/reader-client';
 import {
   memoryStatisticsSummary,
   memoryPersonCounts,
   memoryPhotoFacets,
-} from '../eagle/eagle-memory-protocol';
+} from '../eagle/reader-protocol';
 import type { PhotoStatisticsQueryDto } from './photo-statistics.dto';
 
 export async function readMemoryStatistics(

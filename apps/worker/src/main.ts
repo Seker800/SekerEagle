@@ -247,7 +247,7 @@ async function heartbeat(): Promise<void> {
     });
     await recordWorkerHeartbeat();
     if (previousCompute !== computePolicySignature(runtime)) {
-      selectors.NAS.invalidate();
+      selectors.LOCAL.invalidate();
       selectors.REMOTE_MEDIA.invalidate();
       selectors.EMBEDDING.invalidate();
       wakeScheduler?.wakeNow();
@@ -269,10 +269,10 @@ const selectors = {
     () => remoteImageKinds(embeddingClient.computeRuntime),
     () => remoteVideoKinds(embeddingClient.computeRuntime),
   ),
-  NAS: createScheduledMediaSelector(
+  LOCAL: createScheduledMediaSelector(
     prisma,
     () => embeddingReadiness !== 'READY',
-    'NAS',
+    'LOCAL',
     () => remoteImageKinds(embeddingClient.computeRuntime),
     () => remoteVideoKinds(embeddingClient.computeRuntime),
   ),
@@ -282,7 +282,7 @@ const selectors = {
     'EMBEDDING',
   ),
 };
-const claimSequence: Record<MediaResource, number> = { NAS: 0, EMBEDDING: 0, REMOTE_MEDIA: 0 };
+const claimSequence: Record<MediaResource, number> = { LOCAL: 0, EMBEDDING: 0, REMOTE_MEDIA: 0 };
 async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJob | null> {
   if (
     stopping ||
@@ -293,7 +293,7 @@ async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJo
   const claimKinds =
     resource === 'REMOTE_MEDIA'
       ? remoteKinds.filter((k) => !allowedJobKinds || allowedJobKinds.includes(k))
-      : resource === 'NAS' && !facesConfigured
+      : resource === 'LOCAL' && !facesConfigured
         ? availableProcessingJobKinds(allowedJobKinds, false)
         : allowedJobKinds;
   if (resource === 'REMOTE_MEDIA' && !remoteKinds.length) return null;
@@ -1336,13 +1336,13 @@ async function poll(): Promise<void> {
       resourceBudget('REMOTE_MEDIA'),
     )
     .catch(reportLoopError);
-  if (resourcePool.active('NAS') >= workerConcurrency || buildingPhotoMap) return;
+  if (resourcePool.active('LOCAL') >= workerConcurrency || buildingPhotoMap) return;
   if (
     runBackgroundProcessing &&
     activeTagBuildCount === 0 &&
     !buildingSmartFolder &&
     !buildingPhotoMap &&
-    canAdvancePhotoMap(Date.now(), lastPhotoMapStep, resourcePool.active('NAS'), workerConcurrency)
+    canAdvancePhotoMap(Date.now(), lastPhotoMapStep, resourcePool.active('LOCAL'), workerConcurrency)
   ) {
     buildingPhotoMap = true;
     lastPhotoMapStep = Date.now();
@@ -1356,7 +1356,7 @@ async function poll(): Promise<void> {
   }
 
   void resourcePool
-    .fill('NAS', () => claimJob('NAS'), processClaimedJob, resourceBudget('NAS'))
+    .fill('LOCAL', () => claimJob('LOCAL'), processClaimedJob, resourceBudget('LOCAL'))
     .catch(reportLoopError);
 }
 
@@ -1510,7 +1510,7 @@ async function processClaimedJob(
         event: 'eagle_media_job_completed',
         processorVersion: job.processorVersion,
         resource:
-          job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : remoteRequired ? 'REMOTE_MEDIA' : 'NAS',
+          job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : remoteRequired ? 'REMOTE_MEDIA' : 'LOCAL',
         elapsedMs: Date.now() - startedAt,
         jobId: job.id,
         kind: job.kind,

@@ -17,7 +17,7 @@ test('NAS and embedding run together, but each resource holds its own single slo
   let nasClaims = 0,
     embeddingClaims = 0;
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => (++nasClaims === 1 ? 'nas' : null),
     async () => held,
   );
@@ -30,7 +30,7 @@ test('NAS and embedding run together, but each resource holds its own single slo
   );
   await new Promise((resolve) => setImmediate(resolve));
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => {
       nasClaims++;
       return 'duplicate';
@@ -65,7 +65,7 @@ test('claim failures and execution failures release only their own resource and 
   );
   await assert.rejects(
     pool.fill(
-      'NAS',
+      'LOCAL',
       async () => {
         throw new Error('claim');
       },
@@ -103,7 +103,7 @@ test('a slow embedding claim does not block repeated NAS work and cannot overfil
   let completed = 0;
   for (let i = 0; i < 3; i++) {
     await pool.fill(
-      'NAS',
+      'LOCAL',
       async () => 'nas',
       async () => {
         completed++;
@@ -181,8 +181,8 @@ test('two embedding requests may overlap IO, with bounded reservations and uncha
   assert.equal(pool.active('EMBEDDING'), 2);
   assert.equal(claims, 2);
   await pool.fill('EMBEDDING', claim, async () => held);
-  await pool.fill('NAS', claim, async () => held);
-  assert.equal(pool.active('NAS'), 1);
+  await pool.fill('LOCAL', claim, async () => held);
+  assert.equal(pool.active('LOCAL'), 1);
   assert.equal(claims, 3);
   release();
   await new Promise((done) => setImmediate(done));
@@ -208,7 +208,7 @@ test('an offline model leaves vector work unclaimed while NAS keeps progressing,
       },
     );
     await pool.fill(
-      'NAS',
+      'LOCAL',
       async () => 'color',
       async () => {
         nas++;
@@ -290,7 +290,7 @@ test('remote media has separate capacity and cannot increase NAS execution', asy
     },
   );
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => 1,
     async () => {
       nas++;
@@ -361,7 +361,7 @@ test('shared memory reservations allow light overlap and defer a second heavy ta
     remote = 0,
     deferred = 0;
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => 1,
     async () => {
       await new Promise<void>((resolve) => {
@@ -587,7 +587,7 @@ for (const sibling of [null, 64]) {
         releaseSmall = done;
       });
       await pool.fill(
-        'NAS',
+        'LOCAL',
         async () => 1,
         async () => nasHeld,
         { memoryMiB: () => 1400, onMemoryWait: async () => {} },
@@ -603,7 +603,7 @@ for (const sibling of [null, 64]) {
       await new Promise((done) => setImmediate(done));
       let nasClaims = 0;
       await pool.fill(
-        'NAS',
+        'LOCAL',
         async () => {
           nasClaims++;
           return null;
@@ -647,7 +647,7 @@ test('mixed parallel defers retain the largest demand until enough shared memory
   pool.setRemoteMediaLimit(2);
   let releaseNas!: () => void, releaseEmbedding!: () => void;
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => 1,
     async () =>
       new Promise<void>((done) => {
@@ -715,7 +715,7 @@ test('a failed claim alongside a memory defer cannot leak reservations or erase 
   pool.setRemoteMediaLimit(3);
   let release!: () => void;
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => 1,
     async () =>
       new Promise<void>((done) => {
@@ -742,7 +742,7 @@ test('a failed claim alongside a memory defer cannot leak reservations or erase 
   await new Promise((done) => setImmediate(done));
   let nasClaims = 0;
   await pool.fill(
-    'NAS',
+    'LOCAL',
     async () => {
       nasClaims++;
       return null;

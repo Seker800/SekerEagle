@@ -12,7 +12,8 @@ import { EagleUploadController } from '../eagle/eagle-upload.controller';
 import { EagleVectorController } from '../eagle/eagle-vector.controller';
 import { EagleTaskCenterController } from '../eagle/eagle-task-center.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
-import { EagleModule, EAGLE_LIBRARY_PROVIDERS } from '../eagle/eagle.module';
+import { EagleModule } from '../eagle/eagle.module';
+import { libraryProviders } from '../eagle/library-capabilities';
 import { EagleMaintenanceService } from '../eagle/eagle-maintenance.service';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import {
@@ -68,7 +69,7 @@ test('both registered modules bind the same common providers with separate immut
     [PhotoLibraryModule, 'PHOTO'],
   ] as const) {
     const providers = Reflect.getMetadata(MODULE_METADATA.PROVIDERS, module) as any[];
-    for (const provider of EAGLE_LIBRARY_PROVIDERS) {
+    for (const provider of libraryProviders('MATERIAL')) {
       if (mode === 'PHOTO' && provider === EagleMaintenanceService) continue;
       const token =
         typeof provider === 'function' ? provider : (provider as { provide: unknown }).provide;

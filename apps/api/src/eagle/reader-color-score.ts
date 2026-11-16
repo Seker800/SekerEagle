@@ -3,7 +3,7 @@ import {
   COLOR_PALETTE_VERSION,
   type SearchColorSwatch,
 } from '@sekereagle/library-core';
-import type { MemoryAsset } from './eagle-memory-predicate';
+import type { MemoryAsset } from './reader-predicate';
 
 export function memoryPaletteKey(swatches: readonly SearchColorSwatch[]): string {
   const first = swatches[0],

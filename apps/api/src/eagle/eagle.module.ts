@@ -12,7 +12,7 @@ import { EagleVectorController } from './eagle-vector.controller';
 import { EagleService } from './eagle.service';
 import { EagleUploadController } from './eagle-upload.controller';
 
-export { EAGLE_LIBRARY_CAPABILITIES, EAGLE_LIBRARY_PROVIDERS } from './library-capabilities';
+export { EAGLE_LIBRARY_CAPABILITIES } from './library-capabilities';
 
 @Module({
   imports: [AuthModule, StorageModule],

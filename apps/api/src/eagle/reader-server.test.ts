@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { createLibraryReaderServer } from './eagle-memory-server';
-import { LibraryMemoryIndex } from './eagle-memory-index';
+import { createLibraryReaderServer } from './reader-server';
+import { LibraryMemoryIndex } from './reader-index';
 
 test('reader cannot start with missing identity or an invalid body byte budget', () => {
   const store = { read: async () => new LibraryMemoryIndex('owner', 'PHOTO') };

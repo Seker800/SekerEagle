@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { AssetSearchWhere } from './eagle-search-predicate';
 import { colorSearchPlan, hasColorSearch, colorCandidateWhere } from './eagle-color-query';
-import { readMemoryPage, readMemoryCount, rejectLibraryRead } from './eagle-memory-client';
+import { readMemoryPage, readMemoryCount, rejectLibraryRead } from './reader-client';
 export { hasColorSearch, colorCandidateWhere } from './eagle-color-query';
 
 type SearchDatabase = Pick<PrismaClient, 'eagleAsset' | '$queryRaw'>;
