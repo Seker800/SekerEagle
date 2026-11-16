@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { registerLibraryReadIpc } from '../src/main/library-read-ipc';
-import type { LibraryMediaSnapshot } from '../src/main/library-media-snapshot';
+import type { MediaSnapshotAuthorization } from '../src/main/media-snapshot-authorization';
 
 function setup(available = true) {
   const invoke = new Map<string, (...args: unknown[]) => Promise<unknown>>();
@@ -27,7 +27,7 @@ function setup(available = true) {
     assertTrustedIpcSender: (event) => {
       if (event !== trusted) throw new Error('untrusted');
     },
-    snapshot: () => (available ? ({ read, reset } as unknown as LibraryMediaSnapshot) : null),
+    snapshot: () => (available ? ({ read, reset } as unknown as MediaSnapshotAuthorization) : null),
   });
   return { invoke, send, trusted, read, reset };
 }

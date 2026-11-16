@@ -1,10 +1,10 @@
 import type { IpcMain, IpcMainInvokeEvent, IpcMainEvent } from 'electron';
-import type { LibraryMediaSnapshot } from './library-media-snapshot';
+import type { MediaSnapshotAuthorization } from './media-snapshot-authorization';
 
 export function registerLibraryReadIpc(options: {
   ipcMain: Pick<IpcMain, 'handle' | 'on'>;
   assertTrustedIpcSender: (event: IpcMainInvokeEvent | IpcMainEvent) => void;
-  snapshot: () => LibraryMediaSnapshot | null;
+  snapshot: () => MediaSnapshotAuthorization | null;
 }): void {
   const { ipcMain, assertTrustedIpcSender } = options;
   const pending = new Map<string, AbortController>();

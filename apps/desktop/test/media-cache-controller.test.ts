@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LibraryMediaSnapshot } from '../src/main/library-media-snapshot';
+import { MediaSnapshotAuthorization } from '../src/main/media-snapshot-authorization';
 import { MediaCacheController } from '../src/main/media-cache-controller';
 import { CacheEngine } from '../src/utility/cache/cache-engine';
 
@@ -34,7 +34,7 @@ describe('MediaCacheController', () => {
   it('reads cached files with current server-list evidence without a media round trip, and falls back after reset', async () => {
     const identity = { ownerId: 'owner', deploymentId: 'd'.repeat(64) };
     const fetchUpstream = vi.fn(async () => eligibleResponse('image'));
-    const snapshot = new LibraryMediaSnapshot({
+    const snapshot = new MediaSnapshotAuthorization({
       authenticatedOwner: async () => identity,
       fetch: async () =>
         Response.json({

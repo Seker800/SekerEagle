@@ -13,7 +13,7 @@ const record = (value: unknown): Record<string, unknown> | null =>
 
 /** Transient evidence from real authenticated server reads, never renderer-provided DTOs.
  * Same freshness as the list, no per-file timer or persisted authorization lease. */
-export class LibraryMediaSnapshot {
+export class MediaSnapshotAuthorization {
   private generation = 0;
   private sequence = 0;
   private changes: string | null = null;

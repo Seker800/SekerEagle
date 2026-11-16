@@ -1,5 +1,5 @@
 import { registerLibraryReadIpc } from './library-read-ipc';
-import { LibraryMediaSnapshot } from './library-media-snapshot';
+import { MediaSnapshotAuthorization } from './media-snapshot-authorization';
 import { appendFileSync, createReadStream, mkdirSync } from 'node:fs';
 import { copyFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
@@ -132,7 +132,7 @@ let cacheRestartTimer: NodeJS.Timeout | null = null;
 let cacheRestartHistory: number[] = [];
 let shuttingDown = false;
 let connectionService: DesktopConnectionService | null = null;
-let librarySnapshot: LibraryMediaSnapshot | null = null;
+let librarySnapshot: MediaSnapshotAuthorization | null = null;
 let mediaController: MediaCacheController | null = null;
 let connectionRecovery: Promise<void> | null = null;
 let browserSession: DesktopBrowserSession | null = null;
@@ -974,7 +974,7 @@ async function handleAppRequest(requestUrl: string): Promise<Response> {
 
 function createMediaController(owner: AuthenticatedOwner): MediaCacheController {
   librarySnapshot?.reset();
-  const snapshot = new LibraryMediaSnapshot({
+  const snapshot = new MediaSnapshotAuthorization({
     fetch: (path, init) => currentBrowserSession().fetch(path, init),
     authenticatedOwner: () => owner.get(),
     maxEntries: Number(process.env.SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES ?? 12_000),

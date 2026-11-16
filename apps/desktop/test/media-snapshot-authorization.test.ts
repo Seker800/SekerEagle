@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LibraryMediaSnapshot } from '../src/main/library-media-snapshot';
+import { MediaSnapshotAuthorization } from '../src/main/media-snapshot-authorization';
 import { isLibraryReadPath } from '../src/shared/library-read';
 
 const identity = { ownerId: 'owner', deploymentId: 'd'.repeat(64) };
@@ -32,7 +32,7 @@ const changes = (revision = '1') => ({
 });
 function setup(body: unknown = { items: [asset()] }, maxEntries = 100) {
   const fetch = vi.fn(async (_path: string, _init: RequestInit) => Response.json(body));
-  const snapshot = new LibraryMediaSnapshot({
+  const snapshot = new MediaSnapshotAuthorization({
     fetch,
     authenticatedOwner: async () => identity,
     maxEntries,
