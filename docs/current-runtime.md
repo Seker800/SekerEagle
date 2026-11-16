@@ -702,7 +702,6 @@ Docker 项目仍叫 `sekereagle-nas-staging`，数据库仍叫 `sekereagle_test`
 | `apps/worker/src/main.ts`、`processing-policy.ts`              | 共用媒体任务领取和处理策略                                               |
 | `apps/worker/src/image-publication.ts`                         | 普通渲染与复用封面的共用发布事务，检查 owner、模式、版本、租约及私密边界 |
 | `apps/worker/src/synology-preview-pilot.ts`、`cached-image.ts` | 受信任、有界的来源校验及 JPEG 缓存复用适配器；不是普通客户端 API         |
-| `apps/worker/src/source-timeline.ts`                           | 基于冻结来源证据的有界日期维护，不扫描外部图库                           |
 | `scripts/synology-import/preview_copy.py`                      | 独立封面进程、批次检查点及清单指纹校验                                   |
 | `scripts/synology-import/`                                     | 历史原片导入及 journal；继续操作前读该目录 README，不另起重复导入        |
 | `apps/web/src/components/photos/`                              | 照片时间线、日期索引、刻度的位置映射与呈现                               |
