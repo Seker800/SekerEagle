@@ -4,6 +4,8 @@ import type { Provider } from '@nestjs/common';
 import type { LibraryMode } from '@prisma/client';
 import { EagleDuplicateService } from './eagle-duplicates.service';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
+import { LibraryOperationAdmissionService } from './library-operation-admission.service';
+import { LibraryOperationQueryService } from './library-operation-query.service';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { EagleImageSearchService } from './eagle-image-search.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
@@ -147,7 +149,13 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
   {
     id: 'operations',
     modes: ['MATERIAL', 'PHOTO'],
-    providers: [EagleAssetOperationService, LibraryCommandRegistry, EagleLibraryCommandSetup],
+    providers: [
+      EagleAssetOperationService,
+      LibraryCommandRegistry,
+      EagleLibraryCommandSetup,
+      LibraryOperationQueryService,
+      LibraryOperationAdmissionService,
+    ],
     tables: ['EagleAssetOperation', 'EagleAssetOperationItem'],
     dependsOn: ['assets', 'transfers', 'duplicates', 'search', 'processing'],
   },

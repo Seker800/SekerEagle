@@ -22,6 +22,8 @@ import { PrismaService } from './prisma/prisma.service';
 import { ObjectStorageService } from './storage/object-storage.service';
 import { objectStorageRuntimeOptions } from './config/runtime-config';
 import { EagleAssetOperationService } from './eagle/eagle-asset-operations.service';
+import { LibraryOperationAdmissionService } from './eagle/library-operation-admission.service';
+import { LibraryOperationQueryService } from './eagle/library-operation-query.service';
 import { EagleLibraryTransferService } from './eagle/eagle-library-transfer.service';
 import { EagleService } from './eagle/eagle.service';
 import { LibraryManualTagService } from './eagle/library-manual-tag.service';
@@ -72,7 +74,23 @@ export function createAssetOperationExecutors(
         agent: new PhotoAgentService(prisma, undefined, transfers),
       });
     }
-    return new EagleAssetOperationService(prisma, transfers, eagle, mode, duplicates, commands);
+    const operationQuery = new LibraryOperationQueryService(prisma, mode);
+    const operationAdmission = new LibraryOperationAdmissionService(
+      prisma,
+      operationQuery,
+      mode,
+      commands,
+    );
+    return new EagleAssetOperationService(
+      prisma,
+      transfers,
+      eagle,
+      mode,
+      duplicates,
+      commands,
+      operationQuery,
+      operationAdmission,
+    );
   });
 }
 
