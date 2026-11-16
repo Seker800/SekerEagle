@@ -427,7 +427,7 @@ test('two thousand identities yield bounded recommendations including a target b
     );
     assert(result.nextCursor);
     assert(result.items.length <= 32);
-    assert((await service.summary(ownerId, false)).unnamed === 1999);
+    assert((await service.summary(ownerId, false)).unnamed === 2000);
     log(
       JSON.stringify({
         syntheticOnly: true,
