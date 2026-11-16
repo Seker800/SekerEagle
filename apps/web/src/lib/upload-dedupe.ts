@@ -1,8 +1,9 @@
+import { sha256 } from '@noble/hashes/sha2.js';
 import type { EagleUploadContentCheckItem } from './eagle-api';
 
-/** Browser hashing buffers one file at a time per slot; larger files fall back to server dedup. */
-export const UPLOAD_DEDUPE_MAX_BYTES = 64 * 1024 * 1024;
 const HASH_CONCURRENCY = 2;
+const HASH_CHUNK_BYTES = 4 * 1024 * 1024;
+const HASH_SMALL_FILE_MAX = 32 * 1024 * 1024;
 const BATCH_SIZE = 50;
 const FLUSH_DELAY_MS = 80;
 
@@ -28,10 +29,8 @@ export class UploadDedupeChecker {
       signal?: AbortSignal,
     ) => Promise<boolean[]>,
     private readonly hashFile: (file: File, signal?: AbortSignal) => Promise<string> = sha256File,
-    private readonly maxBytes = UPLOAD_DEDUPE_MAX_BYTES,
   ) {}
   async check(file: File, signal?: AbortSignal): Promise<UploadDedupeResult> {
-    if (file.size > this.maxBytes) return { sha256: null, exists: false };
     let sha256: string;
     try {
       sha256 = await this.#hash(file, signal);
@@ -126,10 +125,27 @@ export class UploadDedupeChecker {
 }
 
 export async function sha256File(file: File, signal?: AbortSignal) {
-  const buffer = await file.arrayBuffer();
+  // Small files use hardware-accelerated WebCrypto. Large files stream in bounded
+  // chunks so RAW and video sizes never require a whole-file buffer.
+  if (file.size <= HASH_SMALL_FILE_MAX) {
+    const buffer = await file.arrayBuffer();
+    signal?.throwIfAborted();
+    return toHex(new Uint8Array(await crypto.subtle.digest('SHA-256', buffer)));
+  }
+  const hash = sha256.create();
+  for (let offset = 0; offset < file.size; offset += HASH_CHUNK_BYTES) {
+    signal?.throwIfAborted();
+    const chunk = await file
+      .slice(offset, Math.min(file.size, offset + HASH_CHUNK_BYTES))
+      .arrayBuffer();
+    hash.update(new Uint8Array(chunk));
+  }
   signal?.throwIfAborted();
-  const digest = await crypto.subtle.digest('SHA-256', buffer);
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return toHex(hash.digest());
+}
+
+function toHex(bytes: Uint8Array) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function abortError(signal?: AbortSignal) {

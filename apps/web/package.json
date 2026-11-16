@@ -11,6 +11,7 @@
     "dev": "vite --host 127.0.0.1"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@sekereagle/contracts": "*",
     "@sekereagle/eagle-filter-core": "*",
     "@sekereagle/library-core": "*",

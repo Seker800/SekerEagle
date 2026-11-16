@@ -21,15 +21,6 @@ it('hashes and checks nearby files in one batch request', async () => {
   expect(second).toEqual({ sha256: 'a'.repeat(64), exists: false });
 });
 
-it('skips pre-check for files above the browser memory bound', async () => {
-  const batch = vi.fn(async () => [true]);
-  const hash = vi.fn(async () => 'a'.repeat(64));
-  const checker = new UploadDedupeChecker(batch, hash, 3);
-  expect(await checker.check(file('raw.dng', 4))).toEqual({ sha256: null, exists: false });
-  expect(hash).not.toHaveBeenCalled();
-  expect(batch).not.toHaveBeenCalled();
-});
-
 it('fails open when the browser cannot hash the file', async () => {
   const checker = new UploadDedupeChecker(
     async () => [true],
