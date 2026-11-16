@@ -1,6 +1,6 @@
 import { EagleImportItemStatus, EagleImportRunStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
