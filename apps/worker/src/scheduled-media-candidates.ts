@@ -220,7 +220,8 @@ export function invalidateMediaCandidates(
     selectors.LOCAL.invalidate();
     selectors.REMOTE_MEDIA?.invalidate();
     selectors.EMBEDDING.invalidate();
-  } else if (payload === 'media-ready:LOCAL') {
+  } else if (payload === 'media-ready:LOCAL' || payload === 'media-ready:NAS') {
+    // 'NAS' is the legacy trigger payload; keep accepting it until the DB trigger is renamed.
     selectors.LOCAL.invalidate();
     selectors.REMOTE_MEDIA?.invalidate();
   } else if (payload === 'media-ready:EMBEDDING') selectors.EMBEDDING.invalidate();

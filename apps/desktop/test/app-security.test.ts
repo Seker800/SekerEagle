@@ -36,6 +36,11 @@ describe('desktop server and navigation security', () => {
     );
   });
 
+  it('assigns the startup media controller to the shared desktop context', async () => {
+    const main = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    expect(main).toMatch(/ctx\.mediaController\s*=\s*createMediaController\(/);
+  });
+
   it('uses the canonical local browser origin by default', () => {
     expect(DEFAULT_DESKTOP_SERVER_URL).toBe('http://localhost:8180');
   });

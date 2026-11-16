@@ -348,7 +348,7 @@ try {
       { where: { lane: 'BACKGROUND', kind: 'GENERATE_RENDITIONS' }, take: 50 },
       true,
       false,
-      { freshOnly: true, resource: 'NAS' },
+      { freshOnly: true, resource: 'LOCAL' },
     );
   const wrongModeUpload = await db.uploadSession.create({
     data: { ...uploadData, libraryMode: 'MATERIAL' },

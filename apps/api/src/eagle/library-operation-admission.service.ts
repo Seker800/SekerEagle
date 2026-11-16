@@ -59,7 +59,7 @@ export class LibraryOperationAdmissionService {
               existing.undoOfId !== id
             )
               throw new NotFoundException('操作不存在。');
-            return this.query.summarize(
+            return this.query.summary(
               await this.query.owned(tx, operationId, principal.sub, principal.canViewPrivate),
             );
           }
@@ -71,7 +71,7 @@ export class LibraryOperationAdmissionService {
             },
           });
           if (priorUndo)
-            return this.query.summarize(
+            return this.query.summary(
               await this.query.owned(tx, priorUndo.id, principal.sub, principal.canViewPrivate),
             );
           await tx.eagleAssetOperationItem.updateMany({
@@ -158,7 +158,7 @@ export class LibraryOperationAdmissionService {
                 canonicalLibraryCommand([intent, input.type])
             )
               throw new ConflictException('操作标识与请求不一致。');
-            return this.query.summarize(existing);
+            return this.query.summary(existing);
           }
           const resources = new Map<
             string,
@@ -281,7 +281,7 @@ export class LibraryOperationAdmissionService {
               JSON.stringify(existing.inputIds) !== JSON.stringify(ids)
             )
               throw new ConflictException('操作标识与选择不一致。');
-            return this.query.summarize(existing);
+            return this.query.summary(existing);
           }
           const resourcesById = new Map<
             string,
@@ -537,7 +537,7 @@ export class LibraryOperationAdmissionService {
           data: { status: 'PENDING', errorCode: null, leaseUntil: null },
         });
       await tx.$queryRaw`SELECT pg_notify('eagle_asset_operations', ${this.libraryMode})::text`;
-      return this.query.summarize(
+      return this.query.summary(
         await this.query.owned(tx, id, principal.sub, principal.canViewPrivate),
       );
     });
@@ -564,7 +564,7 @@ export class LibraryOperationAdmissionService {
         },
         data: { status: 'CANCELLED', leaseUntil: null },
       });
-      return this.query.summarize(
+      return this.query.summary(
         await this.query.owned(tx, id, principal.sub, principal.canViewPrivate),
       );
     });

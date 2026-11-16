@@ -482,11 +482,11 @@ test('database notifications distinguish progress, newly eligible dependencies, 
       (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: first.id } })).status,
       'COMPLETED',
     );
-    const counts = { NAS: 0, EMBEDDING: 0 };
+    const counts = { LOCAL: 0, EMBEDDING: 0 };
     const selectors = {
-      NAS: {
+      LOCAL: {
         invalidate: () => {
-          counts.NAS++;
+          counts.LOCAL++;
         },
       },
       EMBEDDING: {
@@ -496,7 +496,7 @@ test('database notifications distinguish progress, newly eligible dependencies, 
       },
     };
     for (const payload of committedPayloads) invalidateMediaCandidates(selectors, payload);
-    assert.ok(counts.NAS > 0 && counts.EMBEDDING > 0);
+    assert.ok(counts.LOCAL > 0 && counts.EMBEDDING > 0);
   } finally {
     await listener.stop();
   }

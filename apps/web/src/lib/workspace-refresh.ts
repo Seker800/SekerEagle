@@ -14,7 +14,7 @@ import {
   isEagleAssetListShape,
   isEagleQuery,
   isEagleTaskCenterKey,
-} from '../components/eagle/eagle-query-keys';
+} from './eagle-query-key-shape';
 
 export const workspaceRefreshKey = (ownerId: string, includePrivate: boolean) =>
   ['workspace-changes', ownerId, includePrivate] as const;

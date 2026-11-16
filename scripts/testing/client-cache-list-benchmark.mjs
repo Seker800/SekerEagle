@@ -41,7 +41,7 @@ try {
     import { Readable } from 'node:stream';
     import { MediaCacheController } from './apps/desktop/src/main/media-cache-controller';
     import { MediaRequestLimiter } from './apps/desktop/src/main/media-request-limiter';
-    import { LibraryMediaSnapshot } from './apps/desktop/src/main/library-media-snapshot';
+    import { MediaSnapshotAuthorization } from './apps/desktop/src/main/media-snapshot-authorization';
     import { registerLibraryReadIpc } from './apps/desktop/src/main/library-read-ipc';
     import { CacheRpcClient } from './apps/desktop/src/shared/cache-rpc';
     import { desktopContentSecurityPolicy, isAllowedMediaOrigin, mediaCorsHeaders } from './apps/desktop/src/main/navigation-policy';
@@ -70,7 +70,7 @@ try {
       const cache=new CacheRpcClient({postMessage:m=>child.postMessage(m),subscribe:listener=>{child.on('message',listener);return()=>child.off('message',listener);}});
       await cache.initialize({cacheRoot:${JSON.stringify(join(directory, 'cache'))},limitBytes:8*1024**2,enforceDiskSafety:false});
       const identity={ownerId:'fixture',deploymentId:'d'.repeat(64)};
-      const snapshot=new LibraryMediaSnapshot({authenticatedOwner:async()=>identity,fetch:(path,init)=>session.defaultSession.fetch(origin+path,init)});
+      const snapshot=new MediaSnapshotAuthorization({authenticatedOwner:async()=>identity,fetch:(path,init)=>session.defaultSession.fetch(origin+path,init)});
       const limiter=new MediaRequestLimiter(6,64);
       const controller=new MediaCacheController({serverUrl:origin,cache,authenticatedOwner:async()=>identity,canReadLocal:(media,owner,file)=>enabled&&snapshot.allows(media,owner,file),fetchUpstream:(path,options)=>limiter.fetch(signal=>session.defaultSession.fetch(origin+path,{signal,headers:{'cache-control':'no-store',...(options.ifNoneMatch?{'if-none-match':options.ifNoneMatch}:{})}}),options.signal)});
       protocol.handle('sekereagle-media',async request=>{

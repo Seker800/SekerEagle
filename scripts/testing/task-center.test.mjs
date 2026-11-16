@@ -732,14 +732,14 @@ test('separate resource claims prioritize new uploads over newer-dated historica
     historicalOnly.map((row) => row.assetId),
     [historyNew.id, historyOld.id],
   );
-  assert.equal((await select('NAS')).length, 0);
+  assert.equal((await select('LOCAL')).length, 0);
   const nas = (
     await selectScheduledMediaCandidates(
       prisma,
       { ...input, where: { lane: 'INTERACTIVE' } },
       true,
       false,
-      { resource: 'NAS' },
+      { resource: 'LOCAL' },
     )
   ).filter((row) => row.ownerId === f.owner);
   assert.deepEqual(

@@ -134,7 +134,7 @@
 
 ### 阶段 2：API、上传与来源隔离
 
-主要位置：`apps/api/src/eagle/eagle.controller.ts`、`eagle.service.ts`、`eagle.dto.ts`、`eagle-upload.service.ts`、`eagle-upload.dto.ts`、`eagle-media.service.ts`、`eagle-media-capability.service.ts`、`eagle-import.service.ts`、`import/`、`eagle-browser-capture.service.ts`。
+主要位置：`apps/api/src/eagle/eagle.controller.ts`、`eagle.service.ts`、`eagle.dto.ts`、`eagle-upload.service.ts`、`eagle-upload.dto.ts`、`eagle-media.service.ts`、`eagle-media-capability.service.ts`、`import/eagle-app-import.service.ts`、`import/`、`eagle-browser-capture.service.ts`。
 
 任务：
 

@@ -33,6 +33,7 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
+import { normalizeKey } from './library-values';
 import {
   normalizeEagleUploadOriginalName,
   uploadPublicationTimeoutMs,
@@ -990,8 +991,4 @@ function normalizeStoredParts(value: unknown): ReturnType<typeof normalizeParts>
 function displayNameFromOriginal(originalName: string): string {
   const dot = originalName.lastIndexOf('.');
   return (dot > 0 ? originalName.slice(0, dot) : originalName).slice(0, 255);
-}
-
-function normalizeKey(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
 }

@@ -1,3 +1,11 @@
+import {
+  eagleAssetListFilters,
+  eagleQuerySection,
+  isEagleAssetListShape,
+  isEagleQuery,
+  isEagleTaskCenterKey,
+} from '../../lib/eagle-query-key-shape';
+
 export function createEagleQueryKeys(
   ownerId: string | null,
   libraryMode: 'MATERIAL' | 'PHOTO' = 'MATERIAL',
@@ -64,37 +72,13 @@ export function createEagleQueryKeys(
   };
 }
 
-/** Classify keys beside their constructors so receipt refreshes cannot guess tuple positions. */
-export function isEagleQuery(key: readonly unknown[], ownerId: string, mode: string) {
-  return key[0] === 'eagle' && key[1] === ownerId && key[2] === mode;
-}
-
-/** The resource section is the only tuple position consumers may need. */
-export function eagleQuerySection(key: readonly unknown[]): string | null {
-  return key[0] === 'eagle' && typeof key[3] === 'string' ? key[3] : null;
-}
-
-export function isEagleAssetListShape(key: readonly unknown[]): boolean {
-  const filters = key[5];
-  return (
-    key[0] === 'eagle' &&
-    key[3] === 'assets' &&
-    key.length === 6 &&
-    Boolean(filters && typeof filters === 'object' && !Array.isArray(filters))
-  );
-}
-
-export function eagleAssetListFilters(key: readonly unknown[]): Record<string, unknown> | null {
-  if (!isEagleAssetListShape(key)) return null;
-  const filters = key[5];
-  return filters && typeof filters === 'object' && !Array.isArray(filters)
-    ? (filters as Record<string, unknown>)
-    : null;
-}
-
-export function isEagleTaskCenterKey(key: readonly unknown[], ownerId: string, mode: string) {
-  return key[0] === 'task-center' && key[1] === ownerId && key[2] === mode;
-}
+export {
+  eagleAssetListFilters,
+  eagleQuerySection,
+  isEagleAssetListShape,
+  isEagleQuery,
+  isEagleTaskCenterKey,
+};
 
 export function isEagleAssetDetailKey(key: readonly unknown[], ownerId: string, mode: string) {
   return (

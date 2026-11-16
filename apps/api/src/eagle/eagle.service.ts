@@ -1297,47 +1297,6 @@ export class EagleService {
   async deleteSmartFolder(ownerId: string, folderId: string) {
     return this.smartFolderService.deleteSmartFolder(ownerId, folderId);
   }
-
-  private async throwAssetWriteError(
-    transaction: Prisma.TransactionClient,
-    ownerId: string,
-    assetId: string,
-  ): Promise<never> {
-    const exists = await transaction.eagleAsset.findFirst({
-      where: { ownerId, id: assetId, deletedAt: null, libraryMode: this.libraryMode },
-      select: { id: true },
-    });
-    if (!exists) throw new NotFoundException('素材不存在。');
-    throw new ConflictException('素材已被其他操作更新，请刷新后重试。');
-  }
-
-  private async throwTagWriteError(
-    transaction: Prisma.TransactionClient,
-    ownerId: string,
-    tagId: string,
-  ): Promise<never> {
-    if (
-      !(await transaction.eagleManualTag.count({
-        where: { ownerId, id: tagId, libraryMode: this.libraryMode },
-      }))
-    )
-      throw new NotFoundException('标签不存在。');
-    throw new ConflictException('标签已被其他操作更新，请刷新后重试。');
-  }
-
-  private async throwFolderWriteError(
-    transaction: Prisma.TransactionClient,
-    ownerId: string,
-    folderId: string,
-  ): Promise<never> {
-    if (
-      !(await transaction.eagleSmartFolder.count({
-        where: { ownerId, id: folderId, libraryMode: this.libraryMode },
-      }))
-    )
-      throw new NotFoundException('智能文件夹不存在。');
-    throw new ConflictException('智能文件夹已被其他操作更新，请刷新后重试。');
-  }
 }
 
 type StoredAssetFilters = Partial<ListEagleAssetsDto> & {

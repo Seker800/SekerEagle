@@ -172,7 +172,7 @@ if (hasSingleInstanceLock)
     registerOriginalFileExportIpc(ctx, owner, originalDragExporter);
     registerNetworkOnlineIpc(ctx, owner);
 
-    createMediaController(ctx, owner);
+    ctx.mediaController = createMediaController(ctx, owner);
     protocol.handle('sekereagle-media', (request) =>
       handleMediaRequest(ctx, request.url, request.signal, request.headers.get('origin')),
     );

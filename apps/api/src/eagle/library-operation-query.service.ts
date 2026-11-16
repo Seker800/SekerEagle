@@ -265,9 +265,4 @@ export class LibraryOperationQueryService {
     if (!operation) throw new NotFoundException('操作不存在。');
     return operation;
   }
-
-  /** Counter columns and errorCounts are the full progress projection. */
-  summarize(operation: OperationWithItems): AssetOperationSummary {
-    return this.summary(operation);
-  }
 }
