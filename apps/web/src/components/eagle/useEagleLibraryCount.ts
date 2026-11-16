@@ -8,7 +8,6 @@ import type { createEagleQueryKeys } from './eagle-query-keys';
 
 /** The navigation badge counts originals, including members of collapsed photo groups. */
 export function useEagleLibraryCount(
-  accessToken: string,
   queryKeys: ReturnType<typeof createEagleQueryKeys>,
   privateVisible: boolean,
   privacyRevision: number,
@@ -21,7 +20,7 @@ export function useEagleLibraryCount(
   const query = useQuery({
     queryKey: queryKeys.libraryCount(privateVisible, privacyRevision),
     queryFn: () =>
-      api.countEagleAssets(accessToken, { version: EAGLE_FILTER_QUERY_VERSION, conditions: [] }),
+      api.countEagleAssets({ version: EAGLE_FILTER_QUERY_VERSION, conditions: [] }),
     staleTime: 60_000,
     enabled,
     select: (result) => changes.countOverride ?? result.count,

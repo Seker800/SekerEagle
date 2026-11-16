@@ -5,7 +5,7 @@ import type { EagleAssetLocation } from '../../lib/eagle-api';
 it('cancels stale owner/privacy requests and preserves the current view on errors', async () => {
   let resolve!: (value: EagleAssetLocation) => void;
   const getLocation = vi.fn(
-    (_token: string, _id: string, _signal?: AbortSignal) =>
+    (_id: string, _signal?: AbortSignal) =>
       new Promise<EagleAssetLocation>((done) => {
         resolve = done;
       }),
@@ -19,7 +19,7 @@ it('cancels stale owner/privacy requests and preserves the current view on error
   act(() => {
     pending = view.result.current.locate('old');
   });
-  const signal = getLocation.mock.calls[0][2]!;
+  const signal = getLocation.mock.calls[0][1]!;
   view.rerender({ scopeKey: 'owner:PHOTO:private' });
   expect(signal.aborted).toBe(true);
   await act(async () => {

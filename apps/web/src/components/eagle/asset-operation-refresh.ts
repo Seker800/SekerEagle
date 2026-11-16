@@ -396,7 +396,7 @@ export class AssetOperationRefresher {
     for (let offset = 0; offset < ids.length; offset += 100) {
       const batch = ids.slice(offset, offset + 100);
       const previous = new Map(batch.map((id) => [id, cache.store.get(id)]));
-      const facts = await api.listEagleAssetFacts('', batch);
+      const facts = await api.listEagleAssetFacts(batch);
       if (this.disposed || cache.operations.epoch !== epoch) return;
       cache.store.upsertMany(facts);
       const visible = new Set(facts.map((asset) => asset.id));

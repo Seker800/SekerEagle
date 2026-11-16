@@ -9,8 +9,8 @@ it('binds concurrent clients to separate routes without mutable global mode', as
     .spyOn(globalThis, 'fetch')
     .mockImplementation(async () => Response.json({ items: [], nextCursor: null }));
   await Promise.all([
-    createEagleApi('PHOTO').listEagleAssets('', { limit: 1 }),
-    createEagleApi('MATERIAL').listEagleAssets('', { limit: 1 }),
+    createEagleApi('PHOTO').listEagleAssets({ limit: 1 }),
+    createEagleApi('MATERIAL').listEagleAssets({ limit: 1 }),
   ]);
   expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
     '/api/photos/assets?limit=1',
@@ -43,9 +43,9 @@ it('uses the same semantic intent, preview and cached-ranking contract in both l
   };
   for (const mode of ['PHOTO', 'MATERIAL'] as const) {
     const api = createEagleApi(mode);
-    await api.createEagleSmartFolder('', { name: '海边', query });
-    await api.countEagleAssets('', query);
-    await api.listEagleAssets('', { smartFolderId: 'folder', smartFolderOrder: 'RELEVANCE' });
+    await api.createEagleSmartFolder({ name: '海边', query });
+    await api.countEagleAssets(query);
+    await api.listEagleAssets({ smartFolderId: 'folder', smartFolderOrder: 'RELEVANCE' });
   }
   const calls = fetchMock.mock.calls;
   expect(calls[0][0]).toBe('/api/photos/smart-folders');

@@ -41,7 +41,7 @@ it('submits the whole selection once and closes after durable acceptance without
   );
   fireEvent.click(screen.getByRole('button', { name: '开始套用' }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
-  expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith('', {
+  expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith({
     operationId: expect.any(String),
     assetIds: ['a', 'b'],
     recipe,
@@ -93,15 +93,15 @@ it('reuses the same render intent on a lost response and assigns a new intent wh
   );
   fireEvent.click(screen.getByRole('button', { name: '开始套用' }));
   await screen.findByRole('alert');
-  const first = mocks.enqueue.mock.calls[0][1].operationId;
+  const first = mocks.enqueue.mock.calls[0][0].operationId;
   fireEvent.click(screen.getByRole('button', { name: '开始套用' }));
   await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(screen.getByRole('button', { name: '开始套用' })).toBeEnabled());
-  expect(mocks.enqueue.mock.calls[1][1].operationId).toBe(first);
+  expect(mocks.enqueue.mock.calls[1][0].operationId).toBe(first);
   fireEvent.click(screen.getByRole('checkbox', { name: '水印' }));
   fireEvent.click(screen.getByRole('button', { name: '开始套用' }));
   await waitFor(() => expect(mocks.enqueue).toHaveBeenCalledTimes(3));
-  expect(mocks.enqueue.mock.calls[2][1].operationId).not.toBe(first);
+  expect(mocks.enqueue.mock.calls[2][0].operationId).not.toBe(first);
 });
 
 it('preserves the local LUT of legacy browser-uploaded or draft targets when their filter is not pasted', async () => {
@@ -135,7 +135,6 @@ it('preserves the local LUT of legacy browser-uploaded or draft targets when the
   expect(mocks.context).toHaveBeenCalledExactlyOnceWith(['legacy-copy', 'draft-target']);
   expect(mocks.loadLut).toHaveBeenCalledExactlyOnceWith('legacy-target');
   expect(mocks.enqueue).toHaveBeenCalledExactlyOnceWith(
-    '',
     expect.objectContaining({
       assetIds: ['legacy-copy', 'draft-target'],
       recipe,
@@ -143,7 +142,7 @@ it('preserves the local LUT of legacy browser-uploaded or draft targets when the
       preservedLuts: { 'lut:legacy-target': writePortableLut(table) },
     }),
   );
-  expect(mocks.enqueue.mock.calls[0][1]).not.toHaveProperty('lut');
+  expect(mocks.enqueue.mock.calls[0][0]).not.toHaveProperty('lut');
   expect(resolveSession).not.toHaveBeenCalled();
 });
 
@@ -179,6 +178,6 @@ it('does not read or upload unrelated local tables when preserved targets alread
   fireEvent.click(screen.getByRole('button', { name: '开始套用' }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
   expect(mocks.loadLut).not.toHaveBeenCalled();
-  expect(mocks.enqueue.mock.calls[0][1]).not.toHaveProperty('preservedLuts');
-  expect(mocks.enqueue.mock.calls[0][1]).not.toHaveProperty('lut');
+  expect(mocks.enqueue.mock.calls[0][0]).not.toHaveProperty('preservedLuts');
+  expect(mocks.enqueue.mock.calls[0][0]).not.toHaveProperty('lut');
 });

@@ -74,10 +74,8 @@ const PROCESSING_TABS: ReadonlyArray<{
   },
 ];
 export function EagleProcessingPage({
-  accessToken: providedAccessToken,
   canManageProcessing = true,
 }: {
-  accessToken?: string;
   canManageProcessing?: boolean;
 } = {}) {
   const {
@@ -91,7 +89,6 @@ export function EagleProcessingPage({
     },
   } = useLibraryWorkspace();
 
-  const accessToken = providedAccessToken ?? '';
   const [summary, setSummary] = useState<EagleProcessingSummary | null>(null);
   const [jobs, setJobs] = useState<EagleProcessingJob[]>([]);
   const [status, setStatus] = useState<EagleProcessingStatus | ''>('');
@@ -116,10 +113,10 @@ export function EagleProcessingPage({
     canManageProcessing && visible && activePage !== 'VECTOR' && activePage !== 'BROWSE';
   const load = useCallback(
     async () => ({
-      summary: activePage === 'HISTORY' ? null : await fetchEagleProcessingSummary(accessToken),
+      summary: activePage === 'HISTORY' ? null : await fetchEagleProcessingSummary(),
       jobs:
         activePage === 'HISTORY'
-          ? await listEagleProcessingJobs(accessToken, {
+          ? await listEagleProcessingJobs({
               status: status || undefined,
               lane: lane || undefined,
               kind: kind || undefined,
@@ -127,7 +124,6 @@ export function EagleProcessingPage({
           : null,
     }),
     [
-      accessToken,
       activePage,
       fetchEagleProcessingSummary,
       listEagleProcessingJobs,
@@ -332,7 +328,7 @@ export function EagleProcessingPage({
                 onClick={() => {
                   setConfirmRetryAll(false);
                   void runAction(
-                    () => retryAllFailedEagleProcessingJobs(accessToken),
+                    () => retryAllFailedEagleProcessingJobs(),
                     t('已重新排队全部失败任务'),
                   );
                 }}
@@ -552,7 +548,7 @@ export function EagleProcessingPage({
                 onClick={() =>
                   void runAction(
                     () =>
-                      updateEagleProcessingSettings(accessToken, {
+                      updateEagleProcessingSettings({
                         mode,
                         nightStart,
                         nightEnd,
@@ -574,7 +570,7 @@ export function EagleProcessingPage({
                 disabled={isActing}
                 onClick={() =>
                   void runAction(
-                    () => reconcileEagleProcessingJobs(accessToken),
+                    () => reconcileEagleProcessingJobs(),
                     t('缺失任务扫描完成'),
                   )
                 }
@@ -684,7 +680,7 @@ export function EagleProcessingPage({
                           disabled={isActing}
                           onClick={() =>
                             void runAction(
-                              () => retryEagleProcessingJob(accessToken, job.id),
+                              () => retryEagleProcessingJob(job.id),
                               t('任务已重新排队'),
                             )
                           }

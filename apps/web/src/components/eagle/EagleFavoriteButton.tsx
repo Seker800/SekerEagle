@@ -20,21 +20,21 @@ export function isLibraryFavorite(asset: EagleAssetListItem) {
 }
 export async function setLibraryFavorite(api: FavoriteApi, assetIds: string[], enabled: boolean) {
   if (!assetIds.length) return;
-  let tag = (await api.listEagleManualTags('')).find((item) => item.name === FAVORITE_TAG);
+  let tag = (await api.listEagleManualTags()).find((item) => item.name === FAVORITE_TAG);
   if (enabled && !tag) {
     try {
-      tag = await api.createEagleManualTag('', { name: FAVORITE_TAG });
+      tag = await api.createEagleManualTag({ name: FAVORITE_TAG });
     } catch (reason) {
       if (!(reason && typeof reason === 'object' && 'status' in reason && reason.status === 409))
         throw reason;
-      tag = (await api.listEagleManualTags('')).find((item) => item.name === FAVORITE_TAG);
+      tag = (await api.listEagleManualTags()).find((item) => item.name === FAVORITE_TAG);
       if (!tag) throw reason;
     }
   }
   if (!tag) return;
   const privacy = await api.getEaglePrivacySettings();
   if (privacy.tagIds.includes(tag.id)) throw new Error(t('收藏标签被设为私密，请先在设置中调整。'));
-  return api.batchChangeEagleManualTags('', {
+  return api.batchChangeEagleManualTags({
     assetIds,
     addTagIds: enabled ? [tag.id] : [],
     removeTagIds: enabled ? [] : [tag.id],

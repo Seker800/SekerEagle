@@ -235,8 +235,8 @@ describe('browser session recovery', () => {
       .mockResolvedValueOnce(jsonResponse({ user: { id: 'owner-1' } }))
       .mockResolvedValueOnce(jsonResponse({ refreshedAt: '2026-08-17T00:00:00.000Z' }));
 
-    await expect(listEagleAssets('', { limit: 1 })).resolves.toMatchObject({ items: [] });
-    await expect(fetchEagleProcessingSummary('')).resolves.toMatchObject({
+    await expect(listEagleAssets({ limit: 1 })).resolves.toMatchObject({ items: [] });
+    await expect(fetchEagleProcessingSummary()).resolves.toMatchObject({
       refreshedAt: '2026-08-17T00:00:00.000Z',
     });
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
@@ -283,7 +283,7 @@ it('operation admission and legacy sending outlive the admission transaction wit
   for (const mode of ['MATERIAL', 'PHOTO'] as const) {
     const api = createAssetOperationsApi(mode);
     await api.enqueue({ kind: 'SEND', operationId: 'op', assetIds: ['asset'] });
-    await createEagleApi(mode).sendEagleAssets('', { operationId: 'op', assetIds: ['asset'] });
+    await createEagleApi(mode).sendEagleAssets({ operationId: 'op', assetIds: ['asset'] });
     await api.list();
   }
   expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([

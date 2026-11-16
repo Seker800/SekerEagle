@@ -62,7 +62,7 @@ describe('EagleProcessingPage', () => {
   });
 
   it('does not activate hidden vector content or fetch unopened history', async () => {
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
     await screen.findByRole('heading', { name: '当前任务' });
     expect(screen.getByTestId('vector-processing-panel')).toHaveAttribute('data-active', 'false');
     expect(api.listEagleProcessingJobs).not.toHaveBeenCalled();
@@ -71,7 +71,7 @@ describe('EagleProcessingPage', () => {
   });
 
   it('shows worker, queue metrics and background schedule', async () => {
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
     expect(await screen.findByText('在线')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '当前任务' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '当前队列' })).not.toBeInTheDocument();
@@ -81,14 +81,14 @@ describe('EagleProcessingPage', () => {
   });
 
   it('confirms before retrying all failed jobs', async () => {
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
     await screen.findByRole('heading', { name: '当前任务' });
     fireEvent.click(screen.getByRole('button', { name: '重试全部失败' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText(/将把当前所有失败的处理任务重新排队/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: '确认重试' }));
     await waitFor(() =>
-      expect(api.retryAllFailedEagleProcessingJobs).toHaveBeenCalledWith('token'),
+      expect(api.retryAllFailedEagleProcessingJobs).toHaveBeenCalledWith(),
     );
   });
 
@@ -104,7 +104,7 @@ describe('EagleProcessingPage', () => {
   });
 
   it('groups user-facing outcomes separately from operational task views', async () => {
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
 
     await screen.findByText('在线');
     const navigation = screen.getByRole('navigation', { name: '素材处理功能' });
@@ -154,7 +154,7 @@ describe('EagleProcessingPage', () => {
 
   it('keeps API errors distinct from an empty queue', async () => {
     vi.mocked(api.fetchEagleProcessingSummary).mockRejectedValueOnce(new Error('后端暂不可用'));
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
     expect(await screen.findByRole('alert')).toHaveTextContent('后端暂不可用');
     fireEvent.click(screen.getByRole('button', { name: '重试加载' }));
     await waitFor(() => expect(api.fetchEagleProcessingSummary).toHaveBeenCalledTimes(2));
@@ -182,7 +182,7 @@ describe('EagleProcessingPage', () => {
       ],
       nextCursor: null,
     });
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
 
     await screen.findByText('在线');
     fireEvent.click(screen.getByRole('button', { name: '处理记录' }));
@@ -202,7 +202,7 @@ describe('EagleProcessingPage', () => {
         percentage: 110,
       },
     });
-    render(<EagleProcessingPage accessToken="token" />);
+    render(<EagleProcessingPage />);
 
     await screen.findByText('在线');
     fireEvent.click(screen.getByRole('button', { name: '颜色筛选' }));

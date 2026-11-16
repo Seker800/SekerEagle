@@ -54,20 +54,20 @@ const operations = {
       priority: 1,
     }),
   send: (mode: LibraryMode) =>
-    createEagleApi(mode).sendEagleAssets('', { assetIds: ['asset'], operationId: 'operation' }),
-  location: (mode: LibraryMode) => createEagleApi(mode).getEagleAssetLocation('', 'asset'),
+    createEagleApi(mode).sendEagleAssets({ assetIds: ['asset'], operationId: 'operation' }),
+  location: (mode: LibraryMode) => createEagleApi(mode).getEagleAssetLocation('asset'),
   list: (mode: LibraryMode) =>
-    createEagleApi(mode).listEagleAssets('', { limit: 20, search: 'cat' }),
+    createEagleApi(mode).listEagleAssets({ limit: 20, search: 'cat' }),
   tags: (mode: LibraryMode) =>
-    createEagleApi(mode).replaceEagleAssetManualTags('', 'asset', ['tag']),
-  trash: (mode: LibraryMode) => createEagleApi(mode).batchTrashEagleAssets('', ['asset']),
-  restore: (mode: LibraryMode) => createEagleApi(mode).batchRestoreEagleAssets('', ['asset']),
+    createEagleApi(mode).replaceEagleAssetManualTags('asset', ['tag']),
+  trash: (mode: LibraryMode) => createEagleApi(mode).batchTrashEagleAssets(['asset']),
+  restore: (mode: LibraryMode) => createEagleApi(mode).batchRestoreEagleAssets(['asset']),
   filters: (mode: LibraryMode) =>
-    createEagleApi(mode).countEagleAssets('', { version: 2, conditions: [] }),
+    createEagleApi(mode).countEagleAssets({ version: 2, conditions: [] }),
   reviewCounts: (mode: LibraryMode) => createEagleVectorApi(mode).fetchEagleReviewSummary(),
   vectors: (mode: LibraryMode) => createEagleVectorApi(mode).fetchEagleVectorSummary(),
   processing: (mode: LibraryMode) =>
-    createEagleProcessingAdminApi(mode).fetchEagleProcessingSummary(''),
+    createEagleProcessingAdminApi(mode).fetchEagleProcessingSummary(),
   privacy: (mode: LibraryMode) => createEaglePrivacyApi(mode).getEaglePrivacySettings(),
   visibility: (mode: LibraryMode) => createPrivacyVisibilityApi(mode).getPrivacyVisibility(),
 };
@@ -104,9 +104,7 @@ it.each(['MATERIAL', 'PHOTO'] as const)(
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(Response.json({ message: 'stop after declaration' }, { status: 400 }));
     await expect(
-      createEagleApi(mode).uploadEagleAsset(
-        '',
-        new File(['png'], 'edited.png', { type: 'image/png' }),
+      createEagleApi(mode).uploadEagleAsset(new File(['png'], 'edited.png', { type: 'image/png' }),
         vi.fn(),
         {
           duplicatePolicy: 'CREATE_COPY',

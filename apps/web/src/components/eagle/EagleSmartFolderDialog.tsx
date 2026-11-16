@@ -21,7 +21,6 @@ import styles from './EagleSmartFolderDialog.module.css';
 interface EagleSmartFolderDialogProps {
   fieldOptions?: EagleFilterOptions;
   fieldOptionsAction?: ReactNode;
-  accessToken?: string;
   initialQuery: EagleFilterQuery;
   initialName?: string;
   mode?: 'create' | 'edit';
@@ -45,7 +44,6 @@ function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
 export function EagleSmartFolderDialog({
   fieldOptions,
   fieldOptionsAction,
-  accessToken = '',
   initialQuery,
   initialName = '',
   mode = 'create',
@@ -72,7 +70,7 @@ export function EagleSmartFolderDialog({
   const deferredQuery = useDebouncedValue(query, 250);
   // Preview media belongs only to this dialog/privacy session, never the shared query cache.
   const previewQuery = useMutation({
-    mutationFn: (input: EagleFilterQuery) => countEagleAssets(accessToken, input),
+    mutationFn: (input: EagleFilterQuery) => countEagleAssets(input),
     retry: false,
     gcTime: 0,
   });
@@ -83,7 +81,7 @@ export function EagleSmartFolderDialog({
   const hasActiveDeferredCondition = countActiveEagleFilterRules(deferredQuery) > 0;
   const countQuery = useQuery({
     queryKey: ['eagle', ownerId, libraryMode, 'smart-folder-preview', deferredQuery],
-    queryFn: () => countEagleAssets(accessToken, deferredQuery),
+    queryFn: () => countEagleAssets(deferredQuery),
     enabled: hasActiveDeferredCondition && !semantic,
     staleTime: 10000,
   });

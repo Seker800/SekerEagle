@@ -7,7 +7,6 @@ import type { createEagleQueryKeys } from './eagle-query-keys';
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 
 export function useEagleReferenceData(
-  accessToken: string,
   queryKeys: EagleQueryKeys,
   options: { enabled?: boolean },
 ) {
@@ -17,13 +16,13 @@ export function useEagleReferenceData(
 
   const manualTagsQuery = useQuery({
     queryKey: queryKeys.manualTags,
-    queryFn: () => listEagleManualTags(accessToken),
+    queryFn: () => listEagleManualTags(),
     staleTime: 60_000,
     enabled: options.enabled,
   });
   const manualTagGroupsQuery = useQuery({
     queryKey: queryKeys.manualTagGroups,
-    queryFn: () => listEagleManualTagGroups(accessToken),
+    queryFn: () => listEagleManualTagGroups(),
     staleTime: 60_000,
     enabled: options.enabled,
   });
@@ -39,7 +38,7 @@ export function useEagleReferenceData(
   );
   const smartFoldersQuery = useQuery({
     queryKey: queryKeys.smartFolders,
-    queryFn: () => listEagleSmartFolders(accessToken),
+    queryFn: () => listEagleSmartFolders(),
     staleTime: 60_000,
     enabled: options.enabled,
     refetchInterval: progressInterval,

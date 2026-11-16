@@ -276,7 +276,6 @@ function renderPage(
       <MemoryRouter>
         <LibraryWorkspaceProvider ownerId={currentOwnerId} libraryMode="MATERIAL">
           <SekerEaglePage
-            accessToken="token"
             modeSwitcher={modeSwitcher}
             ownerId={currentOwnerId}
             canManageProcessing={canManageProcessing}
@@ -533,7 +532,7 @@ describe('SekerEaglePage', () => {
         await vi.advanceTimersByTimeAsync(1);
       });
       expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
-      const last = JSON.stringify(listEagleAssetsMock.mock.calls.at(-1)?.[1]);
+      const last = JSON.stringify(listEagleAssetsMock.mock.calls.at(-1)?.[0]);
       for (const format of ['webp', 'png', 'jpeg']) expect(last).toContain(format);
     } finally {
       view.unmount();
@@ -565,7 +564,7 @@ describe('SekerEaglePage', () => {
   it('offers an immediate escape from an empty filtered result', async () => {
     renderPage();
     await screen.findByRole('button', { name: /Owl Reference/ });
-    listEagleAssetsMock.mockImplementation(async (_token, input: { search?: string }) => ({
+    listEagleAssetsMock.mockImplementation(async (input: { search?: string }) => ({
       items: input.search ? [] : [asset],
       nextCursor: null,
     }));
@@ -587,7 +586,7 @@ describe('SekerEaglePage', () => {
       target: { value: '北京' },
     });
     await waitFor(() =>
-      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[0]).toMatchObject({ search: '北京' }),
     );
     expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '素材瀑布流' })).toHaveAttribute('aria-busy', 'true');
@@ -606,7 +605,7 @@ describe('SekerEaglePage', () => {
       target: { value: '北京' },
     });
     await waitFor(() =>
-      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[0]).toMatchObject({ search: '北京' }),
     );
     fireEvent.click(screen.getByRole('button', { name: '标签' }));
     fireEvent.click(
@@ -627,7 +626,7 @@ describe('SekerEaglePage', () => {
       target: { value: '北京' },
     });
     await waitFor(() =>
-      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[0]).toMatchObject({ search: '北京' }),
     );
     view.rerender(<></>);
     testWorkspaceMode.value = 'PHOTO';
@@ -656,7 +655,7 @@ describe('SekerEaglePage', () => {
       target: { value: '北京' },
     });
     await waitFor(() =>
-      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[0]).toMatchObject({ search: '北京' }),
     );
     expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument();
   });
@@ -757,7 +756,7 @@ describe('SekerEaglePage', () => {
   it('loads newer neighbors after locating into the middle without discarding the current page', async () => {
     const newer = { ...asset, id: 'newer-asset', displayName: 'Newer neighbor' };
     getEagleAssetLocationMock.mockResolvedValue({ assetId: asset.id, cursor: 'middle' });
-    listEagleAssetsMock.mockImplementation((_token, filters) =>
+    listEagleAssetsMock.mockImplementation((filters) =>
       Promise.resolve(
         filters.cursor === 'newer'
           ? { items: [newer], nextCursor: 'back', previousCursor: null }
@@ -776,9 +775,7 @@ describe('SekerEaglePage', () => {
     fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
     fireEvent.click(await screen.findByRole('button', { name: '定位到时间线' }));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenCalledWith(
-        'token',
-        expect.objectContaining({ cursor: 'newer' }),
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(expect.objectContaining({ cursor: 'newer' }),
         expect.anything(),
       ),
     );
@@ -791,9 +788,7 @@ describe('SekerEaglePage', () => {
     renderPage();
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'owl' } });
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({ search: 'owl' }),
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'owl' }),
         expect.anything(),
       ),
     );
@@ -805,14 +800,12 @@ describe('SekerEaglePage', () => {
     ).toBeTruthy();
     fireEvent.click(locate);
     await waitFor(() =>
-      expect(getEagleAssetLocationMock).toHaveBeenCalledWith('', asset.id, expect.any(AbortSignal)),
+      expect(getEagleAssetLocationMock).toHaveBeenCalledWith(asset.id, expect.any(AbortSignal)),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('searchbox')).toHaveValue('');
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({
           cursor: 'nearby-cursor',
           search: undefined,
           rules: undefined,
@@ -896,7 +889,6 @@ describe('SekerEaglePage', () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <SekerEaglePage
-            accessToken="token"
             ownerId="owner-test"
             accountView={<div data-testid="embedded-account-view">账号信息</div>}
           />
@@ -988,7 +980,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(formatFilter).getByRole('checkbox', { name: 'PNG' }));
 
     await waitFor(() => {
-      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[0] as {
         rules?: { conditions: Array<{ rules: Array<{ field: string; value: string }> }> };
       };
       expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
@@ -1022,7 +1014,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(filterPanel).getByRole('checkbox', { name: /人工标签 01/ }));
 
     await waitFor(() => {
-      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[0] as {
         rules?: { conditions: Array<{ rules: Array<{ field: string; value: string[] }> }> };
       };
       expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
@@ -1043,7 +1035,7 @@ describe('SekerEaglePage', () => {
     );
 
     await waitFor(() => {
-      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[0] as {
         rules?: { conditions: Array<{ rules: Array<{ field: string; value: string }> }> };
       };
       expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
@@ -1069,7 +1061,7 @@ describe('SekerEaglePage', () => {
     fireEvent.blur(screen.getByRole('textbox', { name: '素材来源链接' }));
 
     await waitFor(() => {
-      expect(updateEagleAssetMock).toHaveBeenCalledWith('token', 'asset-1', {
+      expect(updateEagleAssetMock).toHaveBeenCalledWith('asset-1', {
         displayName: 'Night Owl',
         description: '用于夜景灵感板',
         sourceUrl: 'https://example.com/owl',
@@ -1112,7 +1104,7 @@ describe('SekerEaglePage', () => {
     });
 
     await waitFor(() => {
-      expect(updateEagleAssetMock).toHaveBeenLastCalledWith('token', 'asset-1', {
+      expect(updateEagleAssetMock).toHaveBeenLastCalledWith('asset-1', {
         displayName: 'Night Owl',
         description: '用于夜景灵感板',
         rowVersion: 2,
@@ -1196,7 +1188,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '5 星' }));
 
     await waitFor(() => {
-      expect(updateEagleAssetMock).toHaveBeenLastCalledWith('token', 'asset-1', {
+      expect(updateEagleAssetMock).toHaveBeenLastCalledWith('asset-1', {
         rating: 5,
         rowVersion: 2,
       });
@@ -1299,7 +1291,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '4 星' }));
 
     await waitFor(() => {
-      expect(updateEagleAssetMock).toHaveBeenCalledWith('token', 'asset-1', {
+      expect(updateEagleAssetMock).toHaveBeenCalledWith('asset-1', {
         rating: 4,
         rowVersion: 1,
       });
@@ -1325,7 +1317,7 @@ describe('SekerEaglePage', () => {
       rowVersion: 4,
     };
     listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
-    getEagleAssetMock.mockImplementation(async (_token: string, assetId: string) =>
+    getEagleAssetMock.mockImplementation(async (assetId: string) =>
       assetId === secondAsset.id ? secondAsset : asset,
     );
     renderPage();
@@ -1352,7 +1344,7 @@ describe('SekerEaglePage', () => {
     fireEvent.blur(description);
 
     await waitFor(() => {
-      expect(batchUpdateEagleAssetsMock).toHaveBeenCalledWith('token', {
+      expect(batchUpdateEagleAssetsMock).toHaveBeenCalledWith({
         assets: [
           { assetId: 'asset-1', rowVersion: 1 },
           { assetId: 'asset-2', rowVersion: 4 },
@@ -1364,7 +1356,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.click(within(inspector).getByRole('button', { name: '5 星' }));
     await waitFor(() => {
-      expect(batchUpdateEagleAssetsMock).toHaveBeenLastCalledWith('token', {
+      expect(batchUpdateEagleAssetsMock).toHaveBeenLastCalledWith({
         assets: [
           { assetId: 'asset-1', rowVersion: 3 },
           { assetId: 'asset-2', rowVersion: 6 },
@@ -1407,7 +1399,7 @@ describe('SekerEaglePage', () => {
       }),
     );
     await waitFor(() => {
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1', 'asset-2'],
         addTagIds: [],
         removeTagIds: ['11111111-1111-4111-8111-111111111111'],
@@ -1419,7 +1411,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(picker).getByRole('checkbox', { name: '灵感' }));
     fireEvent.click(within(picker).getByRole('button', { name: '添加 1 个标签到 2 项素材' }));
     await waitFor(() => {
-      expect(batchChangeEagleManualTagsMock).toHaveBeenLastCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenLastCalledWith({
         assetIds: ['asset-1', 'asset-2'],
         addTagIds: ['11111111-1111-4111-8111-111111111111'],
         removeTagIds: [],
@@ -1473,7 +1465,7 @@ describe('SekerEaglePage', () => {
     confirm.mockReturnValue(true);
     fireEvent.click(within(inspector).getByRole('button', { name: '清空所有人工标签' }));
     await waitFor(() => {
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1', 'asset-2'],
         addTagIds: [],
         removeTagIds: [],
@@ -1493,7 +1485,7 @@ describe('SekerEaglePage', () => {
     const filterPanel = screen.getByRole('dialog', { name: '标签筛选' });
     expect(within(filterPanel).getByRole('checkbox', { name: /灵感/ })).toBeChecked();
     await waitFor(() => {
-      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[0] as {
         rules?: { conditions: Array<{ rules: Array<{ field: string; value: string[] }> }> };
       };
       expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
@@ -1529,7 +1521,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(picker).getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
 
     await waitFor(() =>
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1'],
         addTagIds: ['11111111-1111-4111-8111-111111111111'],
         removeTagIds: [],
@@ -1584,7 +1576,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(picker).getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
 
     await waitFor(() => {
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1'],
         addTagIds: ['11111111-1111-4111-8111-111111111111'],
         removeTagIds: [],
@@ -1644,7 +1636,7 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(card, { clientX: 180, clientY: 120 });
     fireEvent.click(screen.getByRole('menuitem', { name: '收藏' }));
     await waitFor(() =>
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1'],
         addTagIds: ['favorite-tag'],
         removeTagIds: [],
@@ -1659,7 +1651,7 @@ describe('SekerEaglePage', () => {
     await waitFor(() => expect(button).not.toBeDisabled());
     fireEvent.click(button);
     await waitFor(() =>
-      expect(batchChangeEagleManualTagsMock).toHaveBeenLastCalledWith('', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenLastCalledWith({
         assetIds: ['asset-1'],
         addTagIds: [],
         removeTagIds: ['favorite-tag'],
@@ -1792,7 +1784,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(picker).getByRole('button', { name: '从 2 项素材删除 1 个标签' }));
 
     await waitFor(() =>
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1', 'asset-2'],
         addTagIds: [],
         removeTagIds: ['11111111-1111-4111-8111-111111111111'],
@@ -1812,7 +1804,6 @@ describe('SekerEaglePage', () => {
       // Even an older caller supplying the former callback cannot restore the shortcut.
       const props = {
         ownerId: 'owner-test',
-        accessToken: 'token',
         privacyVisibility: {
           enabled,
           durationHours: 3,
@@ -1872,13 +1863,13 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(picker).getByRole('button', { name: '创建标签 新标签' }));
 
     await waitFor(() =>
-      expect(createEagleManualTagMock).toHaveBeenCalledWith('token', { name: '新标签' }),
+      expect(createEagleManualTagMock).toHaveBeenCalledWith({ name: '新标签' }),
     );
     fireEvent.click(
       await within(picker).findByRole('button', { name: '添加 1 个标签到 1 项素材' }),
     );
     await waitFor(() =>
-      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith({
         assetIds: ['asset-1'],
         addTagIds: ['33333333-3333-4333-8333-333333333333'],
         removeTagIds: [],
@@ -1945,9 +1936,7 @@ describe('SekerEaglePage', () => {
 
     const inspector = await screen.findByRole('complementary', { name: '素材详情' });
     await waitFor(() =>
-      expect(getEagleTrashAssetMock).toHaveBeenCalledWith(
-        'token',
-        'asset-1',
+      expect(getEagleTrashAssetMock).toHaveBeenCalledWith('asset-1',
         expect.any(AbortSignal),
       ),
     );
@@ -2413,7 +2402,7 @@ describe('SekerEaglePage', () => {
     retryEagleAssetProcessingMock.mockClear();
     fireEvent.click(within(dialog).getByRole('button', { name: '重试处理' }));
     await waitFor(() =>
-      expect(retryEagleAssetProcessingMock).toHaveBeenCalledWith('token', asset.id),
+      expect(retryEagleAssetProcessingMock).toHaveBeenCalledWith(asset.id),
     );
   });
 
@@ -2434,7 +2423,7 @@ describe('SekerEaglePage', () => {
     });
 
     await waitFor(() => {
-      expect(uploadEagleAssetMock).toHaveBeenCalledWith('token', file, expect.any(Function), {
+      expect(uploadEagleAssetMock).toHaveBeenCalledWith(file, expect.any(Function), {
         signal: expect.any(AbortSignal),
         waitForFinalization: false,
       });
@@ -2588,14 +2577,12 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
 
     await waitFor(() => {
-      expect(createEagleSmartFolderMock).toHaveBeenCalledWith(
-        'token',
-        expect.objectContaining({
+      expect(createEagleSmartFolderMock).toHaveBeenCalledWith(expect.objectContaining({
           name: '猫头鹰精选',
           query: expect.objectContaining({ version: 2 }),
         }),
       );
-      expect(createEagleSmartFolderMock.mock.calls[0]?.[1]).not.toHaveProperty('limit');
+      expect(createEagleSmartFolderMock.mock.calls[0]?.[0]).not.toHaveProperty('limit');
     });
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '新建智能文件夹' })).not.toBeInTheDocument();
@@ -2697,9 +2684,7 @@ describe('SekerEaglePage', () => {
     expect(await screen.findByText('2026年4月')).toBeVisible();
     fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenCalledWith(
-        'token',
-        expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
         expect.anything(),
       ),
     );
@@ -2732,7 +2717,7 @@ describe('SekerEaglePage', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
     await waitFor(() =>
-      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[0]).toMatchObject({
         smartFolderId: 'scene-folder',
       }),
     );
@@ -2820,9 +2805,7 @@ describe('SekerEaglePage', () => {
     const parent = await screen.findByRole('treeitem', { name: '项目集合' });
     fireEvent.click(within(parent).getByRole('button'));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({
           smartFolderId: 'folder-1',
           rules: undefined,
         }),
@@ -2832,7 +2815,7 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(parent, { clientX: 20, clientY: 30 });
     fireEvent.click(screen.getByRole('menuitemradio', { name: '设为绿色' }));
     await waitFor(() =>
-      expect(updateEagleSmartFolderMock).toHaveBeenCalledWith('token', 'folder-1', {
+      expect(updateEagleSmartFolderMock).toHaveBeenCalledWith('folder-1', {
         color: '#65ad78',
         rowVersion: 1,
       }),
@@ -2843,7 +2826,7 @@ describe('SekerEaglePage', () => {
     fireEvent.dragOver(parent);
     fireEvent.drop(parent);
     await waitFor(() =>
-      expect(moveEagleSmartFolderMock).toHaveBeenCalledWith('token', 'folder-2', {
+      expect(moveEagleSmartFolderMock).toHaveBeenCalledWith('folder-2', {
         parentId: 'folder-1',
         position: 0,
         rowVersion: 1,
@@ -2870,9 +2853,7 @@ describe('SekerEaglePage', () => {
     const folder = await screen.findByRole('treeitem', { name: '项目集合' });
     fireEvent.click(within(folder).getByRole('button'));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({ smartFolderId: 'folder-1' }),
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({ smartFolderId: 'folder-1' }),
         expect.any(AbortSignal),
       ),
     );
@@ -2883,7 +2864,7 @@ describe('SekerEaglePage', () => {
       expect.stringContaining('删除智能文件夹“项目集合”？素材本身不会被删除。'),
     );
     await waitFor(() =>
-      expect(deleteEagleSmartFolderMock).toHaveBeenCalledWith('token', 'folder-1'),
+      expect(deleteEagleSmartFolderMock).toHaveBeenCalledWith('folder-1'),
     );
     await waitFor(() =>
       expect(screen.getByRole('treeitem', { name: '项目集合' })).toHaveAttribute(
@@ -2900,7 +2881,7 @@ describe('SekerEaglePage', () => {
     async (mode) => {
       testWorkspaceMode.value = mode;
       const outsideFolder = { ...asset, id: 'outside-folder', displayName: 'Outside Folder' };
-      listEagleAssetsMock.mockImplementation(async (_token, filters) => ({
+      listEagleAssetsMock.mockImplementation(async (filters) => ({
         items: filters.smartFolderId ? [asset] : [asset, outsideFolder],
         nextCursor: null,
       }));
@@ -2922,7 +2903,7 @@ describe('SekerEaglePage', () => {
       await waitFor(() =>
         expect(screen.queryByRole('button', { name: /Outside Folder/ })).not.toBeInTheDocument(),
       );
-      expect(listEagleAssetsMock.mock.lastCall?.[1]).toEqual(
+      expect(listEagleAssetsMock.mock.lastCall?.[0]).toEqual(
         expect.objectContaining({ smartFolderId: 'folder-1' }),
       );
 
@@ -3025,7 +3006,7 @@ describe('SekerEaglePage', () => {
         }),
       );
       await waitFor(() =>
-        expect(JSON.stringify(listEagleAssetsMock.mock.lastCall?.[1])).toContain('webp'),
+        expect(JSON.stringify(listEagleAssetsMock.mock.lastCall?.[0])).toContain('webp'),
       );
       const before = listEagleAssetsMock.mock.calls.length;
       vi.useFakeTimers();
@@ -3040,7 +3021,7 @@ describe('SekerEaglePage', () => {
           fireEvent.click(screen.getByRole('button', { name: '即时集合' }));
         });
         expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
-        expect(listEagleAssetsMock.mock.lastCall?.[1]).toMatchObject({
+        expect(listEagleAssetsMock.mock.lastCall?.[0]).toMatchObject({
           smartFolderId: 'immediate-folder',
           search: '北京',
           rules: undefined,
@@ -3242,9 +3223,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '保存智能文件夹' }));
 
     await waitFor(() =>
-      expect(updateEagleSmartFolderMock).toHaveBeenCalledWith(
-        'token',
-        'folder-1',
+      expect(updateEagleSmartFolderMock).toHaveBeenCalledWith('folder-1',
         expect.objectContaining({
           name: '新名称',
           query: expect.objectContaining({ version: 2 }),
@@ -3252,7 +3231,7 @@ describe('SekerEaglePage', () => {
         }),
       ),
     );
-    const update = updateEagleSmartFolderMock.mock.calls[0]?.[2] as {
+    const update = updateEagleSmartFolderMock.mock.calls[0]?.[1] as {
       query: { conditions: Array<{ rules: Array<{ field: string; value: string }> }> };
     };
     expect(update.query.conditions[0]?.rules).toEqual(
@@ -3296,7 +3275,7 @@ describe('SekerEaglePage', () => {
 
     await waitFor(() => expect(updateEagleSmartFolderMock).toHaveBeenCalled());
     await waitFor(() => {
-      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[0] as Record<string, unknown>;
       expect(filters.smartFolderId).toBe('folder-parent');
       expect(filters.rules).toBeUndefined();
     });
@@ -3320,9 +3299,7 @@ describe('SekerEaglePage', () => {
     });
 
     expect(await screen.findByRole('button', { name: /Second Owl/ })).toBeInTheDocument();
-    expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-      'token',
-      expect.objectContaining({ cursor: 'cursor-2' }),
+    expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'cursor-2' }),
       expect.any(AbortSignal),
     );
   });
@@ -3345,9 +3322,7 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(listEagleAssetUpdatesMock).toHaveBeenCalledWith(
-        'token',
-        ['asset-1'],
+      expect(listEagleAssetUpdatesMock).toHaveBeenCalledWith(['asset-1'],
         expect.any(AbortSignal),
       );
     });
@@ -3371,7 +3346,7 @@ describe('SekerEaglePage', () => {
     await act(async () => {
       expect(await opened.onSave(output)).toEqual({ id: 'edited-copy', name: 'edited.png' });
     });
-    expect(uploadEagleAssetMock).toHaveBeenCalledWith('token', output, expect.any(Function), {
+    expect(uploadEagleAssetMock).toHaveBeenCalledWith(output, expect.any(Function), {
       duplicatePolicy: 'CREATE_COPY',
       copySourceAssetId: asset.id,
       copySourceRowVersion: asset.rowVersion,

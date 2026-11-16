@@ -41,7 +41,7 @@ it('pins every file of a drag batch to the mode at drop time, including queued f
       </LibraryWorkspaceProvider>
     </QueryClientProvider>
   );
-  const view = renderHook(() => useEagleUploadController('', ['eagle', 'owner', mode, 'assets']), {
+  const view = renderHook(() => useEagleUploadController(['eagle', 'owner', mode, 'assets']), {
     wrapper,
   });
   const files = ['a', 'b', 'c', 'd', 'e'].map(
@@ -79,7 +79,7 @@ it('skips a file found by the pre-upload check without calling the upload API', 
     </QueryClientProvider>
   );
   const view = renderHook(
-    () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
+    () => useEagleUploadController(['eagle', 'owner', 'MATERIAL', 'assets']),
     { wrapper },
   );
   await act(async () => {
@@ -102,7 +102,7 @@ it('keeps independent file progress, all failures and a dismissible success summ
   material.mockReset();
   let finish!: () => void;
   material.mockImplementation(
-    (_token: string, file: File, progress: (value: { percent: number }) => void) => {
+    (file: File, progress: (value: { percent: number }) => void) => {
       progress({ percent: file.name === 'a.jpg' ? 25 : 75 });
       return new Promise<Record<string, never>>((done) => {
         if (file.name === 'a.jpg') finish = () => done({});
@@ -111,7 +111,7 @@ it('keeps independent file progress, all failures and a dismissible success summ
     },
   );
   const view = renderHook(
-    () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
+    () => useEagleUploadController(['eagle', 'owner', 'MATERIAL', 'assets']),
     { wrapper },
   );
   let pending!: Promise<void>;
@@ -173,7 +173,7 @@ it('revoking the browser session aborts active uploads and never starts the queu
     </QueryClientProvider>
   );
   const view = renderHook(
-    () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
+    () => useEagleUploadController(['eagle', 'owner', 'MATERIAL', 'assets']),
     { wrapper },
   );
   let pending!: Promise<void>;
@@ -191,7 +191,7 @@ it('revoking the browser session aborts active uploads and never starts the queu
     await pending;
   });
   expect(material).toHaveBeenCalledTimes(4);
-  expect(material.mock.calls[0]![3].signal.aborted).toBe(true);
+  expect(material.mock.calls[0]![2].signal.aborted).toBe(true);
   vi.unstubAllGlobals();
 });
 
@@ -210,7 +210,7 @@ it('remounting a mode subscribes to its original upload queue', async () => {
       </LibraryWorkspaceProvider>
     </QueryClientProvider>
   );
-  const hook = () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']);
+  const hook = () => useEagleUploadController(['eagle', 'owner', 'MATERIAL', 'assets']);
   const first = renderHook(hook, { wrapper });
   let pending!: Promise<void>;
   await act(async () => {

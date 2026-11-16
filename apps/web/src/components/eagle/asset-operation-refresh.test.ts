@@ -454,7 +454,7 @@ it('retains a second destination intent arriving while the first window is in fl
 
 it('updates metadata cards across loaded pages once without replaying pages or changing their cursors', async () => {
   const f = fixture();
-  const facts = vi.fn(async (_token: string, ids: readonly string[]) =>
+  const facts = vi.fn(async (ids: readonly string[]) =>
     ids.map((id) => ({
       id,
       displayName: 'updated',
@@ -486,7 +486,7 @@ it('updates metadata cards across loaded pages once without replaying pages or c
   try {
     await f.refresher.reconcile('PHOTO', completed);
     expect(facts).toHaveBeenCalledOnce();
-    expect(facts.mock.calls[0][1]).toContain('a-11');
+    expect(facts.mock.calls[0][0]).toContain('a-11');
     expect(f.cache.store.get('a-11')?.displayName).toBe('updated');
     expect(f.client.getQueryData(f.key)).toEqual(f.data);
     expect(f.queryFn).not.toHaveBeenCalled();
@@ -539,7 +539,7 @@ it('merges newly rendered copies from one destination window while retaining eve
   const { createEagleApi } = await import('../../lib/eagle-api');
   vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
     ...createEagleApi('PHOTO'),
-    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+    listEagleAssetFacts: vi.fn(async (ids: string[]) =>
       ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
     ),
   } as never);
@@ -622,7 +622,7 @@ it('refreshes photo-stack topology on every loaded page while retaining IDs and 
   const { createEagleApi } = await import('../../lib/eagle-api');
   vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
     ...createEagleApi('PHOTO'),
-    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+    listEagleAssetFacts: vi.fn(async (ids: string[]) =>
       ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
     ),
   } as never);
@@ -671,7 +671,7 @@ it('evicts newly inaccessible details opened outside loaded list pages and clear
   });
   const stop = observer.subscribe(() => {});
   const { createEagleApi } = await import('../../lib/eagle-api');
-  const facts = vi.fn(async (_token, ids: string[]) =>
+  const facts = vi.fn(async (ids: string[]) =>
     ids
       .filter((id) => id !== 'outside')
       .map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
@@ -697,7 +697,7 @@ it('evicts newly inaccessible details opened outside loaded list pages and clear
   });
   try {
     await f.refresher.reconcile('PHOTO', completed);
-    expect(facts.mock.calls[0][1]).toContain('outside');
+    expect(facts.mock.calls[0][0]).toContain('outside');
     expect(observer.getCurrentResult().data).toBeNull();
     expect(f.client.getQueryData(key)).toBeUndefined();
   } finally {
@@ -734,7 +734,7 @@ it('clears scoped photo privacy projections before a denied refetch while preser
   const { createEagleApi } = await import('../../lib/eagle-api');
   vi.spyOn(await import('../../lib/eagle-api'), 'createEagleApi').mockReturnValue({
     ...createEagleApi('PHOTO'),
-    listEagleAssetFacts: vi.fn(async (_token, ids: string[]) =>
+    listEagleAssetFacts: vi.fn(async (ids: string[]) =>
       ids.map((id) => ({ id, updatedAt: '2026-11-02', rowVersion: 2, mediaRevision: 1 })),
     ),
   } as never);

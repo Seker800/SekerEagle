@@ -95,11 +95,9 @@ export interface PhotoEditSession {
 }
 
 export function useEaglePhotoEditing({
-  accessToken,
   ownerId,
   scopeKey,
 }: {
-  accessToken: string;
   ownerId: string;
   scopeKey: string;
 }) {
@@ -181,7 +179,7 @@ export function useEaglePhotoEditing({
       },
       onSave: async (file, recipe, onProgress) => {
         assertScope();
-        const result = await upload(accessToken, file, (value) => onProgress?.(value.percent), {
+        const result = await upload(file, (value) => onProgress?.(value.percent), {
           duplicatePolicy: 'CREATE_COPY',
           copySourceAssetId: sourceId,
           copySourceRowVersion: sourceVersion,
@@ -260,7 +258,7 @@ export function useEaglePhotoEditing({
       api.listEagleWatermarkPresets().catch(() => ({ presets: {} })),
     ]);
     const base = stored?.baseAssetId
-      ? await api.getEagleAsset(accessToken, stored.baseAssetId)
+      ? await api.getEagleAsset(stored.baseAssetId)
       : asset;
     assertScope();
     if (stored && base.mediaRevision !== stored.baseMediaRevision)

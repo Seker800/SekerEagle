@@ -14,7 +14,7 @@ describe('listEagleProcessingJobs', () => {
       }),
     );
 
-    await listEagleProcessingJobs('', { status: 'PENDING', lane: 'BACKGROUND' });
+    await listEagleProcessingJobs({ status: 'PENDING', lane: 'BACKGROUND' });
 
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       '/api/admin/eagle-processing/jobs?status=PENDING&lane=BACKGROUND',

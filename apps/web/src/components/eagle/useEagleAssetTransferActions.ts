@@ -26,12 +26,11 @@ export function useEagleAssetTransferActions(options: {
   libraryMode: LibraryMode;
   libraryView: EagleLibraryView;
   ownerId: string;
-  accessToken: string;
   assets: EagleAssetListItem[];
   selectedAssetIds: string[];
   contextMenuAsset: EagleAssetListItem | null | undefined;
   workspaceCache: ReturnType<typeof getEagleWorkspaceCache>;
-  getEagleAsset: (token: string, id: string) => Promise<EagleAssetListItem>;
+  getEagleAsset: (id: string) => Promise<EagleAssetListItem>;
   selectAsset: (assetId: string, gesture: EagleSelectionGesture) => void;
   setAssetContextMenu: (position: TransferContextMenu | null) => void;
   importFiles: (files: File[]) => void | Promise<void>;
@@ -40,7 +39,6 @@ export function useEagleAssetTransferActions(options: {
     libraryMode,
     libraryView,
     ownerId,
-    accessToken,
     assets,
     selectedAssetIds,
     contextMenuAsset,
@@ -129,7 +127,7 @@ export function useEagleAssetTransferActions(options: {
     const originals = new Map(selected.map((asset) => [asset.id, asset]));
     for (const asset of selected) {
       const id = asset.livePhotoMotion?.assetId;
-      if (id && !originals.has(id)) originals.set(id, await getEagleAsset(accessToken, id));
+      if (id && !originals.has(id)) originals.set(id, await getEagleAsset(id));
     }
     if (epoch !== workspaceCache.downloads.epoch)
       throw new DOMException('Scope revoked', 'AbortError');

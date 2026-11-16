@@ -1087,7 +1087,7 @@ function DuplicateComparison({
       preview?.mediaRevision,
     ],
     enabled: !!preview,
-    queryFn: ({ signal }) => workspaceApi.getEaglePyramidDescriptor('', preview!.id, signal),
+    queryFn: ({ signal }) => workspaceApi.getEaglePyramidDescriptor(preview!.id, signal),
     retry: false,
   });
   const previewUrl = preview ? getEaglePreviewContentUrl(preview) : null;

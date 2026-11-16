@@ -124,7 +124,7 @@ function StackThumbnail({
   }, [visible, viewport]);
   const query = useQuery({
     queryKey: stackAssetKey(ownerId, id),
-    queryFn: () => api.getEagleAsset('', id),
+    queryFn: () => api.getEagleAsset(id),
     enabled: id !== cover.id && (visible || selected),
   });
   const asset = id === cover.id ? cover : query.data;

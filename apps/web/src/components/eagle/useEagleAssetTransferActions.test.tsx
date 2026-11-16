@@ -14,7 +14,6 @@ function makeOptions(overrides: Record<string, unknown> = {}) {
     libraryMode: 'MATERIAL' as const,
     libraryView: 'ACTIVE' as const,
     ownerId: 'owner-a',
-    accessToken: '',
     assets: [asset],
     selectedAssetIds: [],
     contextMenuAsset: null,

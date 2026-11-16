@@ -31,13 +31,13 @@ export function PhotoStackLightbox({
   const currentId = stack.assetIds[index] ?? stack.cover.id;
   const asset = useQuery({
     queryKey: stackAssetKey(ownerId, currentId),
-    queryFn: () => api.getEagleAsset('', currentId),
+    queryFn: () => api.getEagleAsset(currentId),
     enabled: currentId !== stack.cover.id,
   });
   const displayed = currentId === stack.cover.id ? stack.cover : asset.data;
   const pyramid = useQuery({
     queryKey: createEagleQueryKeys(ownerId, 'PHOTO').pyramid(currentId),
-    queryFn: ({ signal }) => api.getEaglePyramidDescriptor('', currentId, signal),
+    queryFn: ({ signal }) => api.getEaglePyramidDescriptor(currentId, signal),
     enabled: !!displayed && needsEagleImagePyramid(displayed.width, displayed.height),
     retry: false,
   });

@@ -41,14 +41,14 @@ it('favorites a mixed selection and removes only the favorite tag on the second 
   fireEvent.click(screen.getByRole('menuitem', { name: '收藏' }));
   const remove = await screen.findByRole('menuitem', { name: '已收藏' });
   await waitFor(() => expect(remove).not.toBeDisabled());
-  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith('', {
+  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith({
     assetIds: ['one', 'two'],
     addTagIds: ['favorite'],
     removeTagIds: [],
   });
   fireEvent.click(remove);
   await screen.findByRole('menuitem', { name: '收藏' });
-  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith('', {
+  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith({
     assetIds: ['one', 'two'],
     addTagIds: [],
     removeTagIds: ['favorite'],

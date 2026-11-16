@@ -27,7 +27,6 @@ export function getEagleProcessingAssetIds(
 }
 
 export function useEagleProcessingUpdates(input: {
-  accessToken: string;
   assets: EagleAssetListItem[];
   additionalProcessingAssetIds?: string[];
   enabled: boolean;
@@ -59,7 +58,7 @@ export function useEagleProcessingUpdates(input: {
   );
   const updatesQuery = useQuery({
     queryKey: input.updatesQueryKey(processingAssetIds),
-    queryFn: ({ signal }) => listEagleAssetUpdates(input.accessToken, processingAssetIds, signal),
+    queryFn: ({ signal }) => listEagleAssetUpdates(processingAssetIds, signal),
     enabled: input.enabled && visibility === 'visible' && processingAssetIds.length > 0,
     refetchInterval: interval,
     refetchOnWindowFocus: false,

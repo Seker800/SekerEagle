@@ -32,7 +32,7 @@ function useUploads(queue: ReturnType<typeof getEagleWorkspaceCache>['uploads'])
   return useSyncExternalStore(queue.subscribe, queue.snapshot);
 }
 
-export function useEagleUploadController(accessToken: string, assetsQueryKey: QueryKey) {
+export function useEagleUploadController(assetsQueryKey: QueryKey) {
   const {
     api: { uploadEagleAsset, getEagleUploadStatuses, checkEagleUploadContentBatch },
     ownerId,
@@ -49,9 +49,9 @@ export function useEagleUploadController(accessToken: string, assetsQueryKey: Qu
   const dedupe = useMemo(
     () =>
       new UploadDedupeChecker((items, signal) =>
-        checkEagleUploadContentBatch(accessToken, items, signal),
+        checkEagleUploadContentBatch(items, signal),
       ),
-    [accessToken, checkEagleUploadContentBatch],
+    [checkEagleUploadContentBatch],
   );
   const scope = hashKey(assetsQueryKey);
   const uploads = allItems.filter((item) => item.scope === scope);
@@ -110,7 +110,7 @@ export function useEagleUploadController(accessToken: string, assetsQueryKey: Qu
           progress({ percent: 0, phase: 'checking' });
           const { sha256, exists } = await dedupe.check(file, signal);
           if (exists) return { duplicate: true };
-          const result = await uploadEagleAsset(accessToken, file, progress, {
+          const result = await uploadEagleAsset(file, progress, {
             signal,
             waitForFinalization: false,
             ...(sha256 ? { contentSha256: sha256 } : {}),
@@ -118,7 +118,7 @@ export function useEagleUploadController(accessToken: string, assetsQueryKey: Qu
           if (result.duplicate) return { duplicate: true };
           return result.assetId ? undefined : { sessionId: result.uploadSessionId };
         },
-        (sessionIds, signal) => getEagleUploadStatuses(accessToken, sessionIds, signal),
+        (sessionIds, signal) => getEagleUploadStatuses(sessionIds, signal),
       ),
     uploads,
     summary,

@@ -73,7 +73,7 @@ export function EagleBatchPhotoEdit({
       const key = JSON.stringify(input);
       const operationId = operationIds.current.get(key) ?? crypto.randomUUID();
       operationIds.current.set(key, operationId);
-      await api.batchEditEaglePhotos('', { operationId, ...input });
+      await api.batchEditEaglePhotos({ operationId, ...input });
       if (alive.current) onClose();
     } catch (reason) {
       if (alive.current) setError(reason instanceof Error ? reason.message : t('操作失败'));

@@ -73,13 +73,11 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     );
   }
 
-  function fetchEagleProcessingSummary(_token: string) {
+  function fetchEagleProcessingSummary() {
     return request<EagleProcessingSummary>('summary');
   }
 
-  function listEagleProcessingJobs(
-    _token: string,
-    filters: {
+  function listEagleProcessingJobs(filters: {
       status?: string;
       lane?: string;
       kind?: string;
@@ -98,7 +96,7 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     }>(queryString ? `jobs?${queryString}` : 'jobs');
   }
 
-  function retryEagleProcessingJob(_token: string, id: string) {
+  function retryEagleProcessingJob(id: string) {
     return request<{
       retried: number;
     }>(`jobs/${encodeURIComponent(id)}/retry`, {
@@ -107,7 +105,7 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     });
   }
 
-  function retryAllFailedEagleProcessingJobs(_token: string) {
+  function retryAllFailedEagleProcessingJobs() {
     return request<
       OperationResponse<{
         retried: number;
@@ -115,7 +113,7 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     >('retry-failed', { method: 'POST', body: '{}' });
   }
 
-  function reconcileEagleProcessingJobs(_token: string) {
+  function reconcileEagleProcessingJobs() {
     return request<
       OperationResponse<{
         scanned: number;
@@ -126,9 +124,7 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     >('reconcile', { method: 'POST', body: '{}' });
   }
 
-  function updateEagleProcessingSettings(
-    _token: string,
-    settings: Pick<EagleProcessingSettings, 'mode' | 'nightStart' | 'nightEnd'>,
+  function updateEagleProcessingSettings(settings: Pick<EagleProcessingSettings, 'mode' | 'nightStart' | 'nightEnd'>,
   ) {
     return request<EagleProcessingSettings>('settings', {
       method: 'PATCH',

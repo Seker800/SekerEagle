@@ -21,13 +21,13 @@ it('adds and removes only the favorite tag through the scoped shared API', async
     batchChangeEagleManualTags: vi.fn().mockResolvedValue({}),
   };
   await toggleViewerFavorite(api, { id: 'photo' } as EagleAssetListItem, false);
-  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith('', {
+  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith({
     assetIds: ['photo'],
     addTagIds: ['favorite'],
     removeTagIds: [],
   });
   await toggleViewerFavorite(api, { id: 'photo' } as EagleAssetListItem, true);
-  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith('', {
+  expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith({
     assetIds: ['photo'],
     addTagIds: [],
     removeTagIds: ['favorite'],
@@ -184,7 +184,7 @@ it('creates the scoped favorite tag and updates the visible favorite state', asy
     'aria-pressed',
     'true',
   );
-  expect(mocks.api.createEagleManualTag).toHaveBeenCalledWith('', { name: '收藏' });
+  expect(mocks.api.createEagleManualTag).toHaveBeenCalledWith({ name: '收藏' });
 });
 it('reports original read failures without sharing an inaccessible file', async () => {
   const share = vi.fn();

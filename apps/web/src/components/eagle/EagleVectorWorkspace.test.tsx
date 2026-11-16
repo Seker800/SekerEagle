@@ -311,7 +311,7 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('refreshes after assigning a replacement tag instead of reusing a pre-write poll', async () => {
-    const manualTags = await eagleApi.listEagleManualTags('');
+    const manualTags = await eagleApi.listEagleManualTags();
     const assign = vi.fn().mockResolvedValue(undefined);
     render(
       <EagleVectorWorkspace

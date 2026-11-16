@@ -173,7 +173,7 @@ export function EagleVectorWorkspace({
     if ((view !== 'TAGS' && view !== 'DISTANCE') || providedManualTags) return;
     let cancelled = false;
     setLoadingManualTags(true);
-    void listEagleManualTags('')
+    void listEagleManualTags()
       .then((results) => {
         if (!cancelled) setLoadedManualTags(results);
       })

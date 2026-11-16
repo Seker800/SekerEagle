@@ -7,11 +7,7 @@ export function useEagleAssetLocation({
   scopeKey,
   onLocated,
 }: {
-  getLocation: (
-    token: string,
-    assetId: string,
-    signal?: AbortSignal,
-  ) => Promise<EagleAssetLocation>;
+  getLocation: (assetId: string, signal?: AbortSignal) => Promise<EagleAssetLocation>;
   scopeKey: string;
   onLocated: () => void;
 }) {
@@ -35,7 +31,7 @@ export function useEagleAssetLocation({
       const controller = new AbortController();
       request.current = controller;
       try {
-        const next = await getLocation('', assetId, controller.signal);
+        const next = await getLocation(assetId, controller.signal);
         if (controller.signal.aborted) return;
         setLocation(next);
         onLocatedRef.current();

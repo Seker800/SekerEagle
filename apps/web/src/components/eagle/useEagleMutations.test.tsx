@@ -48,7 +48,7 @@ it('rating writes through existing view details without creating a ghost short k
   );
   const view = renderHook(
     () =>
-      useEagleMutations('', keys, {
+      useEagleMutations(keys, {
         onMetadataSaved: vi.fn(),
         onBatchTagsApplied: vi.fn(),
         onAssetPrivacyChanged: vi.fn(),
@@ -90,7 +90,7 @@ it('applies rating optimistically to the list store and restores it when the wri
         }),
     ),
   );
-  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+  const view = renderHook(() => useEagleMutations(keys, callbacks), {
     wrapper: makeWrapper(client),
   });
   let pending!: Promise<unknown>;
@@ -129,7 +129,7 @@ it('keeps the optimistic rating visible until the write settles', async () => {
       return json({ ...asset('a', 2), rating: 5 });
     }),
   );
-  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+  const view = renderHook(() => useEagleMutations(keys, callbacks), {
     wrapper: makeWrapper(client),
   });
   let pending!: Promise<unknown>;
@@ -160,7 +160,7 @@ it('does not refetch an unrelated list after a rating write', async () => {
     'fetch',
     vi.fn(async () => json({ ...asset('a', 2), rating: 5 })),
   );
-  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+  const view = renderHook(() => useEagleMutations(keys, callbacks), {
     wrapper: makeWrapper(client),
   });
   await act(async () => {
@@ -184,7 +184,7 @@ it('refetches a rating-filtered list after a rating write', async () => {
     'fetch',
     vi.fn(async () => json({ ...asset('a', 2), rating: 5 })),
   );
-  const view = renderHook(() => useEagleMutations('', keys, callbacks), {
+  const view = renderHook(() => useEagleMutations(keys, callbacks), {
     wrapper: makeWrapper(client),
   });
   await act(async () => {
@@ -242,7 +242,7 @@ it('partial tag failures drain writes, refresh committed results, and retry only
   );
   const view = renderHook(
     () =>
-      useEagleMutations('', keys, {
+      useEagleMutations(keys, {
         onMetadataSaved: vi.fn(),
         onBatchTagsApplied: vi.fn(),
         onAssetPrivacyChanged: vi.fn(),
@@ -317,7 +317,7 @@ it('releases a queued batch tag mutation without waiting for list reads or deskt
   );
   const view = renderHook(
     () =>
-      useEagleMutations('', keys, {
+      useEagleMutations(keys, {
         onMetadataSaved: vi.fn(),
         onBatchTagsApplied: applied,
         onAssetPrivacyChanged: vi.fn(),
@@ -374,7 +374,7 @@ it('chains a rapid metadata edit to its own accepted rating receipt without inve
   );
   const view = renderHook(
     () =>
-      useEagleMutations('', keys, {
+      useEagleMutations(keys, {
         onMetadataSaved: vi.fn(),
         onBatchTagsApplied: vi.fn(),
         onAssetPrivacyChanged: vi.fn(),
@@ -442,7 +442,7 @@ it('deletes a smart folder through the API and reports the removed folder', asyn
   vi.stubGlobal('fetch', fetchMock);
   const onSmartFolderDeleted = vi.fn();
   const view = renderHook(
-    () => useEagleMutations('', keys, { ...callbacks, onSmartFolderDeleted }),
+    () => useEagleMutations(keys, { ...callbacks, onSmartFolderDeleted }),
     { wrapper: makeWrapper(client) },
   );
   await act(async () => {

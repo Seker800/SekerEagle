@@ -42,7 +42,6 @@ interface EagleMutationCallbacks {
 }
 
 export function useEagleMutations(
-  accessToken: string,
   queryKeys: EagleQueryKeys,
   callbacks: EagleMutationCallbacks,
 ) {
@@ -151,7 +150,7 @@ export function useEagleMutations(
       const targets = withLatestVersions(assets);
       if (targets.length === 1) {
         const [target] = targets;
-        const asset = await updateEagleAsset(accessToken, target.assetId, {
+        const asset = await updateEagleAsset(target.assetId, {
           rating,
           rowVersion: target.rowVersion,
           ...predecessorInput(targets),
@@ -162,7 +161,7 @@ export function useEagleMutations(
         }
         return { asset, versions: [{ assetId: asset.id, rowVersion: asset.rowVersion }] };
       }
-      const result = await batchUpdateEagleAssets(accessToken, {
+      const result = await batchUpdateEagleAssets({
         assets: targets,
         rating,
         ...predecessorInput(targets),
@@ -210,7 +209,7 @@ export function useEagleMutations(
       const targets = withLatestVersions(assets);
       if (targets.length === 1) {
         const [target] = targets;
-        const asset = await updateEagleAsset(accessToken, target.assetId, {
+        const asset = await updateEagleAsset(target.assetId, {
           ...input,
           rowVersion: target.rowVersion,
           ...predecessorInput(targets),
@@ -224,7 +223,7 @@ export function useEagleMutations(
           versions: [{ assetId: asset.id, rowVersion: asset.rowVersion }],
         };
       }
-      const result = await batchUpdateEagleAssets(accessToken, {
+      const result = await batchUpdateEagleAssets({
         assets: targets,
         ...input,
         ...predecessorInput(targets),
@@ -250,7 +249,7 @@ export function useEagleMutations(
   });
   const replaceTagsMutation = useMutation({
     mutationFn: ({ assetId, tagIds }: { assetId: string; tagIds: string[] }) =>
-      replaceEagleAssetManualTags(accessToken, assetId, tagIds),
+      replaceEagleAssetManualTags(assetId, tagIds),
     onSuccess: async (result, { assetId }) => {
       if (isAcceptedOperation(result)) return;
       const { privacyChangedAssetCount } = result;
@@ -259,15 +258,15 @@ export function useEagleMutations(
     },
   });
   const createTagMutation = useMutation({
-    mutationFn: (name: string) => createEagleManualTag(accessToken, { name }),
+    mutationFn: (name: string) => createEagleManualTag({ name }),
     onSuccess: () => invalidate(queryKeys.manualTags),
   });
   const createBatchTagMutation = useMutation({
-    mutationFn: (name: string) => createEagleManualTag(accessToken, { name }),
+    mutationFn: (name: string) => createEagleManualTag({ name }),
     onSuccess: () => invalidate(queryKeys.manualTags),
   });
   const createTagGroupMutation = useMutation({
-    mutationFn: (name: string) => createEagleManualTagGroup(accessToken, { name }),
+    mutationFn: (name: string) => createEagleManualTagGroup({ name }),
     onSuccess: () => invalidate(queryKeys.manualTagGroups),
   });
   const updateTagsMutation = useMutation({
@@ -284,7 +283,7 @@ export function useEagleMutations(
       };
     }) =>
       mapWithConcurrency(tags, 4, (tag) =>
-        updateEagleManualTag(accessToken, tag.id, { ...changes, rowVersion: tag.rowVersion }),
+        updateEagleManualTag(tag.id, { ...changes, rowVersion: tag.rowVersion }),
       ),
     onSettled: (results) =>
       results?.some(isAcceptedOperation)
@@ -298,7 +297,7 @@ export function useEagleMutations(
   });
   const deleteTagsMutation = useMutation({
     mutationFn: (tags: EagleManualTag[]) =>
-      mapWithConcurrency(tags, 4, (tag) => deleteEagleManualTag(accessToken, tag.id)),
+      mapWithConcurrency(tags, 4, (tag) => deleteEagleManualTag(tag.id)),
     onSettled: (results) =>
       results?.some(isAcceptedOperation)
         ? undefined
@@ -317,14 +316,14 @@ export function useEagleMutations(
       group: EagleManualTagGroup;
       changes: { name?: string; color?: string | null };
     }) =>
-      updateEagleManualTagGroup(accessToken, group.id, {
+      updateEagleManualTagGroup(group.id, {
         ...changes,
         rowVersion: group.rowVersion,
       }),
     onSuccess: () => invalidate(queryKeys.manualTagGroups),
   });
   const deleteTagGroupMutation = useMutation({
-    mutationFn: (group: EagleManualTagGroup) => deleteEagleManualTagGroup(accessToken, group.id),
+    mutationFn: (group: EagleManualTagGroup) => deleteEagleManualTagGroup(group.id),
     onSuccess: (result) =>
       isAcceptedOperation(result)
         ? undefined
@@ -342,7 +341,7 @@ export function useEagleMutations(
       removeTagIds?: string[];
       clearAll?: boolean;
     }) =>
-      batchChangeEagleManualTags(accessToken, {
+      batchChangeEagleManualTags({
         assetIds,
         addTagIds,
         removeTagIds,
@@ -370,7 +369,7 @@ export function useEagleMutations(
   });
   const smartFolderMutation = useMutation({
     mutationFn: (input: { name: string; query: EagleFilterQuery }) =>
-      createEagleSmartFolder(accessToken, input),
+      createEagleSmartFolder(input),
     onSuccess: async () => {
       callbacks.onSmartFolderCreated();
       await invalidate(queryKeys.smartFolders);
@@ -378,14 +377,14 @@ export function useEagleMutations(
   });
   const updateSmartFolderMutation = useMutation({
     mutationFn: ({ folder, changes }: { folder: EagleSmartFolder; changes: SmartFolderChanges }) =>
-      updateEagleSmartFolder(accessToken, folder.id, { ...changes, rowVersion: folder.rowVersion }),
+      updateEagleSmartFolder(folder.id, { ...changes, rowVersion: folder.rowVersion }),
     onSuccess: async (_, { folder, changes }) => {
       callbacks.onSmartFolderUpdated(folder, changes);
       await invalidate(queryKeys.smartFolders, queryKeys.assets);
     },
   });
   const deleteSmartFolderMutation = useMutation({
-    mutationFn: (folder: EagleSmartFolder) => deleteEagleSmartFolder(accessToken, folder.id),
+    mutationFn: (folder: EagleSmartFolder) => deleteEagleSmartFolder(folder.id),
     onSuccess: async (_result, folder) => {
       callbacks.onSmartFolderDeleted(folder);
       await invalidate(queryKeys.smartFolders);
@@ -398,7 +397,7 @@ export function useEagleMutations(
     }: {
       folder: EagleSmartFolder;
       input: MoveEagleSmartFolderInput;
-    }) => moveEagleSmartFolder(accessToken, folder.id, input),
+    }) => moveEagleSmartFolder(folder.id, input),
     onMutate: async ({ folder, input }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.smartFolders });
       const previousFolders = queryClient.getQueryData<EagleSmartFolder[]>(queryKeys.smartFolders);

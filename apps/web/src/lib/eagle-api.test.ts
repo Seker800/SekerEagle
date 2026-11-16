@@ -11,7 +11,7 @@ describe('listEagleAssetUpdates', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(Response.json({ message: 'stop at initiation' }, { status: 400 }));
     await expect(
-      uploadEagleAsset('', new File(['png'], 'photo-edited.png', { type: 'image/png' }), vi.fn(), {
+      uploadEagleAsset(new File(['png'], 'photo-edited.png', { type: 'image/png' }), vi.fn(), {
         duplicatePolicy: 'CREATE_COPY',
       }),
     ).rejects.toThrow('stop at initiation');
@@ -39,7 +39,7 @@ describe('listEagleAssetUpdates', () => {
     );
     const assetId = '11111111-1111-4111-8111-111111111111';
 
-    await listEagleAssetUpdates('token', [assetId]);
+    await listEagleAssetUpdates([assetId]);
 
     const [requestUrl, request] = fetchMock.mock.calls[0] ?? [];
     expect(requestUrl).toBe('/api/eagle/asset-updates');
@@ -67,10 +67,10 @@ describe('listEagleAssetUpdates', () => {
       .mockImplementation(async () => Response.json({ id: 'copy', isPrivate: true }));
     const file = new File(['png'], 'edited.png', { type: 'image/png' });
     const options = { duplicatePolicy: 'CREATE_COPY' as const, retry: true };
-    await expect(uploadEagleAsset('', file, vi.fn(), options)).rejects.toThrow(
+    await expect(uploadEagleAsset(file, vi.fn(), options)).rejects.toThrow(
       'temporary detail failure',
     );
-    const result = await uploadEagleAsset('', file, vi.fn(), options);
+    const result = await uploadEagleAsset(file, vi.fn(), options);
     expect(result.asset.id).toBe('copy');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/eagle/uploads',
@@ -107,9 +107,7 @@ describe('listEagleAssetUpdates', () => {
       )
       .mockImplementation(async () => Response.json({ id: 'asset-1' }));
 
-    const result = await uploadEagleAsset(
-      '',
-      new File(['image'], 'image.png', { type: 'image/png' }),
+    const result = await uploadEagleAsset(new File(['image'], 'image.png', { type: 'image/png' }),
       progress,
     );
 
@@ -136,7 +134,7 @@ describe('listEagleAssetUpdates', () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     await expect(
-      uploadEagleAsset('', new File(['image'], 'image.png', { type: 'image/png' }), vi.fn()),
+      uploadEagleAsset(new File(['image'], 'image.png', { type: 'image/png' }), vi.fn()),
     ).rejects.toThrow('stop after upload');
 
     expect(fetchMock.mock.calls[2]).toEqual([
@@ -176,9 +174,7 @@ it('session revocation cancels an object PUT and prevents completion or cleanup 
     throw new Error(`unexpected request: ${url}`);
   });
   try {
-    const upload = uploadEagleAsset(
-      '',
-      new File(['image'], 'test.png', { type: 'image/png' }),
+    const upload = uploadEagleAsset(new File(['image'], 'test.png', { type: 'image/png' }),
       vi.fn(),
     );
     const rejected = expect(upload).rejects.toMatchObject({ name: 'AbortError' });
@@ -268,9 +264,7 @@ describe('upload throughput', () => {
       throw new Error(`unexpected request: ${url}`);
     });
 
-    const result = await uploadEagleAsset(
-      '',
-      new File([new Uint8Array(12)], 'multi.jpg', { type: 'image/jpeg' }),
+    const result = await uploadEagleAsset(new File([new Uint8Array(12)], 'multi.jpg', { type: 'image/jpeg' }),
       vi.fn(),
       { waitForFinalization: false },
     );
@@ -300,9 +294,7 @@ describe('upload throughput', () => {
       throw new Error(`unexpected request: ${url}`);
     });
 
-    const result = await uploadEagleAsset(
-      '',
-      new File(['image'], 'fast.jpg', { type: 'image/jpeg' }),
+    const result = await uploadEagleAsset(new File(['image'], 'fast.jpg', { type: 'image/jpeg' }),
       vi.fn(),
       { waitForFinalization: false },
     );
@@ -329,7 +321,7 @@ describe('upload throughput', () => {
       },
     ];
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ items }));
-    const result = await createEagleApi('PHOTO').getEagleUploadStatuses('', [
+    const result = await createEagleApi('PHOTO').getEagleUploadStatuses([
       'session-a',
       'session-b',
     ]);

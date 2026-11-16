@@ -242,31 +242,25 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     };
   }
 
-  function getEagleMediaCapabilities(_accessToken: string) {
+  function getEagleMediaCapabilities() {
     return api<EagleMediaCapabilities>('/eagle/media-capabilities');
   }
 
-  async function listEagleAssets(
-    _token: string,
-    filters: EagleAssetFilters = {},
+  async function listEagleAssets(filters: EagleAssetFilters = {},
     signal?: AbortSignal,
   ): Promise<EagleAssetPage> {
     const result = await api<EagleAssetPage>(`/eagle/assets?${assetQuery(filters)}`, { signal });
     return { ...result, items: result.items.map(normalizeAsset) };
   }
 
-  async function listEagleTrash(
-    _token: string,
-    filters: EagleAssetFilters = {},
+  async function listEagleTrash(filters: EagleAssetFilters = {},
     signal?: AbortSignal,
   ): Promise<EagleAssetPage> {
     const result = await api<EagleAssetPage>(`/eagle/trash?${assetQuery(filters)}`, { signal });
     return { ...result, items: result.items.map(normalizeAsset) };
   }
 
-  async function sendEagleAssets(
-    _token: string,
-    input: { assetIds: string[]; operationId: string },
+  async function sendEagleAssets(input: { assetIds: string[]; operationId: string },
   ) {
     return api<AssetOperationSummary>(
       '/eagle/assets/batch/send',
@@ -278,25 +272,23 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  async function getEagleAssetLocation(_token: string, id: string, signal?: AbortSignal) {
+  async function getEagleAssetLocation(id: string, signal?: AbortSignal) {
     return api<EagleAssetLocation>(`/eagle/assets/${encodeURIComponent(id)}/location`, { signal });
   }
 
-  async function getEagleAsset(_token: string, id: string, signal?: AbortSignal) {
+  async function getEagleAsset(id: string, signal?: AbortSignal) {
     return normalizeAsset(
       await api<EagleAsset>(`/eagle/assets/${encodeURIComponent(id)}`, { signal }),
     );
   }
 
-  async function getEagleTrashAsset(_token: string, id: string, signal?: AbortSignal) {
+  async function getEagleTrashAsset(id: string, signal?: AbortSignal) {
     return normalizeAsset(
       await api<EagleAsset>(`/eagle/trash/${encodeURIComponent(id)}`, { signal }),
     );
   }
 
-  async function listEagleAssetFacts(
-    _token: string,
-    assetIds: readonly string[],
+  async function listEagleAssetFacts(assetIds: readonly string[],
     signal?: AbortSignal,
   ) {
     const result = await api<EagleAssetListItem[]>('/eagle/assets/facts', {
@@ -307,9 +299,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return result.map(normalizeAsset);
   }
 
-  async function listEagleAssetUpdates(
-    _token: string,
-    ids: readonly string[],
+  async function listEagleAssetUpdates(ids: readonly string[],
     signal?: AbortSignal,
   ) {
     if (!ids.length) return [];
@@ -341,13 +331,11 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     };
   }
 
-  async function listEagleManualTags(_token: string) {
+  async function listEagleManualTags() {
     return (await api<Array<Parameters<typeof normalizeTag>[0]>>('/eagle/tags')).map(normalizeTag);
   }
 
-  async function createEagleManualTag(
-    _token: string,
-    input: {
+  async function createEagleManualTag(input: {
       name: string;
       color?: string | null;
     },
@@ -360,9 +348,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  async function updateEagleManualTag(
-    _token: string,
-    id: string,
+  async function updateEagleManualTag(id: string,
     input: Partial<Pick<EagleManualTag, 'name' | 'color' | 'groupId' | 'isStarred'>> & {
       rowVersion: number;
     },
@@ -376,17 +362,15 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
     return isAcceptedOperation(result) ? result : normalizeTag(result);
   }
-  async function deleteEagleManualTag(_token: string, id: string) {
+  async function deleteEagleManualTag(id: string) {
     return api<OperationResponse<{ deletedId: string }>>(`/eagle/tags/${id}`, { method: 'DELETE' });
   }
 
-  async function listEagleManualTagGroups(_token: string) {
+  async function listEagleManualTagGroups() {
     return api<EagleManualTagGroup[]>('/eagle/tag-groups');
   }
 
-  async function createEagleManualTagGroup(
-    _token: string,
-    input: {
+  async function createEagleManualTagGroup(input: {
       name: string;
       color?: string | null;
       description?: string | null;
@@ -398,9 +382,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function updateEagleManualTagGroup(
-    _token: string,
-    id: string,
+  async function updateEagleManualTagGroup(id: string,
     input: {
       name?: string;
       color?: string | null;
@@ -414,13 +396,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function deleteEagleManualTagGroup(_token: string, id: string) {
+  async function deleteEagleManualTagGroup(id: string) {
     return api<OperationResponse<{ deletedId: string }>>(`/eagle/tag-groups/${id}`, {
       method: 'DELETE',
     });
   }
 
-  async function listEagleSmartFolders(_token: string) {
+  async function listEagleSmartFolders() {
     const rows = await api<
       Array<
         Omit<EagleSmartFolder, 'queryJson'> & {
@@ -436,9 +418,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }));
   }
 
-  async function createEagleSmartFolder(
-    _token: string,
-    input: {
+  async function createEagleSmartFolder(input: {
       name: string;
       query: EagleFilterQuery;
     },
@@ -449,9 +429,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function updateEagleSmartFolder(
-    _token: string,
-    id: string,
+  async function updateEagleSmartFolder(id: string,
     input: {
       name?: string;
       color?: string | null;
@@ -465,7 +443,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function countEagleAssets(_token: string, query: EagleFilterQuery) {
+  async function countEagleAssets(query: EagleFilterQuery) {
     return api<{
       count: number | null;
       semanticStatus?: 'READY' | 'UNAVAILABLE';
@@ -476,9 +454,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function moveEagleSmartFolder(
-    _token: string,
-    id: string,
+  async function moveEagleSmartFolder(id: string,
     input: {
       parentId: string | null;
       position: number;
@@ -491,11 +467,11 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function deleteEagleSmartFolder(_token: string, id: string) {
+  async function deleteEagleSmartFolder(id: string) {
     return api<{ id: string }>(`/eagle/smart-folders/${id}`, { method: 'DELETE' });
   }
 
-  async function replaceEagleAssetManualTags(_token: string, id: string, tagIds: string[]) {
+  async function replaceEagleAssetManualTags(id: string, tagIds: string[]) {
     return api<
       OperationResponse<{
         affectedAssetCount: number;
@@ -504,9 +480,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     >(`/eagle/assets/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds }) });
   }
 
-  async function batchChangeEagleManualTags(
-    _token: string,
-    input: {
+  async function batchChangeEagleManualTags(input: {
       assetIds: string[];
       addTagIds: string[];
       removeTagIds: string[];
@@ -528,7 +502,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  async function batchTrashEagleAssets(_token: string, assetIds: string[]) {
+  async function batchTrashEagleAssets(assetIds: string[]) {
     return api<{
       affectedAssetCount: number;
     }>('/eagle/assets/batch/trash', {
@@ -537,7 +511,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function batchRestoreEagleAssets(_token: string, assetIds: string[]) {
+  async function batchRestoreEagleAssets(assetIds: string[]) {
     return api<{
       affectedAssetCount: number;
     }>('/eagle/assets/batch/restore', {
@@ -546,15 +520,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function emptyEagleTrash(_token: string) {
+  async function emptyEagleTrash() {
     return api<{
       affectedAssetCount: number;
     }>('/eagle/trash/empty', { method: 'POST', body: '{}' });
   }
 
-  async function updateEagleAsset(
-    _token: string,
-    id: string,
+  async function updateEagleAsset(id: string,
     input: EagleAssetChanges & {
       rowVersion: number;
       predecessorOperationIds?: string[];
@@ -567,9 +539,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return isAcceptedOperation(result) ? result : normalizeAsset(result);
   }
 
-  async function batchUpdateEagleAssets(
-    _token: string,
-    input: EagleAssetChanges & {
+  async function batchUpdateEagleAssets(input: EagleAssetChanges & {
       assets: EagleAssetVersion[];
       predecessorOperationIds?: string[];
     },
@@ -601,9 +571,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  function batchEditEaglePhotos(
-    _token: string,
-    input: {
+  function batchEditEaglePhotos(input: {
       operationId?: string;
       assetIds: string[];
       recipe: PhotoEditRecipe;
@@ -647,9 +615,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }
   }
 
-  function getEagleUploadStatuses(
-    _token: string,
-    uploadSessionIds: string[],
+  function getEagleUploadStatuses(uploadSessionIds: string[],
     signal?: AbortSignal,
   ): Promise<EagleUploadSessionStatus[]> {
     return api<{ items: EagleUploadSessionStatus[] }>('/eagle/uploads/status-batch', {
@@ -659,16 +625,14 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }).then((result) => result.items);
   }
 
-  function retryEagleAssetProcessing(_token: string, assetId: string) {
+  function retryEagleAssetProcessing(assetId: string) {
     return api<{ retried: number }>(
       `/eagle/assets/${encodeURIComponent(assetId)}/processing-retry`,
       { method: 'POST', body: '{}' },
     );
   }
 
-  function checkEagleUploadContentBatch(
-    _token: string,
-    items: EagleUploadContentCheckItem[],
+  function checkEagleUploadContentBatch(items: EagleUploadContentCheckItem[],
     signal?: AbortSignal,
   ): Promise<boolean[]> {
     return api<{ exists: boolean[] }>('/eagle/uploads/check-content-batch', {
@@ -688,21 +652,15 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     waitForFinalization?: boolean;
     contentSha256?: string;
   };
-  function uploadEagleAsset(
-    _token: string,
-    file: File,
+  function uploadEagleAsset(file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options: UploadOptions & { waitForFinalization: false },
   ): Promise<EagleUploadAccepted>;
-  function uploadEagleAsset(
-    _token: string,
-    file: File,
+  function uploadEagleAsset(file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options?: UploadOptions,
   ): Promise<{ duplicate: boolean; asset: EagleAsset }>;
-  async function uploadEagleAsset(
-    _token: string,
-    file: File,
+  async function uploadEagleAsset(file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options?: UploadOptions,
   ): Promise<EagleUploadAccepted | { duplicate: boolean; asset: EagleAsset }> {
@@ -724,7 +682,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         uploadSessionId: retained.sessionId,
         assetId: retained.completedAssetId,
         duplicate: false,
-        asset: await getEagleAsset('', retained.completedAssetId, signal),
+        asset: await getEagleAsset(retained.completedAssetId, signal),
       };
     const session = retained
       ? { id: retained.sessionId, partSize: retained.partSize }
@@ -830,7 +788,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       if (retained) retained.completedAssetId = settled.assetId;
       return {
         duplicate: settled.duplicate,
-        asset: await getEagleAsset('', settled.assetId, signal),
+        asset: await getEagleAsset(settled.assetId, signal),
       };
     } catch (error) {
       // Once the server accepted the finalization job it owns the object; never abort that session here.
@@ -846,7 +804,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return libraryApiPath(`/api/eagle/assets/${encodeURIComponent(id)}/original`, mode);
   }
 
-  function getEaglePyramidDescriptor(_token: string, assetId: string, signal?: AbortSignal) {
+  function getEaglePyramidDescriptor(assetId: string, signal?: AbortSignal) {
     return api<EaglePyramidDescriptor>(`/eagle/assets/${encodeURIComponent(assetId)}/pyramid`, {
       signal,
     });

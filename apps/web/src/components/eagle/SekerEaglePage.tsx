@@ -186,7 +186,6 @@ const EagleBatchPhotoEdit = lazy(() =>
 
 interface SekerEaglePageProps {
   modeSwitcher?: ReactNode;
-  accessToken?: string;
   ownerId: string;
   canManageProcessing?: boolean;
   accountView?: ReactNode;
@@ -258,7 +257,6 @@ function formatBytes(value: number): string {
 }
 export function SekerEaglePage({
   modeSwitcher,
-  accessToken: providedAccessToken,
   ownerId,
   canManageProcessing = false,
   accountView,
@@ -282,7 +280,6 @@ export function SekerEaglePage({
     },
   } = useLibraryWorkspace();
 
-  const accessToken = providedAccessToken ?? '';
   const queryClient = useQueryClient();
   const privateVisible = privacyVisibility?.enabled === true;
   const queryKeys = useMemo(() => {
@@ -376,7 +373,6 @@ export function SekerEaglePage({
   const imagePreview = useEagleAssetPreview(editingScope);
   const previewAssetId = imagePreview.assetId;
   const photoEditing = useEaglePhotoEditing({
-    accessToken,
     ownerId,
     scopeKey: editingScope,
   });
@@ -395,7 +391,7 @@ export function SekerEaglePage({
     retryAllFailed,
     dismissUploads,
     retryUpload,
-  } = useEagleUploadController(accessToken, queryKeys.assets);
+  } = useEagleUploadController(queryKeys.assets);
   const assetLocator = useEagleAssetLocation({
     getLocation: getEagleAssetLocation,
     scopeKey: `${storeScope}:${privateVisible}:${privacyRulesRevision}`,
@@ -496,8 +492,8 @@ export function SekerEaglePage({
       const pageFilters = { ...assetFilters, cursor: pageParam || undefined };
       const page =
         libraryView === 'TRASH'
-          ? await listEagleTrash(accessToken, pageFilters, signal)
-          : await listEagleAssets(accessToken, pageFilters, signal);
+          ? await listEagleTrash(pageFilters, signal)
+          : await listEagleAssets(pageFilters, signal);
       signal.throwIfAborted();
       workspaceCache.operations.observePage(
         page.items,
@@ -533,9 +529,7 @@ export function SekerEaglePage({
     previousSelectionScope.current = selectionScope;
     clearAssetSelection({ preserveMode: true });
   }, [selectionScope]);
-  const { manualTagsQuery, manualTagGroupsQuery, smartFoldersQuery } = useEagleReferenceData(
-    accessToken,
-    queryKeys,
+  const { manualTagsQuery, manualTagGroupsQuery, smartFoldersQuery } = useEagleReferenceData(queryKeys,
     { enabled: true },
   );
   useAssetOperationProgress(privateVisible, true);
@@ -591,7 +585,7 @@ export function SekerEaglePage({
     updateSmartFolderMutation,
     deleteSmartFolderMutation,
     moveSmartFolderMutation,
-  } = useEagleMutations(accessToken, queryKeys, {
+  } = useEagleMutations(queryKeys, {
     onMetadataSaved: metadataDraft.saved,
     onBatchTagsApplied: () => setTagPicker(null),
     onAssetPrivacyChanged: resetAssetPrivacyState,
@@ -612,7 +606,7 @@ export function SekerEaglePage({
     },
   });
   const retryAssetProcessingMutation = useMutation({
-    mutationFn: (assetId: string) => retryEagleAssetProcessing(accessToken, assetId),
+    mutationFn: (assetId: string) => retryEagleAssetProcessing(assetId),
     onSuccess: async () => {
       setFailedAssetAction(null);
       setFailedAssetError(null);
@@ -656,9 +650,7 @@ export function SekerEaglePage({
     privacyRulesRevision,
     resetAssetPrivacyState,
   ]);
-  const libraryCount = useEagleLibraryCount(
-    accessToken,
-    queryKeys,
+  const libraryCount = useEagleLibraryCount(queryKeys,
     privateVisible,
     privacyRulesRevision,
     true,
@@ -753,8 +745,8 @@ export function SekerEaglePage({
     queryKey: queryKeys.assetDetail(selectedAssetId, libraryView),
     queryFn: ({ signal }) =>
       libraryView === 'TRASH'
-        ? getEagleTrashAsset(accessToken, selectedAssetId!, signal)
-        : getEagleAsset(accessToken, selectedAssetId!, signal),
+        ? getEagleTrashAsset(selectedAssetId!, signal)
+        : getEagleAsset(selectedAssetId!, signal),
     enabled: selectedAssetId !== null && isInspectorVisible,
   });
   const selectedAsset: EagleAsset | null = selectedAssetQuery.data ?? null;
@@ -929,7 +921,6 @@ export function SekerEaglePage({
   useEagleProcessingUpdates({
     additionalProcessingAssetIds: processingStackMembers,
     assetsQueryKey: queryKeys.assets,
-    accessToken,
     assets: observedAssets,
     enabled: isAssetView,
     assetStore,
@@ -948,7 +939,7 @@ export function SekerEaglePage({
   const previewPyramidQuery = useQuery({
     queryKey: queryKeys.pyramid(imagePreview.previewImage?.assetId ?? 'none'),
     queryFn: ({ signal }) =>
-      getEaglePyramidDescriptor(accessToken, imagePreview.previewImage!.assetId!, signal),
+      getEaglePyramidDescriptor(imagePreview.previewImage!.assetId!, signal),
     enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
@@ -1114,7 +1105,6 @@ export function SekerEaglePage({
     libraryMode,
     libraryView,
     ownerId,
-    accessToken,
     assets,
     selectedAssetIds,
     contextMenuAsset,
@@ -2952,7 +2942,6 @@ export function SekerEaglePage({
           key={editingScope}
           fieldOptions={photoFieldOptions.fieldOptions}
           fieldOptionsAction={peopleOptionsAction}
-          accessToken={accessToken}
           initialQuery={
             editingSmartFolder
               ? toEagleFilterQuery(editingSmartFolder.queryJson)

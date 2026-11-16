@@ -120,7 +120,7 @@ describe('shared library photo editing', () => {
   it('freezes source version and upload scope, and isolates list refresh failure from save completion', async () => {
     const { wrapper, client } = harness();
     const view = renderHook(
-      ({ scopeKey }) => useEaglePhotoEditing({ accessToken: 'token', ownerId: 'owner', scopeKey }),
+      ({ scopeKey }) => useEaglePhotoEditing({ ownerId: 'owner', scopeKey }),
       { wrapper, initialProps: { scopeKey: 'owner:MATERIAL' } },
     );
     const source = { ...asset };
@@ -132,7 +132,7 @@ describe('shared library photo editing', () => {
     const refresh = vi.spyOn(client, 'invalidateQueries').mockRejectedValue(new Error('offline'));
     const file = new File(['png'], 'output.png');
     expect(await session.onSave(file)).toEqual({ id: 'copy', name: 'output.png' });
-    expect(state.upload).toHaveBeenCalledWith('token', file, expect.any(Function), {
+    expect(state.upload).toHaveBeenCalledWith(file, expect.any(Function), {
       duplicatePolicy: 'CREATE_COPY',
       copySourceAssetId: 'source',
       copySourceRowVersion: 7,
@@ -157,7 +157,7 @@ describe('shared library photo editing', () => {
   it('edits HEIF from the bounded preview and renders the full-size PNG on the server', async () => {
     const { wrapper } = harness();
     const { result } = renderHook(
-      () => useEaglePhotoEditing({ accessToken: 'token', ownerId: 'owner', scopeKey: 'scope' }),
+      () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
       { wrapper },
     );
     act(() => result.current.open(heif));
@@ -181,7 +181,7 @@ describe('shared library photo editing', () => {
     state.mode = 'PHOTO';
     const { wrapper } = harness();
     const { result } = renderHook(
-      () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'photo' }),
+      () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'photo' }),
       { wrapper },
     );
     act(() => result.current.open(asset));
@@ -198,7 +198,6 @@ describe('shared library photo editing', () => {
     const { result } = renderHook(
       () =>
         useEaglePhotoEditing({
-          accessToken: 'token',
           ownerId: 'owner',
           scopeKey: 'owner:MATERIAL',
         }),
@@ -229,7 +228,6 @@ describe('shared library photo editing', () => {
     const { result } = renderHook(
       () =>
         useEaglePhotoEditing({
-          accessToken: 'token',
           ownerId: 'owner',
           scopeKey: 'owner:MATERIAL',
         }),
@@ -247,7 +245,7 @@ describe('shared library photo editing', () => {
   it('propagates upload failure for the existing editor retry flow', async () => {
     const { wrapper } = harness();
     const { result } = renderHook(
-      () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+      () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
       { wrapper },
     );
     act(() => result.current.open(asset));
@@ -283,7 +281,7 @@ describe('shared library photo editing', () => {
   it('locates the saved asset before dismissing the editor', async () => {
     const { wrapper } = harness();
     const { result } = renderHook(
-      () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+      () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
       { wrapper },
     );
     act(() => result.current.open(asset));
@@ -309,7 +307,7 @@ describe('shared library photo editing', () => {
 it('restores a saved copy from its original, autosaves there, and freezes its recipe on export', async () => {
   const { wrapper } = harness();
   const { result } = renderHook(
-    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+    () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
     { wrapper },
   );
   const edits = { ...DEFAULT_PHOTO_EDITS, exposure: 25 };
@@ -329,9 +327,7 @@ it('restores a saved copy from its original, autosaves there, and freezes its re
   expect(state.saveRecipe).toHaveBeenCalledWith('source', 2, { version: 1, edits });
   state.upload.mockResolvedValue({ asset: { id: 'second-copy' } });
   await restored.onSave(new File(['png'], 'edited.png'), { version: 1, edits });
-  expect(state.upload).toHaveBeenLastCalledWith(
-    '',
-    expect.any(File),
+  expect(state.upload).toHaveBeenLastCalledWith(expect.any(File),
     expect.any(Function),
     expect.objectContaining({
       copySourceAssetId: 'source',
@@ -347,7 +343,7 @@ it('restores a saved copy from its original, autosaves there, and freezes its re
 it('applies a saved cross-photo preset to a new session and saves presets', async () => {
   const { wrapper } = harness();
   const { result } = renderHook(
-    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+    () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
     { wrapper },
   );
   const preset = {
@@ -377,7 +373,7 @@ it('applies a saved cross-photo preset to a new session and saves presets', asyn
 it('does not let a revoked scope save a draft or export after switching mode', async () => {
   const { wrapper } = harness();
   const view = renderHook(
-    ({ scopeKey }) => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey }),
+    ({ scopeKey }) => useEaglePhotoEditing({ ownerId: 'owner', scopeKey }),
     { wrapper, initialProps: { scopeKey: 'old' } },
   );
   act(() => view.result.current.open(asset));
@@ -392,7 +388,7 @@ it('does not let a revoked scope save a draft or export after switching mode', a
 it('freezes a current bounded preview separately from its original export source in either mode', () => {
   const { wrapper } = harness();
   const { result } = renderHook(
-    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+    () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
     { wrapper },
   );
   act(() =>
@@ -423,7 +419,7 @@ it('keeps RAW preview dimensions separate from the bounded developed export dime
   state.mode = 'PHOTO';
   const { wrapper } = harness();
   const { result } = renderHook(
-    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'photo' }),
+    () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'photo' }),
     { wrapper },
   );
   act(() =>
@@ -454,7 +450,7 @@ it('keeps RAW preview dimensions separate from the bounded developed export dime
 it('preserves legacy EXIF reading when a resource has no managed photography metadata', () => {
   const { wrapper } = harness();
   const { result } = renderHook(
-    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+    () => useEaglePhotoEditing({ ownerId: 'owner', scopeKey: 'scope' }),
     { wrapper },
   );
   act(() =>

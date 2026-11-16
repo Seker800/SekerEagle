@@ -27,9 +27,7 @@ function setup() {
   );
   const hook = renderHook(
     ({ owner, privateVisible, revision }) =>
-      useEagleLibraryCount(
-        'token',
-        createEagleQueryKeys(owner, state.mode),
+      useEagleLibraryCount(createEagleQueryKeys(owner, state.mode),
         privateVisible,
         revision,
       ),
@@ -59,7 +57,7 @@ it('does not replace a pending total with the previous mode total or a late resp
 it('refreshes the total on the same invalidation used after import, deletion and restore', async () => {
   const hook = setup();
   await waitFor(() => expect(hook.result.current.data).toBe(1000));
-  expect(state.material).toHaveBeenCalledWith('token', { version: 2, conditions: [] });
+  expect(state.material).toHaveBeenCalledWith({ version: 2, conditions: [] });
   state.material.mockResolvedValue({ count: 1001 });
   await act(async () => {
     await hook.client.invalidateQueries({ queryKey: createEagleQueryKeys('owner').assets });

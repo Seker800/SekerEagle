@@ -46,7 +46,7 @@ export function EagleDuplicatePreview({
       preview?.mediaRevision,
     ],
     enabled: !!preview,
-    queryFn: ({ signal }) => api.getEaglePyramidDescriptor('', preview!.id, signal),
+    queryFn: ({ signal }) => api.getEaglePyramidDescriptor(preview!.id, signal),
     retry: false,
   });
   const url = preview ? getEaglePreviewContentUrl(preview) : null;
