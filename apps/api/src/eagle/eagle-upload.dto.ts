@@ -135,3 +135,28 @@ export class CheckUploadContentBatchResultDto {
   })
   exists!: boolean[];
 }
+
+export class UploadStatusBatchDto {
+  @ApiProperty({ type: [String], format: 'uuid', minItems: 1 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  uploadSessionIds!: string[];
+}
+
+export class UploadSessionStatusDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() status!: string;
+  @ApiProperty({ type: String, nullable: true }) eagleAssetId!: string | null;
+  @ApiProperty() objectCleanupPending!: boolean;
+  @ApiProperty({ type: Number, nullable: true }) finalizationAttempts!: number | null;
+  @ApiProperty({ type: String, nullable: true }) lastError!: string | null;
+}
+
+export class UploadStatusBatchResultDto {
+  @ApiProperty({
+    type: [UploadSessionStatusDto],
+    description: 'Sessions owned by the authenticated principal in the current library mode.',
+  })
+  items!: UploadSessionStatusDto[];
+}

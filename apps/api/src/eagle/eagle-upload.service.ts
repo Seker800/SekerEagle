@@ -232,6 +232,23 @@ export class EagleUploadService {
     };
   }
 
+  async getSessions(ownerId: string, uploadSessionIds: string[]) {
+    const ids = [...new Set(uploadSessionIds)];
+    if (!ids.length) return { items: [] };
+    const items = await this.prisma.uploadSession.findMany({
+      where: { id: { in: ids }, uploaderId: ownerId, libraryMode: this.libraryMode },
+      select: {
+        id: true,
+        status: true,
+        eagleAssetId: true,
+        objectCleanupPending: true,
+        finalizationAttempts: true,
+        lastError: true,
+      },
+    });
+    return { items };
+  }
+
   async presignPart(ownerId: string, uploadSessionId: string, partNumber: number) {
     if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
       throw new BadRequestException('分片编号无效。');

@@ -1284,6 +1284,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/uploads/status-batch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleUploadController_getStatusBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/uploads/{uploadSessionId}': {
     parameters: {
       query?: never;
@@ -3588,6 +3604,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/uploads/status-batch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoUploadsController_getStatusBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/uploads/{uploadSessionId}': {
     parameters: {
       query?: never;
@@ -4798,6 +4830,21 @@ export interface components {
     CheckUploadContentBatchResultDto: {
       /** @description One result per request item, in order; content visible to the authenticated owner and library. */
       exists: boolean[];
+    };
+    UploadStatusBatchDto: {
+      uploadSessionIds: string[];
+    };
+    UploadSessionStatusDto: {
+      id: string;
+      status: string;
+      eagleAssetId: string | null;
+      objectCleanupPending: boolean;
+      finalizationAttempts: number | null;
+      lastError: string | null;
+    };
+    UploadStatusBatchResultDto: {
+      /** @description Sessions owned by the authenticated principal in the current library mode. */
+      items: components['schemas']['UploadSessionStatusDto'][];
     };
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
@@ -7129,6 +7176,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CheckUploadContentBatchResultDto'];
+        };
+      };
+    };
+  };
+  EagleUploadController_getStatusBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UploadStatusBatchDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UploadStatusBatchResultDto'];
         };
       };
     };
@@ -10735,6 +10805,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CheckUploadContentBatchResultDto'];
+        };
+      };
+    };
+  };
+  PhotoUploadsController_getStatusBatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UploadStatusBatchDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UploadStatusBatchResultDto'];
         };
       };
     };

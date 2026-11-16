@@ -4,17 +4,25 @@ import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import { useEagleUploadController } from './useEagleUploadController';
-const { material, photo } = vi.hoisted(() => ({ material: vi.fn(), photo: vi.fn() }));
+const { material, photo, statuses } = vi.hoisted(() => ({
+  material: vi.fn(),
+  photo: vi.fn(),
+  statuses: vi.fn(),
+}));
 vi.mock('../../lib/eagle-api', () => ({
   uploadEagleAsset: material,
-  createEagleApi: (mode: string) => ({ uploadEagleAsset: mode === 'PHOTO' ? photo : material }),
+  getEagleUploadStatuses: statuses,
+  createEagleApi: (mode: string) => ({
+    uploadEagleAsset: mode === 'PHOTO' ? photo : material,
+    getEagleUploadStatuses: statuses,
+  }),
 }));
 it('pins every file of a drag batch to the mode at drop time, including queued files after switching modes', async () => {
   let release!: () => void;
   const gate = new Promise<void>((done) => {
     release = done;
   });
-  material.mockImplementation(() => gate);
+  material.mockImplementation(() => gate.then(() => ({})));
   photo.mockResolvedValue({});
   let mode: 'MATERIAL' | 'PHOTO' = 'MATERIAL';
   const client = new QueryClient();
@@ -28,21 +36,21 @@ it('pins every file of a drag batch to the mode at drop time, including queued f
   const view = renderHook(() => useEagleUploadController('', ['eagle', 'owner', mode, 'assets']), {
     wrapper,
   });
-  const files = ['a', 'b', 'c'].map(
+  const files = ['a', 'b', 'c', 'd', 'e'].map(
     (name) => new File(['jpeg'], `${name}.jpg`, { type: 'image/jpeg' }),
   );
   let pending!: Promise<void>;
   await act(async () => {
     pending = view.result.current.importFiles(files);
   });
-  expect(material).toHaveBeenCalledTimes(2);
+  expect(material).toHaveBeenCalledTimes(4);
   mode = 'PHOTO';
   view.rerender();
   await act(async () => {
     release();
     await pending;
   });
-  expect(material).toHaveBeenCalledTimes(3);
+  expect(material).toHaveBeenCalledTimes(5);
   expect(photo).not.toHaveBeenCalled();
   await act(async () => {
     await view.result.current.importFiles([files[0]]);
@@ -64,9 +72,9 @@ it('keeps independent file progress, all failures and a dismissible success summ
   material.mockImplementation(
     (_token: string, file: File, progress: (value: { percent: number }) => void) => {
       progress({ percent: file.name === 'a.jpg' ? 25 : 75 });
-      return new Promise<void>((done) => {
-        if (file.name === 'a.jpg') finish = done;
-        else done();
+      return new Promise<Record<string, never>>((done) => {
+        if (file.name === 'a.jpg') finish = () => done({});
+        else done({});
       });
     },
   );
@@ -114,7 +122,7 @@ it('keeps independent file progress, all failures and a dismissible success summ
   );
 });
 
-it('revoking the browser session aborts active uploads and never starts the third queued file', async () => {
+it('revoking the browser session aborts active uploads and never starts the queued fifth file', async () => {
   const { fetchWithBrowserSession } = await import('../../lib/api-client');
   const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
   vi.stubGlobal('fetch', fetchMock);
@@ -123,7 +131,7 @@ it('revoking the browser session aborts active uploads and never starts the thir
   const gate = new Promise<void>((done) => {
     release = done;
   });
-  material.mockImplementation(() => gate);
+  material.mockImplementation(() => gate.then(() => ({})));
   const client = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
@@ -139,10 +147,10 @@ it('revoking the browser session aborts active uploads and never starts the thir
   let pending!: Promise<void>;
   await act(async () => {
     pending = view.result.current.importFiles(
-      ['a', 'b', 'c'].map((name) => new File(['data'], name)),
+      ['a', 'b', 'c', 'd', 'e'].map((name) => new File(['data'], name)),
     );
   });
-  expect(material).toHaveBeenCalledTimes(2);
+  expect(material).toHaveBeenCalledTimes(4);
   view.unmount();
   await fetchWithBrowserSession('/api/auth/logout');
   await fetchWithBrowserSession('/api/auth/login');
@@ -150,18 +158,18 @@ it('revoking the browser session aborts active uploads and never starts the thir
     release();
     await pending;
   });
-  expect(material).toHaveBeenCalledTimes(2);
+  expect(material).toHaveBeenCalledTimes(4);
   expect(material.mock.calls[0]![3].signal.aborted).toBe(true);
   vi.unstubAllGlobals();
 });
 
-it('remounting a mode subscribes to its original upload queue and keeps the original two slots', async () => {
+it('remounting a mode subscribes to its original upload queue', async () => {
   material.mockReset();
   let release!: () => void;
   const gate = new Promise<void>((done) => {
     release = done;
   });
-  material.mockImplementation(() => gate);
+  material.mockImplementation(() => gate.then(() => ({})));
   const client = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
@@ -189,5 +197,6 @@ it('remounting a mode subscribes to its original upload queue and keeps the orig
     await pending;
     await next;
   });
+  expect(material).toHaveBeenCalledTimes(3);
   expect(second.result.current.uploads.every((item) => item.state === 'completed')).toBe(true);
 });

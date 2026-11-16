@@ -3565,6 +3565,43 @@
         "tags": ["eagle-uploads"]
       }
     },
+    "/api/eagle/uploads/status-batch": {
+      "post": {
+        "operationId": "EagleUploadController_getStatusBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadStatusBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatusBatchResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads"]
+      }
+    },
     "/api/eagle/uploads/{uploadSessionId}": {
       "get": {
         "operationId": "EagleUploadController_getSession",
@@ -9223,6 +9260,43 @@
         "tags": ["eagle-uploads", "photo-uploads"]
       }
     },
+    "/api/photos/uploads/status-batch": {
+      "post": {
+        "operationId": "PhotoUploadsController_getStatusBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadStatusBatchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadStatusBatchResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads", "photo-uploads"]
+      }
+    },
     "/api/photos/uploads/{uploadSessionId}": {
       "get": {
         "operationId": "PhotoUploadsController_getSession",
@@ -12043,6 +12117,67 @@
           }
         },
         "required": ["exists"]
+      },
+      "UploadStatusBatchDto": {
+        "type": "object",
+        "properties": {
+          "uploadSessionIds": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": ["uploadSessionIds"]
+      },
+      "UploadSessionStatusDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "eagleAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "objectCleanupPending": {
+            "type": "boolean"
+          },
+          "finalizationAttempts": {
+            "type": "number",
+            "nullable": true
+          },
+          "lastError": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "eagleAssetId",
+          "objectCleanupPending",
+          "finalizationAttempts",
+          "lastError"
+        ]
+      },
+      "UploadStatusBatchResultDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "Sessions owned by the authenticated principal in the current library mode.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadSessionStatusDto"
+            }
+          }
+        },
+        "required": ["items"]
       },
       "CreateEagleImportRunDto": {
         "type": "object",

@@ -25,6 +25,8 @@ import {
   CheckUploadContentResultDto,
   CompleteEagleUploadDto,
   InitiateEagleUploadDto,
+  UploadStatusBatchDto,
+  UploadStatusBatchResultDto,
 } from './eagle-upload.dto';
 import { EagleImportsService } from './import/eagle-app-import.service';
 import { EagleUploadService } from './eagle-upload.service';
@@ -69,6 +71,16 @@ export class EagleUploadController {
       input.items,
       principal.canViewPrivate === true,
     );
+  }
+
+  @Post('status-batch')
+  @ApiCreatedResponse({ type: UploadStatusBatchResultDto })
+  @UseGuards(BrowserOrPatOriginGuard)
+  getStatusBatch(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: UploadStatusBatchDto,
+  ): Promise<UploadStatusBatchResultDto> {
+    return this.uploads.getSessions(principal.sub, input.uploadSessionIds);
   }
 
   @Get(':uploadSessionId')

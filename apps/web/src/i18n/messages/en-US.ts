@@ -1730,6 +1730,9 @@ export const enUS = {
     'Importing in parallel · {{value1}}/{{value2}} completed',
   '正在并行导入 · 已完成 {{value1}}/{{value2}} · {{value3}} {{value4}}%':
     'Importing in parallel · {{value1}}/{{value2}} completed · {{value3}} {{value4}}%',
+  '已上传 {{value1}}/{{value2}} · 入库 {{value3}}/{{value2}}':
+    'Uploaded {{value1}}/{{value2}} · stored {{value3}}/{{value2}}',
+  '已上传，入库校验中': 'Uploaded, verifying',
   正在处理: 'Processing',
   '正在创建…': 'Creating…',
   正在读取: 'Processing...',

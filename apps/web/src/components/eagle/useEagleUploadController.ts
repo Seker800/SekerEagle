@@ -7,7 +7,7 @@ export type { EagleUploadItem } from '../../lib/library-upload-queue';
 
 export function useEagleUploadController(accessToken: string, assetsQueryKey: QueryKey) {
   const {
-    api: { uploadEagleAsset },
+    api: { uploadEagleAsset, getEagleUploadStatuses },
     ownerId,
     libraryMode,
   } = useLibraryWorkspace();
@@ -18,20 +18,35 @@ export function useEagleUploadController(accessToken: string, assetsQueryKey: Qu
   const items = useSyncExternalStore(queue.subscribe, queue.snapshot);
   const scope = hashKey(assetsQueryKey);
   const uploads = items.filter((item) => item.scope === scope);
+  const uploaded = uploads.filter(
+    (item) => item.state === 'uploaded' || item.state === 'completed',
+  ).length;
   const completed = uploads.filter((item) => item.state === 'completed').length;
-  const pending = uploads.some((item) => item.state === 'queued' || item.state === 'uploading');
+  const pending = uploads.some(
+    (item) => item.state === 'queued' || item.state === 'uploading' || item.state === 'uploaded',
+  );
   return {
     importFiles: (files: File[]) =>
-      queue.add(files, assetsQueryKey, (file, progress, signal) =>
-        uploadEagleAsset(accessToken, file, progress, { signal }),
+      queue.add(
+        files,
+        assetsQueryKey,
+        async (file, progress, signal) => {
+          const result = await uploadEagleAsset(accessToken, file, progress, {
+            signal,
+            waitForFinalization: false,
+          });
+          return result.assetId ? undefined : { sessionId: result.uploadSessionId };
+        },
+        (sessionIds, signal) => getEagleUploadStatuses(accessToken, sessionIds, signal),
       ),
     uploads,
     uploadStatus: !uploads.length
       ? null
       : pending
-        ? t('正在并行导入 · 已完成 {{value1}}/{{value2}}', {
-            value1: completed,
+        ? t('已上传 {{value1}}/{{value2}} · 入库 {{value3}}/{{value2}}', {
+            value1: uploaded,
             value2: uploads.length,
+            value3: completed,
           })
         : t('导入完成 {{value1}}/{{value2}}', { value1: completed, value2: uploads.length }),
     dismissUploads: () => queue.dismiss(scope),

@@ -19,6 +19,7 @@ import { request as requestJson } from './api-client';
 import { resolveEagleRenditionUrl } from './media-resolver';
 
 import { resolveObjectUploadUrl } from './object-upload-url';
+import { ConcurrentWorkError, mapWithConcurrency } from './async-pool';
 
 export type EagleRendition = components['schemas']['EagleRenditionResponseDto'];
 export type EagleManualTagRef = components['schemas']['EagleManualTagResponseDto'];
@@ -122,6 +123,23 @@ export interface EagleAssetLocation {
   assetId: string;
   cursor: string | null;
 }
+
+export interface EagleUploadSessionStatus {
+  id: string;
+  status: string;
+  eagleAssetId: string | null;
+  objectCleanupPending: boolean;
+  finalizationAttempts: number | null;
+  lastError: string | null;
+}
+
+export interface EagleUploadAccepted {
+  uploadSessionId: string;
+  assetId?: string;
+  duplicate?: boolean;
+}
+
+const UPLOAD_PART_CONCURRENCY = 3;
 
 export interface EagleAssetFilters {
   personId?: string;
@@ -639,19 +657,45 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }
   }
 
+  function getEagleUploadStatuses(
+    _token: string,
+    uploadSessionIds: string[],
+    signal?: AbortSignal,
+  ): Promise<EagleUploadSessionStatus[]> {
+    return api<{ items: EagleUploadSessionStatus[] }>('/eagle/uploads/status-batch', {
+      method: 'POST',
+      body: JSON.stringify({ uploadSessionIds }),
+      signal,
+    }).then((result) => result.items);
+  }
+
+  type UploadOptions = {
+    duplicatePolicy?: 'CREATE_COPY';
+    signal?: AbortSignal;
+    copySourceAssetId?: string;
+    copySourceRowVersion?: number;
+    editRecipe?: PhotoEditRecipe;
+    retry?: boolean;
+    waitForFinalization?: boolean;
+  };
+  function uploadEagleAsset(
+    _token: string,
+    file: File,
+    onProgress: (value: { percent: number; phase?: 'validating' }) => void,
+    options: UploadOptions & { waitForFinalization: false },
+  ): Promise<EagleUploadAccepted>;
+  function uploadEagleAsset(
+    _token: string,
+    file: File,
+    onProgress: (value: { percent: number; phase?: 'validating' }) => void,
+    options?: UploadOptions,
+  ): Promise<{ duplicate: boolean; asset: EagleAsset }>;
   async function uploadEagleAsset(
     _token: string,
     file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
-    options?: {
-      duplicatePolicy?: 'CREATE_COPY';
-      signal?: AbortSignal;
-      copySourceAssetId?: string;
-      copySourceRowVersion?: number;
-      editRecipe?: PhotoEditRecipe;
-      retry?: boolean;
-    },
-  ) {
+    options?: UploadOptions,
+  ): Promise<EagleUploadAccepted | { duplicate: boolean; asset: EagleAsset }> {
     const signal = options?.signal
       ? AbortSignal.any([options.signal, getBrowserSessionSignal()])
       : getBrowserSessionSignal();
@@ -667,6 +711,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       throw new Error(t('原照片已变化，请重新打开编辑器。'));
     if (retained?.completedAssetId)
       return {
+        uploadSessionId: retained.sessionId,
+        assetId: retained.completedAssetId,
         duplicate: false,
         asset: await getEagleAsset('', retained.completedAssetId, signal),
       };
@@ -702,35 +748,49 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     let accepted = false;
     try {
       const count = Math.ceil(file.size / session.partSize);
-      for (let index = parts.length; index < count; index += 1) {
-        const partNumber = index + 1;
-        const { uploadUrl } = await api<{
-          uploadUrl: string;
-        }>(`/eagle/uploads/${session.id}/parts/${partNumber}`, {
-          method: 'POST',
-          body: '{}',
-          signal,
+      const sent = new Set(parts.map((part) => part.partNumber));
+      let finished = sent.size;
+      const pending = Array.from({ length: count }, (_, index) => index).filter(
+        (index) => !sent.has(index + 1),
+      );
+      try {
+        await mapWithConcurrency(pending, UPLOAD_PART_CONCURRENCY, async (index) => {
+          signal.throwIfAborted();
+          const partNumber = index + 1;
+          const { uploadUrl } = await api<{
+            uploadUrl: string;
+          }>(`/eagle/uploads/${session.id}/parts/${partNumber}`, {
+            method: 'POST',
+            body: '{}',
+            signal,
+          });
+          const response = await fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
+            method: 'PUT',
+            body: file.slice(
+              index * session.partSize,
+              Math.min(file.size, (index + 1) * session.partSize),
+            ),
+            credentials: 'omit',
+            signal,
+          });
+          if (!response.ok)
+            throw new Error(
+              t('上传分片失败（{{value1}}）', {
+                value1: response.status,
+              }),
+            );
+          const etag = response.headers.get('etag');
+          if (!etag) throw new Error(t('对象存储未返回分片校验值。'));
+          parts.push({ partNumber, etag });
+          finished += 1;
+          onProgress({ percent: Math.round((finished / count) * 100) });
         });
-        const response = await fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
-          method: 'PUT',
-          body: file.slice(
-            index * session.partSize,
-            Math.min(file.size, (index + 1) * session.partSize),
-          ),
-          credentials: 'omit',
-          signal,
-        });
-        if (!response.ok)
-          throw new Error(
-            t('上传分片失败（{{value1}}）', {
-              value1: response.status,
-            }),
-          );
-        const etag = response.headers.get('etag');
-        if (!etag) throw new Error(t('对象存储未返回分片校验值。'));
-        parts.push({ partNumber, etag });
-        onProgress({ percent: Math.round((partNumber / count) * 100) });
+      } catch (error) {
+        if (signal.aborted) throw abortReason(signal);
+        if (error instanceof ConcurrentWorkError && error.cause instanceof Error) throw error.cause;
+        throw error;
       }
+      parts.sort((left, right) => left.partNumber - right.partNumber);
       const completed = await api<{
         uploadSessionId: string;
         status: string;
@@ -742,6 +802,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         body: JSON.stringify({ parts }),
       });
       accepted = completed.assetId === undefined;
+      if (options?.waitForFinalization === false)
+        return {
+          uploadSessionId: session.id,
+          ...(completed.assetId
+            ? { assetId: completed.assetId, duplicate: completed.duplicate === true }
+            : {}),
+        };
       let settled: { assetId: string; duplicate: boolean };
       if (completed.assetId) {
         settled = { assetId: completed.assetId, duplicate: completed.duplicate === true };
@@ -869,6 +936,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     batchEditEaglePhotos,
     getBatchEaglePhotoEditContext,
     uploadEagleAsset,
+    getEagleUploadStatuses,
     getEagleAssetContentUrl,
     getEaglePyramidDescriptor,
     getEagleRenditionContentUrl,
@@ -915,6 +983,7 @@ export const {
   batchEditEaglePhotos,
   getBatchEaglePhotoEditContext,
   uploadEagleAsset,
+  getEagleUploadStatuses,
   getEagleAssetContentUrl,
   getEaglePyramidDescriptor,
   getEagleRenditionContentUrl,

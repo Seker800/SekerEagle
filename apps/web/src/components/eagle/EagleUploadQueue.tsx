@@ -37,11 +37,13 @@ export function EagleUploadQueue({
                 ? t('导入成功')
                 : item.state === 'failed'
                   ? t('导入失败')
-                  : item.state === 'queued'
-                    ? t('等待导入')
-                    : item.phase === 'validating'
-                      ? t('校验中')
-                      : `${item.percent}%`}
+                  : item.state === 'uploaded'
+                    ? t('已上传，入库校验中')
+                    : item.state === 'queued'
+                      ? t('等待导入')
+                      : item.phase === 'validating'
+                        ? t('校验中')
+                        : `${item.percent}%`}
             </span>
             {item.error && <span role="alert">{item.error}</span>}
             {item.state === 'failed' && (
