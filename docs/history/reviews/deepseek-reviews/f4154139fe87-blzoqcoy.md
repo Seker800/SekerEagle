@@ -20,6 +20,7 @@
 ## 1. [高] 并发在途读会让最后一次发布被跳过或取消，且不会再补读
 
 **位置**
+
 - `apps/web/src/components/eagle/asset-operation-refresh.ts:20-38`（`invalidateQueries(..., {cancelRefetch:false})` 和仅在 `pending` 有值时重跑）
 - `apps/web/src/components/eagle/SekerEaglePage.tsx:1074-1098`（`fetchNextPage()` 既未检查 `assetsQuery.isFetching`，也未传 `cancelRefetch:false`）
 - `apps/web/src/components/eagle/useAssetOperations.ts:72-108`（终态事件只消费一次，之后轮询不再产生发布）
@@ -51,6 +52,7 @@
 ## 2. [中] 首次观察到的终态操作不会触发刷新（重挂载/切模式）
 
 **位置**
+
 - `apps/web/src/components/eagle/useAssetOperations.ts:64`（每次建 refresher 都把 `previous` 重置为 `undefined`）
 - `useAssetOperations.ts:76-89`（`before` 不存在直接 `return`；`published` 和 `finished` 都依赖 `old`）
 - `apps/web/src/components/eagle/SekerEaglePage.tsx:264-265,602`（资产列表 `staleTime` 5 分钟）
@@ -77,6 +79,7 @@
 ## 3. [低] 失效 predicate 过宽：把多页“关系查询”和刚删除资源的详情也重取
 
 **位置**
+
 - `apps/web/src/components/eagle/asset-operation-refresh.ts:26-32`（只排除了 `operations`，其余同 owner/mode 的查询全部 `refetchType:'active'`）
 - `apps/web/src/components/photos/usePhotoFilterOptions.ts:13-20`（人物选项是 infinite query，一页 24 人，可加载多页）
 - `apps/web/src/components/eagle/SekerEaglePage.tsx:808-815,2558-2565`（选中资源详情查询，删除后重取会 404 并显示加载失败）
@@ -100,6 +103,7 @@
 ## 4. [低] 旧成本记录仍写“用户主动加载更新”，并遗留已删除 UI 的文案键
 
 **位置**
+
 - `docs/asset-operation-efficiency-2026-10-31.md:14`（“原工作区提示……用户按‘加载更新’主动刷新”）
 - `docs/asset-operation-efficiency-2026-10-31.md:32`（成本表“用户主动加载更新……仅用户主动触发”）
 - `docs/architecture.md:21`（新 North star 明确把该文档链接为“成本与验收记录”）

@@ -6,6 +6,7 @@
 > 当时的镜像/迁移。它们不是当前状态；现用状态读 [current-runtime](../../current-runtime.md)。
 
 ---
+
 ## 当前恢复状态
 
 2026-10-23 晚间，用户在群晖重启后授权恢复，并要求以后开机自动恢复。**六个常驻服务及独立封面复制容器已从原容器启动**，HTTPS readiness 返回 ready。清单哈希及下一批来源指纹核对通过，封面检查点已从 13,300 推进至 13,600，新增 300 张、无新增跳过；此数量为恢复验收快照，实时进度仍读检查点。
@@ -155,4 +156,3 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 - `nas-staging.md` 保留**初始恢复和 HTTPS 配置历史**；`operations-runbook.md` 用于新建本机运行环境。
 - `maintainer-guide.md` 记录**代码目录和开发门禁**；`nas-preview-reuse.md` 记录封面复用实现、验收及限制。
 - 实时数量、速度、任务错误以运行检查点和队列为准，不在本页维护跳动的百分比。运行文档不包含密码、令牌、私钥或用户照片内容，也不自动授权下一次部署／删除。
-

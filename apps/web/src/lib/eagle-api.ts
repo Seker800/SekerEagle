@@ -246,22 +246,23 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return api<EagleMediaCapabilities>('/eagle/media-capabilities');
   }
 
-  async function listEagleAssets(filters: EagleAssetFilters = {},
+  async function listEagleAssets(
+    filters: EagleAssetFilters = {},
     signal?: AbortSignal,
   ): Promise<EagleAssetPage> {
     const result = await api<EagleAssetPage>(`/eagle/assets?${assetQuery(filters)}`, { signal });
     return { ...result, items: result.items.map(normalizeAsset) };
   }
 
-  async function listEagleTrash(filters: EagleAssetFilters = {},
+  async function listEagleTrash(
+    filters: EagleAssetFilters = {},
     signal?: AbortSignal,
   ): Promise<EagleAssetPage> {
     const result = await api<EagleAssetPage>(`/eagle/trash?${assetQuery(filters)}`, { signal });
     return { ...result, items: result.items.map(normalizeAsset) };
   }
 
-  async function sendEagleAssets(input: { assetIds: string[]; operationId: string },
-  ) {
+  async function sendEagleAssets(input: { assetIds: string[]; operationId: string }) {
     return api<AssetOperationSummary>(
       '/eagle/assets/batch/send',
       {
@@ -288,9 +289,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  async function listEagleAssetFacts(assetIds: readonly string[],
-    signal?: AbortSignal,
-  ) {
+  async function listEagleAssetFacts(assetIds: readonly string[], signal?: AbortSignal) {
     const result = await api<EagleAssetListItem[]>('/eagle/assets/facts', {
       method: 'POST',
       body: JSON.stringify({ assetIds }),
@@ -299,9 +298,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return result.map(normalizeAsset);
   }
 
-  async function listEagleAssetUpdates(ids: readonly string[],
-    signal?: AbortSignal,
-  ) {
+  async function listEagleAssetUpdates(ids: readonly string[], signal?: AbortSignal) {
     if (!ids.length) return [];
     return api<EagleAssetUpdate[]>('/eagle/asset-updates', {
       method: 'POST',
@@ -335,11 +332,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return (await api<Array<Parameters<typeof normalizeTag>[0]>>('/eagle/tags')).map(normalizeTag);
   }
 
-  async function createEagleManualTag(input: {
-      name: string;
-      color?: string | null;
-    },
-  ) {
+  async function createEagleManualTag(input: { name: string; color?: string | null }) {
     return normalizeTag(
       await api<Parameters<typeof normalizeTag>[0]>('/eagle/tags', {
         method: 'POST',
@@ -348,7 +341,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  async function updateEagleManualTag(id: string,
+  async function updateEagleManualTag(
+    id: string,
     input: Partial<Pick<EagleManualTag, 'name' | 'color' | 'groupId' | 'isStarred'>> & {
       rowVersion: number;
     },
@@ -371,18 +365,18 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   async function createEagleManualTagGroup(input: {
-      name: string;
-      color?: string | null;
-      description?: string | null;
-    },
-  ) {
+    name: string;
+    color?: string | null;
+    description?: string | null;
+  }) {
     return api<EagleManualTagGroup>('/eagle/tag-groups', {
       method: 'POST',
       body: JSON.stringify(input),
     });
   }
 
-  async function updateEagleManualTagGroup(id: string,
+  async function updateEagleManualTagGroup(
+    id: string,
     input: {
       name?: string;
       color?: string | null;
@@ -418,18 +412,15 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }));
   }
 
-  async function createEagleSmartFolder(input: {
-      name: string;
-      query: EagleFilterQuery;
-    },
-  ) {
+  async function createEagleSmartFolder(input: { name: string; query: EagleFilterQuery }) {
     return api<EagleSmartFolder>('/eagle/smart-folders', {
       method: 'POST',
       body: JSON.stringify(input),
     });
   }
 
-  async function updateEagleSmartFolder(id: string,
+  async function updateEagleSmartFolder(
+    id: string,
     input: {
       name?: string;
       color?: string | null;
@@ -454,7 +445,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     });
   }
 
-  async function moveEagleSmartFolder(id: string,
+  async function moveEagleSmartFolder(
+    id: string,
     input: {
       parentId: string | null;
       position: number;
@@ -481,12 +473,11 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   async function batchChangeEagleManualTags(input: {
-      assetIds: string[];
-      addTagIds: string[];
-      removeTagIds: string[];
-      clearAll?: boolean;
-    },
-  ) {
+    assetIds: string[];
+    addTagIds: string[];
+    removeTagIds: string[];
+    clearAll?: boolean;
+  }) {
     return api<
       OperationResponse<{
         affectedAssetCount: number;
@@ -526,7 +517,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }>('/eagle/trash/empty', { method: 'POST', body: '{}' });
   }
 
-  async function updateEagleAsset(id: string,
+  async function updateEagleAsset(
+    id: string,
     input: EagleAssetChanges & {
       rowVersion: number;
       predecessorOperationIds?: string[];
@@ -539,7 +531,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return isAcceptedOperation(result) ? result : normalizeAsset(result);
   }
 
-  async function batchUpdateEagleAssets(input: EagleAssetChanges & {
+  async function batchUpdateEagleAssets(
+    input: EagleAssetChanges & {
       assets: EagleAssetVersion[];
       predecessorOperationIds?: string[];
     },
@@ -572,14 +565,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   }
 
   function batchEditEaglePhotos(input: {
-      operationId?: string;
-      assetIds: string[];
-      recipe: PhotoEditRecipe;
-      parts: PhotoEditParts;
-      lut?: string;
-      preservedLuts?: Record<string, string>;
-    },
-  ) {
+    operationId?: string;
+    assetIds: string[];
+    recipe: PhotoEditRecipe;
+    parts: PhotoEditParts;
+    lut?: string;
+    preservedLuts?: Record<string, string>;
+  }) {
     return api<AssetOperationSummary>(
       '/eagle/assets/batch/edit-renders',
       {
@@ -615,7 +607,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }
   }
 
-  function getEagleUploadStatuses(uploadSessionIds: string[],
+  function getEagleUploadStatuses(
+    uploadSessionIds: string[],
     signal?: AbortSignal,
   ): Promise<EagleUploadSessionStatus[]> {
     return api<{ items: EagleUploadSessionStatus[] }>('/eagle/uploads/status-batch', {
@@ -632,7 +625,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  function checkEagleUploadContentBatch(items: EagleUploadContentCheckItem[],
+  function checkEagleUploadContentBatch(
+    items: EagleUploadContentCheckItem[],
     signal?: AbortSignal,
   ): Promise<boolean[]> {
     return api<{ exists: boolean[] }>('/eagle/uploads/check-content-batch', {
@@ -652,15 +646,18 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     waitForFinalization?: boolean;
     contentSha256?: string;
   };
-  function uploadEagleAsset(file: File,
+  function uploadEagleAsset(
+    file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options: UploadOptions & { waitForFinalization: false },
   ): Promise<EagleUploadAccepted>;
-  function uploadEagleAsset(file: File,
+  function uploadEagleAsset(
+    file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options?: UploadOptions,
   ): Promise<{ duplicate: boolean; asset: EagleAsset }>;
-  async function uploadEagleAsset(file: File,
+  async function uploadEagleAsset(
+    file: File,
     onProgress: (value: { percent: number; phase?: 'validating' }) => void,
     options?: UploadOptions,
   ): Promise<EagleUploadAccepted | { duplicate: boolean; asset: EagleAsset }> {

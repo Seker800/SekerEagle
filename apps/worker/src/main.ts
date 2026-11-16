@@ -407,7 +407,12 @@ async function poll(): Promise<void> {
     activeTagBuildCount === 0 &&
     !buildingSmartFolder &&
     !buildingPhotoMap &&
-    canAdvancePhotoMap(Date.now(), lastPhotoMapStep, resourcePool.active('LOCAL'), workerConcurrency)
+    canAdvancePhotoMap(
+      Date.now(),
+      lastPhotoMapStep,
+      resourcePool.active('LOCAL'),
+      workerConcurrency,
+    )
   ) {
     buildingPhotoMap = true;
     lastPhotoMapStep = Date.now();
@@ -575,7 +580,11 @@ async function processClaimedJob(
         event: 'eagle_media_job_completed',
         processorVersion: job.processorVersion,
         resource:
-          job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : remoteRequired ? 'REMOTE_MEDIA' : 'LOCAL',
+          job.kind === 'GENERATE_EMBEDDING'
+            ? 'EMBEDDING'
+            : remoteRequired
+              ? 'REMOTE_MEDIA'
+              : 'LOCAL',
         elapsedMs: Date.now() - startedAt,
         jobId: job.id,
         kind: job.kind,
@@ -741,7 +750,6 @@ function reportLoopError(error: unknown): void {
   const message = error instanceof Error ? error.message : 'unknown worker loop error';
   process.stderr.write(`${message}\n`);
 }
-
 
 process.on('SIGTERM', () => void stop('SIGTERM'));
 process.on('SIGINT', () => void stop('SIGINT'));

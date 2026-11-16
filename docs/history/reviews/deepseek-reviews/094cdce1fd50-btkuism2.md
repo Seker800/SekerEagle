@@ -151,6 +151,7 @@
 **触发条件与证据**
 
 需求明确要求“页签UNNAMED改ALL并显示named+unnamed总数”和“空状态更新”。当前测试能证明 NAMED 空状态和 mock 下的 ALL 总数标签，但不能证明：
+
 - 切到 ALL 且没有人物时显示“暂无人物。”；
 - 真实数据下 `summary.named + summary.unnamed` 与 ALL 列表实际可分页总数一致。
 

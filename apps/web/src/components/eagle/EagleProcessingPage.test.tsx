@@ -87,9 +87,7 @@ describe('EagleProcessingPage', () => {
     const dialog = await screen.findByRole('alertdialog');
     expect(within(dialog).getByText(/将把当前所有失败的处理任务重新排队/)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: '确认重试' }));
-    await waitFor(() =>
-      expect(api.retryAllFailedEagleProcessingJobs).toHaveBeenCalledWith(),
-    );
+    await waitFor(() => expect(api.retryAllFailedEagleProcessingJobs).toHaveBeenCalledWith());
   });
 
   it('shows owners an operational vector status without nesting labeling workflows', () => {

@@ -22,11 +22,13 @@
 ## 问题 1（中高｜桌面缓存回归，可证实）
 
 **位置**
+
 - `apps/web/src/components/eagle/asset-operation-refresh.ts:200-213`（`if (privacyChanged) await getDesktopCacheBridge()?.clearCache()`）
 - `apps/web/src/components/eagle/asset-operation-refresh.ts:332-402`（`refreshLoadedFacts` 对**全部已加载 id** 反复 `invalidateDesktopAssets(batch)`）
 - `apps/web/src/lib/desktop-cache.ts:1-7`、`apps/desktop/src/main/main.ts:437-442`、`apps/desktop/src/utility/cache/cache-engine.ts:279-288`
 
 **触发条件与证据**
+
 - `PRIVACY_COMMAND_TYPES` 包含 `ASSET_TAGS`（`asset-operation-refresh.ts:26-39`），而收藏/加标签走的正是 `ASSET_TAGS`（`EagleFavoriteButton.tsx:37`）。任何 PHOTO/MATERIAL 的标签命令终态都会命中 `:212` 的 `clearCache()`。
 - `clearCache` → `desktop:clear-cache` → `removeAccountCache(..., namespaces)` → `clearNamespace` 对 MATERIAL+PHOTO **两个命名空间整库删除**（`cache-engine.ts:286-288`）。这不是“撤回受影响资源”，而是清空账号磁盘缓存。
 - 同一终态还会让 `refreshLoadedFacts` 取回**所有已加载页**（含 12 页×N 张）的事实，然后在 `:401` 对每 100 个 id 调一次 `invalidateDesktopAssets`，即每张已加载资源都执行 `desktop:invalidate-asset` → `invalidateAsset` 删除该资源的缩略图/预览图文件（`cache-engine.ts:279-284`）。对一次“改 1 张照片的评分”也会发生（`ASSET_UPDATE` 也会走 `refreshLoadedFacts`）。
@@ -44,10 +46,12 @@
 ## 问题 2（中｜批量成片请求体上限未生效，可证实于代码路径）
 
 **位置**
+
 - `apps/api/src/eagle/eagle-edit-request-body.ts:8-13`（判断用 `req.path`）
 - 相关 DTO：`apps/api/src/eagle/eagle-batch-edit.ts:57-62`（`lut` `@MaxLength(4500000)`，`preservedLuts` 逐表最大约 4.39MB）
 
 **触发条件与证据**
+
 - 单张编辑与批量成片共用一个 `app.use(/^\/api\/(eagle|photos)\/assets\/(?:uuid|batch)\/edit-renders$/, ...)`。Express 的 `app.use(path, fn)` 会把已匹配的前缀从 `req.url` 中裁掉（挂载路径保留在 `req.baseUrl`），所以处理器里的 `req.path` 是 `/`，`:11` 的 `/\/assets\/batch\/edit-renders\/?$/` 永远不匹配。
 - 结果是批量成片**始终用 `parse`（5mb）**，`parseBatch`（`EAGLE_OPERATION_BODY_LIMIT`，默认 32mb）成为死代码。最大 65³ LUT 的 base64 约 4.39MB，再叠加一个 `preservedLuts` 或普通 JSON 字段就超过 5mb；文档却声明批量成片复用 32MB 边界。
 - 现有测试只覆盖 `assets/batch/edit-render-context`（走 operation parser，`eagle-operation-request-body.test.ts` 新增用例），没有一条 >5MB 的 `/assets/batch/edit-renders` 用例；单测 `eagle-batch-edit.test.ts` 也不经过 HTTP 解析器，因此该回归不会被 CI 发现。
@@ -63,10 +67,12 @@
 ## 问题 3（中/低中｜照片组全库扫描会撞默认事务超时；大库上重试同样失败）
 
 **位置**
+
 - `apps/api/src/photos/photo-management.service.ts:542-598`（`rows` 已无 `take: 2000`；`:553` `this.prisma.$transaction(async tx => ...)` 未传 `timeout`；`:562-595` 每个 suggestion 一次 `findUnique` + `create` + `createMany`）
 - 调用入口：`apps/api/src/photos/photo-management.controller.ts:254-255` → `PHOTO_GROUPS_SCAN`；执行：`apps/api/src/photos/photo-library-commands.ts:96-98`
 
 **触发条件与证据**
+
 - 移除 2000 行上限后，`rows` 是全库 `EaglePhotoMetadata`；每个建议组在**同一个交互事务**里做 2–3 次数据库往返，事务没有显式 `timeout`，Prisma 7 交互事务默认 5s。
 - 一个 6 万张、按连拍/相似聚类的图库可能有数千到上万个建议组（即便重复扫描时只做存在的 `findUnique`，也是每组一次往返）。超过约 5s 即抛 `P2028`；`publishMetadataBatch`/`failItems` 会把它映射为 `TRANSACTION_TIMEOUT`，整笔事务回滚，用户重试仍会再次超时。
 - 同一仓库的同类全库扫描已有显式长超时先例：`packages/library-persistence/src/photo-face-scan.ts:54`（`{ maxWait: 5000, timeout: 630000 }`）。本轮的测试（`photo-batch-selection.test.ts` 1201 张、`photo-command-admission.test.ts` 全 mock）没有覆盖大库照片组扫描。
@@ -84,6 +90,7 @@
 ## 问题 4（低｜私密授权与“公开资源命令”不必要耦合，待产品确认）
 
 **位置**
+
 - `apps/api/src/eagle/eagle-asset-operations.service.ts:538-542`（`const isPrivate = principal.canViewPrivate`）
 - `apps/api/src/eagle/eagle-duplicates.service.ts:423-431`（清理同样传 `principal.canViewPrivate`）
 
@@ -91,9 +98,10 @@
 `isPrivate` 只取决于“当前是否持有私密可见授权”，不取决于本次操作是否真的涉及私密资源；而 `deleteMany(TRASH/SEND/RESTORE)` 的既有 `enqueue` 是**仅在选中行含私密时才标记**（`eagle-asset-operations.service.ts:902-921`）。因此：私密视图开着时对**公开照片**排队一个标签/评分/清理，操作会带 `isPrivate=true` 和 `privateUntil=授权过期时间`。
 
 **实际影响**
+
 - 授权到期后执行 → `assertPrivateGrant` 抛 `PRIVATE_LOCKED`，本来只涉及公开资源的任务失败；
 - 用户在任务中心关闭“显示私密内容”后，该操作在 `list(includePrivate=false)` 中被隐藏，`retry` 也会 404，无法查看失败原因或重试。
-这不是数据/权限越界，但把一个“公开资源任务”变成了依赖临时授权可见性的任务。
+  这不是数据/权限越界，但把一个“公开资源任务”变成了依赖临时授权可见性的任务。
 
 **修复方向**
 在 `enqueueCommand` 的资源存在性查询中同时取 `isPrivate`，仅当选中资源含私密（或 domain `admit` 返回涉及私密对象）时标记 `isPrivate`；否则按普通操作处理。若这是刻意的保守策略，建议在文档中写明“持有私密视图时受理的所有命令都视为私密操作”的副作用。
@@ -103,6 +111,7 @@
 ## 问题 5（低｜仓库内 Android 客户端的读后写竞态）
 
 **位置**
+
 - `apps/api/src/eagle/eagle.controller.ts:830-844`（`batch/manual-tags` 202）、`:650-672`（batch trash/restore 202）
 - `apps/android/app/src/main/kotlin/com/sekereagle/android/NativeGalleryRepository.kt:299-312`
 - `apps/android/app/src/main/kotlin/com/sekereagle/android/NativeGalleryViewModel.kt:1039-1047`（收藏：`setFavorite` 后立即 `detail` 并覆盖列表项）、`:1135-1149`（批量改后立即 `refresh()` 并提示“已完成”）

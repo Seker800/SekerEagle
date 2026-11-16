@@ -41,10 +41,7 @@ interface EagleMutationCallbacks {
   onSmartFolderDeleted: (folder: EagleSmartFolder) => void;
 }
 
-export function useEagleMutations(
-  queryKeys: EagleQueryKeys,
-  callbacks: EagleMutationCallbacks,
-) {
+export function useEagleMutations(queryKeys: EagleQueryKeys, callbacks: EagleMutationCallbacks) {
   const {
     ownerId,
     libraryMode,
@@ -368,8 +365,7 @@ export function useEagleMutations(
     onMutate: () => callbacks.onOperationStarted(),
   });
   const smartFolderMutation = useMutation({
-    mutationFn: (input: { name: string; query: EagleFilterQuery }) =>
-      createEagleSmartFolder(input),
+    mutationFn: (input: { name: string; query: EagleFilterQuery }) => createEagleSmartFolder(input),
     onSuccess: async () => {
       callbacks.onSmartFolderCreated();
       await invalidate(queryKeys.smartFolders);

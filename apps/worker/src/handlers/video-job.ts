@@ -5,10 +5,7 @@ import { processVideo } from '../video-processing';
 import { assertExpectedHash } from './shared';
 import type { AssetFamilyHandler } from './types';
 
-export const videoJob: AssetFamilyHandler = async (
-  { job, remoteRequired, context },
-  asset,
-) => {
+export const videoJob: AssetFamilyHandler = async ({ job, remoteRequired, context }, asset) => {
   if (!isCameraVideoMime(asset.mimeType))
     throw new PermanentMediaValidationError('UNSUPPORTED_MEDIA_TYPE');
   await processVideo(job, asset, {

@@ -27,10 +27,7 @@ function setup() {
   );
   const hook = renderHook(
     ({ owner, privateVisible, revision }) =>
-      useEagleLibraryCount(createEagleQueryKeys(owner, state.mode),
-        privateVisible,
-        revision,
-      ),
+      useEagleLibraryCount(createEagleQueryKeys(owner, state.mode), privateVisible, revision),
     { wrapper, initialProps: { owner: 'owner', privateVisible: false, revision: 0 } },
   );
   return { ...hook, client };

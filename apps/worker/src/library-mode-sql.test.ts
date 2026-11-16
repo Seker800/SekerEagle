@@ -18,7 +18,10 @@ void test('worker raw SQL binds library modes as PostgreSQL enums across media a
     for (const match of source.matchAll(/"libraryMode"\s*=\s*\$\{[^}]+\}/g)) {
       comparisons++;
       const tail = source.slice(match.index! + match[0].length);
-      assert.ok(tail.startsWith('::"LibraryMode"'), `Uncast enum parameter in ${file}: ${match[0]}`);
+      assert.ok(
+        tail.startsWith('::"LibraryMode"'),
+        `Uncast enum parameter in ${file}: ${match[0]}`,
+      );
     }
   }
   assert.ok(comparisons > 0);

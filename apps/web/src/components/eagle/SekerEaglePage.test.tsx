@@ -775,7 +775,8 @@ describe('SekerEaglePage', () => {
     fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
     fireEvent.click(await screen.findByRole('button', { name: '定位到时间线' }));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenCalledWith(expect.objectContaining({ cursor: 'newer' }),
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ cursor: 'newer' }),
         expect.anything(),
       ),
     );
@@ -788,7 +789,8 @@ describe('SekerEaglePage', () => {
     renderPage();
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'owl' } });
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'owl' }),
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: 'owl' }),
         expect.anything(),
       ),
     );
@@ -805,7 +807,8 @@ describe('SekerEaglePage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('searchbox')).toHaveValue('');
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
           cursor: 'nearby-cursor',
           search: undefined,
           rules: undefined,
@@ -1862,9 +1865,7 @@ describe('SekerEaglePage', () => {
     });
     fireEvent.click(within(picker).getByRole('button', { name: '创建标签 新标签' }));
 
-    await waitFor(() =>
-      expect(createEagleManualTagMock).toHaveBeenCalledWith({ name: '新标签' }),
-    );
+    await waitFor(() => expect(createEagleManualTagMock).toHaveBeenCalledWith({ name: '新标签' }));
     fireEvent.click(
       await within(picker).findByRole('button', { name: '添加 1 个标签到 1 项素材' }),
     );
@@ -1936,9 +1937,7 @@ describe('SekerEaglePage', () => {
 
     const inspector = await screen.findByRole('complementary', { name: '素材详情' });
     await waitFor(() =>
-      expect(getEagleTrashAssetMock).toHaveBeenCalledWith('asset-1',
-        expect.any(AbortSignal),
-      ),
+      expect(getEagleTrashAssetMock).toHaveBeenCalledWith('asset-1', expect.any(AbortSignal)),
     );
     expect(within(inspector).getByRole('textbox', { name: '素材标题' })).toBeDisabled();
     expect(within(inspector).getByText('回收站中的素材信息为只读。')).toBeInTheDocument();
@@ -2401,9 +2400,7 @@ describe('SekerEaglePage', () => {
     const dialog = await screen.findByRole('alertdialog');
     retryEagleAssetProcessingMock.mockClear();
     fireEvent.click(within(dialog).getByRole('button', { name: '重试处理' }));
-    await waitFor(() =>
-      expect(retryEagleAssetProcessingMock).toHaveBeenCalledWith(asset.id),
-    );
+    await waitFor(() => expect(retryEagleAssetProcessingMock).toHaveBeenCalledWith(asset.id));
   });
 
   it('offers file picking alongside drag-and-drop import', async () => {
@@ -2577,7 +2574,8 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
 
     await waitFor(() => {
-      expect(createEagleSmartFolderMock).toHaveBeenCalledWith(expect.objectContaining({
+      expect(createEagleSmartFolderMock).toHaveBeenCalledWith(
+        expect.objectContaining({
           name: '猫头鹰精选',
           query: expect.objectContaining({ version: 2 }),
         }),
@@ -2684,7 +2682,8 @@ describe('SekerEaglePage', () => {
     expect(await screen.findByText('2026年4月')).toBeVisible();
     fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenCalledWith(expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(
+        expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
         expect.anything(),
       ),
     );
@@ -2805,7 +2804,8 @@ describe('SekerEaglePage', () => {
     const parent = await screen.findByRole('treeitem', { name: '项目集合' });
     fireEvent.click(within(parent).getByRole('button'));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
           smartFolderId: 'folder-1',
           rules: undefined,
         }),
@@ -2853,7 +2853,8 @@ describe('SekerEaglePage', () => {
     const folder = await screen.findByRole('treeitem', { name: '项目集合' });
     fireEvent.click(within(folder).getByRole('button'));
     await waitFor(() =>
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({ smartFolderId: 'folder-1' }),
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ smartFolderId: 'folder-1' }),
         expect.any(AbortSignal),
       ),
     );
@@ -2863,9 +2864,7 @@ describe('SekerEaglePage', () => {
     expect(confirm).toHaveBeenCalledWith(
       expect.stringContaining('删除智能文件夹“项目集合”？素材本身不会被删除。'),
     );
-    await waitFor(() =>
-      expect(deleteEagleSmartFolderMock).toHaveBeenCalledWith('folder-1'),
-    );
+    await waitFor(() => expect(deleteEagleSmartFolderMock).toHaveBeenCalledWith('folder-1'));
     await waitFor(() =>
       expect(screen.getByRole('treeitem', { name: '项目集合' })).toHaveAttribute(
         'aria-selected',
@@ -3223,7 +3222,8 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '保存智能文件夹' }));
 
     await waitFor(() =>
-      expect(updateEagleSmartFolderMock).toHaveBeenCalledWith('folder-1',
+      expect(updateEagleSmartFolderMock).toHaveBeenCalledWith(
+        'folder-1',
         expect.objectContaining({
           name: '新名称',
           query: expect.objectContaining({ version: 2 }),
@@ -3299,7 +3299,8 @@ describe('SekerEaglePage', () => {
     });
 
     expect(await screen.findByRole('button', { name: /Second Owl/ })).toBeInTheDocument();
-    expect(listEagleAssetsMock).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: 'cursor-2' }),
+    expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ cursor: 'cursor-2' }),
       expect.any(AbortSignal),
     );
   });
@@ -3322,9 +3323,7 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(listEagleAssetUpdatesMock).toHaveBeenCalledWith(['asset-1'],
-        expect.any(AbortSignal),
-      );
+      expect(listEagleAssetUpdatesMock).toHaveBeenCalledWith(['asset-1'], expect.any(AbortSignal));
     });
     expect(listEagleAssetsMock).toHaveBeenCalledTimes(1);
     await waitFor(() => {

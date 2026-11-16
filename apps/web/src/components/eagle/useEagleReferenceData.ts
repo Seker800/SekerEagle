@@ -6,10 +6,7 @@ import type { createEagleQueryKeys } from './eagle-query-keys';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 
-export function useEagleReferenceData(
-  queryKeys: EagleQueryKeys,
-  options: { enabled?: boolean },
-) {
+export function useEagleReferenceData(queryKeys: EagleQueryKeys, options: { enabled?: boolean }) {
   const {
     api: { listEagleManualTagGroups, listEagleManualTags, listEagleSmartFolders },
   } = useLibraryWorkspace();

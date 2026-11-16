@@ -10,10 +10,7 @@ import { PrismaClient, Prisma } from '@prisma/client';
 import { createPrismaAdapter } from '../../packages/library-persistence/dist/index.js';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { requireApi } from './api-dependencies.mjs';
-import {
-  LibraryReadStore,
-  createLibraryReadPool,
-} from '../../apps/api/dist/eagle/reader-store.js';
+import { LibraryReadStore, createLibraryReadPool } from '../../apps/api/dist/eagle/reader-store.js';
 import { createLibraryReaderServer } from '../../apps/api/dist/eagle/reader-server.js';
 import {
   DEFAULT_LIBRARY_READ_ACTIONS,

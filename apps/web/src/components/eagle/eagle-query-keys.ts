@@ -84,9 +84,7 @@ export function isEagleAssetListShape(key: readonly unknown[]): boolean {
   );
 }
 
-export function eagleAssetListFilters(
-  key: readonly unknown[],
-): Record<string, unknown> | null {
+export function eagleAssetListFilters(key: readonly unknown[]): Record<string, unknown> | null {
   if (!isEagleAssetListShape(key)) return null;
   const filters = key[5];
   return filters && typeof filters === 'object' && !Array.isArray(filters)

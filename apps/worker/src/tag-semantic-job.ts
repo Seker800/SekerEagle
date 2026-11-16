@@ -54,7 +54,9 @@ export async function processTagSemanticBuild(
   const memberCount = Number(memberStats[0]?.count ?? 0n);
   if (!memberCount) throw new Error('TAG_HAS_NO_READY_EMBEDDINGS');
   const sampleLimit = boundedInteger(process.env.EAGLE_TAG_CLUSTER_SAMPLE_SIZE, 2_000, 1, 10_000);
-  const sample = await context.prisma.$queryRaw<Array<{ assetId: string; embedding: string }>>(Prisma.sql`
+  const sample = await context.prisma.$queryRaw<
+    Array<{ assetId: string; embedding: string }>
+  >(Prisma.sql`
     SELECT link."assetId", embedding.embedding::text AS embedding
     FROM "EagleAssetManualTag" link
     JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"

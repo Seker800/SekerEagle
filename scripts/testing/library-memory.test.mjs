@@ -6,10 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { before, after, test } from 'node:test';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
-import {
-  createLibraryReadPool,
-  LibraryReadStore,
-} from '../../apps/api/dist/eagle/reader-store.js';
+import { createLibraryReadPool, LibraryReadStore } from '../../apps/api/dist/eagle/reader-store.js';
 import { compileSearchPredicate } from '../../apps/api/dist/eagle/eagle-search-predicate.js';
 import { buildEagleFilterWhere } from '../../apps/api/dist/eagle/eagle-filter-query.js';
 import { createLibraryReaderServer } from '../../apps/api/dist/eagle/reader-server.js';

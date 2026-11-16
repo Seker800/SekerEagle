@@ -62,7 +62,8 @@ export const imageJob: AssetFamilyHandler = async ({ job, remoteRequired, contex
 
   // The same queue, policy and lease guard handle both inference and stored-vector activation.
   // Check before selecting or reading an object: a SEND must not download or infer again.
-  if (job.kind === 'GENERATE_EMBEDDING' && (await context.embeddingProcessor.activateStored(job))) return;
+  if (job.kind === 'GENERATE_EMBEDDING' && (await context.embeddingProcessor.activateStored(job)))
+    return;
   if (asset.mimeType.startsWith('image/')) {
     if (asset.byteSize > BigInt(CAMERA_MAX_IMAGE_BYTES))
       throw new PermanentMediaValidationError(
@@ -120,10 +121,11 @@ export const imageJob: AssetFamilyHandler = async ({ job, remoteRequired, contex
       result: processed,
       sha256,
       sourceMode,
-    } = await (remoteRequired ? context.remoteMediaClient.image.bind(context.remoteMediaClient) : processImageWork)(
-      object.Body as AsyncIterable<Uint8Array>,
-      imageWork,
-    );
+    } = await (
+      remoteRequired
+        ? context.remoteMediaClient.image.bind(context.remoteMediaClient)
+        : processImageWork
+    )(object.Body as AsyncIterable<Uint8Array>, imageWork);
     process.stdout.write(
       `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, processorVersion: job.processorVersion, mimeType: asset.mimeType, sourceMode })}\n`,
     );
@@ -294,8 +296,7 @@ export const imageJob: AssetFamilyHandler = async ({ job, remoteRequired, contex
         photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
         livePhoto: livePhoto ?? null,
         scheduleFaces:
-          context.facesConfigured ||
-          context.remoteKinds().includes('ANALYZE_PHOTO_FACES'),
+          context.facesConfigured || context.remoteKinds().includes('ANALYZE_PHOTO_FACES'),
         deferDetails,
         preserveBrowseState: sourceDetailsOnly,
       });
@@ -304,5 +305,4 @@ export const imageJob: AssetFamilyHandler = async ({ job, remoteRequired, contex
     }
     return;
   }
-
 };

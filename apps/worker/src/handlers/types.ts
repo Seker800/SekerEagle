@@ -27,7 +27,4 @@ export interface JobExecution {
 }
 
 export type JobHandler = (execution: JobExecution) => Promise<void>;
-export type AssetFamilyHandler = (
-  execution: JobExecution,
-  asset: JobMediaAsset,
-) => Promise<void>;
+export type AssetFamilyHandler = (execution: JobExecution, asset: JobMediaAsset) => Promise<void>;

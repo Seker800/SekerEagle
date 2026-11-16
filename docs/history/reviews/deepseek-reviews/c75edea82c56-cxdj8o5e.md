@@ -27,6 +27,7 @@
 ### 1. 中：冲突后只刷新目录，未刷新“合并目标”轻 options，清除重选后仍可能用旧版本目标再次 404/409
 
 **位置**
+
 - `apps/web/src/components/photos/PhotoPersonMergeSelection.tsx:44-52`（`people-merge-targets` 查询，`staleTime: 30000`）
 - `apps/web/src/components/photos/PhotoPersonMergeSelection.tsx:78-81`（404/409 时只 `setConflicted` + `onConflict()`）
 - `apps/web/src/components/photos/PhotoCollections.tsx:218-222`（`onConflict` 只失效 `['eagle', ownerId, 'PHOTO', 'people']`）
@@ -47,6 +48,7 @@
 ### 2. 中低：移除 `people` 失效后，“不是同一个人”导致的版本递增没有投影回目录/目标缓存
 
 **位置**
+
 - `apps/web/src/components/photos/PhotoCollections.tsx:113-119`（`afterReviewChange` 不再失效 `people`）
 - `apps/web/src/components/photos/PhotoPeopleReview.tsx:208-222`（DIFFERENT 分支只 `updatePeople` 写 review 的 edits）
 - 服务端版本递增：`apps/api/src/photos/photo-person-review.service.ts:189-196`
@@ -67,6 +69,7 @@
 ### 3. 低（需产品确认）：证据“同照片数按相似度”实际使用含 confidence 的综合 rank
 
 **位置**
+
 - `apps/api/src/photos/photo-person-review-evidence.ts:75`（`rank = 0.8*similarity + 0.1*confidence + 0.1*volume`）
 - `apps/api/src/photos/photo-person-review-evidence.ts:78-85`（先 `firstCount`、`secondCount`，再 `rank`）
 
@@ -82,6 +85,7 @@
 ### 4. 低（当前被掩盖）：缓存投影把筛选器的 `people/options` 缓存也当成目录，隐私隐藏取错 key 下标
 
 **位置**
+
 - `apps/web/src/components/photos/photo-person-merge-cache.ts:16`（谓词同时匹配 `people` 和 `people-merge-targets`）
 - `apps/web/src/components/photos/photo-person-merge-cache.ts:18`（`query.queryKey[4] === false` 判断公共范围）
 - `apps/web/src/components/photos/usePhotoFilterOptions.ts:14`（筛选器 key 为 `['eagle', ownerId, 'PHOTO', 'people', 'options', includePrivate]`）

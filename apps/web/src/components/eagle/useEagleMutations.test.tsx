@@ -441,10 +441,9 @@ it('deletes a smart folder through the API and reports the removed folder', asyn
   );
   vi.stubGlobal('fetch', fetchMock);
   const onSmartFolderDeleted = vi.fn();
-  const view = renderHook(
-    () => useEagleMutations(keys, { ...callbacks, onSmartFolderDeleted }),
-    { wrapper: makeWrapper(client) },
-  );
+  const view = renderHook(() => useEagleMutations(keys, { ...callbacks, onSmartFolderDeleted }), {
+    wrapper: makeWrapper(client),
+  });
   await act(async () => {
     await view.result.current.deleteSmartFolderMutation.mutateAsync(folder);
   });

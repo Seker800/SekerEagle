@@ -123,14 +123,7 @@ export function EagleProcessingPage({
             })
           : null,
     }),
-    [
-      activePage,
-      fetchEagleProcessingSummary,
-      listEagleProcessingJobs,
-      kind,
-      lane,
-      status,
-    ],
+    [activePage, fetchEagleProcessingSummary, listEagleProcessingJobs, kind, lane, status],
   );
   const apply = useCallback((next: Awaited<ReturnType<typeof load>>) => {
     if (next.summary) {
@@ -569,10 +562,7 @@ export function EagleProcessingPage({
                 type="button"
                 disabled={isActing}
                 onClick={() =>
-                  void runAction(
-                    () => reconcileEagleProcessingJobs(),
-                    t('缺失任务扫描完成'),
-                  )
+                  void runAction(() => reconcileEagleProcessingJobs(), t('缺失任务扫描完成'))
                 }
               >
                 {' ' + t('扫描缺失任务') + ' '}

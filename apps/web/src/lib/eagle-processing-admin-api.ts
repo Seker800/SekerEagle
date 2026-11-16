@@ -77,7 +77,8 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     return request<EagleProcessingSummary>('summary');
   }
 
-  function listEagleProcessingJobs(filters: {
+  function listEagleProcessingJobs(
+    filters: {
       status?: string;
       lane?: string;
       kind?: string;
@@ -124,7 +125,8 @@ export function createEagleProcessingAdminApi(libraryMode: LibraryMode = 'MATERI
     >('reconcile', { method: 'POST', body: '{}' });
   }
 
-  function updateEagleProcessingSettings(settings: Pick<EagleProcessingSettings, 'mode' | 'nightStart' | 'nightEnd'>,
+  function updateEagleProcessingSettings(
+    settings: Pick<EagleProcessingSettings, 'mode' | 'nightStart' | 'nightEnd'>,
   ) {
     return request<EagleProcessingSettings>('settings', {
       method: 'PATCH',

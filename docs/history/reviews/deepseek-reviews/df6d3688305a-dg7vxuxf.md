@@ -24,6 +24,7 @@
 ## 问题 1（中）：空间不可用时仍会回退到完整读图与模型推理，随后才失败并重试
 
 **位置**
+
 - `apps/worker/src/embedding-publication.ts:88-90`：`publishStoredEmbedding` 在 `SPACE_INCOMPATIBLE` 时返回 `false`。
 - `apps/worker/src/embedding-job.ts:29-32, 61-71`：`activateStored` 的 `false` 被调用方当作“无可用存量向量”。
 - `apps/worker/src/main.ts:441-475`：`false` 后继续选择源对象、读取图片、调用 `embeddingProcessor.infer`。
@@ -31,6 +32,7 @@
 - `apps/worker/src/main.ts:1128-1155`：该错误是普通 `Error`，`embeddingRetry` 不识别，`permanent=false`，按普通媒体失败重试。
 
 **触发条件与证据**
+
 1. 常驻 worker 已成功执行过一次 `initializeSpace`（`embedding-space.ts:40-56` 对成功初始化永久 memoize）。
 2. 之后模型空间被替换/停用（`EAGLE...` 模型切换，或该 space 的 `isCurrent` 变为 false）。
 3. 队列里仍有该 worker 身份下待处理的 `GENERATE_EMBEDDING`（例如 SEND 复制出的向量任务）。
@@ -39,10 +41,12 @@
 这与文档“不重新下载或推理可复用向量”的取向相违背，也直接消耗模型与 S3 带宽；而该分支下推理结果注定无法发布（同一身份空间已不兼容）。
 
 **实际影响**
+
 - 模型切换后、旧 worker 尚未重启期间，每个积压任务白做一次（重试上限内多次）原图读取和模型推理。
 - 日志与任务中心表现为普通失败，排查时容易误判为模型/网络问题。
 
 **修复方向**
+
 - 区分“没有可复用向量”（返回 false，允许推理回退）与“当前身份空间已不可发布”（返回/抛出独立结果，如 `EMBEDDING_SPACE_INCOMPATIBLE`，worker 直接终态失败或等待显式重建，不进入推理路径）。
 - 或在 `processJob` 进入 `infer` 前再确认一次空间兼容性，避免先读图后失败。
 - 补一个真实的 `processJob` 级反例：空间在 memoize 后退役，断言不发生 S3 GET 与模型请求。
@@ -52,6 +56,7 @@
 ## 问题 2（低，待验证）：活动目标列表在首窗口合并后可能仍保持 invalidated，窗口聚焦可能整段重取
 
 **位置**
+
 - `apps/web/src/components/eagle/asset-operation-refresh.ts:87-90`：先对目标查询 `invalidateQueries({refetchType:'none'})`。
 - 同文件 `223-288`：只取消、标记 stale、合并首窗口，未显式清除 invalidated 状态。
 - `apps/web/src/main.tsx:8`：`new QueryClient()` 使用默认 `refetchOnWindowFocus`；`SekerEaglePage.tsx:597` 只设置了 asset list 的 `staleTime`。
@@ -61,6 +66,7 @@
 TanStack Query v5 中 `setQueryData` 是否会把 `isInvalidated` 复位（该行为取决于安装版本）。若不复位，活动目标列表在首窗口合并后仍陈旧，下一次窗口聚焦/重新挂载会触发整个 infinite query 全部分页重取（十二页即十二个 GET），与本轮“保留已加载分页、只补首窗口”的目标相冲突。
 
 **建议**
+
 - 增加断言：对活动目标查询合并后 `getQueryState(key).isInvalidated === false`；对关闭目标保持 true。
 - 若确认不会复位，合并首窗口成功后显式清除陈旧标记（或使用可控的 `setQueryData` + 成功状态/`ensureQueryData` 组合），同时保留失败重试意图。
 
@@ -69,6 +75,7 @@ TanStack Query v5 中 `setQueryData` 是否会把 `isInvalidated` 复位（该�
 ## 问题 3（低）：后台宿主的失败日志丢失具体错误，维护成功计数不再记录
 
 **位置**
+
 - `apps/api/src/asset-operation-background.ts:47-49`：`work().catch(() => logger.warn('operations_background_discovery_failed'))`，丢弃错误对象。
 - `apps/api/src/eagle/eagle-maintenance.service.ts:17-42`：现在只返回计数；被删除的 `runScheduledMaintenance` 原来会记录 `eagle_maintenance_failed {error}` 和 `eagle_maintenance_pruned {...result}`。
 
@@ -83,6 +90,7 @@ TanStack Query v5 中 `setQueryData` 是否会把 `isInvalidated` 复位（该�
 ## 问题 4（低）：Web 端旧的清空回收站客户端契约未同步
 
 **位置**
+
 - `apps/web/src/lib/eagle-api.ts:508-512, 719, 757`：`emptyEagleTrash` 仍声明返回 `{affectedAssetCount:number}`，请求 `POST /eagle/trash/empty`。
 - `apps/api/src/eagle/eagle.controller.ts:600-606`：该端点现在返回 `202` + `EagleOperationSummary`（`affectedAssetCount` 不存在）。
 
@@ -97,6 +105,7 @@ TanStack Query v5 中 `setQueryData` 是否会把 `isInvalidated` 复位（该�
 ## 问题 5（低，文档一致性）：旧的数据库批次配置上限说明已与代码不符
 
 **位置**
+
 - `apps/api/src/eagle/eagle-operation-settings.ts:10`：`OPERATION_DB_BATCH_SIZE` 已移除 `maximum`，超大的 `EAGLE_OPERATION_DB_BATCH_SIZE` 不再启动失败，而是在 `databaseBatchSize` 中按语句行宽钳制。
 - `docs/asset-operation-efficiency-2026-10-31.md:41`：仍写“启动时拒绝超过32767参数的保守换算预算”。
 

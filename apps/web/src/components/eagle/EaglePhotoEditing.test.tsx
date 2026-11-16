@@ -327,7 +327,8 @@ it('restores a saved copy from its original, autosaves there, and freezes its re
   expect(state.saveRecipe).toHaveBeenCalledWith('source', 2, { version: 1, edits });
   state.upload.mockResolvedValue({ asset: { id: 'second-copy' } });
   await restored.onSave(new File(['png'], 'edited.png'), { version: 1, edits });
-  expect(state.upload).toHaveBeenLastCalledWith(expect.any(File),
+  expect(state.upload).toHaveBeenLastCalledWith(
+    expect.any(File),
     expect.any(Function),
     expect.objectContaining({
       copySourceAssetId: 'source',
@@ -372,10 +373,10 @@ it('applies a saved cross-photo preset to a new session and saves presets', asyn
 
 it('does not let a revoked scope save a draft or export after switching mode', async () => {
   const { wrapper } = harness();
-  const view = renderHook(
-    ({ scopeKey }) => useEaglePhotoEditing({ ownerId: 'owner', scopeKey }),
-    { wrapper, initialProps: { scopeKey: 'old' } },
-  );
+  const view = renderHook(({ scopeKey }) => useEaglePhotoEditing({ ownerId: 'owner', scopeKey }), {
+    wrapper,
+    initialProps: { scopeKey: 'old' },
+  });
   act(() => view.result.current.open(asset));
   const old = view.result.current.session!;
   view.rerender({ scopeKey: 'new' });

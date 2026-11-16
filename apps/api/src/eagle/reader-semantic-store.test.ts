@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { LibraryMemoryIndex } from './reader-index';
-import {
-  loadResidentSemanticFolders,
-  withResidentSemanticGraph,
-} from './reader-semantic-store';
+import { loadResidentSemanticFolders, withResidentSemanticGraph } from './reader-semantic-store';
 
 const scope = { ownerId: 'owner', libraryMode: 'PHOTO' as const };
 function source(abort?: AbortController) {

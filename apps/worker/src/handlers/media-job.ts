@@ -21,11 +21,7 @@ export const assetJob: JobHandler = async (execution) => {
     });
     return;
   }
-  if (
-    remoteRequired &&
-    !asset.mimeType.startsWith('image/') &&
-    !isCameraVideoMime(asset.mimeType)
-  )
+  if (remoteRequired && !asset.mimeType.startsWith('image/') && !isCameraVideoMime(asset.mimeType))
     throw new RemoteMediaUnavailableError();
   if (job.kind === 'ANALYZE_PHOTO_FACES') return facesJob(execution, asset);
   if (asset.mimeType.startsWith('image/')) return imageJob(execution, asset);

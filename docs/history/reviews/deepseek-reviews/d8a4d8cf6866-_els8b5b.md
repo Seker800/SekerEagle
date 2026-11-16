@@ -23,6 +23,7 @@
 ## 发现一（高，需求风险，实际耗时待实测）：稀疏/零命中搜索仍可能全库扫描并被网关 15s 截成 504
 
 **位置**
+
 - `apps/api/src/eagle/eagle-image-search.service.ts:103-171`（`windowSize` 在 123，窗口循环 125-170；只在 `page.length >= limit` 或 `rows.length < windowSize` 时返回）
 - `apps/api/src/eagle/eagle.service.ts:559-586`（`candidateBatchSize = 250`，`exhausted = candidateIds.length < 250`，`ranked.length <= query.limit` 循环）
 - `deploy/gateway/nginx.conf:72-83`（`/api/` 的 `proxy_read_timeout 15s`，第 80 行）
@@ -40,6 +41,7 @@
 ## 发现二（中，性能风险，需实测）：带结构化筛选的搜索会把整份合格 ID 列表在每个日期窗口重复绑定
 
 **位置**
+
 - `apps/api/src/eagle/eagle.service.ts:545-555`（`hasStructuredFilters` 时把全部合格资产 id 拉成数组）、`:569`（传入 `rankPage`）
 - `apps/api/src/eagle/eagle-image-search.service.ts:94-96,137`（`visible` 里的 `asset.id = ANY($n::text[])`，被每个窗口查询使用）
 
@@ -52,6 +54,7 @@
 ## 发现三（中，需求呈现 + 可访问性）：降级提示放在网格末尾，长结果下不可见、读屏不播报
 
 **位置**
+
 - `apps/android/app/src/main/kotlin/com/sekereagle/android/NativeGalleryScreen.kt:363-366`（作为 `item(...)` 追加在 `state.items` 和 loading item 之后）
 - 对比同文件 `:244-264` 已有顶部搜索条件行；网页对照 `apps/web/src/components/eagle/SekerEaglePage.tsx:2092-2097`（顶部 `statusBar` + `role="status"`）
 

@@ -59,9 +59,7 @@ it('auto-clears an original-file error after six seconds', () => {
 
 it('tracks file drags and imports dropped files', () => {
   const importFiles = vi.fn();
-  const { result } = renderHook(() =>
-    useEagleAssetTransferActions(makeOptions({ importFiles })),
-  );
+  const { result } = renderHook(() => useEagleAssetTransferActions(makeOptions({ importFiles })));
   const file = new File(['x'], 'x.jpg', { type: 'image/jpeg' });
   const preventDefault = vi.fn();
   const event = {

@@ -94,13 +94,7 @@ export interface PhotoEditSession {
   ) => Promise<SavedPhoto>;
 }
 
-export function useEaglePhotoEditing({
-  ownerId,
-  scopeKey,
-}: {
-  ownerId: string;
-  scopeKey: string;
-}) {
+export function useEaglePhotoEditing({ ownerId, scopeKey }: { ownerId: string; scopeKey: string }) {
   const { libraryMode, api } = useLibraryWorkspace();
   const client = useQueryClient();
   const currentScope = useRef(scopeKey);
@@ -257,9 +251,7 @@ export function useEaglePhotoEditing({
       api.getEagleEditRecipe(asset.id),
       api.listEagleWatermarkPresets().catch(() => ({ presets: {} })),
     ]);
-    const base = stored?.baseAssetId
-      ? await api.getEagleAsset(stored.baseAssetId)
-      : asset;
+    const base = stored?.baseAssetId ? await api.getEagleAsset(stored.baseAssetId) : asset;
     assertScope();
     if (stored && base.mediaRevision !== stored.baseMediaRevision)
       throw new Error(t('原照片内容已变化，无法恢复编辑参数。'));

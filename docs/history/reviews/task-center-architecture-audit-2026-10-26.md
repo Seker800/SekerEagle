@@ -57,10 +57,10 @@
 
 ### 2. 同一条规则三份实现，漂移是结构性的
 
-| 层                       | 实现位置                                                                                                                                                       | 职责                                         |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 领取（真实决定能不能跑） | `scheduled-media-candidates`、`processing-policy`、[job-claim.ts](../../../apps/worker/src/job-claim.ts:71)                                                          | 车道、依赖、白名单、时段、公平轮次、租约 CAS |
-| 解释（告诉用户为什么）   | [eagle-task-center.service.ts](../../../apps/api/src/eagle/eagle-task-center.service.ts:176)                                                                         | 一段顺序覆盖链，先命中者赢                   |
+| 层                       | 实现位置                                                                                                                                                                   | 职责                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 领取（真实决定能不能跑） | `scheduled-media-candidates`、`processing-policy`、[job-claim.ts](../../../apps/worker/src/job-claim.ts:71)                                                                | 车道、依赖、白名单、时段、公平轮次、租约 CAS |
+| 解释（告诉用户为什么）   | [eagle-task-center.service.ts](../../../apps/api/src/eagle/eagle-task-center.service.ts:176)                                                                               | 一段顺序覆盖链，先命中者赢                   |
 | 展示（卡片状态）         | [task-center-labels.ts](../../../apps/web/src/components/eagle/task-center-labels.ts:171)、[task-scheduling.ts](../../../packages/library-core/src/task-scheduling.ts:157) | 从聚合计数反推                               |
 
 已发生的故障：10-26"worker 在线掩盖模型断连"——因为 `workerOwned && !workers.length`（[eagle-task-center.service.ts](../../../apps/api/src/eagle/eagle-task-center.service.ts:191)）排在模型可用性判断（同文件 195 行）之前，worker 在线就永远轮不到模型原因。修复方式只能是在链里再插一个分支。

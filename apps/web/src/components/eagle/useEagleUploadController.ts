@@ -47,10 +47,7 @@ export function useEagleUploadController(assetsQueryKey: QueryKey) {
   itemsRef.current = allItems;
   const [speed, setSpeed] = useState({ bytes: 0, at: 0, speed: 0 });
   const dedupe = useMemo(
-    () =>
-      new UploadDedupeChecker((items, signal) =>
-        checkEagleUploadContentBatch(items, signal),
-      ),
+    () => new UploadDedupeChecker((items, signal) => checkEagleUploadContentBatch(items, signal)),
     [checkEagleUploadContentBatch],
   );
   const scope = hashKey(assetsQueryKey);

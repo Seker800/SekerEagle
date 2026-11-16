@@ -529,7 +529,8 @@ export function SekerEaglePage({
     previousSelectionScope.current = selectionScope;
     clearAssetSelection({ preserveMode: true });
   }, [selectionScope]);
-  const { manualTagsQuery, manualTagGroupsQuery, smartFoldersQuery } = useEagleReferenceData(queryKeys,
+  const { manualTagsQuery, manualTagGroupsQuery, smartFoldersQuery } = useEagleReferenceData(
+    queryKeys,
     { enabled: true },
   );
   useAssetOperationProgress(privateVisible, true);
@@ -650,11 +651,7 @@ export function SekerEaglePage({
     privacyRulesRevision,
     resetAssetPrivacyState,
   ]);
-  const libraryCount = useEagleLibraryCount(queryKeys,
-    privateVisible,
-    privacyRulesRevision,
-    true,
-  );
+  const libraryCount = useEagleLibraryCount(queryKeys, privateVisible, privacyRulesRevision, true);
   const photoStacks = useMemo(() => {
     const stacks = new Map<string, EaglePhotoStack>();
     for (const page of assetsQuery.data?.pages ?? [])
@@ -938,8 +935,7 @@ export function SekerEaglePage({
   );
   const previewPyramidQuery = useQuery({
     queryKey: queryKeys.pyramid(imagePreview.previewImage?.assetId ?? 'none'),
-    queryFn: ({ signal }) =>
-      getEaglePyramidDescriptor(imagePreview.previewImage!.assetId!, signal),
+    queryFn: ({ signal }) => getEaglePyramidDescriptor(imagePreview.previewImage!.assetId!, signal),
     enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,

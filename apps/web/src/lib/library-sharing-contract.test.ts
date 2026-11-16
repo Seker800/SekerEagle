@@ -56,10 +56,8 @@ const operations = {
   send: (mode: LibraryMode) =>
     createEagleApi(mode).sendEagleAssets({ assetIds: ['asset'], operationId: 'operation' }),
   location: (mode: LibraryMode) => createEagleApi(mode).getEagleAssetLocation('asset'),
-  list: (mode: LibraryMode) =>
-    createEagleApi(mode).listEagleAssets({ limit: 20, search: 'cat' }),
-  tags: (mode: LibraryMode) =>
-    createEagleApi(mode).replaceEagleAssetManualTags('asset', ['tag']),
+  list: (mode: LibraryMode) => createEagleApi(mode).listEagleAssets({ limit: 20, search: 'cat' }),
+  tags: (mode: LibraryMode) => createEagleApi(mode).replaceEagleAssetManualTags('asset', ['tag']),
   trash: (mode: LibraryMode) => createEagleApi(mode).batchTrashEagleAssets(['asset']),
   restore: (mode: LibraryMode) => createEagleApi(mode).batchRestoreEagleAssets(['asset']),
   filters: (mode: LibraryMode) =>
@@ -104,7 +102,8 @@ it.each(['MATERIAL', 'PHOTO'] as const)(
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(Response.json({ message: 'stop after declaration' }, { status: 400 }));
     await expect(
-      createEagleApi(mode).uploadEagleAsset(new File(['png'], 'edited.png', { type: 'image/png' }),
+      createEagleApi(mode).uploadEagleAsset(
+        new File(['png'], 'edited.png', { type: 'image/png' }),
         vi.fn(),
         {
           duplicatePolicy: 'CREATE_COPY',

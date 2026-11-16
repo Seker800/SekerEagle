@@ -5,15 +5,8 @@ import type { LibraryMode } from '../../lib/library-api-scope';
 import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import type { EagleSelectionGesture } from './eagle-selection';
-import {
-  getAssetDragIds,
-  getDesktopAssetDragBridge,
-  isFileDrag,
-} from './eagle-asset-drag';
-import {
-  DesktopAssetDragSession,
-  type DesktopAssetDragStatus,
-} from './eagle-asset-drag-session';
+import { getAssetDragIds, getDesktopAssetDragBridge, isFileDrag } from './eagle-asset-drag';
+import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
 import { getEaglePreviewContentUrl } from './eagle-media-sources';
 import type { getEagleWorkspaceCache, EagleLibraryView } from './eagle-workspace-cache';
 

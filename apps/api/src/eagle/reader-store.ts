@@ -5,10 +5,7 @@ import { Pool, type PoolClient } from 'pg';
 import { LibraryMemoryIndex } from './reader-index';
 import type { MemoryAsset } from './reader-predicate';
 import type { LibraryIdentity } from './library-mode';
-import {
-  loadResidentSemanticFolders,
-  SemanticMemoryBudgetError,
-} from './reader-semantic-store';
+import { loadResidentSemanticFolders, SemanticMemoryBudgetError } from './reader-semantic-store';
 
 async function execute<T extends MemoryAsset>(
   connection: Pick<PoolClient, 'query'>,

@@ -107,7 +107,8 @@ describe('listEagleAssetUpdates', () => {
       )
       .mockImplementation(async () => Response.json({ id: 'asset-1' }));
 
-    const result = await uploadEagleAsset(new File(['image'], 'image.png', { type: 'image/png' }),
+    const result = await uploadEagleAsset(
+      new File(['image'], 'image.png', { type: 'image/png' }),
       progress,
     );
 
@@ -174,7 +175,8 @@ it('session revocation cancels an object PUT and prevents completion or cleanup 
     throw new Error(`unexpected request: ${url}`);
   });
   try {
-    const upload = uploadEagleAsset(new File(['image'], 'test.png', { type: 'image/png' }),
+    const upload = uploadEagleAsset(
+      new File(['image'], 'test.png', { type: 'image/png' }),
       vi.fn(),
     );
     const rejected = expect(upload).rejects.toMatchObject({ name: 'AbortError' });
@@ -264,7 +266,8 @@ describe('upload throughput', () => {
       throw new Error(`unexpected request: ${url}`);
     });
 
-    const result = await uploadEagleAsset(new File([new Uint8Array(12)], 'multi.jpg', { type: 'image/jpeg' }),
+    const result = await uploadEagleAsset(
+      new File([new Uint8Array(12)], 'multi.jpg', { type: 'image/jpeg' }),
       vi.fn(),
       { waitForFinalization: false },
     );
@@ -294,7 +297,8 @@ describe('upload throughput', () => {
       throw new Error(`unexpected request: ${url}`);
     });
 
-    const result = await uploadEagleAsset(new File(['image'], 'fast.jpg', { type: 'image/jpeg' }),
+    const result = await uploadEagleAsset(
+      new File(['image'], 'fast.jpg', { type: 'image/jpeg' }),
       vi.fn(),
       { waitForFinalization: false },
     );
@@ -321,10 +325,7 @@ describe('upload throughput', () => {
       },
     ];
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ items }));
-    const result = await createEagleApi('PHOTO').getEagleUploadStatuses([
-      'session-a',
-      'session-b',
-    ]);
+    const result = await createEagleApi('PHOTO').getEagleUploadStatuses(['session-a', 'session-b']);
     expect(result).toEqual(items);
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       '/api/photos/uploads/status-batch',
