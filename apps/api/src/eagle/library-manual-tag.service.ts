@@ -25,7 +25,7 @@ import {
   normalizeName,
   privateVisibilityWhere,
   visibleManualTagWhere,
-} from './eagle-library-values';
+} from './library-values';
 
 const BATCH_TAG_WRITE_ASSET_CHUNK_SIZE = 100;
 

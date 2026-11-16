@@ -93,7 +93,7 @@ import {
   normalizeKey,
   normalizeName,
   privateVisibilityWhere,
-} from './eagle-library-values';
+} from './library-values';
 
 type AssetListOptions = { trash?: boolean; includePrivate?: boolean };
 

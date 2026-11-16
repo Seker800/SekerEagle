@@ -23,7 +23,7 @@ import {
   readSmartFolderDependencies,
   readStoredQueryVersion,
   type SmartFolderDependencies,
-} from './eagle-library-values';
+} from './library-values';
 
 @Injectable()
 export class LibrarySmartFolderService {
