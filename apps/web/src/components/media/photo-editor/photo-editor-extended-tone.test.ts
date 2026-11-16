@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
-import { adjustedLuminance, applyExtendedTone } from './photo-editor-extended-tone';
+import {
+  adjustedLuminance,
+  applyExtendedTone,
+} from '@sekereagle/photo-render-core/photo-editor-extended-tone';
 
 const grey = (value: number) => new Uint8Array([value, value, value, 96]);
 const apply = (pixel: Uint8Array, edits: Partial<PhotoEdits>) =>

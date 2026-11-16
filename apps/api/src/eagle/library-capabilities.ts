@@ -6,7 +6,6 @@ import { EagleDuplicateService } from './eagle-duplicates.service';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { EagleImageSearchService } from './eagle-image-search.service';
-import { EagleAiTagService } from './eagle-ai-tag.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
 import { EagleBrowserCaptureService } from './eagle-browser-capture.service';
 import { EagleImportService } from './eagle-import.service';
@@ -66,16 +65,10 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
   {
     id: 'search',
     modes: ['MATERIAL', 'PHOTO'],
-    providers: [
-      EagleImageSearchService,
-      EagleAiTagService,
-      EagleEmbeddingClient,
-      EagleVectorService,
-    ],
+    providers: [EagleImageSearchService, EagleEmbeddingClient, EagleVectorService],
     tables: [
       'EagleEmbeddingSpace',
       'EagleAssetEmbedding',
-      'EagleAiTag',
       'EagleManualTagSemanticConfig',
       'EagleTagPrototypeSnapshot',
       'EagleTagPrototype',
@@ -83,10 +76,13 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
       'EagleVectorTagSuggestion',
       'EagleTagSemanticBuild',
       'EagleAssetManualTagIngestion',
-      'EagleAiAnalysisRun',
-      'EagleAssetAiTag',
       'EagleAssetColorAnalysis',
       'EagleAssetColorSwatch',
+      // Retired 2026-10-24, read paths removed 2026-11-16. Historical rows are retained
+      // without an owner: no capability reads or writes them until a deliberate drop.
+      'EagleAiTag',
+      'EagleAiAnalysisRun',
+      'EagleAssetAiTag',
     ],
     dependsOn: [],
   },

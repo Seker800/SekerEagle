@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyPhotoDetail, triangleBlur } from './photo-editor-detail';
+import { applyPhotoDetail, triangleBlur } from '@sekereagle/photo-render-core/photo-editor-detail';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 
 function solid(width: number, height: number, value = 128) {

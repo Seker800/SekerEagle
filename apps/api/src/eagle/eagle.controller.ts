@@ -818,11 +818,6 @@ export class EagleController {
     });
   }
 
-  @Get('ai-tags')
-  listAiTags(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.listAiTags(principal.sub, principal.canViewPrivate);
-  }
-
   @Put('assets/:assetId/tags')
   @UseGuards(BrowserOriginGuard)
   @HttpCode(202)

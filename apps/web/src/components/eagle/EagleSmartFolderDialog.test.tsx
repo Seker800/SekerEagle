@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createEmptyEagleFilterQuery, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
-import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
+import type { EagleManualTag } from '../../lib/eagle-api';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 
 const countEagleAssetsMock = vi.fn().mockResolvedValue({ count: 327 });
@@ -30,10 +30,6 @@ const manualTags: EagleManualTag[] = [
     pinyinInitials: 'kit',
   },
 ];
-const aiTags: EagleAiTag[] = [
-  { id: 'industrial', name: '工业', assetCount: 18, pinyin: 'gongye', pinyinInitials: 'gy' },
-];
-
 function renderDialog(
   onSave = vi.fn(),
   options: {
@@ -51,7 +47,6 @@ function renderDialog(
           initialQuery={options.initialQuery ?? createEmptyEagleFilterQuery()}
           mode={options.mode}
           manualTags={manualTags}
-          aiTags={aiTags}
           onClose={vi.fn()}
           onSave={onSave}
         />

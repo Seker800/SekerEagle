@@ -15,7 +15,7 @@ import {
   type EagleFilterQuery,
   type EagleFilterRule,
 } from '@sekereagle/eagle-filter-core';
-import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
+import type { EagleManualTag } from '../../lib/eagle-api';
 import { searchAndSortEagleTags } from './eagle-tag-index';
 import styles from './EagleRuleBuilder.module.css';
 export type EagleFilterOptions = Partial<
@@ -25,14 +25,12 @@ interface EagleRuleBuilderProps {
   fieldOptions?: EagleFilterOptions;
   value: EagleFilterQuery;
   manualTags: EagleManualTag[];
-  aiTags: EagleAiTag[];
   onChange: (value: EagleFilterQuery) => void;
 }
 export function EagleRuleBuilder({
   fieldOptions,
   value,
   manualTags,
-  aiTags,
   onChange,
 }: EagleRuleBuilderProps) {
   const replaceCondition = (conditionId: string, next: EagleFilterCondition) =>
@@ -153,7 +151,6 @@ export function EagleRuleBuilder({
                 rule={rule}
                 ruleIndex={ruleIndex}
                 manualTags={manualTags}
-                aiTags={aiTags}
                 onChange={(nextRule) =>
                   replaceCondition(condition.id, {
                     ...condition,
@@ -186,7 +183,6 @@ interface RuleRowProps {
   rule: EagleFilterRule;
   ruleIndex: number;
   manualTags: EagleManualTag[];
-  aiTags: EagleAiTag[];
   onChange: (value: EagleFilterRule) => void;
   onAdd: () => void;
   onRemove: () => void;
@@ -197,7 +193,6 @@ function RuleRow({
   rule,
   ruleIndex,
   manualTags,
-  aiTags,
   onChange,
   onAdd,
   onRemove,
@@ -258,7 +253,6 @@ function RuleRow({
             fieldOptions={fieldOptions}
             rule={rule}
             manualTags={manualTags}
-            aiTags={aiTags}
             onChange={onChange}
           />
         )}
@@ -295,12 +289,7 @@ function changeRuleOperator(
       rule.value ?? (getEagleFilterFieldDefinition(rule.field).kind === 'DATE' ? '' : 0);
     return { ...rule, operator, value: [value, value] as EagleFilterRule['value'] };
   }
-  if (
-    operator !== 'BETWEEN' &&
-    Array.isArray(rule.value) &&
-    rule.field !== 'MANUAL_TAGS' &&
-    rule.field !== 'AI_TAGS'
-  ) {
+  if (operator !== 'BETWEEN' && Array.isArray(rule.value) && rule.field !== 'MANUAL_TAGS') {
     return { ...rule, operator, value: rule.value[0] };
   }
   return { ...rule, operator };
@@ -309,13 +298,11 @@ function RuleValue({
   fieldOptions,
   rule,
   manualTags,
-  aiTags,
   onChange,
 }: {
   fieldOptions?: EagleFilterOptions;
   rule: EagleFilterRule;
   manualTags: EagleManualTag[];
-  aiTags: EagleAiTag[];
   onChange: (value: EagleFilterRule) => void;
 }) {
   const definition = getEagleFilterFieldDefinition(rule.field);
@@ -346,7 +333,7 @@ function RuleValue({
     return (
       <RuleTagPicker
         label={definition.label}
-        tags={rule.field === 'MANUAL_TAGS' ? manualTags : aiTags}
+        tags={manualTags}
         value={Array.isArray(rule.value) ? (rule.value as string[]) : []}
         onChange={(value) => onChange({ ...rule, value })}
       />
@@ -511,7 +498,7 @@ function NumberRuleValue({
     </div>
   );
 }
-type RuleTag = EagleManualTag | EagleAiTag;
+type RuleTag = EagleManualTag;
 function RuleTagPicker({
   label,
   tags,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { applyPhotoTone, photoContrast, srgbToLinear, linearToSrgb } from './photo-editor-tone';
+import {
+  applyPhotoTone,
+  photoContrast,
+  srgbToLinear,
+  linearToSrgb,
+} from '@sekereagle/photo-render-core/photo-editor-tone';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 
 describe('photographic adjustment calibration', () => {

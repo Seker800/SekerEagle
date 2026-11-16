@@ -23,7 +23,6 @@ import { ConcurrentWorkError, mapWithConcurrency } from './async-pool';
 
 export type EagleRendition = components['schemas']['EagleRenditionResponseDto'];
 export type EagleManualTagRef = components['schemas']['EagleManualTagResponseDto'];
-export type EagleAiTagRef = components['schemas']['EagleAiTagResponseDto'];
 export type EagleColorAnalysis = components['schemas']['EagleColorAnalysisResponseDto'];
 export type PhotoMetadata = components['schemas']['EaglePhotoMetadataResponseDto'];
 export type PhotoLocation = components['schemas']['EaglePhotoLocationResponseDto'];
@@ -84,14 +83,6 @@ export interface EagleManualTagGroup {
   description: string | null;
   rowVersion: number;
   tagCount: number;
-}
-
-export interface EagleAiTag {
-  id: string;
-  name: string;
-  assetCount: number;
-  pinyin: string;
-  pinyinInitials: string;
 }
 
 export interface EagleSmartFolder {
@@ -158,7 +149,6 @@ export interface EagleAssetFilters {
   search?: string;
   formats?: string[];
   manualTagIds?: string[];
-  aiTagIds?: string[];
   rating?: number;
   minWidth?: number;
   maxWidth?: number;
@@ -237,7 +227,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     for (const key of ['rating', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'] as const) {
       if (filters[key] !== undefined) query.set(key, String(filters[key]));
     }
-    for (const key of ['formats', 'manualTagIds', 'aiTagIds'] as const) {
+    for (const key of ['formats', 'manualTagIds'] as const) {
       if (filters[key]?.length) query.set(key, filters[key].join(','));
     }
     if (filters.rules) query.set('rules', JSON.stringify(filters.rules));
@@ -248,7 +238,6 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return {
       ...asset,
       isPrivate: asset.isPrivate ?? false,
-      aiTags: 'aiTags' in asset && Array.isArray(asset.aiTags) ? asset.aiTags : [],
       colorAnalysis: 'colorAnalysis' in asset ? (asset.colorAnalysis ?? null) : null,
     };
   }
@@ -429,10 +418,6 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return api<OperationResponse<{ deletedId: string }>>(`/eagle/tag-groups/${id}`, {
       method: 'DELETE',
     });
-  }
-
-  async function listEagleAiTags(_token: string) {
-    return api<EagleAiTag[]>('/eagle/ai-tags');
   }
 
   async function listEagleSmartFolders(_token: string) {
@@ -945,7 +930,6 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     createEagleManualTagGroup,
     updateEagleManualTagGroup,
     deleteEagleManualTagGroup,
-    listEagleAiTags,
     listEagleSmartFolders,
     createEagleSmartFolder,
     updateEagleSmartFolder,
@@ -994,7 +978,6 @@ export const {
   createEagleManualTagGroup,
   updateEagleManualTagGroup,
   deleteEagleManualTagGroup,
-  listEagleAiTags,
   listEagleSmartFolders,
   createEagleSmartFolder,
   updateEagleSmartFolder,

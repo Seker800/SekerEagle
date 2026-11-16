@@ -21,7 +21,6 @@ export const transferFactIncludes = {
   manualTagLinks: {
     include: { tag: { include: { group: true, groupMemberships: { include: { group: true } } } } },
   },
-  aiTagLinks: { include: { aiTag: true, analysisRun: true } },
   colorAnalyses: { where: { status: 'COMPLETED', isCurrent: true }, include: { swatches: true } },
 } satisfies Prisma.EagleAssetInclude;
 type Source = Prisma.EagleAssetGetPayload<{ include: typeof transferFactIncludes }>;
@@ -37,26 +36,17 @@ export async function readTransferSources(
     include: {
       ...transferFactIncludes,
       manualTagLinks: true,
-      aiTagLinks: true,
       colorAnalyses: { where: transferFactIncludes.colorAnalyses.where },
     },
   });
   const tagIds = [...new Set(rows.flatMap((row) => row.manualTagLinks.map((link) => link.tagId)))];
-  const aiIds = [...new Set(rows.flatMap((row) => row.aiTagLinks.map((link) => link.aiTagId)))];
-  const runIds = [
-    ...new Set(rows.flatMap((row) => row.aiTagLinks.map((link) => link.analysisRunId))),
-  ];
   const analysisIds = rows.flatMap((row) => row.colorAnalyses.map((analysis) => analysis.id));
-  const [tags, aiTags, runs, swatches] = await Promise.all([
+  const [tags, swatches] = await Promise.all([
     tagIds.length
       ? tx.eagleManualTag.findMany({
           where: { ...scope, id: { in: tagIds } },
           include: transferFactIncludes.manualTagLinks.include.tag.include,
         })
-      : [],
-    aiIds.length ? tx.eagleAiTag.findMany({ where: { ...scope, id: { in: aiIds } } }) : [],
-    runIds.length
-      ? tx.eagleAiAnalysisRun.findMany({ where: { ...scope, id: { in: runIds } } })
       : [],
     analysisIds.length
       ? tx.eagleAssetColorSwatch.findMany({
@@ -66,9 +56,7 @@ export async function readTransferSources(
   ]);
   const byId = <T extends { id: string }>(values: readonly T[]) =>
     new Map(values.map((value) => [value.id, value]));
-  const tagsById = byId(tags),
-    aiTagsById = byId(aiTags),
-    runsById = byId(runs);
+  const tagsById = byId(tags);
   const swatchesByAnalysis = new Map<string, typeof swatches>();
   for (const swatch of swatches) {
     const group = swatchesByAnalysis.get(swatch.analysisId) ?? [];
@@ -85,11 +73,6 @@ export async function readTransferSources(
     manualTagLinks: row.manualTagLinks.map((link) => ({
       ...link,
       tag: required(tagsById, link.tagId),
-    })),
-    aiTagLinks: row.aiTagLinks.map((link) => ({
-      ...link,
-      aiTag: required(aiTagsById, link.aiTagId),
-      analysisRun: required(runsById, link.analysisRunId),
     })),
     colorAnalyses: row.colorAnalyses.map((analysis) => ({
       ...analysis,
@@ -336,65 +319,6 @@ async function copyTags(
   else
     for (const { rows } of databaseBatches(links, DATABASE_STATEMENTS.transferAssetTagInsert))
       await tx.eagleAssetManualTag.createMany({ data: rows, skipDuplicates: true });
-  // Retired AI tags are existing results, not new model executions or new approval decisions.
-  const runs = new Map<string, string>();
-  for (const link of source.aiTagLinks ?? []) {
-    if (link.analysisRun.assetRevision !== source.mediaRevision) continue;
-    let runId = runs.get(link.analysisRunId);
-    if (!runId) {
-      const run = link.analysisRun;
-      const created = await tx.eagleAiAnalysisRun.create({
-        data: {
-          ownerId,
-          libraryMode: targetMode,
-          assetId: targetId,
-          assetRevision: 1,
-          provider: run.provider,
-          model: run.model,
-          modelVersion: run.modelVersion,
-          promptVersion: run.promptVersion,
-          processorVersion: run.processorVersion,
-          status: run.status,
-          errorCode: run.errorCode,
-          startedAt: run.startedAt,
-          completedAt: run.completedAt,
-          createdAt: run.createdAt,
-        },
-      });
-      runId = created.id;
-      runs.set(link.analysisRunId, runId);
-    }
-    const tag = await tx.eagleAiTag.upsert({
-      where: {
-        ownerId_libraryMode_normalizedName: {
-          ownerId,
-          libraryMode: targetMode,
-          normalizedName: link.aiTag.normalizedName,
-        },
-      },
-      update: {},
-      create: {
-        ownerId,
-        libraryMode: targetMode,
-        name: link.aiTag.name,
-        normalizedName: link.aiTag.normalizedName,
-      },
-    });
-    await tx.eagleAssetAiTag.create({
-      data: {
-        ownerId,
-        libraryMode: targetMode,
-        assetId: targetId,
-        aiTagId: tag.id,
-        analysisRunId: runId,
-        confidence: link.confidence,
-        status: link.status,
-        promotedManualTagId: link.promotedManualTagId
-          ? tagIds.get(link.promotedManualTagId)
-          : undefined,
-      },
-    });
-  }
   return hasPrivateTag;
 }
 

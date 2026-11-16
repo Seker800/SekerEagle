@@ -90,7 +90,6 @@ import {
   IconRefresh,
   IconSearch,
   IconSettings,
-  IconSparkles,
   IconStar,
   IconStarFilled,
   IconTagsOff,
@@ -206,7 +205,7 @@ type EagleTagPickerState = {
 type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS' | 'TASKS';
 
 function getWorkspaceSection(view: EagleLibraryView): EagleWorkspaceSection | null {
-  if (view === 'MANUAL_TAGS' || view === 'AI_TAGS') return 'TAGS';
+  if (view === 'MANUAL_TAGS') return 'TAGS';
   if (view === 'PROCESSING') return 'TASKS';
   if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED') {
     return 'PENDING';
@@ -356,7 +355,6 @@ export function SekerEaglePage({
     const saved = !privateVisible ? workspaceCache.browse?.libraryView : undefined;
     return saved && saved !== 'PRIVATE' ? saved : 'ACTIVE';
   });
-  const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
   const [smartFolderOrder, setSmartFolderOrder] = useState<'DATE' | 'RELEVANCE'>(() =>
     privateVisible ? 'DATE' : (workspaceCache.browse?.smartFolderOrder ?? 'DATE'),
   );
@@ -446,7 +444,6 @@ export function SekerEaglePage({
   useEffect(() => {
     setOriginalFileError(null);
     setAssetDragStatus(null);
-    setAiTagReferenceRequested(false);
   }, [ownerId, libraryMode]);
   useEffect(() => {
     if (!originalFileError) return undefined;
@@ -653,12 +650,11 @@ export function SekerEaglePage({
     previousSelectionScope.current = selectionScope;
     clearAssetSelection({ preserveMode: true });
   }, [selectionScope]);
-  const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
-    useEagleReferenceData(accessToken, queryKeys, {
-      enabled: true,
-      aiTagsEnabled:
-        libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
-    });
+  const { manualTagsQuery, manualTagGroupsQuery, smartFoldersQuery } = useEagleReferenceData(
+    accessToken,
+    queryKeys,
+    { enabled: true },
+  );
   useAssetOperationProgress(privateVisible, true);
   const vectorSummaryQuery = useQuery({
     queryKey: queryKeys.vectorSummary,
@@ -1057,7 +1053,6 @@ export function SekerEaglePage({
     updatesQueryKey: queryKeys.assetUpdates,
   });
   const manualTagGroups = manualTagGroupsQuery.data ?? [];
-  const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];
   const previewAssets = imagePreview.context ?? assets;
   const previewAsset = previewAssets.find((asset) => asset.id === previewAssetId) ?? null;
@@ -1475,12 +1470,9 @@ export function SekerEaglePage({
     const motionSrc = getEagleLivePhotoContentUrl(asset);
     if (current.motionSrc !== motionSrc) imagePreview.setPreviewImage({ ...current, motionSrc });
   }, [assetsById, imagePreview.previewImage, imagePreview.setPreviewImage]);
-  const showAssetsForTag = (kind: 'MANUAL' | 'AI', tagId: string) => {
+  const showAssetsForTag = (tagId: string) => {
     changeLibraryView('ACTIVE');
-    setQuickFilters({
-      ...createEmptyEagleQuickFilterState(),
-      ...(kind === 'MANUAL' ? { manualTagIds: [tagId] } : { aiTagIds: [tagId] }),
-    });
+    setQuickFilters({ ...createEmptyEagleQuickFilterState(), manualTagIds: [tagId] });
   };
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
     if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
@@ -1547,8 +1539,6 @@ export function SekerEaglePage({
           fieldOptions={photoFieldOptions.fieldOptions}
           value={quickFilters}
           manualTags={manualTags}
-          aiTags={aiTags}
-          onRequestAiTags={() => setAiTagReferenceRequested(true)}
           onChange={setQuickFilters}
         />
         {peopleOptionsAction}
@@ -2041,10 +2031,7 @@ export function SekerEaglePage({
               title={t('标签')}
               ariaLabel={t('标签功能')}
               activeView={libraryView}
-              items={[
-                { view: 'MANUAL_TAGS', label: t('人工标签') },
-                { view: 'AI_TAGS', label: t('AI 标签') },
-              ]}
+              items={[{ view: 'MANUAL_TAGS', label: t('人工标签') }]}
               onSelect={changeLibraryView}
             />
           ) : workspaceSection === 'PENDING' ? (
@@ -2114,11 +2101,9 @@ export function SekerEaglePage({
                 }
               />
             </AsyncViewBoundary>
-          ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
+          ) : libraryView === 'MANUAL_TAGS' ? (
             <EagleTagPage
-              kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
               manualTags={manualTags}
-              aiTags={aiTags}
               manualTagGroups={manualTagGroups}
               creating={createTagMutation.isPending}
               busy={
@@ -2137,9 +2122,8 @@ export function SekerEaglePage({
                   deleteTagsMutation.error ??
                   updateTagGroupMutation.error ??
                   deleteTagGroupMutation.error ??
-                  (libraryView === 'MANUAL_TAGS'
-                    ? (manualTagsQuery.error ?? manualTagGroupsQuery.error)
-                    : aiTagsQuery.error)
+                  manualTagsQuery.error ??
+                  manualTagGroupsQuery.error
                 )?.message
               }
               onCreateManualTag={(name) => createTagMutation.mutate(name)}
@@ -2150,9 +2134,7 @@ export function SekerEaglePage({
                 updateTagGroupMutation.mutate({ group, changes })
               }
               onDeleteManualTagGroup={(group) => deleteTagGroupMutation.mutate(group)}
-              onSelectTag={(tagId) =>
-                showAssetsForTag(libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI', tagId)
-              }
+              onSelectTag={(tagId) => showAssetsForTag(tagId)}
             />
           ) : (
             <>
@@ -2727,19 +2709,6 @@ export function SekerEaglePage({
                       <p className={styles.inlineError}>{batchTagMutation.error.message}</p>
                     )}
                   </section>
-                  <section className={styles.detailSection}>
-                    <h3>
-                      <IconSparkles size={15} />
-                      {' ' + t('AI 自动标签') + ' '}
-                    </h3>
-                    <div className={styles.tagList}>
-                      {selectedAsset.aiTags.length ? (
-                        selectedAsset.aiTags.map((tag) => <span key={tag.id}>{tag.name}</span>)
-                      ) : (
-                        <em>{t('AI 分析尚未启用')}</em>
-                      )}
-                    </div>
-                  </section>
                   <form
                     ref={metadataFormRef}
                     id="eagle-asset-metadata-form"
@@ -3251,7 +3220,6 @@ export function SekerEaglePage({
           initialName={editingSmartFolder?.name}
           mode={editingSmartFolder ? 'edit' : 'create'}
           manualTags={manualTags}
-          aiTags={aiTags}
           pending={smartFolderMutation.isPending || updateSmartFolderMutation.isPending}
           error={
             (editingSmartFolder ? updateSmartFolderMutation.error : smartFolderMutation.error)

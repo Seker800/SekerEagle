@@ -57,7 +57,6 @@ export const searchPredicateModels: Readonly<Record<string, Model>> = {
       photoLocation: one('location'),
       photoFaces: relation('face'),
       manualTagLinks: relation('manualLink'),
-      aiTagLinks: relation('aiLink'),
       colorAnalyses: relation('analysis'),
       embeddings: relation('embedding'),
       owner: one('owner', 'ownerId', 'id', false),
@@ -74,12 +73,6 @@ export const searchPredicateModels: Readonly<Record<string, Model>> = {
     tag: one('tag', 'tagId', 'id'),
   }),
   tag: model('EagleManualTag', 'id ownerId libraryMode normalizedName'),
-  aiLink: model(
-    'EagleAssetAiTag',
-    'ownerId libraryMode assetId aiTagId status',
-    {},
-    { status: 'EagleAiTagStatus' },
-  ),
   analysis: model(
     'EagleAssetColorAnalysis',
     'id ownerId libraryMode assetId isCurrent processorVersion status',

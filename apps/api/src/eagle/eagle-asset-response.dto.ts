@@ -7,14 +7,6 @@ export class EagleManualTagResponseDto {
   @ApiProperty({ type: String, nullable: true }) color!: string | null;
 }
 
-export class EagleAiTagResponseDto {
-  @ApiProperty({ type: String }) id!: string;
-  @ApiProperty({ type: String }) name!: string;
-  @ApiProperty({ type: Number }) confidence!: number;
-  @ApiProperty({ enum: ['ACTIVE', 'HIDDEN', 'REJECTED'] }) status!:
-    'ACTIVE' | 'HIDDEN' | 'REJECTED';
-}
-
 export class EaglePhotoMetadataResponseDto {
   @ApiPropertyOptional({ type: Boolean }) captureMetadataInherited?: boolean;
   @ApiProperty({ type: String, format: 'date-time', nullable: true }) capturedAt!: Date | null;
@@ -121,7 +113,6 @@ export class EagleAssetResponseDto extends EagleAssetListResponseDto {
   privacyReasons?: EaglePrivacyReasonResponseDto[];
   @ApiProperty({ type: EagleAnnotationResponseDto, nullable: true })
   annotation!: EagleAnnotationResponseDto | null;
-  @ApiProperty({ type: [EagleAiTagResponseDto] }) aiTags!: EagleAiTagResponseDto[];
   @ApiProperty({ type: EagleColorAnalysisResponseDto, nullable: true })
   colorAnalysis!: EagleColorAnalysisResponseDto | null;
 }

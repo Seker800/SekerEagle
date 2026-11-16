@@ -1060,22 +1060,6 @@ export interface paths {
     patch: operations['EagleController_updateTagGroup[1]'];
     trace?: never;
   };
-  '/api/eagle/ai-tags': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['EagleController_listAiTags'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/eagle/assets/{assetId}/tags': {
     parameters: {
       query?: never;
@@ -2834,22 +2818,6 @@ export interface paths {
     options?: never;
     head?: never;
     patch: operations['PhotosController_updateTagGroup[1]'];
-    trace?: never;
-  };
-  '/api/photos/ai-tags': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['PhotosController_listAiTags'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   '/api/photos/assets/{assetId}/tags': {
@@ -4683,13 +4651,6 @@ export interface components {
       description: string | null;
       sourceUrl: string | null;
     };
-    EagleAiTagResponseDto: {
-      id: string;
-      name: string;
-      confidence: number;
-      /** @enum {string} */
-      status: 'ACTIVE' | 'HIDDEN' | 'REJECTED';
-    };
     EagleColorSwatchResponseDto: {
       rank: number;
       hex: string;
@@ -4746,7 +4707,6 @@ export interface components {
       manualTags: components['schemas']['EagleManualTagResponseDto'][];
       privacyReasons?: components['schemas']['EaglePrivacyReasonResponseDto'][];
       annotation: components['schemas']['EagleAnnotationResponseDto'] | null;
-      aiTags: components['schemas']['EagleAiTagResponseDto'][];
       colorAnalysis: components['schemas']['EagleColorAnalysisResponseDto'] | null;
     };
     BatchUpdateEagleAssetsDto: {
@@ -5916,8 +5876,6 @@ export interface operations {
         formats?: string;
         /** @description Comma-separated values */
         manualTagIds?: string;
-        /** @description Comma-separated values */
-        aiTagIds?: string;
         smartFolderId?: string;
         minWidth?: number;
         maxWidth?: number;
@@ -6426,8 +6384,6 @@ export interface operations {
         formats?: string;
         /** @description Comma-separated values */
         manualTagIds?: string;
-        /** @description Comma-separated values */
-        aiTagIds?: string;
         smartFolderId?: string;
         minWidth?: number;
         maxWidth?: number;
@@ -6841,23 +6797,6 @@ export interface operations {
         'application/json': components['schemas']['UpdateManualTagGroupDto'];
       };
     };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleController_listAiTags: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
     responses: {
       200: {
         headers: {
@@ -8731,8 +8670,6 @@ export interface operations {
         formats?: string;
         /** @description Comma-separated values */
         manualTagIds?: string;
-        /** @description Comma-separated values */
-        aiTagIds?: string;
         smartFolderId?: string;
         minWidth?: number;
         maxWidth?: number;
@@ -9241,8 +9178,6 @@ export interface operations {
         formats?: string;
         /** @description Comma-separated values */
         manualTagIds?: string;
-        /** @description Comma-separated values */
-        aiTagIds?: string;
         smartFolderId?: string;
         minWidth?: number;
         maxWidth?: number;
@@ -9656,23 +9591,6 @@ export interface operations {
         'application/json': components['schemas']['UpdateManualTagGroupDto'];
       };
     };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PhotosController_listAiTags: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
     responses: {
       200: {
         headers: {

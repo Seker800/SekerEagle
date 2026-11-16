@@ -11,7 +11,6 @@ export type EagleFilterField =
   | 'NAME'
   | 'FORMAT'
   | 'MANUAL_TAGS'
-  | 'AI_TAGS'
   | 'RATING'
   | 'WIDTH'
   | 'HEIGHT'
@@ -187,13 +186,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
     defaultValue: [],
   },
   {
-    field: 'AI_TAGS',
-    kind: 'TAGS',
-    operators: SET_OPERATORS,
-    defaultOperator: 'ALL_OF',
-    defaultValue: [],
-  },
-  {
     field: 'RATING',
     kind: 'SELECT',
     operators: ['EQUALS', 'NOT_EQUALS', 'GTE', 'LTE'],
@@ -349,19 +341,11 @@ export function toEagleFilterQuery(value: StoredEagleFilterQuery | undefined): E
     );
   }
   const manualTagIds = stringArray(filters.manualTagIds);
-  const aiTagIds = stringArray(filters.aiTagIds);
-  if (manualTagIds.length || aiTagIds.length) {
+  if (manualTagIds.length) {
     const operator: EagleFilterOperator = filters.tagMatch === 'ANY' ? 'ANY_OF' : 'ALL_OF';
     addCondition(
-      [
-        ...(manualTagIds.length
-          ? [{ ...createEagleFilterRule('MANUAL_TAGS'), operator, value: manualTagIds }]
-          : []),
-        ...(aiTagIds.length
-          ? [{ ...createEagleFilterRule('AI_TAGS'), operator, value: aiTagIds }]
-          : []),
-      ],
-      filters.tagMatch === 'ANY' ? 'ANY' : 'ALL',
+      [{ ...createEagleFilterRule('MANUAL_TAGS'), operator, value: manualTagIds }],
+      'ANY',
     );
   }
   if (typeof filters.rating === 'number') addRule('RATING', 'GTE', String(filters.rating));

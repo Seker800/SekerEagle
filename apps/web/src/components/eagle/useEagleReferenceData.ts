@@ -9,10 +9,10 @@ type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 export function useEagleReferenceData(
   accessToken: string,
   queryKeys: EagleQueryKeys,
-  options: { aiTagsEnabled: boolean; enabled?: boolean },
+  options: { enabled?: boolean },
 ) {
   const {
-    api: { listEagleAiTags, listEagleManualTagGroups, listEagleManualTags, listEagleSmartFolders },
+    api: { listEagleManualTagGroups, listEagleManualTags, listEagleSmartFolders },
   } = useLibraryWorkspace();
 
   const manualTagsQuery = useQuery({
@@ -26,12 +26,6 @@ export function useEagleReferenceData(
     queryFn: () => listEagleManualTagGroups(accessToken),
     staleTime: 60_000,
     enabled: options.enabled,
-  });
-  const aiTagsQuery = useQuery({
-    queryKey: queryKeys.aiTags,
-    queryFn: () => listEagleAiTags(accessToken),
-    staleTime: 60_000,
-    enabled: options.enabled !== false && options.aiTagsEnabled,
   });
   const progressInterval = useProgressQueryInterval<
     Awaited<ReturnType<typeof listEagleSmartFolders>>
@@ -53,5 +47,5 @@ export function useEagleReferenceData(
     refetchOnWindowFocus: false,
   });
 
-  return { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery };
+  return { manualTagsQuery, manualTagGroupsQuery, smartFoldersQuery };
 }

@@ -340,7 +340,7 @@ test('rejects an Injectable without a capability owner even when both modes coul
 
 test('rejects optional mode injection rather than permitting silent MATERIAL fallback', () => {
   rejectsMutation(
-    'apps/api/src/eagle/eagle-ai-tag.service.ts',
+    'apps/api/src/eagle/eagle-image-search.service.ts',
     (s) => s.replace('@Inject(LIBRARY_MODE)', '@Optional() @Inject(LIBRARY_MODE)'),
     'mode-assembly',
   );

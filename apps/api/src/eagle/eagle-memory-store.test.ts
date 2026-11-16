@@ -115,7 +115,7 @@ test('incremental relation queries constrain their own owner, mode and asset key
     ['a'],
   );
   for (const sql of statements.filter((sql) =>
-    /FROM "EagleAssetAiTag"|FROM "EaglePhotoFace"|FROM "EagleAssetColorAnalysis"/.test(sql),
+    /FROM "EaglePhotoFace"|FROM "EagleAssetColorAnalysis"/.test(sql),
   )) {
     assert.match(sql, /c\."ownerId"=/);
     assert.match(sql, /c\."libraryMode"=/);

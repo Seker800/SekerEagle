@@ -72,7 +72,6 @@ export async function readMemoryAssets(
     }
     if (needs('EaglePhotoLocation')) row.photoLocation = null;
     if (needs('EagleAssetManualTag', 'EagleManualTag')) row.manualTagLinks = [];
-    if (needs('EagleAssetAiTag')) row.aiTagLinks = [];
     if (needs('EaglePhotoFace')) row.photoFaces = [];
     if (needs('EagleAssetColorAnalysis', 'EagleAssetColorSwatch')) row.colorAnalyses = [];
   }
@@ -116,12 +115,6 @@ export async function readMemoryAssets(
     await attach(
       Prisma.sql`SELECT c."assetId",c."tagId",jsonb_build_object('normalizedName',t."normalizedName") tag FROM "EagleAssetManualTag" c JOIN "EagleAsset" a ON a.id=c."assetId" JOIN "EagleManualTag" t ON t.id=c."tagId" WHERE ${relationScope}`,
       'manualTagLinks',
-      true,
-    );
-  if (needs('EagleAssetAiTag'))
-    await attach(
-      Prisma.sql`SELECT c."assetId",c."aiTagId",c.status FROM "EagleAssetAiTag" c JOIN "EagleAsset" a ON a.id=c."assetId" WHERE ${relationScope} AND c.status='ACTIVE'`,
-      'aiTagLinks',
       true,
     );
   if (needs('EaglePhotoFace'))

@@ -49,7 +49,6 @@
     "bootstrap-credentials:create": "node ./scripts/create-bootstrap-credentials.mjs",
     "smoke:auth": "node ./scripts/smoke-auth.mjs",
     "smoke:eagle": "node ./scripts/smoke-eagle.mjs",
-    "maintenance:reclassify-small-imported-tags": "npm run maintenance:reclassify-small-imported-tags --workspace @sekereagle/api --",
     "eagle:migrator": "npm run build --workspace @sekereagle/eagle-migrator && node apps/eagle-migrator/dist/main.js",
     "performance:library:100k": "node ./scripts/performance/verify-library-100k.mjs --verify",
     "performance:media-memory": "node ./scripts/performance/verify-media-memory.mjs --verify",

@@ -1597,45 +1597,6 @@ export class EagleService {
     return { deletedId: groupId };
   }
 
-  async listAiTags(ownerId: string, includePrivate = false) {
-    const tags = await this.prisma.eagleAiTag.findMany({
-      where: {
-        ownerId,
-        libraryMode: this.libraryMode,
-        ...(includePrivate
-          ? {}
-          : {
-              OR: [
-                { assetLinks: { none: {} } },
-                {
-                  assetLinks: {
-                    some: { status: 'ACTIVE', asset: { deletedAt: null, isPrivate: false } },
-                  },
-                },
-              ],
-            }),
-      },
-      orderBy: { normalizedName: 'asc' },
-      include: {
-        _count: {
-          select: {
-            assetLinks: {
-              where: {
-                status: 'ACTIVE',
-                asset: { deletedAt: null, ...privateVisibilityWhere(includePrivate) },
-              },
-            },
-          },
-        },
-      },
-    });
-    return tags.map(({ _count, ...tag }) => ({
-      ...tag,
-      assetCount: _count.assetLinks,
-      ...createEagleTagPhonetics(tag.name),
-    }));
-  }
-
   async replaceAssetTags(
     ownerId: string,
     assetId: string,
@@ -1821,14 +1782,9 @@ export class EagleService {
         });
         if (result.count !== 1) await this.throwFolderWriteError(transaction, ownerId, folderId);
         if (dependencies) {
-          await Promise.all([
-            transaction.eagleSmartFolderManualTagDependency.deleteMany({
-              where: { ownerId, smartFolderId: folderId, libraryMode: this.libraryMode },
-            }),
-            transaction.eagleSmartFolderAiTagDependency.deleteMany({
-              where: { ownerId, smartFolderId: folderId, libraryMode: this.libraryMode },
-            }),
-          ]);
+          await transaction.eagleSmartFolderManualTagDependency.deleteMany({
+            where: { ownerId, smartFolderId: folderId, libraryMode: this.libraryMode },
+          });
           await this.replaceSmartFolderDependencies(transaction, ownerId, folderId, dependencies);
         }
         if (queryJson && (readSemanticIntent(queryJson) || readSemanticIntent(current.queryJson))) {
@@ -1985,18 +1941,11 @@ export class EagleService {
     ownerId: string,
     dependencies: SmartFolderDependencies,
   ) {
-    const [manualTagCount, aiTagCount] = await Promise.all([
-      this.prisma.eagleManualTag.count({
-        where: { ownerId, id: { in: dependencies.manualTagIds }, libraryMode: this.libraryMode },
-      }),
-      this.prisma.eagleAiTag.count({
-        where: { ownerId, id: { in: dependencies.aiTagIds }, libraryMode: this.libraryMode },
-      }),
-    ]);
+    const manualTagCount = await this.prisma.eagleManualTag.count({
+      where: { ownerId, id: { in: dependencies.manualTagIds }, libraryMode: this.libraryMode },
+    });
     if (manualTagCount !== dependencies.manualTagIds.length)
       throw new NotFoundException('一个或多个人工标签不存在。');
-    if (aiTagCount !== dependencies.aiTagIds.length)
-      throw new NotFoundException('一个或多个 AI 标签不存在。');
   }
 
   private async replaceSmartFolderDependencies(
@@ -2012,17 +1961,6 @@ export class EagleService {
             ownerId,
             smartFolderId: folderId,
             manualTagId,
-          }))
-          .map((row) => inLibrary(this.libraryMode, row)),
-      });
-    }
-    if (dependencies.aiTagIds.length) {
-      await transaction.eagleSmartFolderAiTagDependency.createMany({
-        data: dependencies.aiTagIds
-          .map((aiTagId) => ({
-            ownerId,
-            smartFolderId: folderId,
-            aiTagId,
           }))
           .map((row) => inLibrary(this.libraryMode, row)),
       });
@@ -2217,12 +2155,9 @@ function buildAssetWhere(
       : [];
   if (formats.length)
     conditions.push({ format: { in: formats.map((value) => value.toLowerCase()) } });
-  const tagConditions: AssetSearchWhere[] = [
-    ...(filters.manualTagIds ?? []).map((tagId) => ({ manualTagLinks: { some: { tagId } } })),
-    ...(filters.aiTagIds ?? []).map((aiTagId) => ({
-      aiTagLinks: { some: { aiTagId, status: 'ACTIVE' as const } },
-    })),
-  ];
+  const tagConditions: AssetSearchWhere[] = (filters.manualTagIds ?? []).map((tagId) => ({
+    manualTagLinks: { some: { tagId } },
+  }));
   if (tagConditions.length) {
     if (filters.tagMatch === 'ANY') conditions.push({ OR: tagConditions });
     else conditions.push(...tagConditions);
@@ -2259,7 +2194,7 @@ function omitRepeatedSmartFolderFilters(
 ): StoredAssetFilters {
   if (!folderQueries.length) return query;
   const result = { ...query };
-  for (const key of ['formats', 'manualTagIds', 'aiTagIds'] as const) {
+  for (const key of ['formats', 'manualTagIds'] as const) {
     const requested = [...new Set(result[key] ?? [])];
     if (!requested.length) continue;
     const folderValues = folderQueries.map((folder) => new Set(folder[key] ?? []));
@@ -2403,7 +2338,6 @@ function normalizeSmartFolderQuery(
     'format',
     'formats',
     'manualTagIds',
-    'aiTagIds',
     'minWidth',
     'maxWidth',
     'minHeight',
@@ -2422,13 +2356,12 @@ function normalizeSmartFolderQuery(
     (typeof filters.tagMatch !== 'string' || !['ANY', 'ALL'].includes(filters.tagMatch))
   )
     throw new BadRequestException('智能文件夹标签匹配方式无效。');
-  for (const key of ['manualTagIds', 'aiTagIds'] as const) {
-    if (filters[key] !== undefined) readUniqueStringArray(filters[key], key);
-  }
+  if (filters.manualTagIds !== undefined)
+    readUniqueStringArray(filters.manualTagIds, 'manualTagIds');
   return { version: 1, filters: JSON.parse(JSON.stringify(filters)) as Prisma.InputJsonObject };
 }
 
-type SmartFolderDependencies = { manualTagIds: string[]; aiTagIds: string[] };
+type SmartFolderDependencies = { manualTagIds: string[] };
 
 function readSmartFolderDependencies(query: Prisma.InputJsonValue): SmartFolderDependencies {
   if (!query || typeof query !== 'object' || Array.isArray(query))
@@ -2441,10 +2374,7 @@ function readSmartFolderDependencies(query: Prisma.InputJsonValue): SmartFolderD
   if (!filters || typeof filters !== 'object' || Array.isArray(filters))
     throw new BadRequestException('智能文件夹条件无效。');
   const record = filters as Prisma.InputJsonObject;
-  return {
-    manualTagIds: readUniqueStringArray(record.manualTagIds, '人工标签'),
-    aiTagIds: readUniqueStringArray(record.aiTagIds, 'AI 标签'),
-  };
+  return { manualTagIds: readUniqueStringArray(record.manualTagIds, '人工标签') };
 }
 
 function readStoredQueryVersion(query: Prisma.InputJsonValue): number {

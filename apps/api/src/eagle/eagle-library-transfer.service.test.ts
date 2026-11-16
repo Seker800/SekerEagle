@@ -146,7 +146,6 @@ for (const sourceMode of ['PHOTO', 'MATERIAL'] as const)
       }));
       const source = {
         manualTagLinks: [],
-        aiTagLinks: [],
         colorAnalyses: [],
         id: sourceId,
         ownerId,

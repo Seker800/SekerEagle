@@ -1,7 +1,7 @@
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { describe, expect, it, vi } from 'vitest';
 import { renderPhotoWatermark } from './photo-editor-watermark';
-import { paintFrostedWatermarkBackground } from './photo-watermark-background';
+import { paintFrostedWatermarkBackground } from '@sekereagle/photo-render-core/photo-watermark-background';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 import { WATERMARK_TEMPLATES, photoWatermarkLayout, findWatermark } from './photo-watermark-model';
 import { drawPhoto } from './photo-editor-render';

@@ -11,7 +11,7 @@ import {
   createEagleFilterRule,
   type EagleFilterQuery,
 } from '@sekereagle/eagle-filter-core';
-import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
+import type { EagleManualTag } from '../../lib/eagle-api';
 
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { EagleRuleBuilder, type EagleFilterOptions } from './EagleRuleBuilder';
@@ -26,7 +26,6 @@ interface EagleSmartFolderDialogProps {
   initialName?: string;
   mode?: 'create' | 'edit';
   manualTags: EagleManualTag[];
-  aiTags: EagleAiTag[];
   pending?: boolean;
   error?: string;
   onClose: () => void;
@@ -51,7 +50,6 @@ export function EagleSmartFolderDialog({
   initialName = '',
   mode = 'create',
   manualTags,
-  aiTags,
   pending,
   error,
   onClose,
@@ -149,7 +147,6 @@ export function EagleSmartFolderDialog({
             fieldOptions={fieldOptions}
             value={query}
             manualTags={manualTags}
-            aiTags={aiTags}
             onChange={setQuery}
           />
           {fieldOptionsAction}

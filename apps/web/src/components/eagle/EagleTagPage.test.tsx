@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { EagleAiTag, EagleManualTag, EagleManualTagGroup } from '../../lib/eagle-api';
+import type { EagleManualTag, EagleManualTagGroup } from '../../lib/eagle-api';
 import { EagleTagPage } from './EagleTagPage';
 
 const manualTags: EagleManualTag[] = [
@@ -33,11 +33,6 @@ const manualTags: EagleManualTag[] = [
   },
 ];
 
-const aiTags: EagleAiTag[] = [
-  { id: 'ai-owl', name: '猫头鹰', assetCount: 8, pinyin: 'maotouying', pinyinInitials: 'mty' },
-  { id: 'ai-night', name: 'night', assetCount: 0, pinyin: 'night', pinyinInitials: 'n' },
-];
-
 const groups: EagleManualTagGroup[] = [
   {
     id: 'group-purpose',
@@ -51,9 +46,7 @@ const groups: EagleManualTagGroup[] = [
 
 function renderManualPage(overrides: Partial<Parameters<typeof EagleTagPage>[0]> = {}) {
   const props: Parameters<typeof EagleTagPage>[0] = {
-    kind: 'MANUAL',
     manualTags,
-    aiTags,
     manualTagGroups: groups,
     onCreateManualTag: vi.fn(),
     onCreateManualTagGroup: vi.fn(),
@@ -134,76 +127,85 @@ describe('EagleTagPage', () => {
     });
   });
 
-  it('reuses the same directory workbench for read-only AI tags', () => {
-    const onSelectTag = vi.fn();
-    render(
-      <EagleTagPage
-        kind="AI"
-        manualTags={manualTags}
-        aiTags={aiTags}
-        manualTagGroups={groups}
-        onCreateManualTag={vi.fn()}
-        onCreateManualTagGroup={vi.fn()}
-        onUpdateManualTags={vi.fn()}
-        onDeleteManualTags={vi.fn()}
-        onUpdateManualTagGroup={vi.fn()}
-        onDeleteManualTagGroup={vi.fn()}
-        onSelectTag={onSelectTag}
-      />,
-    );
-
-    const page = screen.getByRole('region', { name: 'AI 标签管理' });
-    expect(within(page).getByRole('navigation', { name: 'AI 标签导航' })).toHaveTextContent(
-      '全部标签',
-    );
-    expect(page).toHaveTextContent('已使用');
-    expect(page).toHaveTextContent('未使用');
-    expect(screen.getByRole('searchbox', { name: '搜索AI标签' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '设为常用' })).not.toBeInTheDocument();
-
-    fireEvent.doubleClick(screen.getByRole('button', { name: /AI标签 猫头鹰/ }));
-    expect(onSelectTag).toHaveBeenCalledWith('ai-owl');
-  });
-
   it('groups Chinese tags into A-Z by phrase-aware pinyin instead of a Chinese fallback', () => {
     render(
       <EagleTagPage
-        kind="AI"
-        manualTags={manualTags}
-        aiTags={[
+        manualTags={[
           {
-            id: 'ai-changchun',
+            id: 'tag-changchun',
             name: '长春',
             assetCount: 1,
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            lastUsedAt: null,
             pinyin: 'changchun',
             pinyinInitials: 'cc',
           },
           {
-            id: 'ai-chongqing',
+            id: 'tag-chongqing',
             name: '重庆',
             assetCount: 1,
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            lastUsedAt: null,
             pinyin: 'chongqing',
             pinyinInitials: 'cq',
           },
           {
-            id: 'ai-material',
+            id: 'tag-material',
             name: 'Material',
             assetCount: 1,
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            lastUsedAt: null,
             pinyin: 'material',
             pinyinInitials: 'm',
           },
           {
-            id: 'ai-owl',
+            id: 'tag-owl',
             name: '猫头鹰',
             assetCount: 1,
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            lastUsedAt: null,
             pinyin: 'maotouying',
             pinyinInitials: 'mty',
           },
-          { id: 'ai-number', name: '42', assetCount: 1, pinyin: '42', pinyinInitials: '4' },
           {
-            id: 'ai-symbol',
+            id: 'tag-number',
+            name: '42',
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 1,
+            lastUsedAt: null,
+            pinyin: '42',
+            pinyinInitials: '4',
+          },
+          {
+            id: 'tag-symbol',
             name: '✨灵感',
             assetCount: 1,
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            lastUsedAt: null,
             pinyin: 'linggan',
             pinyinInitials: 'lg',
           },
@@ -219,7 +221,7 @@ describe('EagleTagPage', () => {
       />,
     );
 
-    const directory = screen.getByRole('list', { name: 'AI标签目录' });
+    const directory = screen.getByRole('list', { name: '人工标签目录' });
     expect(within(directory).getByText('C', { selector: 'span' })).toBeInTheDocument();
     expect(within(directory).getByText('M', { selector: 'span' })).toBeInTheDocument();
     expect(within(directory).getByText('0–9', { selector: 'span' })).toBeInTheDocument();
@@ -238,9 +240,34 @@ describe('EagleTagPage', () => {
   it('finds Chinese tags by full pinyin and pinyin initials', () => {
     render(
       <EagleTagPage
-        kind="AI"
-        manualTags={manualTags}
-        aiTags={aiTags}
+        manualTags={[
+          {
+            id: 'tag-owl',
+            name: '猫头鹰',
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 8,
+            lastUsedAt: null,
+            pinyin: 'maotouying',
+            pinyinInitials: 'mty',
+          },
+          {
+            id: 'tag-night',
+            name: 'night',
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 0,
+            lastUsedAt: null,
+            pinyin: 'night',
+            pinyinInitials: 'n',
+          },
+        ]}
         manualTagGroups={groups}
         onCreateManualTag={vi.fn()}
         onCreateManualTagGroup={vi.fn()}
@@ -252,46 +279,13 @@ describe('EagleTagPage', () => {
       />,
     );
 
-    const search = screen.getByRole('searchbox', { name: '搜索AI标签' });
+    const search = screen.getByRole('searchbox', { name: '搜索人工标签' });
     fireEvent.change(search, { target: { value: 'maotouying' } });
-    expect(screen.getByRole('button', { name: /AI标签 猫头鹰/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /AI标签 night/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /人工标签 猫头鹰/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /人工标签 night/ })).not.toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: 'mty' } });
-    expect(screen.getByRole('button', { name: /AI标签 猫头鹰/ })).toBeInTheDocument();
-  });
-
-  it('keeps a large AI tag directory bounded to one dense page', () => {
-    const manyAiTags = Array.from({ length: 121 }, (_, index) => ({
-      id: `ai-${index}`,
-      name: `tag-${String(index).padStart(3, '0')}`,
-      assetCount: index,
-      pinyin: `tag${index}`,
-      pinyinInitials: `t${index}`,
-    }));
-    render(
-      <EagleTagPage
-        kind="AI"
-        manualTags={manualTags}
-        aiTags={manyAiTags}
-        manualTagGroups={groups}
-        onCreateManualTag={vi.fn()}
-        onCreateManualTagGroup={vi.fn()}
-        onUpdateManualTags={vi.fn()}
-        onDeleteManualTags={vi.fn()}
-        onUpdateManualTagGroup={vi.fn()}
-        onDeleteManualTagGroup={vi.fn()}
-        onSelectTag={vi.fn()}
-      />,
-    );
-
-    const directory = screen.getByRole('list', { name: 'AI标签目录' });
-    expect(within(directory).getAllByRole('button')).toHaveLength(120);
-    expect(screen.getByText('1 / 2')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
-    expect(within(directory).getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /人工标签 猫头鹰/ })).toBeInTheDocument();
   });
 });
 

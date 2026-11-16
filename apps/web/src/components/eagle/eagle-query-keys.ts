@@ -60,7 +60,6 @@ export function createEagleQueryKeys(
     assetUpdates: (assetIds: string[]) => [...root, 'asset-updates', assetIds] as const,
     manualTags: [...root, 'manual-tags'] as const,
     manualTagGroups: [...root, 'manual-tag-groups'] as const,
-    aiTags: [...root, 'ai-tags'] as const,
     smartFolders: [...root, 'smart-folders'] as const,
   };
 }

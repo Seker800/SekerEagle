@@ -10,7 +10,6 @@ export const fields: Record<EagleFilterField, MessageId> = {
   NAME: '名称',
   FORMAT: '格式',
   MANUAL_TAGS: '标签',
-  AI_TAGS: 'AI 标签',
   RATING: '评分',
   WIDTH: '宽度',
   HEIGHT: '高度',

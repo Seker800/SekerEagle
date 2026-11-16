@@ -19,7 +19,6 @@ test('asset projections share one safe read model without importing the applicat
     manualTagLinks: [{ tag: { id: 'tag', name: 'private', marksAssetsPrivate: true } }],
     renditions: [{ id: 'thumb', kind: 'THUMBNAIL', byteSize: 12n }],
     annotation: null,
-    aiTagLinks: [],
     colorAnalyses: [],
     photoFaces: [
       { assetRevision: 1, person: { id: 'old', name: 'old' } },

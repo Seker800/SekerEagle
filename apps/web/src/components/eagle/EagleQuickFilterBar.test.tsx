@@ -44,18 +44,6 @@ const manualTags = [
   },
 ];
 
-const aiTags = [
-  {
-    id: 'ai-1',
-    name: '管道',
-    color: null,
-    rowVersion: 1,
-    assetCount: 20,
-    pinyin: 'guandao',
-    pinyinInitials: 'gd',
-  },
-];
-
 function renderBar(initialValue: EagleQuickFilterState = createEmptyEagleQuickFilterState()) {
   const onChange = vi.fn();
   function ControlledBar() {
@@ -64,7 +52,6 @@ function renderBar(initialValue: EagleQuickFilterState = createEmptyEagleQuickFi
       <EagleQuickFilterBar
         value={value}
         manualTags={manualTags}
-        aiTags={aiTags}
         onChange={(next) => {
           onChange(next);
           setValue(next);
@@ -192,7 +179,7 @@ it('photo fields are managed and cleared in the existing filter toolbar', () => 
     const [value, onChange] = useState(createEmptyEagleQuickFilterState());
     return (
       <LibraryWorkspaceProvider ownerId="owner" libraryMode="PHOTO">
-        <EagleQuickFilterBar value={value} manualTags={[]} aiTags={[]} onChange={onChange} />
+        <EagleQuickFilterBar value={value} manualTags={[]} onChange={onChange} />
       </LibraryWorkspaceProvider>
     );
   }
@@ -231,7 +218,7 @@ function scopedBar(mode: 'MATERIAL' | 'PHOTO') {
       <EagleQuickFilterBar
         value={createEmptyEagleQuickFilterState()}
         manualTags={[]}
-        aiTags={[]}
+
         onChange={vi.fn()}
       />
     </LibraryWorkspaceProvider>
@@ -295,7 +282,7 @@ it('offers missing camera parameters in the photo quick filter and clears the se
     const [value, onChange] = useState(createEmptyEagleQuickFilterState());
     return (
       <LibraryWorkspaceProvider ownerId="owner" libraryMode="PHOTO">
-        <EagleQuickFilterBar value={value} manualTags={[]} aiTags={[]} onChange={onChange} />
+        <EagleQuickFilterBar value={value} manualTags={[]} onChange={onChange} />
       </LibraryWorkspaceProvider>
     );
   }
@@ -329,7 +316,7 @@ it('lets photo users add capture date, enter an old date range, and clear it', (
     const [value, onChange] = useState(createEmptyEagleQuickFilterState);
     return (
       <LibraryWorkspaceProvider ownerId="date-test" libraryMode="PHOTO">
-        <EagleQuickFilterBar value={value} onChange={onChange} manualTags={[]} aiTags={[]} />
+        <EagleQuickFilterBar value={value} onChange={onChange} manualTags={[]} />
       </LibraryWorkspaceProvider>
     );
   }

@@ -13,9 +13,6 @@ export async function invalidateMediaRevision(
         "lockedAt"=NULL,"completedAt"=now(),"lastError"='SUPERSEDED_MEDIA_REVISION',"updatedAt"=now()
       WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND "assetId"=${assetId}
         AND "assetRevision"<${revision} AND kind<>'PURGE_ASSET' AND status IN ('PROCESSING','PENDING')
-    ), tags AS (
-      UPDATE "EagleAssetAiTag" SET status='HIDDEN'
-      WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND "assetId"=${assetId} AND status='ACTIVE'
     ), colors AS (
       UPDATE "EagleAssetColorAnalysis" SET "isCurrent"=false
       WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND "assetId"=${assetId} AND "assetRevision"<${revision}

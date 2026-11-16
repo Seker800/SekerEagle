@@ -127,14 +127,13 @@ test('ANY tag matching combines every selected manual and AI tag into one union'
   await service.listAssets('owner-1', {
     limit: 30,
     manualTagIds: ['manual-1', 'manual-2'],
-    aiTagIds: ['ai-1'],
     tagMatch: 'ANY',
   });
 
   const baseWhere = (queries[0]?.where.AND as Array<Record<string, unknown>>)[0]!;
   const conditions = baseWhere.AND as Array<Record<string, unknown>>;
   const tagUnion = conditions.find((condition) => Array.isArray(condition.OR))?.OR as unknown[];
-  assert.equal(tagUnion.length, 3);
+  assert.equal(tagUnion.length, 2);
 });
 
 test('color filtering reports original global image-analysis coverage', async () => {
@@ -383,7 +382,6 @@ test('smart folder creation rejects a missing owner-scoped tag before writing', 
         },
       },
       eagleManualTag: { count: async () => 0 },
-      eagleAiTag: { count: async () => 0 },
     } as never,
     undefined,
     'MATERIAL',
@@ -413,7 +411,6 @@ test('new smart folders default to matching any selected tag', async () => {
     {
       eagleSmartFolder: { aggregate: async () => ({ _max: { position: null } }) },
       eagleManualTag: { count: async () => 0 },
-      eagleAiTag: { count: async () => 0 },
       $transaction: async (callback: (client: typeof transaction) => unknown) =>
         callback(transaction),
     } as never,

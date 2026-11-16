@@ -169,7 +169,7 @@ export function compileMemorySearchPredicate(
       } else {
         const link = definition.relations[key];
         if (!link) throw unsupported();
-        if (key === 'photoFaces' || key === 'aiTagLinks') {
+        if (key === 'photoFaces') {
           const relation = object(value);
           if (
             !Object.keys(relation).length ||

@@ -22,7 +22,6 @@ const asset = {
   annotation: null,
   photoMetadata: { cameraModel: null, lensModel: 'lens' },
   manualTagLinks: [{ tagId: 'sea' }],
-  aiTagLinks: [{ aiTagId: 'blue', status: 'ACTIVE' }],
   photoFaces: [{ personId: 'person', isCurrent: true }],
 };
 test('memory predicates keep scope, scalar comparisons and exact bigint values', () => {
@@ -72,12 +71,6 @@ test('tag, person and annotation relations reuse canonical predicates', () => {
   assert.equal(
     compileMemorySearchPredicate({ manualTagLinks: { some: { tagId: { in: ['sea'] } } } })(asset),
     true,
-  );
-  assert.equal(
-    compileMemorySearchPredicate({ aiTagLinks: { none: { aiTagId: 'blue', status: 'ACTIVE' } } })(
-      asset,
-    ),
-    false,
   );
   assert.equal(
     compileMemorySearchPredicate({ photoFaces: { some: { personId: 'person', isCurrent: true } } })(
@@ -213,7 +206,6 @@ test('partial relation projections reject queries for history before scanning', 
   for (const where of [
     { photoFaces: { some: { personId: 'person' } } },
     { photoFaces: { every: { personId: 'person', isCurrent: true } } },
-    { aiTagLinks: { none: { aiTagId: 'blue' } } },
     { colorAnalyses: { some: { isCurrent: false } } },
   ])
     assert.throws(() => compileMemorySearchPredicate(where as AssetSearchWhere), /Unsupported/);

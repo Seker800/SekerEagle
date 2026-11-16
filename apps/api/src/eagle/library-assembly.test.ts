@@ -4,7 +4,7 @@ import test from 'node:test';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplicationContext } from '@nestjs/common';
 import * as assembly from './eagle.module';
-import { EagleAiTagService } from './eagle-ai-tag.service';
+import { EagleImageSearchService } from './eagle-image-search.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,7 +18,7 @@ test('a shared service cannot silently start as MATERIAL when its mode binding i
           providers: [
             { provide: PrismaService, useValue: {} },
             { provide: EagleEmbeddingClient, useValue: {} },
-            EagleAiTagService,
+            EagleImageSearchService,
           ],
         },
         { logger: false, abortOnError: false },

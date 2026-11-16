@@ -13,7 +13,6 @@ const row = (id: string, date = '2026-11-01T00:00:00Z') => ({
   isPrivate: false,
   rating: null,
   manualTagLinks: [],
-  aiTagLinks: [],
   photoFaces: [],
   colorAnalyses: [],
 });

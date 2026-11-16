@@ -22,7 +22,6 @@ export function makeEagleAsset(overrides: Partial<EagleAsset> = {}): EagleAsset 
     renditions: [],
     manualTags: [],
     annotation: null,
-    aiTags: [],
     colorAnalysis: null,
     ...overrides,
   };

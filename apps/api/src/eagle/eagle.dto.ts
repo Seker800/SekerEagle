@@ -149,15 +149,6 @@ export class ListEagleAssetsDto {
   @IsUUID('4', { each: true })
   manualTagIds?: string[];
 
-  @ApiPropertyOptional({ type: String, description: 'Comma-separated values' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
-  )
-  @IsOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  aiTagIds?: string[];
-
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsUUID('4')

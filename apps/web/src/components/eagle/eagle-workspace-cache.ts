@@ -13,7 +13,6 @@ export type EagleLibraryView =
   | 'PRIVATE'
   | 'TRASH'
   | 'MANUAL_TAGS'
-  | 'AI_TAGS'
   | 'VECTOR_REVIEW'
   | 'VECTOR_TAGS'
   | 'VECTOR_UNCLASSIFIED'

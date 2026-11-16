@@ -120,7 +120,6 @@ const getEagleTrashAssetMock = vi.fn();
 const listEagleManualTagsMock = vi.fn();
 const createEagleManualTagMock = vi.fn();
 const listEagleManualTagGroupsMock = vi.fn();
-const listEagleAiTagsMock = vi.fn();
 const replaceEagleAssetManualTagsMock = vi.fn();
 const batchChangeEagleManualTagsMock = vi.fn();
 const listEagleTrashMock = vi.fn();
@@ -165,7 +164,6 @@ vi.mock('../../lib/eagle-api', () => {
     listEagleAssetUpdates: (...args: unknown[]) => listEagleAssetUpdatesMock(...args),
     listEagleManualTags: (...args: unknown[]) => listEagleManualTagsMock(...args),
     listEagleManualTagGroups: (...args: unknown[]) => listEagleManualTagGroupsMock(...args),
-    listEagleAiTags: (...args: unknown[]) => listEagleAiTagsMock(...args),
     createEagleManualTag: (...args: unknown[]) => createEagleManualTagMock(...args),
     createEagleManualTagGroup: vi.fn(),
     updateEagleManualTag: vi.fn(),
@@ -264,7 +262,6 @@ const asset = {
     },
   ],
   manualTags: [],
-  aiTags: [],
 };
 
 function renderPage(
@@ -374,15 +371,6 @@ describe('SekerEaglePage', () => {
       },
     ]);
     listEagleManualTagGroupsMock.mockResolvedValue([]);
-    listEagleAiTagsMock.mockResolvedValue([
-      {
-        id: '22222222-2222-4222-8222-222222222222',
-        name: '猫头鹰',
-        assetCount: 1,
-        pinyin: 'maotouying',
-        pinyinInitials: 'mty',
-      },
-    ]);
     replaceEagleAssetManualTagsMock.mockResolvedValue({
       affectedAssetCount: 1,
       privacyChangedAssetCount: 0,
@@ -1154,7 +1142,6 @@ describe('SekerEaglePage', () => {
     const orderedTools = [
       within(inspector).getByRole('textbox', { name: '素材标题' }),
       within(inspector).getByRole('heading', { name: '人工标签' }),
-      within(inspector).getByRole('heading', { name: 'AI 自动标签' }),
       within(inspector).getByRole('textbox', { name: '素材描述' }),
       within(inspector).getByRole('textbox', { name: '素材来源链接' }),
       within(inspector).getByLabelText('星级评分'),
@@ -1495,7 +1482,7 @@ describe('SekerEaglePage', () => {
     });
   });
 
-  it('keeps manual and AI tag filters separate in the server query', async () => {
+  it('keeps manual tag filters in the server query', async () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: '标签' }));
@@ -1518,30 +1505,6 @@ describe('SekerEaglePage', () => {
     });
     fireEvent.click(within(filterPanel).getByRole('button', { name: '清除此项' }));
     expect(screen.getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: '标签' }));
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: '标签功能' })).getByRole('button', {
-        name: 'AI 标签',
-      }),
-    );
-    fireEvent.doubleClick(await screen.findByRole('button', { name: /AI标签 猫头鹰/ }));
-    expect(screen.getByRole('button', { name: '收起筛选' })).toBeInTheDocument();
-    const aiFilterButton = screen.getByRole('button', { name: 'AI 标签筛选，1' });
-    fireEvent.click(aiFilterButton);
-    const aiFilterPanel = screen.getByRole('dialog', { name: 'AI 标签筛选' });
-    expect(within(aiFilterPanel).getByRole('checkbox', { name: /猫头鹰/ })).toBeChecked();
-    await waitFor(() => {
-      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
-        rules?: { conditions: Array<{ rules: Array<{ field: string; value: string[] }> }> };
-      };
-      expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
-        expect.objectContaining({
-          field: 'AI_TAGS',
-          value: ['22222222-2222-4222-8222-222222222222'],
-        }),
-      );
-    });
   });
 
   it('shows only manual tags assigned to the selected asset in the inspector', async () => {
@@ -2541,26 +2504,6 @@ describe('SekerEaglePage', () => {
     expect(within(inspector).getByRole('textbox', { name: '素材标题' })).toBeInTheDocument();
   });
 
-  it('keeps the AI tag catalog unloaded until the user opens the AI tag tab', async () => {
-    renderPage();
-
-    await screen.findByRole('heading', { name: '全部' });
-    expect(listEagleAiTagsMock).not.toHaveBeenCalled();
-
-    fireEvent.click(await screen.findByRole('button', { name: '标签' }));
-    expect(screen.getByRole('heading', { name: '人工标签' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '人工标签管理' })).toHaveTextContent('灵感');
-
-    fireEvent.click(
-      within(screen.getByRole('navigation', { name: '标签功能' })).getByRole('button', {
-        name: 'AI 标签',
-      }),
-    );
-    await waitFor(() => expect(listEagleAiTagsMock).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole('region', { name: 'AI 标签管理' })).toHaveTextContent('猫头鹰');
-    expect(screen.queryByRole('region', { name: 'AI 自动标签运行设置' })).not.toBeInTheDocument();
-  });
-
   it('reduces the feature navigation to tags, pending work, and settings', async () => {
     renderPage();
 
@@ -2825,7 +2768,6 @@ describe('SekerEaglePage', () => {
           version: 1,
           filters: {
             manualTagIds: ['11111111-1111-4111-8111-111111111111'],
-            aiTagIds: ['22222222-2222-4222-8222-222222222222'],
           },
         },
         position: 0,

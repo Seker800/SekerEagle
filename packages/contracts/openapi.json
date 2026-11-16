@@ -1379,15 +1379,6 @@
             }
           },
           {
-            "name": "aiTagIds",
-            "required": false,
-            "in": "query",
-            "description": "Comma-separated values",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "smartFolderId",
             "required": false,
             "in": "query",
@@ -2370,15 +2361,6 @@
             }
           },
           {
-            "name": "aiTagIds",
-            "required": false,
-            "in": "query",
-            "description": "Comma-separated values",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "smartFolderId",
             "required": false,
             "in": "query",
@@ -3011,23 +2993,6 @@
                 }
               }
             }
-          }
-        },
-        "security": [
-          {
-            "cookie": []
-          }
-        ],
-        "tags": ["eagle"]
-      }
-    },
-    "/api/eagle/ai-tags": {
-      "get": {
-        "operationId": "EagleController_listAiTags",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
           }
         },
         "security": [
@@ -5917,15 +5882,6 @@
             }
           },
           {
-            "name": "aiTagIds",
-            "required": false,
-            "in": "query",
-            "description": "Comma-separated values",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "smartFolderId",
             "required": false,
             "in": "query",
@@ -6908,15 +6864,6 @@
             }
           },
           {
-            "name": "aiTagIds",
-            "required": false,
-            "in": "query",
-            "description": "Comma-separated values",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
             "name": "smartFolderId",
             "required": false,
             "in": "query",
@@ -7549,23 +7496,6 @@
                 }
               }
             }
-          }
-        },
-        "security": [
-          {
-            "cookie": []
-          }
-        ],
-        "tags": ["eagle", "photos"]
-      }
-    },
-    "/api/photos/ai-tags": {
-      "get": {
-        "operationId": "PhotosController_listAiTags",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": ""
           }
         },
         "security": [
@@ -11492,25 +11422,6 @@
         },
         "required": ["color", "description", "sourceUrl"]
       },
-      "EagleAiTagResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "confidence": {
-            "type": "number"
-          },
-          "status": {
-            "type": "string",
-            "enum": ["ACTIVE", "HIDDEN", "REJECTED"]
-          }
-        },
-        "required": ["id", "name", "confidence", "status"]
-      },
       "EagleColorSwatchResponseDto": {
         "type": "object",
         "properties": {
@@ -11704,12 +11615,6 @@
               }
             ]
           },
-          "aiTags": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EagleAiTagResponseDto"
-            }
-          },
           "colorAnalysis": {
             "nullable": true,
             "type": "object",
@@ -11742,7 +11647,6 @@
           "renditions",
           "manualTags",
           "annotation",
-          "aiTags",
           "colorAnalysis"
         ]
       },

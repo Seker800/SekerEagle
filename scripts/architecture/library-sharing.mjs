@@ -378,13 +378,9 @@ export function checkLibrarySharing(sources) {
   // Browser adapters cannot grow a second pixel/crop/watermark implementation.
   for (const name of [
     'photo-editor-photon',
-    'photo-editor-tone',
-    'photo-editor-detail',
     'photo-editor-watermark',
     'photo-editor-model',
     'photo-editor-color-mixer',
-    'photo-editor-denoise',
-    'photo-editor-dehaze',
   ]) {
     const file = `apps/web/src/components/media/photo-editor/${name}.ts`;
     const source = sources.get(file) ?? '';

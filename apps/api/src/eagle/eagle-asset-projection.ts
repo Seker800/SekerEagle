@@ -66,11 +66,6 @@ export const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
     select: { assetRevision: true, person: { select: { id: true, name: true } } },
   },
   annotation: { select: { color: true, description: true, sourceUrl: true } },
-  aiTagLinks: {
-    where: { status: 'ACTIVE' },
-    orderBy: { confidence: 'desc' },
-    select: { confidence: true, status: true, aiTag: { select: { id: true, name: true } } },
-  },
   colorAnalyses: {
     where: { isCurrent: true, processorVersion: COLOR_PROCESSOR_VERSION },
     take: 1,
@@ -81,7 +76,7 @@ export const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
 export type AssetListRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetListInclude }>;
 export type AssetRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetInclude }>;
 export function serializeAsset(asset: AssetRecord): EagleAssetResponseDto {
-  const { annotation, aiTagLinks, colorAnalyses, photoFaces, ...listRecord } = asset;
+  const { annotation, colorAnalyses, photoFaces, ...listRecord } = asset;
   const privacyReasons = asset.isPrivate
     ? [
         ...asset.manualTagLinks
@@ -101,7 +96,6 @@ export function serializeAsset(asset: AssetRecord): EagleAssetResponseDto {
     ...serializeAssetList(listRecord),
     privacyReasons,
     annotation,
-    aiTags: aiTagLinks.map(({ aiTag, confidence, status }) => ({ ...aiTag, confidence, status })),
     colorAnalysis: colorAnalyses[0]
       ? {
           assetRevision: colorAnalyses[0].assetRevision,

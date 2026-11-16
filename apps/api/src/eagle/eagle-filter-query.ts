@@ -45,19 +45,16 @@ export function buildEagleFilterWhere(
 
 export function readEagleFilterTagDependencies(query: EagleFilterQuery): {
   manualTagIds: string[];
-  aiTagIds: string[];
 } {
   const manualTagIds = new Set<string>();
-  const aiTagIds = new Set<string>();
   for (const condition of query.conditions) {
     for (const rule of condition.rules) {
+      if (rule.field !== 'MANUAL_TAGS') continue;
       if (!Array.isArray(rule.value) || rule.value.some((id) => typeof id !== 'string')) continue;
-      const target =
-        rule.field === 'MANUAL_TAGS' ? manualTagIds : rule.field === 'AI_TAGS' ? aiTagIds : null;
-      if (target) for (const id of rule.value as string[]) target.add(id);
+      for (const id of rule.value as string[]) manualTagIds.add(id);
     }
   }
-  return { manualTagIds: [...manualTagIds], aiTagIds: [...aiTagIds] };
+  return { manualTagIds: [...manualTagIds] };
 }
 
 function buildConditionWhere(
@@ -134,9 +131,7 @@ function buildRuleWhere(rule: EagleFilterRule): AssetSearchWhere {
         ? { format: { not: readString(rule).toLowerCase() } }
         : { format: readString(rule).toLowerCase() };
     case 'MANUAL_TAGS':
-      return buildTagWhere('MANUAL', rule);
-    case 'AI_TAGS':
-      return buildTagWhere('AI', rule);
+      return buildTagWhere(rule);
     case 'RATING':
       return buildRatingWhere(rule);
     case 'WIDTH':
@@ -218,25 +213,17 @@ function textFilter(operator: EagleFilterRule['operator'], value: string): Prism
   }
 }
 
-function buildTagWhere(source: 'MANUAL' | 'AI', rule: EagleFilterRule): AssetSearchWhere {
+function buildTagWhere(rule: EagleFilterRule): AssetSearchWhere {
   const ids = readStringArray(rule);
-  const some = (id?: string): AssetSearchWhere =>
-    source === 'MANUAL'
-      ? { manualTagLinks: { some: id ? { tagId: id } : {} } }
-      : { aiTagLinks: { some: { ...(id ? { aiTagId: id } : {}), status: 'ACTIVE' } } };
-  const none = (selectedIds?: string[]): AssetSearchWhere =>
-    source === 'MANUAL'
-      ? { manualTagLinks: { none: selectedIds ? { tagId: { in: selectedIds } } : {} } }
-      : {
-          aiTagLinks: {
-            none: { ...(selectedIds ? { aiTagId: { in: selectedIds } } : {}), status: 'ACTIVE' },
-          },
-        };
+  const some = (id?: string): AssetSearchWhere => ({
+    manualTagLinks: { some: id ? { tagId: id } : {} },
+  });
+  const none = (selectedIds?: string[]): AssetSearchWhere => ({
+    manualTagLinks: { none: selectedIds ? { tagId: { in: selectedIds } } : {} },
+  });
   switch (rule.operator) {
     case 'ANY_OF':
-      return source === 'MANUAL'
-        ? { manualTagLinks: { some: { tagId: { in: ids } } } }
-        : { aiTagLinks: { some: { aiTagId: { in: ids }, status: 'ACTIVE' } } };
+      return { manualTagLinks: { some: { tagId: { in: ids } } } };
     case 'NONE_OF':
       return none(ids);
     case 'EMPTY':

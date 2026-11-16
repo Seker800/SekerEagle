@@ -27,8 +27,6 @@ export interface EagleQuickFilterState {
   color?: string;
   manualTagIds: string[];
   manualTagMatch: EagleQuickTagMatch;
-  aiTagIds: string[];
-  aiTagMatch: EagleQuickTagMatch;
   formats: string[];
   shapes: string[];
   ratingAtLeast?: number;
@@ -51,7 +49,6 @@ export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, stri
   PERSON: t('人物'),
   COLOR: t('颜色'),
   MANUAL_TAGS: t('标签'),
-  AI_TAGS: t('AI 标签'),
   SHAPE: t('形状'),
   RATING: t('评分'),
   FORMAT: t('格式'),
@@ -73,7 +70,6 @@ export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   'LENS_MODEL',
   'GPS',
   'PERSON',
-  'AI_TAGS',
   'WIDTH',
   'HEIGHT',
   'FILE_SIZE',
@@ -89,8 +85,6 @@ export function createEmptyEagleQuickFilterState(): EagleQuickFilterState {
   return {
     manualTagIds: [],
     manualTagMatch: 'ANY',
-    aiTagIds: [],
-    aiTagMatch: 'ANY',
     formats: [],
     shapes: [],
     ranges: {},
@@ -113,8 +107,6 @@ export function isEagleQuickFilterActive(
       return Boolean(state.color);
     case 'MANUAL_TAGS':
       return state.manualTagIds.length > 0;
-    case 'AI_TAGS':
-      return state.aiTagIds.length > 0;
     case 'FORMAT':
       return state.formats.length > 0;
     case 'SHAPE':
@@ -163,8 +155,6 @@ export function summarizeEagleQuickFilter(
       return state.color?.toUpperCase();
     case 'MANUAL_TAGS':
       return state.manualTagIds.length ? String(state.manualTagIds.length) : undefined;
-    case 'AI_TAGS':
-      return state.aiTagIds.length ? String(state.aiTagIds.length) : undefined;
     case 'FORMAT':
       return state.formats.length
         ? state.formats.map((value) => value.toUpperCase()).join('、')
@@ -221,8 +211,6 @@ export function clearEagleQuickFilter(
       return { ...state, color: undefined };
     case 'MANUAL_TAGS':
       return { ...state, manualTagIds: [] };
-    case 'AI_TAGS':
-      return { ...state, aiTagIds: [] };
     case 'FORMAT':
       return { ...state, formats: [] };
     case 'SHAPE':
@@ -280,9 +268,6 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
       state.manualTagMatch === 'ALL' ? 'ALL_OF' : 'ANY_OF',
       state.manualTagIds,
     );
-  }
-  if (state.aiTagIds.length) {
-    addRule('AI_TAGS', state.aiTagMatch === 'ALL' ? 'ALL_OF' : 'ANY_OF', state.aiTagIds);
   }
   addChoiceRules(conditions, 'FORMAT', state.formats);
   addChoiceRules(conditions, 'SHAPE', state.shapes);

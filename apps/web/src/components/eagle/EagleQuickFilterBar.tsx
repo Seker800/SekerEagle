@@ -22,13 +22,12 @@ import {
   IconPlus,
   IconRulerMeasure,
   IconSearch,
-  IconSparkles,
   IconStar,
   IconTags,
   IconX,
   type Icon,
 } from '@tabler/icons-react';
-import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
+import type { EagleManualTag } from '../../lib/eagle-api';
 import { searchAndSortEagleTags } from './eagle-tag-index';
 import {
   DEFAULT_EAGLE_QUICK_FILTER_FIELDS,
@@ -58,8 +57,6 @@ interface EagleQuickFilterBarProps {
   fieldOptions?: Partial<Record<EagleQuickFilterField, Array<{ value: string; label: string }>>>;
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
-  aiTags: EagleAiTag[];
-  onRequestAiTags?: () => void;
   onChange: (value: EagleQuickFilterState) => void;
 }
 const QUICK_FILTER_FIELDS_KEY = 'seker-eagle.quick-filter-fields.v1';
@@ -98,7 +95,6 @@ const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
   PERSON: IconUsers,
   COLOR: IconPalette,
   MANUAL_TAGS: IconTags,
-  AI_TAGS: IconSparkles,
   SHAPE: IconAspectRatio,
   RATING: IconStar,
   FORMAT: IconFile,
@@ -122,8 +118,6 @@ function ScopedQuickFilterBar({
   fieldOptions,
   value,
   manualTags,
-  aiTags,
-  onRequestAiTags,
   onChange,
 }: EagleQuickFilterBarProps) {
   const { libraryMode } = useLibraryWorkspace();
@@ -202,7 +196,6 @@ function ScopedQuickFilterBar({
                 aria-expanded={openField === field}
                 onClick={(event) => {
                   anchorRef.current = event.currentTarget;
-                  if (field === 'AI_TAGS' && openField !== field) onRequestAiTags?.();
                   setOpenField((current) => (current === field ? null : field));
                 }}
               >
@@ -221,7 +214,6 @@ function ScopedQuickFilterBar({
                     options={fieldOptions?.[field]}
                     value={value}
                     manualTags={manualTags}
-                    aiTags={aiTags}
                     onChange={onChange}
                     onClose={closePopover}
                   />
@@ -283,7 +275,6 @@ function FieldPopover({
   field,
   value,
   manualTags,
-  aiTags,
   onChange,
   onClose,
 }: {
@@ -291,7 +282,6 @@ function FieldPopover({
   field: EagleQuickFilterField;
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
-  aiTags: EagleAiTag[];
   onChange: (value: EagleQuickFilterState) => void;
   onClose: () => void;
 }) {
@@ -326,7 +316,7 @@ function FieldPopover({
         </div>
       </header>
       <div className={styles.popoverBody}>
-        {renderFieldControl(field, value, manualTags, aiTags, onChange, options)}
+        {renderFieldControl(field, value, manualTags, onChange, options)}
       </div>
     </div>
   );
@@ -335,7 +325,6 @@ function renderFieldControl(
   field: EagleQuickFilterField,
   value: EagleQuickFilterState,
   manualTags: EagleManualTag[],
-  aiTags: EagleAiTag[],
   onChange: (value: EagleQuickFilterState) => void,
   options?: Array<{ value: string; label: string }>,
 ) {
@@ -407,24 +396,11 @@ function renderFieldControl(
     case 'MANUAL_TAGS':
       return (
         <TagControl
-          kind="MANUAL"
           tags={manualTags}
           selectedIds={value.manualTagIds}
           match={value.manualTagMatch}
           onChange={(selectedIds, match) =>
             onChange({ ...value, manualTagIds: selectedIds, manualTagMatch: match })
-          }
-        />
-      );
-    case 'AI_TAGS':
-      return (
-        <TagControl
-          kind="AI"
-          tags={aiTags}
-          selectedIds={value.aiTagIds}
-          match={value.aiTagMatch}
-          onChange={(selectedIds, match) =>
-            onChange({ ...value, aiTagIds: selectedIds, aiTagMatch: match })
           }
         />
       );
@@ -498,14 +474,12 @@ function ColorControl({
   );
 }
 function TagControl({
-  kind,
   tags,
   selectedIds,
   match,
   onChange,
 }: {
-  kind: 'MANUAL' | 'AI';
-  tags: Array<EagleManualTag | EagleAiTag>;
+  tags: EagleManualTag[];
   selectedIds: string[];
   match: 'ANY' | 'ALL';
   onChange: (selectedIds: string[], match: 'ANY' | 'ALL') => void;
@@ -518,15 +492,15 @@ function TagControl({
         .map(({ tag }) => tag),
     [search, selectedIds, tags],
   );
-  const searchLabel = kind === 'MANUAL' ? t('搜索标签') : t('搜索 AI 标签');
+  const searchLabel = t('搜索标签');
   return (
     <div className={styles.tagControl}>
       <div className={styles.matchModes}>
         <label>
           <input
             type="radio"
-            name={`${kind}-tag-match`}
-            aria-label={kind === 'MANUAL' ? t('匹配任一标签') : t('匹配任一 AI 标签')}
+            name="manual-tag-match"
+            aria-label={t('匹配任一标签')}
             checked={match === 'ANY'}
             onChange={() => onChange(selectedIds, 'ANY')}
           />
@@ -535,8 +509,8 @@ function TagControl({
         <label>
           <input
             type="radio"
-            name={`${kind}-tag-match`}
-            aria-label={kind === 'MANUAL' ? t('匹配全部标签') : t('匹配全部 AI 标签')}
+            name="manual-tag-match"
+            aria-label={t('匹配全部标签')}
             checked={match === 'ALL'}
             onChange={() => onChange(selectedIds, 'ALL')}
           />

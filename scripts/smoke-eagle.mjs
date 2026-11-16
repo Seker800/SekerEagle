@@ -310,7 +310,7 @@ const importedAssetId =
   typeof importCompleted.payload?.assetId === 'string'
     ? importCompleted.payload.assetId
     : await waitForUpload(importUpload.payload.id, { bearer: importerToken });
-const importFinished = await api(
+const retiredFinish = await api(
   `/api/eagle/imports/${firstImport.runId}/items/${importItem.id}/finish`,
   {
     method: 'POST',
@@ -318,7 +318,7 @@ const importFinished = await api(
     body: { assetId: importedAssetId },
   },
 );
-if (!importFinished.response.ok) throw new Error('导入项元数据收敛失败');
+if (retiredFinish.response.status !== 410) throw new Error('旧导入 finish 应返回 410 墓碑');
 
 const metadataImport = await createImportRun('updated');
 if (

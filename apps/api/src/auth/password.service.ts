@@ -54,8 +54,8 @@ export class PasswordService {
         if (!(await bcrypt.compare(password, user.passwordHash)))
           throw new UnauthorizedException('邮箱或密码错误。');
       } else {
-        user = await this.claimSoleLegacyAdminEmail(normalized, password);
-        if (!user) throw new UnauthorizedException('邮箱或密码错误。');
+        await bcrypt.compare(password, DUMMY_HASH);
+        throw new UnauthorizedException('邮箱或密码错误。');
       }
     } catch (error) {
       if (error instanceof UnauthorizedException) recordLoginFailure(normalized);
@@ -164,51 +164,6 @@ export class PasswordService {
         data: { revokedAt: now },
       }),
     ]);
-  }
-
-  private async claimSoleLegacyAdminEmail(email: string, password: string): Promise<User | null> {
-    const candidates = await this.prisma.user.findMany({
-      where: { role: UserRole.ADMIN, disabledAt: null, email: { not: { contains: '@' } } },
-      take: 2,
-    });
-    if (candidates.length !== 1) {
-      await bcrypt.compare(password, DUMMY_HASH);
-      return null;
-    }
-    const [legacyAdmin] = candidates;
-    if (!legacyAdmin || !(await bcrypt.compare(password, legacyAdmin.passwordHash))) return null;
-    const now = new Date();
-    try {
-      const claimed = await this.prisma.$transaction(async (transaction) => {
-        const updated = await transaction.user.updateMany({
-          where: {
-            id: legacyAdmin.id,
-            email: legacyAdmin.email,
-            role: UserRole.ADMIN,
-            disabledAt: null,
-          },
-          data: { email, authVersion: { increment: 1 } },
-        });
-        if (updated.count !== 1) return null;
-        await Promise.all([
-          transaction.refreshToken.updateMany({
-            where: { userId: legacyAdmin.id, revokedAt: null },
-            data: { revokedAt: now },
-          }),
-          transaction.personalAccessToken.updateMany({
-            where: { userId: legacyAdmin.id, revokedAt: null },
-            data: { revokedAt: now },
-          }),
-        ]);
-        return transaction.user.findUnique({ where: { id: legacyAdmin.id } });
-      });
-      return claimed;
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        return null;
-      }
-      throw error;
-    }
   }
 }
 
