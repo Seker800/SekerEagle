@@ -3,9 +3,33 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from '../src/main/app-config';
 import { isAllowedAppNavigation } from '../src/main/navigation-policy';
 
+const mainSourceFiles = [
+  'main.ts',
+  'desktop-context.ts',
+  'cache-process.ts',
+  'window.ts',
+  'media-protocol.ts',
+  'connection-lifecycle.ts',
+  'ipc/session-ipc.ts',
+  'ipc/cache-ipc.ts',
+  'ipc/connection-ipc.ts',
+  'ipc/clipboard-ipc.ts',
+  'ipc/original-drag-ipc.ts',
+  'ipc/original-file-export-ipc.ts',
+];
+
+async function readMainSources(): Promise<string> {
+  const parts = await Promise.all(
+    mainSourceFiles.map((file) =>
+      readFile(new URL(`../src/main/${file}`, import.meta.url), 'utf8'),
+    ),
+  );
+  return parts.join('\n');
+}
+
 describe('desktop server and navigation security', () => {
   it('redirects portable profile data before acquiring the single-instance lock', async () => {
-    const main = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    const main = await readMainSources();
     expect(main.indexOf("app.setPath('userData'")).toBeGreaterThan(-1);
     expect(main.indexOf("app.setPath('userData'")).toBeLessThan(
       main.indexOf('app.requestSingleInstanceLock()'),
@@ -52,14 +76,14 @@ describe('desktop server and navigation security', () => {
   });
 
   it('holds a single-instance cache writer lock and focuses the existing window', async () => {
-    const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    const source = await readMainSources();
     expect(source).toContain('app.requestSingleInstanceLock()');
     expect(source).toContain("app.on('second-instance'");
     expect(source).toMatch(/mainWindow\?\.focus\(\)/u);
   });
 
   it('lets Windows reserve native title bar space for every fixed overlay', async () => {
-    const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    const source = await readMainSources();
     expect(source).toContain("process.platform === 'win32'");
     expect(source).toContain('autoHideMenuBar: true');
     expect(source).toContain('window.removeMenu()');
@@ -71,9 +95,9 @@ describe('desktop server and navigation security', () => {
   });
 
   it('propagates custom-protocol cancellation into media resolution', async () => {
-    const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    const source = await readMainSources();
     expect(source).toMatch(
-      /handleMediaRequest\(request\.url, request\.signal, request\.headers\.get\('origin'\)\)/u,
+      /handleMediaRequest\(\s*ctx,\s*request\.url, request\.signal, request\.headers\.get\('origin'\)\)/u,
     );
     expect(source).toContain('mediaController.resolve(requestUrl, signal)');
     expect(source).toContain('options.signal');
@@ -81,7 +105,7 @@ describe('desktop server and navigation security', () => {
 
   it('expires authorization leases after a trusted offline-to-online transition', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(preload).toContain(".addEventListener('online'");
@@ -92,7 +116,7 @@ describe('desktop server and navigation security', () => {
 
   it('serves an offline connection manager and exposes only validated connection IPC', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(main).toContain("scheme: 'sekereagle-app'");
@@ -107,14 +131,14 @@ describe('desktop server and navigation security', () => {
       /desktop:reset-deployment-binding'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
     );
     expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager', locale)");
-    expect(main).toContain('normalizeDesktopLocale(requestedLocale ?? desktopLocale)');
+    expect(main).toContain('normalizeDesktopLocale(requestedLocale ?? ctx.desktopLocale)');
     expect(preload).toContain("ipcRenderer.invoke('desktop:test-connections'");
     expect(preload).not.toContain('shell.openExternal');
   });
 
   it('exposes cache management only through sender-validated desktop IPC', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(main).toMatch(
@@ -129,7 +153,7 @@ describe('desktop server and navigation security', () => {
 
   it('writes only bounded PNG payloads through sender-validated clipboard IPC', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(main).toContain("ipcMain.handle('desktop:write-clipboard-image'");
@@ -143,7 +167,7 @@ describe('desktop server and navigation security', () => {
 
   it('prepares and starts native original-file drags only through trusted capabilities', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(main).toContain("ipcMain.handle('desktop:prepare-asset-drag'");
@@ -155,7 +179,7 @@ describe('desktop server and navigation security', () => {
     expect(main).toContain("ipcMain.on('desktop:discard-prepared-asset-drag'");
     expect(main).toContain('parseAssetDragInput(input)');
     expect(main).toContain('webContents.startDrag');
-    expect(main).toContain('dragServerUrl !== serverUrl');
+    expect(main).toContain('dragServerUrl !== ctx.serverUrl');
     expect(main).toContain('currentIdentity.ownerId !== identity.ownerId');
     expect(main).toContain("app.getFileIcon(prepared.files[0], { size: 'normal' })");
     expect(main).toContain('startNativeDrag(event, entry.prepared, entry.icon)');
@@ -175,7 +199,7 @@ describe('desktop server and navigation security', () => {
 
   it('saves one authenticated original only through a native Save As dialog', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(main).toContain("ipcMain.handle('desktop:save-original-file'");
@@ -192,7 +216,7 @@ describe('desktop server and navigation security', () => {
 
   it('downloads a validated original batch only into a native-selected directory', async () => {
     const [main, preload] = await Promise.all([
-      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readMainSources(),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
     expect(main).toMatch(/ipcMain\.handle\(\s*'desktop:download-original-files'/u);

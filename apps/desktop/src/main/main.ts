@@ -1,84 +1,43 @@
-import { registerLibraryReadIpc } from './library-read-ipc';
-import { MediaSnapshotAuthorization } from './media-snapshot-authorization';
-import { appendFileSync, createReadStream, mkdirSync } from 'node:fs';
-import { copyFile, readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, protocol, session } from 'electron';
 import path from 'node:path';
-import { desktopCacheRoot } from './cache-location';
-import { Readable } from 'node:stream';
-import {
-  app,
-  BrowserWindow,
-  clipboard,
-  dialog,
-  ipcMain,
-  nativeImage,
-  powerMonitor,
-  protocol,
-  session,
-  shell,
-  utilityProcess,
-  type UtilityProcess,
-  type NativeImage,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent,
-} from 'electron';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from './app-config';
 import { AuthenticatedOwner } from './authenticated-owner';
-import {
-  MediaCacheController,
-  emptyCacheRequestStats,
-  type MediaResolution,
-} from './media-cache-controller';
-import { MediaRequestLimiter } from './media-request-limiter';
-import {
-  isAllowedAppNavigation,
-  desktopContentSecurityPolicy,
-  isAllowedMediaOrigin,
-  mediaCorsHeaders,
-} from './navigation-policy';
-import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
-import {
-  DEFAULT_CACHE_LIMIT_BYTES,
-  PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
-} from '../utility/cache/cache-policy';
-import { buildNamespaceId } from '../shared/media-identity';
-import {
-  accountCacheNamespaces,
-  readAccountCacheStats,
-  removeAccountCache,
-} from './account-media-cache';
-import { DesktopSettingsStore } from './desktop-settings';
-import { DesktopConnectionSettingsStore } from './connection-settings';
-import { connectionSettingsForServerUrl } from './connection-config';
-import { connectionPageAsset, isConnectionPageUrl } from './connection-page-protocol';
-import { DesktopConnectionResolver } from './connection-resolver';
-import { DesktopConnectionService, type DesktopConnectionSnapshot } from './connection-service';
-import { createDesktopConnectionProbe } from './connection-probe';
 import { DesktopBrowserSession } from './browser-session';
-import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem';
-import { parseClipboardImageInput } from './clipboard-image';
-import { copyPreparedFilesToDirectory } from './original-file-destination';
 import {
-  connectionPageUrl,
-  desktopText,
-  normalizeDesktopLocale,
-  type DesktopLocale,
-} from './desktop-locale';
+  connectCacheProcess,
+  expireCacheAuthorizations,
+  setCacheLimitBytes,
+  setPortableDataRoot,
+  shutdownCache,
+} from './cache-process';
+import { connectionSettingsForServerUrl } from './connection-config';
+import { recoverConnection } from './connection-lifecycle';
+import { connectionPageUrl, normalizeDesktopLocale } from './desktop-locale';
+import { DesktopContext } from './desktop-context';
+import { DesktopConnectionResolver } from './connection-resolver';
+import { DesktopConnectionService } from './connection-service';
+import { createDesktopConnectionProbe } from './connection-probe';
+import { DesktopConnectionSettingsStore } from './connection-settings';
+import { DesktopSettingsStore } from './desktop-settings';
+import { registerCacheIpc } from './ipc/cache-ipc';
+import { registerClipboardIpc } from './ipc/clipboard-ipc';
+import { registerConnectionIpc } from './ipc/connection-ipc';
+import { registerOriginalDragIpc } from './ipc/original-drag-ipc';
+import { registerOriginalFileExportIpc } from './ipc/original-file-export-ipc';
+import { registerNetworkOnlineIpc, registerSessionIpc } from './ipc/session-ipc';
+import { registerLibraryReadIpc } from './library-read-ipc';
+import { createMediaController, handleAppRequest, handleMediaRequest } from './media-protocol';
+import { OriginalDragExporter } from './original-drag-export';
 import {
-  ORIGINAL_DRAG_EXPORT_TTL_MS,
-  OriginalDragExporter,
-  parseAssetDragInput,
-  parsePreparedDragToken,
-  parseLibraryDragRequest,
-  type OriginalLibraryMode,
-} from './original-drag-export';
-import {
-  portableCacheRoot,
   portableProfileRoot,
   preparePortableDataRoot,
   resolvePortableDataRoot,
 } from './portable-data';
+import { createWindow, lockDownSession } from './window';
+import {
+  DEFAULT_CACHE_LIMIT_BYTES,
+  PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
+} from '../utility/cache/cache-policy';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -110,6 +69,7 @@ try {
     preparePortableDataRoot(portableDataRoot);
     app.setPath('userData', portableProfileRoot(portableDataRoot));
   }
+  setPortableDataRoot(portableDataRoot);
 } catch (error) {
   portableStartupFailed = true;
   dialog.showErrorBox(
@@ -122,34 +82,20 @@ try {
 const initialServerUrl = normalizeDesktopServerUrl(
   process.env.SEKEREAGLE_SERVER_URL ?? DEFAULT_DESKTOP_SERVER_URL,
 );
-let desktopLocale: DesktopLocale = 'zh-CN';
-let serverUrl = initialServerUrl;
-let mainWindow: BrowserWindow | null = null;
-let cacheProcess: UtilityProcess | null = null;
-let cacheClient: CacheRpcClient | null = null;
-let cacheLimitBytes = DEFAULT_CACHE_LIMIT_BYTES;
-let cacheRestartTimer: NodeJS.Timeout | null = null;
-let cacheRestartHistory: number[] = [];
-let shuttingDown = false;
-let connectionService: DesktopConnectionService | null = null;
-let librarySnapshot: MediaSnapshotAuthorization | null = null;
-let mediaController: MediaCacheController | null = null;
-let connectionRecovery: Promise<void> | null = null;
-let browserSession: DesktopBrowserSession | null = null;
-let clearPreparedOriginalDrags: () => void = () => undefined;
+const ctx = new DesktopContext(initialServerUrl);
 
 const hasSingleInstanceLock = !portableStartupFailed && app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
 app.on('second-instance', () => {
-  if (mainWindow?.isMinimized()) mainWindow.restore();
-  mainWindow?.show();
-  mainWindow?.focus();
+  if (ctx.mainWindow?.isMinimized()) ctx.mainWindow.restore();
+  ctx.mainWindow?.show();
+  ctx.mainWindow?.focus();
 });
 
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
-    desktopLocale = normalizeDesktopLocale(app.getLocale());
+    ctx.desktopLocale = normalizeDesktopLocale(app.getLocale());
     const settings = new DesktopSettingsStore(
       app.getPath('userData'),
       portableDataRoot ? PORTABLE_DEFAULT_CACHE_LIMIT_BYTES : DEFAULT_CACHE_LIMIT_BYTES,
@@ -159,66 +105,54 @@ if (hasSingleInstanceLock)
       connectionSettingsForServerUrl(initialServerUrl),
     );
     const initialSettings = await settings.load();
-    cacheLimitBytes = initialSettings.cacheLimitBytes;
+    setCacheLimitBytes(initialSettings.cacheLimitBytes);
     await connectCacheProcess();
 
     const currentSession = session.defaultSession;
-    browserSession = new DesktopBrowserSession(
+    ctx.browserSession = new DesktopBrowserSession(
       (url, init) => currentSession.fetch(url, init),
-      () => serverUrl,
+      () => ctx.serverUrl,
     );
-    connectionService = new DesktopConnectionService(
+    ctx.connectionService = new DesktopConnectionService(
       connectionSettings,
       new DesktopConnectionResolver(
         createDesktopConnectionProbe((url, init) => currentSession.fetch(url, init)),
       ),
     );
-    const initialConnection = await connectionService.initialize();
-    if (initialConnection.active) serverUrl = initialConnection.active.url;
+    const initialConnection = await ctx.connectionService.initialize();
+    if (initialConnection.active) ctx.serverUrl = initialConnection.active.url;
     const owner = new AuthenticatedOwner(() =>
-      currentBrowserSession().fetch('/api/auth/me', {
+      ctx.currentBrowserSession().fetch('/api/auth/me', {
         credentials: 'include',
         headers: { 'cache-control': 'no-store' },
       }),
     );
     currentSession.cookies.on('changed', () => {
-      librarySnapshot?.reset();
+      ctx.librarySnapshot?.reset();
       owner.invalidate();
-      clearPreparedOriginalDrags();
+      ctx.clearPreparedOriginalDrags();
     });
     powerMonitor.on('resume', () => {
-      librarySnapshot?.reset();
+      ctx.librarySnapshot?.reset();
       owner.invalidate();
-      clearPreparedOriginalDrags();
-      void cacheClient?.expireAuthorizations().catch(() => undefined);
-      void recoverConnection(owner);
+      ctx.clearPreparedOriginalDrags();
+      void expireCacheAuthorizations();
+      void recoverConnection(ctx, owner);
     });
-    lockDownSession(currentSession);
-    ipcMain.handle('desktop:refresh-session', async (event) => {
-      assertTrustedIpcSender(event);
-      const response = await currentBrowserSession().refreshSession();
-      const body: unknown = response.ok ? null : await response.json().catch(() => null);
-      return {
-        status: response.status,
-        code:
-          body && typeof body === 'object' && 'code' in body && typeof body.code === 'string'
-            ? body.code
-            : null,
-      };
+    lockDownSession(ctx, currentSession);
+    registerSessionIpc(ctx);
+    registerLibraryReadIpc({
+      ipcMain,
+      assertTrustedIpcSender: (event) => ctx.assertTrustedIpcSender(event),
+      snapshot: () => ctx.librarySnapshot,
     });
-    ipcMain.handle('desktop:app-info', (event) => {
-      assertTrustedIpcSender(event);
-      return { version: app.getVersion(), platform: process.platform };
-    });
-
-    registerLibraryReadIpc({ ipcMain, assertTrustedIpcSender, snapshot: () => librarySnapshot });
-    registerCacheIpc(owner, settings);
-    registerConnectionIpc(owner);
-    registerClipboardIpc();
+    registerCacheIpc(ctx, owner, settings);
+    registerConnectionIpc(ctx, owner);
+    registerClipboardIpc(ctx);
     const originalDragExporter = new OriginalDragExporter({
       rootPath: path.join(app.getPath('temp'), 'SekerEagle', 'OriginalDrag'),
       fetchOriginal: (assetId, signal, libraryMode) =>
-        currentBrowserSession().fetch(
+        ctx.currentBrowserSession().fetch(
           `/api/${libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${assetId}/original`,
           {
             credentials: 'include',
@@ -232,31 +166,29 @@ if (hasSingleInstanceLock)
         ),
     });
     await originalDragExporter.cleanupExpired().catch(() => undefined);
-    clearPreparedOriginalDrags = registerOriginalDragIpc(owner, originalDragExporter);
-    registerOriginalFileExportIpc(owner, originalDragExporter);
-    ipcMain.on('desktop:network-online', (event) => {
-      try {
-        assertTrustedIpcSender(event);
-      } catch {
-        return;
-      }
-      librarySnapshot?.reset();
-      owner.invalidate();
-      void cacheClient?.expireAuthorizations().catch(() => undefined);
-      void recoverConnection(owner);
-    });
+    ctx.clearPreparedOriginalDrags = registerOriginalDragIpc(ctx, owner, originalDragExporter);
+    registerOriginalFileExportIpc(ctx, owner, originalDragExporter);
+    registerNetworkOnlineIpc(ctx, owner);
 
-    mediaController = createMediaController(owner);
+    createMediaController(ctx, owner);
     protocol.handle('sekereagle-media', (request) =>
-      handleMediaRequest(request.url, request.signal, request.headers.get('origin')),
+      handleMediaRequest(ctx, request.url, request.signal, request.headers.get('origin')),
     );
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
-    createWindow(initialConnection.active ? serverUrl : connectionPageUrl(desktopLocale), owner);
+    createWindow(
+      ctx,
+      initialConnection.active ? ctx.serverUrl : connectionPageUrl(ctx.desktopLocale),
+      owner,
+    );
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        const active = connectionService?.current()?.active;
-        createWindow(active ? active.url : connectionPageUrl(desktopLocale), owner);
+        const active = ctx.connectionService?.current()?.active;
+        createWindow(
+          ctx,
+          active ? active.url : connectionPageUrl(ctx.desktopLocale),
+          owner,
+        );
       }
     });
   });
@@ -266,799 +198,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-  shuttingDown = true;
-  if (cacheRestartTimer) clearTimeout(cacheRestartTimer);
-  if (cacheClient) void cacheClient.close().catch(() => undefined);
-  cacheProcess?.kill();
-  clearPreparedOriginalDrags();
+  ctx.shuttingDown = true;
+  shutdownCache();
+  ctx.clearPreparedOriginalDrags();
 });
-
-async function startCacheProcess(
-  limitBytes = DEFAULT_CACHE_LIMIT_BYTES,
-): Promise<{ child: UtilityProcess; client: CacheRpcClient }> {
-  const child = utilityProcess.fork(path.join(__dirname, 'utility.cjs'), [], {
-    serviceName: 'SekerEagle Media Cache',
-  });
-  const endpoint: CacheRpcEndpoint = {
-    postMessage(message) {
-      child.postMessage(message);
-    },
-    subscribe(listener) {
-      const onMessage = (message: unknown) => listener(message as CacheRpcMessage);
-      child.on('message', onMessage);
-      return () => child.off('message', onMessage);
-    },
-  };
-  const client = new CacheRpcClient(endpoint);
-  try {
-    await client.initialize({
-      cacheRoot: currentDesktopCacheRoot(),
-      limitBytes,
-    });
-  } catch (error) {
-    client.disconnect(error instanceof Error ? error : undefined);
-    child.kill();
-    throw error;
-  }
-  return { child, client };
-}
-
-async function connectCacheProcess(): Promise<void> {
-  if (shuttingDown || cacheClient) return;
-  try {
-    const started = await startCacheProcess(cacheLimitBytes);
-    if (shuttingDown) {
-      started.client.disconnect();
-      started.child.kill();
-      return;
-    }
-    cacheClient = started.client;
-    cacheProcess = started.child;
-    started.child.once('exit', () => handleCacheProcessExit(started.child, started.client));
-  } catch {
-    scheduleCacheRestart();
-  }
-}
-
-function handleCacheProcessExit(child: UtilityProcess, client: CacheRpcClient): void {
-  client.disconnect();
-  if (cacheProcess !== child) return;
-  cacheProcess = null;
-  cacheClient = null;
-  scheduleCacheRestart();
-}
-
-function scheduleCacheRestart(): void {
-  if (shuttingDown || cacheRestartTimer) return;
-  const now = Date.now();
-  cacheRestartHistory = cacheRestartHistory.filter((startedAt) => now - startedAt < 60_000);
-  if (cacheRestartHistory.length >= 3) return;
-  const delayMs = 250 * 2 ** cacheRestartHistory.length;
-  cacheRestartHistory.push(now);
-  cacheRestartTimer = setTimeout(() => {
-    cacheRestartTimer = null;
-    void connectCacheProcess();
-  }, delayMs);
-  cacheRestartTimer.unref();
-}
-
-function currentCache(): CacheRpcClient {
-  if (!cacheClient) throw new Error('本地缓存暂时不可用。');
-  return cacheClient;
-}
-
-function cacheBackend() {
-  return {
-    acquire: (...args: Parameters<CacheRpcClient['acquire']>) => currentCache().acquire(...args),
-    release: (...args: Parameters<CacheRpcClient['release']>) => currentCache().release(...args),
-    beginWrite: (...args: Parameters<CacheRpcClient['beginWrite']>) =>
-      currentCache().beginWrite(...args),
-    append: (...args: Parameters<CacheRpcClient['append']>) => currentCache().append(...args),
-    commit: (...args: Parameters<CacheRpcClient['commit']>) => currentCache().commit(...args),
-    abort: (...args: Parameters<CacheRpcClient['abort']>) => currentCache().abort(...args),
-    renewAuthorization: (...args: Parameters<CacheRpcClient['renewAuthorization']>) =>
-      currentCache().renewAuthorization(...args),
-    invalidate: (...args: Parameters<CacheRpcClient['invalidate']>) =>
-      currentCache().invalidate(...args),
-  };
-}
-
-function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsStore): void {
-  const namespaces = async (
-    event: IpcMainInvokeEvent,
-    allowConnectionPage = false,
-  ): Promise<string[]> => {
-    if (allowConnectionPage) assertTrustedConnectionSender(event);
-    else assertTrustedIpcSender(event);
-    const identity = await owner.get();
-    if (!identity) throw new Error('需要重新登录。');
-    return accountCacheNamespaces(serverUrl, identity);
-  };
-  ipcMain.handle('desktop:cache-status', async (event) => {
-    const namespaceIds = await namespaces(event);
-    const [namespaceStats, globalStats, currentSettings] = await Promise.all([
-      readAccountCacheStats(
-        currentCache(),
-        namespaceIds,
-        (namespace) => mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
-      ),
-      currentCache().getStats(),
-      settings.load(),
-    ]);
-    return {
-      ...namespaceStats,
-      globalAllocatedBytes: globalStats.allocatedBytes,
-      globalEntryCount: globalStats.entryCount,
-      limitBytes: currentSettings.cacheLimitBytes,
-    };
-  });
-  ipcMain.handle('desktop:get-cache-manager-status', async (event) => {
-    assertConnectionPageSender(event);
-    const cacheRoot = currentDesktopCacheRoot();
-    const [globalStats, currentSettings, availableBytes, identity] = await Promise.all([
-      currentCache().getStats(),
-      settings.load(),
-      availableBytesForPath(cacheRoot),
-      owner.get(),
-    ]);
-    const currentAccountStats = identity
-      ? await readAccountCacheStats(
-          currentCache(),
-          accountCacheNamespaces(serverUrl, identity),
-          (namespace) => mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
-        )
-      : null;
-    return {
-      cachePath: cacheRoot,
-      availableBytes,
-      limitBytes: currentSettings.cacheLimitBytes,
-      globalAllocatedBytes: globalStats.allocatedBytes,
-      globalEntryCount: globalStats.entryCount,
-      currentAccountStats,
-    };
-  });
-  ipcMain.handle('desktop:set-cache-limit', async (event, limitGiB: unknown) => {
-    assertTrustedConnectionSender(event);
-    if (typeof limitGiB !== 'number') throw new Error('缓存容量无效。');
-    const updated = await settings.setCacheLimitGiB(limitGiB);
-    cacheLimitBytes = updated.cacheLimitBytes;
-    await currentCache().setLimitBytes(updated.cacheLimitBytes);
-  });
-  ipcMain.handle('desktop:clear-cache', async (event) =>
-    removeAccountCache(currentCache(), await namespaces(event, true)),
-  );
-  ipcMain.handle('desktop:open-cache-folder', async (event) => {
-    assertConnectionPageSender(event);
-    const cacheRoot = currentDesktopCacheRoot();
-    await ensureCacheDirectory(cacheRoot);
-    const error = await shell.openPath(cacheRoot);
-    if (error) throw new Error(`无法打开缓存目录：${error}`);
-  });
-  ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
-    if (typeof assetId !== 'string') throw new Error('资源标识无效。');
-    const scope = await namespaces(event);
-    librarySnapshot?.invalidateAsset(assetId);
-    return removeAccountCache(currentCache(), scope, assetId);
-  });
-}
-
-function currentDesktopCacheRoot(): string {
-  if (portableDataRoot) return portableCacheRoot(portableDataRoot);
-  return desktopCacheRoot({
-    platform: process.platform,
-    home: app.getPath('home'),
-    appData: app.getPath('appData'),
-    localAppData: process.env.LOCALAPPDATA,
-    xdgCacheHome: process.env.XDG_CACHE_HOME,
-  });
-}
-
-function registerConnectionIpc(owner: AuthenticatedOwner): void {
-  ipcMain.handle('desktop:get-connection-status', (event) => {
-    assertTrustedConnectionSender(event);
-    const snapshot = currentConnections();
-    return {
-      mode: snapshot.settings.mode,
-      activeSlot: snapshot.active?.slot ?? null,
-      activeUrl: snapshot.active?.url ?? null,
-      latencyMs: snapshot.active?.latencyMs ?? null,
-    };
-  });
-  ipcMain.handle('desktop:get-connection-manager-state', (event) => {
-    assertConnectionPageSender(event);
-    return currentConnections();
-  });
-  ipcMain.handle('desktop:test-connections', async (event, input: unknown) => {
-    assertConnectionPageSender(event);
-    return currentConnectionService().test(input);
-  });
-  ipcMain.handle('desktop:retry-connections', async (event) => {
-    assertConnectionPageSender(event);
-    const snapshot = await currentConnectionService().retry();
-    if (snapshot.active) setTimeout(() => void applyConnection(snapshot, owner), 0).unref();
-    return snapshot;
-  });
-  ipcMain.handle('desktop:save-connections', async (event, input: unknown) => {
-    assertConnectionPageSender(event);
-    const snapshot = await currentConnectionService().save(input);
-    if (snapshot.active) {
-      setTimeout(() => void applyConnection(snapshot, owner), 0).unref();
-    }
-    return snapshot;
-  });
-  ipcMain.handle('desktop:reset-deployment-binding', async (event) => {
-    assertConnectionPageSender(event);
-    const snapshot = await currentConnectionService().resetDeploymentBinding();
-    if (snapshot.active) {
-      setTimeout(() => void applyConnection(snapshot, owner), 0).unref();
-    }
-    return snapshot;
-  });
-  ipcMain.handle('desktop:open-connection-manager', async (event, requestedLocale: unknown) => {
-    assertTrustedConnectionSender(event);
-    desktopLocale = normalizeDesktopLocale(requestedLocale ?? desktopLocale);
-    await mainWindow?.loadURL(connectionPageUrl(desktopLocale));
-  });
-  ipcMain.handle('desktop:cancel-connection-manager', async (event) => {
-    assertConnectionPageSender(event);
-    const active = currentConnections().active;
-    if (active) await mainWindow?.loadURL(active.url);
-  });
-}
-
-function registerClipboardIpc(): void {
-  ipcMain.handle('desktop:write-clipboard-image', (event, input: unknown) => {
-    assertTrustedIpcSender(event);
-    const image = nativeImage.createFromBuffer(Buffer.from(parseClipboardImageInput(input)));
-    if (image.isEmpty()) throw new Error('剪贴板图片无法解码。');
-    clipboard.writeImage(image);
-  });
-}
-
-function registerOriginalDragIpc(
-  owner: AuthenticatedOwner,
-  exporter: OriginalDragExporter,
-): () => void {
-  const preparedDrags = new Map<
-    string,
-    {
-      prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>>;
-      serverUrl: string;
-      icon: NativeImage;
-      cleanupTimer: NodeJS.Timeout;
-    }
-  >();
-  let dragInFlight = false;
-  let dragPreparationController: AbortController | null = null;
-  const removePreparedDrag = (token: string) => {
-    const entry = preparedDrags.get(token);
-    if (!entry) return;
-    preparedDrags.delete(token);
-    clearTimeout(entry.cleanupTimer);
-    void exporter.remove(entry.prepared).catch(() => undefined);
-  };
-  const startNativeDrag = (
-    event: IpcMainEvent | IpcMainInvokeEvent,
-    prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>>,
-    icon: NativeImage,
-  ) => {
-    const webContents = event.sender;
-    webContents.startDrag({
-      file: prepared.files[0],
-      files: prepared.files,
-      icon,
-    });
-  };
-
-  const prepareDrag = async (
-    event: IpcMainInvokeEvent,
-    input: unknown,
-    libraryMode: OriginalLibraryMode,
-  ) => {
-    assertTrustedIpcSender(event);
-    if (dragInFlight) throw new Error('已有原文件正在准备，请稍候。');
-    dragInFlight = true;
-    const preparationController = new AbortController();
-    dragPreparationController = preparationController;
-    const dragServerUrl = serverUrl;
-    let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
-    let preparedToken: string | null = null;
-    try {
-      const assetIds = parseAssetDragInput(input);
-      const identity = await owner.get();
-      if (!identity) throw new Error('需要重新登录。');
-      const namespaceId = buildNamespaceId(dragServerUrl, identity.ownerId, identity.deploymentId);
-      prepared = await exporter.prepare(
-        namespaceId,
-        assetIds,
-        preparationController.signal,
-        (progress) => {
-          if (dragPreparationController === preparationController && !event.sender.isDestroyed()) {
-            event.sender.send('desktop:asset-drag-preparation-progress', progress);
-          }
-        },
-        libraryMode,
-      );
-      const icon = await app.getFileIcon(prepared.files[0], { size: 'normal' });
-      const currentIdentity = await owner.get();
-      if (
-        dragServerUrl !== serverUrl ||
-        !currentIdentity ||
-        currentIdentity.ownerId !== identity.ownerId ||
-        currentIdentity.deploymentId !== identity.deploymentId
-      ) {
-        throw new Error('账号或服务器已切换，请重新拖动素材。');
-      }
-      assertTrustedIpcSender(event);
-      while (preparedDrags.size >= 8) removePreparedDrag(preparedDrags.keys().next().value!);
-      const token = randomUUID();
-      preparedToken = token;
-      const cleanupTimer = setTimeout(() => removePreparedDrag(token), ORIGINAL_DRAG_EXPORT_TTL_MS);
-      cleanupTimer.unref();
-      preparedDrags.set(token, { prepared, serverUrl: dragServerUrl, icon, cleanupTimer });
-      return { token };
-    } catch (error) {
-      if (preparedToken) removePreparedDrag(preparedToken);
-      else if (prepared) await exporter.remove(prepared);
-      throw error;
-    } finally {
-      if (dragPreparationController === preparationController) dragPreparationController = null;
-      dragInFlight = false;
-    }
-  };
-  ipcMain.handle('desktop:prepare-asset-drag', (event, input: unknown) =>
-    prepareDrag(event, input, 'MATERIAL'),
-  );
-  ipcMain.handle('desktop:prepare-library-asset-drag', (event, input: unknown) => {
-    assertTrustedIpcSender(event);
-    const request = parseLibraryDragRequest(input);
-    return prepareDrag(event, request.assetIds, request.libraryMode);
-  });
-
-  ipcMain.on('desktop:cancel-asset-drag-preparation', (event) => {
-    try {
-      assertTrustedIpcSender(event);
-      dragPreparationController?.abort(new Error('原文件拖拽已取消。'));
-    } catch {
-      return;
-    }
-  });
-
-  ipcMain.on('desktop:discard-prepared-asset-drag', (event, input: unknown) => {
-    try {
-      assertTrustedIpcSender(event);
-      removePreparedDrag(parsePreparedDragToken(input));
-    } catch {
-      return;
-    }
-  });
-
-  ipcMain.on('desktop:start-prepared-asset-drag', (event, input: unknown) => {
-    try {
-      assertTrustedIpcSender(event);
-      const token = parsePreparedDragToken(input);
-      const entry = preparedDrags.get(token);
-      if (!entry || entry.serverUrl !== serverUrl) {
-        if (entry) removePreparedDrag(token);
-        return;
-      }
-      startNativeDrag(event, entry.prepared, entry.icon);
-    } catch {
-      return;
-    }
-  });
-
-  return () => {
-    dragPreparationController?.abort(new Error('原文件拖拽已取消。'));
-    const entries = [...preparedDrags.values()];
-    preparedDrags.clear();
-    for (const entry of entries) {
-      clearTimeout(entry.cleanupTimer);
-      void exporter.remove(entry.prepared).catch(() => undefined);
-    }
-  };
-}
-
-function registerOriginalFileExportIpc(
-  owner: AuthenticatedOwner,
-  exporter: OriginalDragExporter,
-): void {
-  let exportInFlight = false;
-  ipcMain.handle('desktop:save-original-file', async (event, input: unknown, locale: unknown) => {
-    assertTrustedIpcSender(event);
-    const requestedLocale = normalizeDesktopLocale(locale ?? desktopLocale);
-    if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
-    exportInFlight = true;
-    const saveServerUrl = serverUrl;
-    let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
-    try {
-      const [assetId] = parseAssetDragInput([input]);
-      const identity = await owner.get();
-      if (!identity) throw new Error('需要重新登录。');
-      prepared = await exporter.prepare(
-        buildNamespaceId(saveServerUrl, identity.ownerId, identity.deploymentId),
-        [assetId],
-      );
-      await assertOriginalAccessStillCurrent(event, owner, saveServerUrl, identity);
-      const window = BrowserWindow.fromWebContents(event.sender);
-      if (!window) throw new Error('桌面窗口不可用。');
-      const result = await dialog.showSaveDialog(window, {
-        title: desktopText(requestedLocale, 'saveOriginalTitle'),
-        buttonLabel: desktopText(requestedLocale, 'save'),
-        defaultPath: path.join(app.getPath('downloads'), path.basename(prepared.files[0])),
-      });
-      if (result.canceled || !result.filePath) return { saved: false };
-      await assertOriginalAccessStillCurrent(event, owner, saveServerUrl, identity);
-      await copyFile(prepared.files[0], result.filePath);
-      return { saved: true };
-    } finally {
-      if (prepared) await exporter.remove(prepared).catch(() => undefined);
-      exportInFlight = false;
-    }
-  });
-
-  ipcMain.handle(
-    'desktop:download-original-files',
-    async (event, input: unknown, locale: unknown) => {
-      assertTrustedIpcSender(event);
-      const requestedLocale = normalizeDesktopLocale(locale ?? desktopLocale);
-      if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
-      const assetIds = parseAssetDragInput(input);
-      if (assetIds.length < 2) throw new Error('批量下载至少需要选择 2 项素材。');
-      exportInFlight = true;
-      const downloadServerUrl = serverUrl;
-      let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
-      try {
-        const identity = await owner.get();
-        if (!identity) throw new Error('需要重新登录。');
-        const window = BrowserWindow.fromWebContents(event.sender);
-        if (!window) throw new Error('桌面窗口不可用。');
-        const result = await dialog.showOpenDialog(window, {
-          title: desktopText(requestedLocale, 'downloadFolderTitle'),
-          buttonLabel: desktopText(requestedLocale, 'downloadHere'),
-          properties: ['openDirectory', 'createDirectory'],
-        });
-        if (result.canceled || result.filePaths.length !== 1) return { downloaded: 0 };
-        const destinationDirectory = result.filePaths[0]!;
-        await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
-        prepared = await exporter.prepare(
-          buildNamespaceId(downloadServerUrl, identity.ownerId, identity.deploymentId),
-          assetIds,
-        );
-        await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
-        const copied = await copyPreparedFilesToDirectory(prepared.files, destinationDirectory);
-        return { downloaded: copied.length };
-      } finally {
-        if (prepared) await exporter.remove(prepared).catch(() => undefined);
-        exportInFlight = false;
-      }
-    },
-  );
-}
-
-async function assertOriginalAccessStillCurrent(
-  event: IpcMainInvokeEvent,
-  owner: AuthenticatedOwner,
-  expectedServerUrl: string,
-  identity: { ownerId: string; deploymentId: string },
-): Promise<void> {
-  const currentIdentity = await owner.get();
-  if (
-    expectedServerUrl !== serverUrl ||
-    !currentIdentity ||
-    currentIdentity.ownerId !== identity.ownerId ||
-    currentIdentity.deploymentId !== identity.deploymentId
-  ) {
-    throw new Error('账号或服务器已切换，请重新导出素材。');
-  }
-  assertTrustedIpcSender(event);
-}
-
-function currentConnectionService(): DesktopConnectionService {
-  if (!connectionService) throw new Error('连接管理尚未初始化。');
-  return connectionService;
-}
-
-function currentBrowserSession(): DesktopBrowserSession {
-  if (!browserSession) throw new Error('桌面登录会话尚未初始化。');
-  return browserSession;
-}
-
-function currentConnections(): DesktopConnectionSnapshot {
-  const snapshot = currentConnectionService().current();
-  if (!snapshot) throw new Error('连接状态尚未初始化。');
-  return snapshot;
-}
-
-function assertTrustedIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
-  const senderUrl = event.senderFrame?.url;
-  if (
-    event.sender !== mainWindow?.webContents ||
-    !senderUrl ||
-    !isAllowedAppNavigation(serverUrl, senderUrl)
-  ) {
-    throw new Error('拒绝不受信任的桌面调用。');
-  }
-}
-
-function assertTrustedConnectionSender(event: IpcMainInvokeEvent): void {
-  const senderUrl = event.senderFrame?.url;
-  if (
-    event.sender !== mainWindow?.webContents ||
-    !senderUrl ||
-    (!isAllowedAppNavigation(serverUrl, senderUrl) && !isConnectionPageUrl(senderUrl))
-  ) {
-    throw new Error('拒绝不受信任的连接管理调用。');
-  }
-}
-
-function assertConnectionPageSender(event: IpcMainInvokeEvent): void {
-  const senderUrl = event.senderFrame?.url;
-  if (event.sender !== mainWindow?.webContents || !senderUrl || !isConnectionPageUrl(senderUrl)) {
-    throw new Error('拒绝不受信任的连接配置调用。');
-  }
-}
-
-function logRendererFailure(kind: string, details: unknown): void {
-  try {
-    const directory = app.getPath('userData');
-    mkdirSync(directory, { recursive: true });
-    appendFileSync(
-      path.join(directory, 'renderer-failures.log'),
-      `${new Date().toISOString()} ${kind} ${JSON.stringify(details)}\n`,
-    );
-  } catch {
-    // Crash reporting must never prevent recovery.
-  }
-}
-
-function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
-  const window = new BrowserWindow({
-    width: 1440,
-    height: 960,
-    minWidth: 960,
-    minHeight: 640,
-    show: false,
-    title: 'SekerEagle',
-    // Native frame reserves client space for fixed viewers, editors and dialogs.
-    // A CSS margin cannot move viewport-positioned overlays below a title bar.
-    ...(process.platform === 'win32' ? { autoHideMenuBar: true } : {}),
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      webviewTag: false,
-    },
-  });
-  mainWindow = window;
-  if (process.platform === 'win32') {
-    window.removeMenu();
-  }
-  let recoveryDialogOpen = false;
-  window.webContents.on('render-process-gone', (_event, details) => {
-    logRendererFailure('render-process-gone', {
-      reason: details.reason,
-      exitCode: details.exitCode,
-      url: window.webContents.getURL(),
-    });
-    if (shuttingDown || details.reason === 'clean-exit' || recoveryDialogOpen) return;
-    recoveryDialogOpen = true;
-    setTimeout(() => {
-      recoveryDialogOpen = false;
-      if (window.isDestroyed() || shuttingDown) return;
-      const choice = dialog.showMessageBoxSync(window, {
-        type: 'error',
-        title: '页面已停止运行',
-        message: '地图或页面渲染进程意外退出，客户端已记录诊断信息。',
-        detail:
-          '可以重新加载页面继续使用；如再次发生，请把用户数据目录下的 renderer-failures.log 提供给维护者。',
-        buttons: ['重新加载', '退出'],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true,
-      });
-      if (choice === 0) window.webContents.reload();
-      else app.quit();
-    }, 0);
-  });
-  window.on('unresponsive', () => {
-    logRendererFailure('unresponsive', { url: window.webContents.getURL() });
-    if (shuttingDown || recoveryDialogOpen) return;
-    recoveryDialogOpen = true;
-    const choice = dialog.showMessageBoxSync(window, {
-      type: 'warning',
-      title: '页面无响应',
-      message: '页面长时间没有响应，可能正在处理大图或地图。',
-      detail: '可以继续等待，或重新加载页面；诊断信息已写入 renderer-failures.log。',
-      buttons: ['继续等待', '重新加载'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    });
-    recoveryDialogOpen = false;
-    if (choice === 1) window.webContents.reload();
-  });
-  window.once('ready-to-show', () => window.show());
-  window.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) librarySnapshot?.reset();
-  });
-  window.on('closed', () => {
-    librarySnapshot?.reset();
-    if (mainWindow === window) mainWindow = null;
-  });
-  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  window.webContents.on('will-navigate', (event, destination) => {
-    if (!isAllowedAppNavigation(serverUrl, destination) && !isConnectionPageUrl(destination)) {
-      event.preventDefault();
-    }
-  });
-  window.webContents.on(
-    'did-fail-load',
-    (_event, errorCode, _description, validatedUrl, isMainFrame) => {
-      if (isMainFrame && errorCode !== -3 && isAllowedAppNavigation(serverUrl, validatedUrl)) {
-        void recoverConnection(owner);
-      }
-    },
-  );
-  void window.loadURL(initialUrl);
-}
-
-function lockDownSession(currentSession: Electron.Session): void {
-  currentSession.setPermissionCheckHandler(() => false);
-  currentSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
-    callback(false),
-  );
-  currentSession.webRequest.onHeadersReceived(
-    { urls: ['http://*/*', 'https://*/*'] },
-    (details, callback) => {
-      if (!isAllowedAppNavigation(serverUrl, details.url)) {
-        callback({ responseHeaders: details.responseHeaders });
-        return;
-      }
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [desktopContentSecurityPolicy],
-        },
-      });
-    },
-  );
-}
-
-async function handleMediaRequest(
-  requestUrl: string,
-  signal: AbortSignal,
-  origin: string | null,
-): Promise<Response> {
-  const requestServer = serverUrl;
-  if (!isAllowedMediaOrigin(requestServer, origin)) return new Response(null, { status: 403 });
-  const respond = (response: Response) => {
-    const headers = new Headers(response.headers);
-    for (const [name, value] of Object.entries(mediaCorsHeaders(requestServer)))
-      headers.set(name, value);
-    return new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-  };
-  try {
-    if (!mediaController) throw new Error('媒体控制器不可用。');
-    const resolution = await mediaController.resolve(requestUrl, signal);
-    return respond(resolutionToResponse(resolution));
-  } catch {
-    if (signal.aborted) return respond(new Response(null, { status: 499 }));
-    return respond(new Response('媒体缓存暂时不可用。', { status: 502 }));
-  }
-}
-
-async function handleAppRequest(requestUrl: string): Promise<Response> {
-  const asset = connectionPageAsset(requestUrl);
-  if (!asset) return new Response('Not found', { status: 404 });
-  try {
-    return new Response(await readFile(path.join(__dirname, 'connection-page', asset.file)), {
-      status: 200,
-      headers: {
-        'content-type': asset.type,
-        'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
-      },
-    });
-  } catch {
-    return new Response('Connection page unavailable', { status: 500 });
-  }
-}
-
-function createMediaController(owner: AuthenticatedOwner): MediaCacheController {
-  librarySnapshot?.reset();
-  const snapshot = new MediaSnapshotAuthorization({
-    fetch: (path, init) => currentBrowserSession().fetch(path, init),
-    authenticatedOwner: () => owner.get(),
-    maxEntries: Number(process.env.SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES ?? 12_000),
-  });
-  librarySnapshot = snapshot;
-  const limiter = new MediaRequestLimiter(6, 64);
-  return new MediaCacheController({
-    serverUrl,
-    cache: cacheBackend(),
-    authenticatedOwner: () => owner.get(),
-    canReadLocal: (media, identity, file) => snapshot.allows(media, identity, file),
-    fetchUpstream: (mediaPath, options) =>
-      limiter.fetch(
-        (signal) =>
-          currentBrowserSession().fetch(mediaPath, {
-            signal,
-            credentials: 'include',
-            headers: {
-              'cache-control': 'no-store',
-              accept: 'image/avif,image/webp,image/*',
-              'accept-encoding': 'identity',
-              ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
-            },
-          }),
-        options.signal,
-      ),
-  });
-}
-
-async function applyConnection(
-  snapshot: DesktopConnectionSnapshot,
-  owner: AuthenticatedOwner,
-): Promise<void> {
-  if (!snapshot.active) {
-    await mainWindow?.loadURL(connectionPageUrl(desktopLocale));
-    return;
-  }
-  const changed = serverUrl !== snapshot.active.url;
-  serverUrl = snapshot.active.url;
-  if (changed) {
-    owner.invalidate();
-    clearPreparedOriginalDrags();
-    void cacheClient?.expireAuthorizations().catch(() => undefined);
-    mediaController = createMediaController(owner);
-  }
-  if (mainWindow?.webContents.getURL() !== serverUrl) await mainWindow?.loadURL(serverUrl);
-}
-
-async function recoverConnection(owner: AuthenticatedOwner): Promise<void> {
-  if (connectionRecovery) return connectionRecovery;
-  connectionRecovery = currentConnectionService()
-    .retry()
-    .then((snapshot) => applyConnection(snapshot, owner))
-    .finally(() => {
-      connectionRecovery = null;
-    });
-  return connectionRecovery;
-}
-
-function resolutionToResponse(resolution: MediaResolution): Response {
-  if (resolution.source === 'upstream') return resolution.response;
-  if (resolution.source === 'error') {
-    return new Response(resolution.message, { status: resolution.status });
-  }
-
-  const stream = createReadStream(resolution.filePath);
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    if (cacheClient) void cacheClient.release(resolution.leaseId).catch(() => undefined);
-  };
-  stream.once('close', release);
-  stream.once('error', release);
-  stream.once('end', release);
-  return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
-    status: 200,
-    headers: {
-      'content-type': resolution.contentType,
-      'content-length': String(resolution.logicalBytes),
-      'cache-control': 'private, no-store',
-      'x-sekereagle-cache-result': resolution.cacheResult,
-      ...(resolution.etag ? { etag: resolution.etag } : {}),
-      ...(resolution.lastModified ? { 'last-modified': resolution.lastModified } : {}),
-    },
-  });
-}
