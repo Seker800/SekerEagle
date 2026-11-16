@@ -35,6 +35,8 @@ import {
   type ActiveAdjustmentKey,
 } from './photo-adjustment-catalog';
 import { PhotoWatermarkPanel } from './PhotoWatermarkPanel';
+import type { WatermarkPresets } from './photo-watermark-variants';
+import type { WatermarkVariant } from '@sekereagle/library-core';
 import { PhotoCropViewport } from './PhotoCropViewport';
 import { PhotoToolPanel } from './PhotoToolPanel';
 import { PhotoCropPanel } from './PhotoCropPanel';
@@ -104,6 +106,8 @@ export function PhotoEditor({
   onDraftChange,
   onCopyEdits,
   onOpenSaved,
+  watermarkPresets,
+  onSaveWatermarkPreset,
 }: {
   initialTab?: Tab;
   presentation?: 'web' | 'native';
@@ -117,6 +121,8 @@ export function PhotoEditor({
   onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
   onOpenSaved?: (assetId: string) => Promise<void>;
+  watermarkPresets?: WatermarkPresets;
+  onSaveWatermarkPreset?: (templateId: string, variant: WatermarkVariant) => Promise<unknown>;
   onClose: () => void;
   onSaveRecipe?: (
     recipe: PhotoEditRecipe,
@@ -1045,6 +1051,8 @@ export function PhotoEditor({
               source={watermarkSource}
               disabled={!loaded || busy}
               metadataLoading={metadataLoading}
+              watermarkPresets={watermarkPresets}
+              onSaveWatermarkPreset={onSaveWatermarkPreset}
               onChange={update}
             />
           )}

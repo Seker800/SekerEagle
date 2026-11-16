@@ -1,4 +1,9 @@
-import { type PhotoEditRecipe, type PhotoEdits } from '@sekereagle/library-core';
+import {
+  INITIAL_PHOTO_EDITS,
+  type PhotoEditRecipe,
+  type PhotoEdits,
+  type WatermarkVariant,
+} from '@sekereagle/library-core';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,6 +18,10 @@ import { formatPhotoMetadata } from '../media/photo-editor/photo-editor-metadata
 import type { PhotoMetadata } from '../media/photo-editor/photo-watermark-model';
 import type { SavedPhoto } from '../media/photo-editor/photo-editor-save';
 import type { PhotoSaveStage } from '../media/photo-editor/PhotoEditor';
+import {
+  applyWatermarkPreset,
+  type WatermarkPresets,
+} from '../media/photo-editor/photo-watermark-variants';
 import styles from './EaglePhotoEditing.module.css';
 
 const PhotoEditor = lazy(() =>
@@ -68,6 +77,8 @@ export interface PhotoEditSession {
   name: string;
   initialMetadata: PhotoMetadata;
   initialEdits?: PhotoEdits;
+  watermarkPresets?: WatermarkPresets;
+  onSaveWatermarkPreset?: (templateId: string, variant: WatermarkVariant) => Promise<unknown>;
   load?: () => Promise<PhotoEditSession>;
   onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
@@ -112,6 +123,7 @@ export function useEaglePhotoEditing({
   const createSession = (
     asset: EagleAssetListItem,
     initialEdits?: PhotoEdits,
+    watermarkPresets: WatermarkPresets = {},
   ): PhotoEditSession | null => {
     const source = getEagleEditContentUrl(asset);
     if (!source || (asset.libraryMode && asset.libraryMode !== libraryMode)) return null;
@@ -154,6 +166,11 @@ export function useEaglePhotoEditing({
       name: asset.displayName,
       initialMetadata: eaglePhotoWatermarkMetadata(asset),
       initialEdits,
+      watermarkPresets,
+      onSaveWatermarkPreset: async (templateId, variant) => {
+        assertScope();
+        return api.saveEagleWatermarkPreset(templateId, variant);
+      },
       onDraftChange: async (recipe) => {
         assertScope();
         return api.saveEagleEditRecipe(sourceId, asset.mediaRevision, recipe);
@@ -238,14 +255,19 @@ export function useEaglePhotoEditing({
   };
   const resolveSession = async (asset: EagleAssetListItem) => {
     assertScope();
-    const stored = await api.getEagleEditRecipe(asset.id);
+    const [stored, presetResponse] = await Promise.all([
+      api.getEagleEditRecipe(asset.id),
+      api.listEagleWatermarkPresets().catch(() => ({ presets: {} })),
+    ]);
     const base = stored?.baseAssetId
       ? await api.getEagleAsset(accessToken, stored.baseAssetId)
       : asset;
     assertScope();
     if (stored && base.mediaRevision !== stored.baseMediaRevision)
       throw new Error(t('原照片内容已变化，无法恢复编辑参数。'));
-    const resolved = createSession(base, stored?.recipe.edits);
+    const presets = presetResponse.presets;
+    const initialEdits = stored?.recipe.edits ?? applyWatermarkPreset(INITIAL_PHOTO_EDITS, presets);
+    const resolved = createSession(base, initialEdits, presets);
     if (!resolved) throw new Error(t('此照片暂不支持编辑。'));
     return resolved;
   };

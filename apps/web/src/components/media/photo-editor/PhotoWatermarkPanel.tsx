@@ -7,9 +7,11 @@ import {
   IconAlignCenter,
   IconAlignRight,
   IconRefresh,
+  IconBookmarkPlus,
 } from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
+import type { WatermarkVariant } from '@sekereagle/library-core';
 import { drawPhoto } from './photo-editor-render';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import {
@@ -20,7 +22,11 @@ import {
 } from './photo-watermark-model';
 import styles from './PhotoEditor.module.css';
 import { useWatermarkNavigation, ORDERED_WATERMARK_TEMPLATES } from './useWatermarkNavigation';
-import { selectWatermarkTemplate } from './photo-watermark-variants';
+import {
+  selectWatermarkTemplate,
+  watermarkPresetFromEdits,
+  type WatermarkPresets,
+} from './photo-watermark-variants';
 import { ScrollableToolRow } from './ScrollableToolRow';
 
 function WatermarkPreview({
@@ -28,21 +34,23 @@ function WatermarkPreview({
   edits,
   metadata,
   id,
+  presets = {},
 }: {
   source: HTMLCanvasElement | null;
   edits: PhotoEdits;
   metadata: PhotoMetadata;
   id: string;
+  presets?: WatermarkPresets;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!canvas.current || !source) return;
-    const preview = { ...edits, ...selectWatermarkTemplate(edits, id) };
+    const preview = { ...edits, ...selectWatermarkTemplate(edits, id, presets) };
     const result = renderPhotoWatermark(source, preview, metadata);
     canvas.current.width = result.width;
     canvas.current.height = result.height;
     canvas.current.getContext('2d')?.drawImage(result, 0, 0);
-  }, [source, edits, metadata, id]);
+  }, [source, edits, metadata, id, presets]);
   return <canvas ref={canvas} className={styles.watermarkThumbnail} aria-hidden="true" />;
 }
 
@@ -176,6 +184,8 @@ export function PhotoWatermarkPanel({
   source,
   disabled,
   metadataLoading,
+  watermarkPresets = {},
+  onSaveWatermarkPreset,
   onChange,
 }: {
   edits: PhotoEdits;
@@ -183,11 +193,38 @@ export function PhotoWatermarkPanel({
   source: HTMLCanvasElement | null;
   disabled: boolean;
   metadataLoading: boolean;
+  watermarkPresets?: WatermarkPresets;
+  onSaveWatermarkPreset?: (templateId: string, variant: WatermarkVariant) => Promise<unknown>;
   onChange: (patch: Partial<PhotoEdits>) => void;
 }) {
   const navigation = useWatermarkNavigation(edits.watermark);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [presetState, setPresetState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [savedPresetIds, setSavedPresetIds] = useState<Set<string>>(() => new Set());
+  const presetTimer = useRef<number | null>(null);
   const selected = findWatermark(edits.watermark);
+  useEffect(() => {
+    setPresetState('idle');
+  }, [selected?.id]);
+  useEffect(
+    () => () => {
+      if (presetTimer.current) window.clearTimeout(presetTimer.current);
+    },
+    [],
+  );
+  const savePreset = async () => {
+    if (!selected || !onSaveWatermarkPreset) return;
+    setPresetState('saving');
+    try {
+      await onSaveWatermarkPreset(selected.id, watermarkPresetFromEdits(edits));
+      setSavedPresetIds((current) => new Set(current).add(selected.id));
+      setPresetState('saved');
+    } catch {
+      setPresetState('error');
+    }
+    if (presetTimer.current) window.clearTimeout(presetTimer.current);
+    presetTimer.current = window.setTimeout(() => setPresetState('idle'), 2000);
+  };
   const { rotation, straighten, flip, cropRatio, cropZoom, cropAspect, cropX, cropY } = edits;
   const settingsButton = useRef<HTMLButtonElement>(null);
   const thumbnail = useMemo(() => {
@@ -347,6 +384,26 @@ export function PhotoWatermarkPanel({
               <IconPencil size={14} />
               {t('编辑文字')}
             </button>
+            {onSaveWatermarkPreset && (
+              <button
+                type="button"
+                className={styles.watermarkEditAction}
+                title={t('保存水印预设')}
+                disabled={disabled || presetState === 'saving'}
+                onClick={() => void savePreset()}
+              >
+                <IconBookmarkPlus size={14} />
+                {presetState === 'saving'
+                  ? t('保存中…')
+                  : presetState === 'saved'
+                    ? t('已保存')
+                    : presetState === 'error'
+                      ? t('保存失败')
+                      : watermarkPresets[selected.id] || savedPresetIds.has(selected.id)
+                        ? t('更新预设')
+                        : t('存预设')}
+              </button>
+            )}
           </>
         )}
       </ScrollableToolRow>
@@ -377,7 +434,7 @@ export function PhotoWatermarkPanel({
           disabled={disabled}
           ref={navigation.templateRef('none')}
           aria-pressed={edits.watermark === 'none'}
-          onClick={() => onChange(selectWatermarkTemplate(edits, 'none'))}
+          onClick={() => onChange(selectWatermarkTemplate(edits, 'none', watermarkPresets))}
         >
           <IconBan size={28} />
           <span>{t('无水印')}</span>
@@ -395,13 +452,14 @@ export function PhotoWatermarkPanel({
             disabled={disabled}
             aria-pressed={selected?.id === template.id}
             aria-label={template.label}
-            onClick={() => onChange(selectWatermarkTemplate(edits, template.id))}
+            onClick={() => onChange(selectWatermarkTemplate(edits, template.id, watermarkPresets))}
           >
             <WatermarkPreview
               source={thumbnail}
               edits={edits}
               metadata={metadata}
               id={template.id}
+              presets={watermarkPresets}
             />
             <span>{template.label}</span>
           </button>

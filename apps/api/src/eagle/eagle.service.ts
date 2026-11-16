@@ -35,6 +35,7 @@ import {
   saveEagleEditRecipe,
   type SaveEagleEditRecipeDto,
 } from './eagle-edit-recipe';
+import { listWatermarkPresets, saveWatermarkPreset } from './eagle-watermark-presets';
 import { locateEagleAsset } from './eagle-asset-location';
 import { selectPhotoStackCover } from './photo-stack-cover';
 import type { LibraryMode } from '@prisma/client';
@@ -141,6 +142,12 @@ export class EagleService {
       input,
       includePrivate,
     );
+  }
+  listWatermarkPresets(ownerId: string) {
+    return listWatermarkPresets(this.prisma, ownerId, this.libraryMode);
+  }
+  saveWatermarkPreset(ownerId: string, templateId: string, settings: unknown) {
+    return saveWatermarkPreset(this.prisma, ownerId, this.libraryMode, templateId, settings);
   }
   assetTimeline(ownerId: string, sort: EagleAssetSort | undefined, timeZone: string) {
     return readAssetTimeline(

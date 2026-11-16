@@ -19,6 +19,8 @@ const state = vi.hoisted(() => ({
   getAsset: vi.fn(),
   createRender: vi.fn(),
   readRender: vi.fn(),
+  listPresets: vi.fn(),
+  savePreset: vi.fn(),
 }));
 vi.mock('../../lib/library-workspace', () => ({
   useLibraryWorkspace: () => ({
@@ -30,6 +32,8 @@ vi.mock('../../lib/library-workspace', () => ({
       getEagleAsset: state.getAsset,
       createEagleEditRender: state.createRender,
       readEagleEditRender: state.readRender,
+      listEagleWatermarkPresets: state.listPresets,
+      saveEagleWatermarkPreset: state.savePreset,
     },
   }),
 }));
@@ -90,6 +94,8 @@ beforeEach(() => {
   state.readRender
     .mockReset()
     .mockResolvedValue({ status: 'COMPLETED', asset: { id: 'copy', name: 'copy.png' } });
+  state.listPresets.mockReset().mockResolvedValue({ presets: {} });
+  state.savePreset.mockReset().mockResolvedValue({ saved: true });
 });
 describe('shared library photo editing', () => {
   it('keeps unsupported, deleted and processing resources out of the edit flow', () => {
@@ -338,6 +344,36 @@ it('restores a saved copy from its original, autosaves there, and freezes its re
     '原照片内容已变化',
   );
 });
+it('applies a saved cross-photo preset to a new session and saves presets', async () => {
+  const { wrapper } = harness();
+  const { result } = renderHook(
+    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+    { wrapper },
+  );
+  const preset = {
+    watermarkAlign: 'left' as const,
+    watermarkTheme: 'black' as const,
+    watermarkCameraColor: 'black' as const,
+    watermarkTimeColor: 'white' as const,
+    watermarkCamera: null,
+    watermarkParameters: null,
+    watermarkCapturedAt: null,
+    watermarkWebsite: 'preset.example',
+    watermarkShowWebsite: false,
+    watermarkShowTime: true,
+    watermarkShowParameters: true,
+  };
+  state.listPresets.mockResolvedValue({ presets: { 'photo-strip': preset } });
+  const restored = await result.current.resolveSession(asset);
+  expect(restored.initialEdits?.watermark).toBe('photo-strip');
+  expect(restored.initialEdits?.watermarkTheme).toBe('black');
+  expect(restored.initialEdits?.watermarkWebsite).toBe('preset.example');
+  expect(restored.initialEdits?.watermarkShowWebsite).toBe(false);
+  expect(restored.watermarkPresets?.['photo-strip']).toEqual(preset);
+  await restored.onSaveWatermarkPreset?.('photo-strip', preset);
+  expect(state.savePreset).toHaveBeenCalledWith('photo-strip', preset);
+});
+
 it('does not let a revoked scope save a draft or export after switching mode', async () => {
   const { wrapper } = harness();
   const view = renderHook(

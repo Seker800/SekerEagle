@@ -265,6 +265,7 @@ model User {
   eagleTaskPolicies        EagleTaskPolicy[]
   eagleUploadSessionStates EagleUploadSessionState[]
   eagleExternalLibraries   EagleExternalLibrary[]
+  eagleWatermarkPresets    EagleWatermarkPreset[]
   eagleExternalAssets      EagleExternalAsset[]
   eagleImportRuns          EagleImportRun[]
   eagleBrowserCaptures     EagleBrowserCapture[]
@@ -284,6 +285,19 @@ model RefreshToken {
 
   @@index([userId, expiresAt])
   @@index([familyId, revokedAt])
+}
+
+
+model EagleWatermarkPreset {
+  ownerId     String
+  libraryMode LibraryMode
+  templateId  String
+  settings    Json
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  @@id([ownerId, libraryMode, templateId])
+  @@index([ownerId, libraryMode])
 }
 
 model EaglePrivacyPreference {

@@ -57,6 +57,7 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
       'EagleSmartFolderSemanticSnapshot',
       'EagleSmartFolderSemanticMatch',
       'EagleAssetEditRecipe',
+      'EagleWatermarkPreset',
       'EagleEditRender',
       'EagleAssetTransferFacts',
     ],

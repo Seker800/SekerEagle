@@ -23,6 +23,7 @@ import { CreateEditRenderDto } from './eagle-edit-render';
 import { AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
 import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
+import { SaveWatermarkPresetDto } from './eagle-watermark-presets';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
 import {
@@ -254,6 +255,21 @@ export class EagleController {
       input.assetIds,
       principal.canViewPrivate,
     );
+  }
+
+  @Get('watermark-presets')
+  listWatermarkPresets(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.eagle.listWatermarkPresets(principal.sub);
+  }
+
+  @Put('watermark-presets/:templateId')
+  @UseGuards(BrowserOriginGuard)
+  saveWatermarkPreset(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('templateId') templateId: string,
+    @Body() input: SaveWatermarkPresetDto,
+  ) {
+    return this.eagle.saveWatermarkPreset(principal.sub, templateId, input.settings);
   }
 
   @Post('assets/batch/edit-renders')

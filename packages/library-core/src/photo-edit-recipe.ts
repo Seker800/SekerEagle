@@ -150,7 +150,7 @@ const WATERMARK_TEXT_NULLABLE = new Set([
   'watermarkParameters',
   'watermarkCapturedAt',
 ]);
-function readWatermarkVariant(value: unknown): WatermarkVariant {
+export function readWatermarkVariant(value: unknown): WatermarkVariant {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('INVALID_EDIT_RECIPE');
   const record = value as Record<string, unknown>;

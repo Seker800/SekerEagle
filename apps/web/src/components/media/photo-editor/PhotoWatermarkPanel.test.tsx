@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PhotoWatermarkPanel } from './PhotoWatermarkPanel';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
@@ -137,6 +137,37 @@ it('merges signature alignment into controls instead of separate layouts', () =>
   );
   fireEvent.click(screen.getByRole('button', { name: '左对齐' }));
   expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
+});
+
+it('saves an explicit cross-photo preset without photo-specific text', async () => {
+  const { props, view } = setup();
+  const onSaveWatermarkPreset = vi.fn().mockResolvedValue({ saved: true });
+  view.rerender(
+    <PhotoWatermarkPanel
+      {...props}
+      edits={{
+        ...props.edits,
+        watermark: 'photo-side',
+        watermarkTheme: 'black',
+        watermarkCamera: 'NIKON Z5',
+        watermarkParameters: '50mm f/1.8',
+      }}
+      onSaveWatermarkPreset={onSaveWatermarkPreset}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '存预设' }));
+  await waitFor(() =>
+    expect(onSaveWatermarkPreset).toHaveBeenCalledWith(
+      'photo-side',
+      expect.objectContaining({
+        watermarkTheme: 'black',
+        watermarkCamera: null,
+        watermarkParameters: null,
+        watermarkCapturedAt: null,
+      }),
+    ),
+  );
+  expect(await screen.findByRole('button', { name: '已保存' })).toBeInTheDocument();
 });
 
 it('puts color toggles on the left and display switches on the right', () => {

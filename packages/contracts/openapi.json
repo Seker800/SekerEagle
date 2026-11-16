@@ -995,6 +995,59 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/watermark-presets": {
+      "get": {
+        "operationId": "EagleController_listWatermarkPresets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/watermark-presets/{templateId}": {
+      "put": {
+        "operationId": "EagleController_saveWatermarkPreset",
+        "parameters": [
+          {
+            "name": "templateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWatermarkPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/batch/edit-renders": {
       "post": {
         "operationId": "EagleController_batchEditRenders",
@@ -5407,6 +5460,59 @@
                 }
               }
             }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/watermark-presets": {
+      "get": {
+        "operationId": "PhotosController_listWatermarkPresets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/watermark-presets/{templateId}": {
+      "put": {
+        "operationId": "PhotosController_saveWatermarkPreset",
+        "parameters": [
+          {
+            "name": "templateId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWatermarkPresetDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
           }
         },
         "security": [
@@ -10603,6 +10709,16 @@
           }
         },
         "required": ["preservedFilterIds"]
+      },
+      "SaveWatermarkPresetDto": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["settings"]
       },
       "BatchEditPartsDto": {
         "type": "object",

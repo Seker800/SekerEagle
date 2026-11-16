@@ -149,6 +149,8 @@ vi.mock('../../lib/eagle-api', () => {
   const api = {
     getEagleEditRecipe: async () => null,
     saveEagleEditRecipe: async () => ({ saved: true }),
+    listEagleWatermarkPresets: async () => ({ presets: {} }),
+    saveEagleWatermarkPreset: async () => ({ saved: true }),
     getEagleAssetContentUrl: (assetId: string) => `/api/eagle/assets/${assetId}/content`,
     getEagleRenditionContentUrl: (assetId: string, renditionId: string) =>
       `/api/eagle/assets/${assetId}/renditions/${renditionId}/content`,

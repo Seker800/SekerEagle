@@ -5,6 +5,7 @@ import type {
   AssetOperationSummary,
   PhotoEditRecipe,
   PhotoEditParts,
+  WatermarkVariant,
 } from '@sekereagle/library-core';
 import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
@@ -811,6 +812,15 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       body: JSON.stringify(input),
     });
   }
+  function listEagleWatermarkPresets() {
+    return api<{ presets: Record<string, WatermarkVariant> }>('/eagle/watermark-presets');
+  }
+  function saveEagleWatermarkPreset(templateId: string, settings: WatermarkVariant) {
+    return api<{ saved: boolean; templateId: string; settings: WatermarkVariant }>(
+      `/eagle/watermark-presets/${encodeURIComponent(templateId)}`,
+      { method: 'PUT', body: JSON.stringify({ settings }) },
+    );
+  }
   function readEagleEditRender(assetId: string, jobId: string) {
     return api<{
       status: string;
@@ -821,6 +831,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   return {
     getEagleEditRecipe,
     saveEagleEditRecipe,
+    listEagleWatermarkPresets,
+    saveEagleWatermarkPreset,
     createEagleEditRender,
     readEagleEditRender,
     getEagleMediaCapabilities,
@@ -865,6 +877,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
 export const {
   getEagleEditRecipe,
   saveEagleEditRecipe,
+  listEagleWatermarkPresets,
+  saveEagleWatermarkPreset,
   createEagleEditRender,
   readEagleEditRender,
   getEagleMediaCapabilities,
