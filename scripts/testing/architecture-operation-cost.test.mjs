@@ -70,7 +70,7 @@ const report = {
   prior32GroupReference: {
     PHOTO: { sql: 439, transactions: 2, s3: 0 },
     MATERIAL: { sql: 471, transactions: 2, s3: 0 },
-    source: 'docs/background-processing-performance-2026-11-01.md',
+    source: 'docs/history/records/background-processing-performance-2026-11-01.md',
     scope:
       'Existing metadata cleanup execution including claim; excludes HTTP admission and frontend',
   },

@@ -90,7 +90,7 @@ export function getAssetOperationRefresher(client: QueryClient, ownerId: string)
 /**
  * Apply receipts once; merge destination windows without replaying loaded pages.
  * Cancellation, retained retry intent and concurrent snapshots are specified in
- * docs/architecture-efficiency-review-followup-2026-11-01.md.
+ * docs/history/reviews/architecture-efficiency-review-followup-2026-11-01.md.
  */
 export class AssetOperationRefresher {
   private disposed = false;
