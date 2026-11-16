@@ -6,7 +6,11 @@ import type { EagleQuickFilterState } from './eagle-quick-filter-state';
 import { QueryObserver, type QueryClient } from '@tanstack/react-query';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import { EagleAssetEntityStore } from './eagle-asset-entity-store';
-import { createEagleQueryKeys } from './eagle-query-keys';
+import {
+  createEagleQueryKeys,
+  eagleQuerySection,
+  isEagleAssetListShape,
+} from './eagle-query-keys';
 
 export type EagleLibraryView =
   | 'ACTIVE'
@@ -222,9 +226,9 @@ class EagleWorkspaceCache {
 
 function queryAssetReferences(key: readonly unknown[], data: unknown): Set<string> | null {
   if (!data || typeof data !== 'object') return null;
-  if (key[3] === 'asset-detail' && 'id' in data && typeof data.id === 'string')
+  if (eagleQuerySection(key) === 'asset-detail' && 'id' in data && typeof data.id === 'string')
     return new Set([data.id]);
-  if (key[3] !== 'assets' || key.length !== 6 || !('pages' in data) || !Array.isArray(data.pages))
+  if (!isEagleAssetListShape(key) || !('pages' in data) || !Array.isArray(data.pages))
     return null;
   const ids = new Set<string>();
   for (const page of data.pages as unknown[]) {

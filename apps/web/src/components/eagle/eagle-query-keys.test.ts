@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   createEagleQueryKeys,
+  eagleAssetListFilters,
+  eagleQuerySection,
   isEagleAssetListKey,
+  isEagleAssetListShape,
   isEagleOperationKey,
   isEagleQuery,
 } from './eagle-query-keys';
@@ -34,6 +37,22 @@ it('shares count and operation namespaces without conflating list pages or priva
   expect(keys.libraryCount(false, 2)).not.toEqual(keys.libraryCount(false, 3));
   expect(keys.operationList(false)).toEqual([...keys.operations, false]);
   expect(keys.operationList(false)).not.toEqual(keys.operationList(true));
+});
+
+it('centralizes the asset list shape and filters beside the constructors', () => {
+  const keys = createEagleQueryKeys('owner', 'PHOTO');
+  const list = keys.assetList('ACTIVE', { smartFolderId: 'folder' });
+  expect(eagleQuerySection(list)).toBe('assets');
+  expect(isEagleAssetListShape(list)).toBe(true);
+  expect(eagleAssetListFilters(list)).toEqual({ smartFolderId: 'folder' });
+  for (const key of [
+    keys.libraryCount(false, 0),
+    ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', null],
+    ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', []],
+  ]) {
+    expect(isEagleAssetListShape(key)).toBe(false);
+    expect(eagleAssetListFilters(key)).toBeNull();
+  }
 });
 
 it('recognizes only scoped asset pages, excluding counts, receipts and transient fetches', () => {

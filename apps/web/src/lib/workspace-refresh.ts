@@ -8,6 +8,13 @@ import {
 import { request } from './api-client';
 import { ApiError } from './api-error';
 import { retryRefreshDelay } from './refresh-policy';
+import {
+  eagleAssetListFilters,
+  eagleQuerySection,
+  isEagleAssetListShape,
+  isEagleQuery,
+  isEagleTaskCenterKey,
+} from '../components/eagle/eagle-query-keys';
 
 export const workspaceRefreshKey = (ownerId: string, includePrivate: boolean) =>
   ['workspace-changes', ownerId, includePrivate] as const;
@@ -106,18 +113,16 @@ function affected(
   kinds: ReadonlySet<WorkspaceChangeKind>,
 ) {
   const key = query.queryKey;
-  if (key[0] === 'task-center')
-    return (
-      key[1] === ownerId &&
-      key[2] === mode &&
-      (kinds.has('TASKS') || kinds.has('SETTINGS') || kinds.has('AGENT'))
-    );
-  if (key[0] !== 'eagle' || key[1] !== ownerId || key[2] !== mode) return false;
-  if ([...kinds].some((kind) => resources[kind].includes(String(key[3])))) return true;
+  if (isEagleTaskCenterKey(key, ownerId, mode))
+    return kinds.has('TASKS') || kinds.has('SETTINGS') || kinds.has('AGENT');
+  if (!isEagleQuery(key, ownerId, mode)) return false;
+  const section = eagleQuerySection(key);
+  if (!section) return false;
+  if ([...kinds].some((kind) => resources[kind].includes(section))) return true;
   return (
     kinds.has('FOLDERS') &&
-    key[3] === 'assets' &&
-    Boolean((key[5] as { smartFolderId?: string } | undefined)?.smartFolderId)
+    isEagleAssetListShape(key) &&
+    Boolean(eagleAssetListFilters(key)?.smartFolderId)
   );
 }
 
