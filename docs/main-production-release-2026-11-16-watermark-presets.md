@@ -25,7 +25,7 @@
 - API、operations、library-reader、web 四个容器均 healthy、0 重启；镜像 revision 均为 `f70f763d…`。
 - 公网首页 200、`/api/health/ready` 200；匿名 `GET /api/eagle/watermark-presets` 与 `/api/photos/watermark-presets` 均 401；两个 PUT 路由已注册到 API。
 - 线上 `index.html`（`d9dacc8b…`）、`PhotoEditor-BSduSJA1.js`（`cbf0932b…`）、`photo-watermark-variants-DfQPtD02.js`（`0b89b23b…`）与本机构建 SHA256 一致；web 镜像内 85 个静态文件与本地 84 个构建文件一致（额外为 nginx 默认 `50x.html`）。
-- 最终全量测试：web 1168 项通过；API 672 项（671 通过、1 跳过、0 失败）；架构门禁 42 项；API 成品镜像冒烟通过（独立依赖、98 项隔离迁移、readiness 200、匿名 401、执行器干净退出）；lint、Prettier、contracts、迁移临时库验证通过。
+- 最终全量 `npm test` 整链退出 0：web 1168 项通过；API 672 项（671 通过、1 跳过、0 失败）；架构门禁 42 项；API 成品镜像冒烟通过（独立依赖、98 项隔离迁移、readiness 200、匿名 401、执行器干净退出）；lint、Prettier、contracts、迁移临时库验证通过。
 - 迁移在一次性临时 pgvector 数据库中完整应用 98 项并通过 `migrate status`；生产迁移由发布脚本在最终 API 镜像内执行，未使用本地源码替代。
 
 ## 回退
