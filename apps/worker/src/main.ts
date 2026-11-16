@@ -2,67 +2,40 @@ import { createPrismaAdapter } from '@sekereagle/library-persistence';
 import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { mediaMemoryMiB, WORKER_INFLIGHT_MEMORY_MIB } from './media-resource-budget';
 import { computePolicySignature } from './compute-runtime';
-import { RemoteMediaClient, RemoteMediaUnavailableError } from './remote-media';
+import { RemoteMediaClient } from './remote-media';
 import { remoteMediaKinds, remoteImageKinds, remoteVideoKinds } from './compute-runtime';
-import { renderPyramidWork } from './pyramid-work';
-import { processImageWork } from './image-work';
 import {
   mediaWaitData,
-  mediaFailure,
   mediaExecutionGuard,
   MediaLeaseRecoveryExhaustedError,
 } from '@sekereagle/library-core';
-import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
 import { canAdvancePhotoMap, runPhotoMapBuildStep } from './photo-map-build';
 import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
 import { SmartFolderBuildRunner } from './smart-folder-runner';
-import { publishImage } from './image-publication';
-import { MediaOutputAttempt } from './media-output-attempt';
-import { publishPyramid } from './pyramid-publication';
 import { EmbeddingProcessor } from './embedding-job';
 import { createCompatibleTextEmbedding } from './embedding-space';
-import {
-  createTopEmbeddingSuggestion,
-  activateEmbeddingSuggestionGeneration,
-} from './embedding-suggestions';
+import { createTopEmbeddingSuggestion } from './embedding-suggestions';
 import { buildMediaWakeQuery } from './job-wakeup-query';
-import { processVideo } from './video-processing';
 import {
   VIDEO_PLAYBACK_PROCESSOR_VERSION,
   videoTranscodingEnabled,
 } from './video-processing-policy';
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
 import type { BackgroundSchedule } from '@sekereagle/library-core';
-import {
-  lockOwnerPrivacyProjection,
-  syncAssetPrivacy,
-  unreviewedSuggestionEvidenceSql,
-} from '@sekereagle/library-persistence';
-import { catalogImageDimensions, canReuseImageBrowsing } from './image-renditions';
-import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
+import { claimNextScheduledTagBuild } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
-import { prepareAssetPurge } from './asset-purge';
 import { ObjectDeletionRunner } from './object-deletion-runner';
-import {
-  nextBackgroundTime,
-  CAMERA_MAX_IMAGE_BYTES,
-  isCameraVideoMime,
-  isCameraRawMime,
-} from '@sekereagle/library-core';
-import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, extname } from 'node:path';
-import {
-  DeleteObjectsCommand,
-  GetObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+import { nextBackgroundTime } from '@sekereagle/library-core';
+import { randomUUID } from 'node:crypto';
+import { boundedInteger, boundedNumber } from './bounded';
+import { failJob } from './handlers/failure';
+import { processJob } from './handlers/registry';
+import { readBoundedBytes } from './handlers/shared';
+import { failTagSemanticBuild, processTagSemanticBuild } from './tag-semantic-job';
+import { DeleteObjectsCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import {
   Prisma,
   PrismaClient,
@@ -71,29 +44,15 @@ import {
   type LibraryMode,
 } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
-import {
-  parseProcessingJobKinds,
-  availableProcessingJobKinds,
-  terminalAssetFailure,
-} from './processing-policy';
-import { inferPhotoFaces, persistPhotoFaces, stopFaceInference } from './photo-faces';
-import { inspectJpegLivePhoto, inspectLivePhotoStream } from './live-photo';
-import { readOwnedImageRange } from './image-range';
-import { selectImageJobSource } from './image-job-source';
-import { parseDeepZoomTilePath } from './image-pyramid';
+import { parseProcessingJobKinds, availableProcessingJobKinds } from './processing-policy';
+import { stopFaceInference } from './photo-faces';
 import {
   createScheduledMediaSelector,
   invalidateMediaCandidates,
 } from './scheduled-media-candidates';
 import { taskPolicyAllowsSql } from '@sekereagle/library-persistence';
 import { claimNextMediaJob } from './job-claim';
-import {
-  isPermanentMediaValidationError,
-  PermanentMediaValidationError,
-} from './media-validation-error';
-import { EmbeddingClient, type EmbeddingClientError } from './embedding-client';
-import { embeddingRetry, embeddingBackoff } from './embedding-retry';
-import { buildPrototypePlanOffThread, parsePgVector } from './tag-semantic-build';
+import { EmbeddingClient } from './embedding-client';
 import {
   JobWakeScheduler,
   nextEligibleWakeAt,
@@ -301,7 +260,7 @@ async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJo
   for (const age of mediaQueueAgeOrder(sequence)) {
     const job = await claimNextMediaJob(prisma, {
       onLeaseExhausted: (job, expiredBefore) =>
-        failJob(job, new MediaLeaseRecoveryExhaustedError(expiredBefore)),
+        failJob(job, new MediaLeaseRecoveryExhaustedError(expiredBefore), mediaJobContext),
       selectCandidates: (input) => selectors[resource](input, age),
       canClaimBackground: canClaimBackgroundForOwner,
       allowedJobKinds: claimKinds,
@@ -338,384 +297,6 @@ async function canClaimBackgroundForOwner(
   return mediaBackgroundAllowed(settings, kind);
 }
 
-async function processJob(job: EagleAssetProcessingJob, remoteRequired = false): Promise<void> {
-  if (job.kind === 'RENDER_EDITED_COPY') {
-    await renderEditedCopy(prisma, storage, s3Bucket, job);
-    return;
-  }
-  if (job.kind === 'PURGE_ASSET') {
-    await purgeAsset(job);
-    return;
-  }
-  const asset = await prisma.eagleAsset.findFirst({
-    where: {
-      id: job.assetId,
-      ownerId: job.ownerId,
-      libraryMode: job.libraryMode,
-      mediaRevision: job.assetRevision,
-      deletedAt: null,
-    },
-    include: {
-      renditions: {
-        where: {
-          revision: job.assetRevision,
-          kind: { in: ['THUMBNAIL', 'PREVIEW'] },
-          status: 'READY',
-        },
-        select: {
-          kind: true,
-          variant: true,
-          revision: true,
-          status: true,
-          storageKey: true,
-          mimeType: true,
-        },
-      },
-      uploadSessions: {
-        where: { status: 'COMPLETED' },
-        orderBy: { completedAt: 'desc' },
-        take: 1,
-        select: { eagleState: { select: { expectedContentSha256: true } } },
-      },
-    },
-  });
-  if (!asset) {
-    await prisma.eagleAssetProcessingJob.updateMany({
-      where: mediaExecutionGuard(job),
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-        lockedAt: null,
-        lastError: 'ASSET_TRASHED',
-      },
-    });
-    return;
-  }
-  if (remoteRequired && !asset.mimeType.startsWith('image/') && !isCameraVideoMime(asset.mimeType))
-    throw new RemoteMediaUnavailableError();
-  if (job.kind === 'ANALYZE_PHOTO_FACES') {
-    if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
-    const preview = selectImageJobSource(asset, job.kind);
-    assertOwnedKey(asset.ownerId, preview.storageKey);
-    const object = await storage.send(
-      new GetObjectCommand({ Bucket: s3Bucket, Key: preview.storageKey }),
-    );
-    if (!object.Body) throw new Error('PHOTO_FACE_PREVIEW_MISSING');
-    const bytes = await readBoundedBytes(
-      object.Body as AsyncIterable<Uint8Array>,
-      20 * 1024 * 1024,
-    );
-    await persistPhotoFaces(
-      prisma,
-      job,
-      remoteRequired ? await remoteMediaClient.faces(bytes) : await inferPhotoFaces(bytes),
-    );
-    return;
-  }
-
-  if (asset.mimeType.startsWith('image/') && canReuseImageBrowsing(job, asset)) {
-    await publishImage(prisma, {
-      asset,
-      job,
-      renditions: [],
-      sha256: asset.sha256!,
-      dimensions: {},
-      photoAnalysis: null,
-      livePhoto: null,
-      scheduleFaces: false,
-      deferDetails: asset.libraryMode === 'PHOTO' || isCameraRawMime(asset.mimeType),
-      preserveBrowseState: true,
-    });
-    return;
-  }
-
-  assertOwnedKey(asset.ownerId, asset.originalObjectKey);
-  if (job.kind === 'EXTRACT_COLOR_PALETTE') {
-    await prisma.eagleAssetColorAnalysis.upsert({
-      where: {
-        assetId_assetRevision_processorVersion: {
-          assetId: job.assetId,
-          assetRevision: job.assetRevision,
-          processorVersion: job.processorVersion,
-        },
-      },
-      create: {
-        ownerId: job.ownerId,
-        libraryMode: job.libraryMode,
-        assetId: job.assetId,
-        assetRevision: job.assetRevision,
-        processorVersion: job.processorVersion,
-        status: 'RUNNING',
-        startedAt: new Date(),
-      },
-      update: { status: 'RUNNING', startedAt: new Date(), completedAt: null, lastError: null },
-    });
-  }
-
-  // The same queue, policy and lease guard handle both inference and stored-vector activation.
-  // Check before selecting or reading an object: a SEND must not download or infer again.
-  if (job.kind === 'GENERATE_EMBEDDING' && (await embeddingProcessor.activateStored(job))) return;
-  if (asset.mimeType.startsWith('image/')) {
-    if (asset.byteSize > BigInt(CAMERA_MAX_IMAGE_BYTES))
-      throw new PermanentMediaValidationError(
-        'IMAGE_CONTENT_MISMATCH',
-        'IMAGE_TOO_LARGE_TO_PROCESS',
-      );
-    const sourceDetailsOnly = job.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION;
-    const sourceDetails = selectImageJobSource(asset, job.kind, job.processorVersion);
-    if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash && !asset.sha256)
-      throw new Error('ORIGINAL_HASH_REQUIRED');
-    process.stdout.write(
-      `${JSON.stringify({
-        event: 'eagle_media_source_selected',
-        jobId: job.id,
-        kind: job.kind,
-        source: sourceDetails.verifiesOriginalHash
-          ? 'ORIGINAL'
-          : job.kind === 'EXTRACT_COLOR_PALETTE'
-            ? 'THUMBNAIL'
-            : 'PREVIEW',
-      })}\n`,
-    );
-    assertOwnedKey(asset.ownerId, sourceDetails.storageKey);
-    const object = await storage.send(
-      new GetObjectCommand({ Bucket: s3Bucket, Key: sourceDetails.storageKey }),
-    );
-    if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-    if (job.kind === 'GENERATE_EMBEDDING') {
-      await embeddingProcessor.infer(
-        job,
-        sourceDetails.mimeType,
-        object.Body as AsyncIterable<Uint8Array>,
-      );
-      return;
-    }
-    const deferDetails =
-      !sourceDetailsOnly && (isCameraRawMime(asset.mimeType) || asset.libraryMode === 'PHOTO');
-    if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
-      await generateImagePyramid(
-        job,
-        asset,
-        object.Body as AsyncIterable<Uint8Array>,
-        remoteRequired,
-      );
-      return;
-    }
-    const imageWork = {
-      assetMimeType: asset.mimeType,
-      sourceMimeType: sourceDetails.mimeType,
-      sourceExtension: ['.heic', '.heif'].includes(extname(sourceDetails.storageKey).toLowerCase())
-        ? extname(sourceDetails.storageKey).toLowerCase()
-        : undefined,
-      kind: job.kind,
-      processorVersion: job.processorVersion,
-      mode: asset.libraryMode,
-      detailsOnly: sourceDetailsOnly,
-      verifiesOriginalHash: sourceDetails.verifiesOriginalHash,
-    };
-    const {
-      result: processed,
-      sha256,
-      sourceMode,
-    } = await (remoteRequired ? remoteMediaClient.image.bind(remoteMediaClient) : processImageWork)(
-      object.Body as AsyncIterable<Uint8Array>,
-      imageWork,
-    );
-    process.stdout.write(
-      `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, processorVersion: job.processorVersion, mimeType: asset.mimeType, sourceMode })}\n`,
-    );
-    if (sourceDetails.verifiesOriginalHash) {
-      assertExpectedHash(
-        asset.uploadSessions[0]?.eagleState?.expectedContentSha256 ?? asset.sha256,
-        sha256,
-      );
-    }
-    if (job.kind === 'EXTRACT_COLOR_PALETTE') {
-      await prisma.$transaction(async (transaction) => {
-        const completed = await transaction.eagleAssetProcessingJob.updateMany({
-          where: mediaExecutionGuard(job),
-          data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-        });
-        if (completed.count !== 1) return;
-        await transaction.eagleAssetColorAnalysis.updateMany({
-          where: {
-            ownerId: asset.ownerId,
-            libraryMode: asset.libraryMode,
-            assetId: asset.id,
-            isCurrent: true,
-          },
-          data: { isCurrent: false },
-        });
-        const analysis = await transaction.eagleAssetColorAnalysis.upsert({
-          where: {
-            assetId_assetRevision_processorVersion: {
-              assetId: asset.id,
-              assetRevision: job.assetRevision,
-              processorVersion: job.processorVersion,
-            },
-          },
-          create: {
-            ownerId: asset.ownerId,
-            libraryMode: asset.libraryMode,
-            assetId: asset.id,
-            assetRevision: job.assetRevision,
-            processorVersion: job.processorVersion,
-            status: 'COMPLETED',
-            isCurrent: true,
-            startedAt: job.startedAt ?? new Date(),
-            completedAt: new Date(),
-          },
-          update: {
-            status: 'COMPLETED',
-            isCurrent: true,
-            lastError: null,
-            completedAt: new Date(),
-          },
-        });
-        await transaction.eagleAssetColorSwatch.deleteMany({
-          where: {
-            ownerId: asset.ownerId,
-            libraryMode: asset.libraryMode,
-            analysisId: analysis.id,
-          },
-        });
-        if (processed.palette?.length) {
-          await transaction.eagleAssetColorSwatch.createMany({
-            data: processed.palette.map((swatch, rank) => ({
-              ownerId: asset.ownerId,
-              libraryMode: asset.libraryMode,
-              analysisId: analysis.id,
-              rank,
-              ...swatch,
-            })),
-          });
-        }
-      });
-      return;
-    }
-    const outputAttempt = new MediaOutputAttempt(prisma, asset, 'renditions');
-    let published = false;
-    try {
-      const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
-      for (const { spec, output: rendered } of processed.rendered ?? []) {
-        const storageKey = outputAttempt.key(`${spec.kind.toLowerCase()}-${spec.variant}.webp`);
-        await outputAttempt.prepare();
-        await storage.send(
-          new PutObjectCommand({
-            Bucket: s3Bucket,
-            Key: storageKey,
-            Body: rendered.data,
-            ContentType: 'image/webp',
-          }),
-        );
-        renditions.push({
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetId: asset.id,
-          kind: spec.kind,
-          variant: spec.variant,
-          revision: job.assetRevision,
-          storageKey,
-          mimeType: 'image/webp',
-          byteSize: BigInt(rendered.data.byteLength),
-          width: rendered.info.width,
-          height: rendered.info.height,
-          status: 'READY' as const,
-        });
-      }
-      let livePhoto = 'livePhoto' in processed ? processed.livePhoto : null;
-      if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash) {
-        if (asset.mimeType === 'image/jpeg') {
-          livePhoto = await inspectJpegLivePhoto(Number(asset.byteSize), (start, length) =>
-            readOwnedImageRange(
-              (input) => storage.send(new GetObjectCommand(input)),
-              {
-                bucket: s3Bucket,
-                ownerId: asset.ownerId,
-                key: asset.originalObjectKey,
-                byteSize: Number(asset.byteSize),
-              },
-              start,
-              length,
-            ),
-          );
-        } else if (asset.mimeType === 'image/heic' || asset.mimeType === 'image/heif') {
-          const original = await storage.send(
-            new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
-          );
-          if (!original.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-          livePhoto = await inspectLivePhotoStream(
-            original.Body as AsyncIterable<Uint8Array>,
-            asset.sha256!,
-          );
-        }
-      }
-      if (livePhoto?.motion) {
-        const motionKey = outputAttempt.key('motion.mp4');
-        await outputAttempt.prepare();
-        await storage.send(
-          new PutObjectCommand({
-            Bucket: s3Bucket,
-            Key: motionKey,
-            Body: livePhoto.motion.data,
-            ContentType: 'video/mp4',
-          }),
-        );
-        renditions.push({
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetId: asset.id,
-          kind: 'PREVIEW',
-          variant: 'motion',
-          revision: job.assetRevision,
-          storageKey: motionKey,
-          mimeType: 'video/mp4',
-          byteSize: BigInt(livePhoto.motion.data.length),
-          width: livePhoto.motion.width,
-          height: livePhoto.motion.height,
-          status: 'READY',
-        });
-      }
-      published = await publishImage(prisma, {
-        outputAttempt,
-        asset,
-        job,
-        renditions,
-        sha256: sourceDetails.verifiesOriginalHash ? sha256 : asset.sha256!,
-        dimensions: sourceDetailsOnly
-          ? {}
-          : catalogImageDimensions(
-              processed.metadata,
-              'originalDimensions' in processed ? processed.originalDimensions : undefined,
-            ),
-        photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
-        livePhoto: livePhoto ?? null,
-        scheduleFaces:
-          facesConfigured ||
-          remoteMediaKinds(embeddingClient.computeRuntime).includes('ANALYZE_PHOTO_FACES'),
-        deferDetails,
-        preserveBrowseState: sourceDetailsOnly,
-      });
-    } finally {
-      await outputAttempt.finish(published);
-    }
-    return;
-  }
-
-  if (!isCameraVideoMime(asset.mimeType))
-    throw new PermanentMediaValidationError('UNSUPPORTED_MEDIA_TYPE');
-  await processVideo(job, asset, {
-    remote: remoteRequired ? remoteMediaClient : undefined,
-    prisma,
-    storage,
-    s3Bucket,
-    assertExpectedHash,
-    transcodingEnabled: runVideoTranscoding,
-    lockPrivacy: lockOwnerPrivacyProjection,
-    syncPrivacy: syncAssetPrivacy,
-  });
-}
-
 const createTopSuggestion = (
   transaction: Prisma.TransactionClient,
   ownerId: string,
@@ -741,542 +322,26 @@ const embeddingProcessor = new EmbeddingProcessor({
   suggest: createTopSuggestion,
 });
 
-async function readBoundedBytes(
-  source: AsyncIterable<Uint8Array>,
-  maximumBytes: number,
-): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of source) {
-    size += chunk.byteLength;
-    if (size > maximumBytes) throw new Error('EMBEDDING_PREVIEW_TOO_LARGE');
-    chunks.push(Buffer.from(chunk));
-  }
-  return Buffer.concat(chunks, size);
-}
+const mediaJobContext = {
+  prisma,
+  storage,
+  s3Bucket,
+  remoteMediaClient,
+  embeddingProcessor,
+  runVideoTranscoding,
+  facesConfigured,
+  remoteKinds: () => remoteMediaKinds(embeddingClient.computeRuntime),
+  resourcePool,
+  embeddingSpaceId,
+  embeddingDimensions,
+};
 
-async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<void> {
-  if (build.operation === 'RECOMPUTE_SUGGESTIONS') {
-    await recomputeSuggestionGeneration(build, null);
-    return;
-  }
-  const [config, space, currentSnapshot, memberStats] = await Promise.all([
-    prisma.eagleManualTagSemanticConfig.findUnique({
-      where: { ownerId_tagId: { ownerId: build.ownerId, tagId: build.tagId } },
-    }),
-    prisma.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } }),
-    prisma.eagleTagPrototypeSnapshot.findFirst({
-      where: {
-        ownerId: build.ownerId,
-        libraryMode: build.libraryMode,
-        tagId: build.tagId,
-        isCurrent: true,
-      },
-      select: { id: true, version: true, sourceAssetCount: true },
-    }),
-    prisma.$queryRaw<Array<{ count: bigint; digest: string }>>(Prisma.sql`
-      SELECT COUNT(*)::bigint AS count,
-             md5(string_agg(link."assetId", ',' ORDER BY link."assetId")) AS digest
-      FROM "EagleAssetManualTag" link
-      JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"
-      JOIN "EagleAssetEmbedding" embedding
-        ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
-       AND embedding."isCurrent" = true AND embedding.status = 'READY'
-       AND embedding."assetRevision" = asset."mediaRevision" AND embedding."spaceId" = ${embeddingSpaceId}
-      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode}::"LibraryMode" AND link."tagId" = ${build.tagId}
-        AND asset."deletedAt" IS NULL
-    `),
-  ]);
-  if (!config?.recommendationEnabled) throw new Error('TAG_RECOMMENDATION_DISABLED');
-  if (!space) throw new Error('CURRENT_EMBEDDING_SPACE_MISSING');
-  const memberCount = Number(memberStats[0]?.count ?? 0n);
-  if (!memberCount) throw new Error('TAG_HAS_NO_READY_EMBEDDINGS');
-  const sampleLimit = boundedInteger(process.env.EAGLE_TAG_CLUSTER_SAMPLE_SIZE, 2_000, 1, 10_000);
-  const sample = await prisma.$queryRaw<Array<{ assetId: string; embedding: string }>>(Prisma.sql`
-    SELECT link."assetId", embedding.embedding::text AS embedding
-    FROM "EagleAssetManualTag" link
-    JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"
-    JOIN "EagleAssetEmbedding" embedding
-      ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
-     AND embedding."isCurrent" = true AND embedding.status = 'READY'
-     AND embedding."assetRevision" = asset."mediaRevision" AND embedding."spaceId" = ${embeddingSpaceId}
-    WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode}::"LibraryMode" AND link."tagId" = ${build.tagId}
-      AND asset."deletedAt" IS NULL
-    ORDER BY md5(link."assetId")
-    LIMIT ${sampleLimit}
-  `);
-  const prototypePlan = await buildPrototypePlanOffThread(
-    sample.map((row) => ({
-      assetId: row.assetId,
-      embedding: parsePgVector(row.embedding, embeddingDimensions),
-    })),
-    {
-      maxK: boundedInteger(process.env.EAGLE_TAG_MAX_CENTERS, 8, 1, 8),
-      minimumRelativeImprovement: boundedNumber(
-        process.env.EAGLE_TAG_CENTER_MINIMUM_IMPROVEMENT,
-        0.12,
-        0,
-        1,
-      ),
-    },
-  );
-  const generationId = randomUUID();
-  const snapshot = await prisma.$transaction(async (transaction) => {
-    await holdTagBuildLease(transaction, build);
-    const versions = await transaction.eagleTagPrototypeSnapshot.aggregate({
-      where: { ownerId: build.ownerId, libraryMode: build.libraryMode, tagId: build.tagId },
-      _max: { version: true },
-    });
-    const row = await transaction.eagleTagPrototypeSnapshot.create({
-      data: {
-        ownerId: build.ownerId,
-        libraryMode: build.libraryMode,
-        tagId: build.tagId,
-        spaceId: space.id,
-        version: (versions._max.version ?? 0) + 1,
-        generationId,
-        status: 'BUILDING',
-        sourceAssetCount: memberCount,
-        sourceSetDigest: memberStats[0]?.digest ?? createHash('sha256').update('').digest('hex'),
-        algorithm: 'MINIBATCH_SPHERICAL_KMEANS',
-        algorithmVersion: 'v1',
-        algorithmParams: {
-          maxK: 8,
-          minimumRelativeImprovement: 0.12,
-          batchSize: 128,
-          outlierTrimFraction: 0.02,
-          sampleLimit,
-          sampleCount: sample.length,
-        },
-        addedMemberCount: Math.max(0, memberCount - (currentSnapshot?.sourceAssetCount ?? 0)),
-        removedMemberCount: Math.max(0, (currentSnapshot?.sourceAssetCount ?? 0) - memberCount),
-      },
-    });
-    await transaction.eagleTagSemanticBuild.update({
-      where: { id: build.id },
-      data: { candidateSnapshotId: row.id },
-    });
-    return row;
-  });
-  for (const prototype of prototypePlan.prototypes) {
-    const vector = `[${prototype.embedding.join(',')}]`;
-    await prisma.$executeRaw(
-      Prisma.sql`
-        INSERT INTO "EagleTagPrototype" (
-          "ownerId", "libraryMode", "snapshotId", rank, embedding, "memberCount", weight,
-          "meanDistance", "p95Distance", "representativeAssetIds", "createdAt"
-        ) VALUES (
-          ${build.ownerId}, ${build.libraryMode}::"LibraryMode", ${snapshot.id}, ${prototype.rank}, ${vector}::vector,
-          ${prototype.memberCount}, ${prototype.weight}, ${prototype.meanDistance},
-          ${prototype.p95Distance}, ${prototype.representativeAssetIds}, NOW()
-        )
-      `,
-    );
-  }
-  await prisma.$executeRaw(
-    Prisma.sql`
-      INSERT INTO "EagleTagMemberDistance" (
-        "ownerId", "libraryMode", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
-      )
-      SELECT link."ownerId", link."libraryMode", link."tagId", link."assetId", ${snapshot.id}, nearest.distance,
-             nearest.rank, NOW()
-      FROM "EagleAssetManualTag" link
-      JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"
-      JOIN "EagleAssetEmbedding" embedding
-        ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
-       AND embedding."isCurrent" = true AND embedding.status = 'READY'
-       AND embedding."assetRevision"=asset."mediaRevision" AND embedding."spaceId"=${embeddingSpaceId}
-      CROSS JOIN LATERAL (
-        SELECT prototype.rank, prototype.embedding <=> embedding.embedding AS distance
-        FROM "EagleTagPrototype" prototype
-        WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode}::"LibraryMode" AND prototype."snapshotId" = ${snapshot.id}
-        ORDER BY prototype.embedding <=> embedding.embedding
-        LIMIT 1
-      ) nearest
-      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode}::"LibraryMode" AND link."tagId" = ${build.tagId}
-        AND asset."deletedAt" IS NULL
-    `,
-  );
-  await prisma.$executeRaw(
-    Prisma.sql`
-      UPDATE "EagleTagPrototype" prototype
-      SET "memberCount" = statistics."memberCount",
-          weight = statistics."memberCount"::double precision / ${memberCount},
-          "meanDistance" = statistics."meanDistance",
-          "p95Distance" = statistics."p95Distance"
-      FROM (
-        SELECT distance."prototypeRank" AS rank,
-               COUNT(*)::integer AS "memberCount",
-               AVG(distance.distance)::double precision AS "meanDistance",
-               percentile_cont(0.95) WITHIN GROUP (ORDER BY distance.distance)::double precision
-                 AS "p95Distance"
-        FROM "EagleTagMemberDistance" distance
-        WHERE distance."ownerId" = ${build.ownerId} AND distance."libraryMode" = ${build.libraryMode}::"LibraryMode" AND distance."snapshotId" = ${snapshot.id}
-        GROUP BY distance."prototypeRank"
-      ) statistics
-      WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode}::"LibraryMode"
-        AND prototype."snapshotId" = ${snapshot.id}
-        AND prototype.rank = statistics.rank
-    `,
-  );
-  await recomputeSuggestionGeneration(build, snapshot.id);
-}
-
-async function recomputeSuggestionGeneration(
-  build: EagleTagSemanticBuild,
-  candidateSnapshotId: string | null,
-): Promise<void> {
-  const generationId = randomUUID();
-  const minimumScore = boundedNumber(process.env.EAGLE_VECTOR_MINIMUM_SCORE, 0.3, -1, 1);
-  await prisma.$executeRaw(
-    Prisma.sql`
-      INSERT INTO "EagleVectorTagSuggestion" (
-        "id", "ownerId", "libraryMode", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
-        "generationId", "isActive", score, distance, "prototypeRank", status, "createdAt", "updatedAt"
-      )
-      SELECT gen_random_uuid()::text, embedding."ownerId", embedding."libraryMode", embedding."assetId", nearest."tagId",
-             embedding.id, nearest."snapshotId", ${generationId}, false, 1 - nearest.distance,
-             nearest.distance, nearest.rank, 'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
-      FROM "EagleAssetEmbedding" embedding
-      JOIN "EagleAsset" asset ON asset."ownerId" = embedding."ownerId" AND asset."libraryMode" = embedding."libraryMode" AND asset.id = embedding."assetId"
-      CROSS JOIN LATERAL (
-        SELECT snapshot."tagId", snapshot.id AS "snapshotId", prototype.rank,
-               prototype.embedding <=> embedding.embedding AS distance
-        FROM "EagleTagPrototypeSnapshot" snapshot
-        JOIN "EagleTagPrototype" prototype
-          ON prototype."ownerId" = snapshot."ownerId" AND prototype."libraryMode" = snapshot."libraryMode" AND prototype."snapshotId" = snapshot.id
-        JOIN "EagleManualTagSemanticConfig" config
-          ON config."ownerId" = snapshot."ownerId" AND config."libraryMode" = snapshot."libraryMode" AND config."tagId" = snapshot."tagId"
-        WHERE snapshot."ownerId" = embedding."ownerId" AND snapshot."libraryMode" = embedding."libraryMode"
-          AND snapshot."spaceId" = embedding."spaceId"
-          AND config."recommendationEnabled" = true
-          AND (snapshot.status = 'ACTIVE' OR snapshot.id = ${candidateSnapshotId})
-          AND (
-            (${candidateSnapshotId}::text IS NOT NULL AND snapshot.id = ${candidateSnapshotId})
-            OR (snapshot."isCurrent" = true AND snapshot."tagId" <> ${build.tagId})
-            OR (${candidateSnapshotId}::text IS NULL AND snapshot."isCurrent" = true)
-          )
-        ORDER BY prototype.embedding <=> embedding.embedding
-        LIMIT 1
-      ) nearest
-      WHERE embedding."ownerId" = ${build.ownerId} AND embedding."libraryMode" = ${build.libraryMode}::"LibraryMode" AND embedding."isCurrent" = true
-        AND embedding.status = 'READY' AND embedding."assetRevision" = asset."mediaRevision"
-        AND embedding."spaceId" = ${embeddingSpaceId} AND asset."deletedAt" IS NULL
-        AND 1 - nearest.distance >= ${minimumScore}
-        AND ${unreviewedSuggestionEvidenceSql(build, Prisma.sql`embedding.id`, Prisma.sql`nearest."tagId"`, Prisma.sql`nearest."snapshotId"`)}
-        AND NOT EXISTS (
-          SELECT 1 FROM "EagleAssetManualTag" manual
-          WHERE manual."ownerId" = embedding."ownerId" AND manual."libraryMode" = embedding."libraryMode" AND manual."assetId" = embedding."assetId"
-        )
-    `,
-  );
-  await prisma.$transaction(async (transaction) => {
-    await holdTagBuildLease(transaction, build);
-    await transaction.eagleVectorTagSuggestion.updateMany({
-      where: {
-        ownerId: build.ownerId,
-        libraryMode: build.libraryMode,
-        isActive: true,
-        status: 'PENDING',
-        invalidatedAt: null,
-      },
-      data: {
-        isActive: false,
-        invalidatedAt: new Date(),
-        invalidReason: 'PROTOTYPE_GENERATION_REPLACED',
-      },
-    });
-    if (candidateSnapshotId) {
-      await transaction.eagleTagPrototypeSnapshot.updateMany({
-        where: {
-          ownerId: build.ownerId,
-          libraryMode: build.libraryMode,
-          tagId: build.tagId,
-          isCurrent: true,
-        },
-        data: { isCurrent: false, status: 'SUPERSEDED' },
-      });
-      await transaction.eagleTagPrototypeSnapshot.update({
-        where: { id: candidateSnapshotId },
-        data: { isCurrent: true, status: 'ACTIVE', activatedAt: new Date() },
-      });
-      await transaction.eagleManualTagSemanticConfig.update({
-        where: { ownerId_tagId: { ownerId: build.ownerId, tagId: build.tagId } },
-        data: { currentSnapshotId: candidateSnapshotId, lastGeneratedAt: new Date() },
-      });
-    }
-    await activateEmbeddingSuggestionGeneration(transaction, build, generationId);
-    await transaction.eagleTagSemanticBuild.updateMany({
-      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-    });
-  });
-}
-
-async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown): Promise<void> {
-  const retry = embeddingRetry(error, build.attempts);
-  if (retry) {
-    const backoff = embeddingBackoff(error);
-    if (
-      backoff?.reason === 'WAITING_EMBEDDING_CAPACITY' &&
-      (error as EmbeddingClientError).deferResource
-    )
-      resourcePool.defer('EMBEDDING', backoff.delayMs);
-    await prisma.eagleTagSemanticBuild.updateMany({
-      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
-      data: retry.data,
-    });
-    return;
-  }
-
-  const message = error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_TAG_BUILD_ERROR';
-  const terminal = build.attempts >= 5 || message === 'TAG_RECOMMENDATION_DISABLED';
-  const delaySeconds = Math.min(3_600, 2 ** Math.min(build.attempts, 12));
-  await prisma.$transaction(async (transaction) => {
-    const held = await transaction.eagleTagSemanticBuild.updateMany({
-      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
-      data: terminal
-        ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
-        : {
-            status: 'PENDING',
-            availableAt: new Date(Date.now() + delaySeconds * 1_000),
-            lockedAt: null,
-            lastError: message,
-          },
-    });
-    if (held.count !== 1) return;
-    const persistedBuild = terminal
-      ? await transaction.eagleTagSemanticBuild.findUnique({
-          where: { id: build.id },
-          select: { candidateSnapshotId: true },
-        })
-      : null;
-    if (terminal && persistedBuild?.candidateSnapshotId) {
-      await transaction.eagleTagPrototypeSnapshot.updateMany({
-        where: {
-          ownerId: build.ownerId,
-          libraryMode: build.libraryMode,
-          id: persistedBuild.candidateSnapshotId,
-          status: 'BUILDING',
-        },
-        data: { status: 'FAILED', failureCode: message.slice(0, 100) },
-      });
-    }
-  });
-}
-
-async function runBoundedWork<T>(
-  items: readonly T[],
-  limit: number,
-  work: (item: T) => Promise<void>,
-): Promise<void> {
-  let cursor = 0;
-  let failed = false;
-  let failure: unknown;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (!failed) {
-        const index = cursor++;
-        if (index >= items.length) return;
-        try {
-          await work(items[index]!);
-        } catch (error) {
-          failed = true;
-          failure = error;
-        }
-      }
-    }),
-  );
-  if (failed) throw failure;
-}
-
-async function generateImagePyramid(
-  job: EagleAssetProcessingJob,
-  asset: {
-    id: string;
-    ownerId: string;
-    libraryMode: LibraryMode;
-    mimeType: string;
-    originalObjectKey: string;
-    uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
-  },
-  sourceBody: AsyncIterable<Uint8Array>,
-  remoteRequired = false,
-): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-pyramid-'));
-  const outputAttempt = new MediaOutputAttempt(
-    prisma,
-    { ...asset, mediaRevision: job.assetRevision },
-    'pyramids',
-  );
-  const storagePrefix = outputAttempt.prefix.replace(/\/+$/, '');
-  let published = false;
-  try {
-    const output = remoteRequired
-      ? await remoteMediaClient.pyramid(sourceBody, asset.mimeType, directory)
-      : await renderPyramidWork(sourceBody, asset.mimeType, asset.originalObjectKey, directory);
-    const { descriptor: result, sha256, tileDirectory } = output;
-    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
-
-    const tilePaths = output.files.map((name) => join(tileDirectory, name));
-    let byteSize = 0n;
-    await outputAttempt.prepare();
-    await runBoundedWork(tilePaths, 4, async (filePath) => {
-      const relativePath = filePath.slice(tileDirectory.length + 1);
-      const tile = parseDeepZoomTilePath(relativePath);
-      const details = await stat(filePath);
-      byteSize += BigInt(details.size);
-      await storage.send(
-        new PutObjectCommand({
-          Bucket: s3Bucket,
-          Key: `${storagePrefix}/${tile.relativeKey}`,
-          Body: await readFile(filePath),
-          ContentType: 'image/webp',
-        }),
-      );
-    });
-
-    published = await publishPyramid(prisma, {
-      job,
-      descriptor: result,
-      storagePrefix,
-      tileCount: tilePaths.length,
-      byteSize,
-      outputAttempt,
-    });
-  } finally {
-    try {
-      await outputAttempt.finish(published);
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  }
-}
-
-async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
-  await prisma.$transaction((transaction) => prepareAssetPurge(transaction, job));
-}
-
-async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
-  if (error instanceof RemoteMediaUnavailableError) {
-    if (error.deferResource) resourcePool.defer('REMOTE_MEDIA', 1000);
-    await prisma.eagleAssetProcessingJob.updateMany({
-      where: mediaExecutionGuard(job),
-      data: mediaWaitData(job.attempts, 1000, 'WAITING_REMOTE_MEDIA_CAPACITY'),
-    });
-    return;
-  }
-  const retry = embeddingRetry(error, job.attempts);
-  if (retry) {
-    const backoff = embeddingBackoff(error);
-    if (
-      backoff?.reason === 'WAITING_EMBEDDING_CAPACITY' &&
-      (error as EmbeddingClientError).deferResource
-    )
-      resourcePool.defer('EMBEDDING', backoff.delayMs);
-    await prisma.eagleAssetProcessingJob.updateMany({
-      where: mediaExecutionGuard(job),
-      data: retry.data,
-    });
-    return;
-  }
-
-  const message =
-    error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
-  const permanent =
-    error instanceof MediaLeaseRecoveryExhaustedError ||
-    isPermanentMediaValidationError(error) ||
-    (job.kind === 'RENDER_EDITED_COPY' && message.startsWith('EDIT_SOURCE_'));
-  const transition = mediaFailure(job, {
-    message: message,
-    permanent: permanent,
-    now: new Date(),
-    expiredBefore:
-      error instanceof MediaLeaseRecoveryExhaustedError ? error.expiredBefore : undefined,
-  });
-  const { terminal } = transition;
-  await prisma.$transaction(async (transaction) => {
-    const failed = await transaction.eagleAssetProcessingJob.updateMany({
-      where: transition.where,
-      data: transition.data,
-    });
-    if (failed.count !== 1) return;
-    if (terminal) await propagateFailedDependencies(transaction);
-    if (job.kind === 'EXTRACT_COLOR_PALETTE') {
-      await transaction.eagleAssetColorAnalysis.upsert({
-        where: {
-          assetId_assetRevision_processorVersion: {
-            assetId: job.assetId,
-            assetRevision: job.assetRevision,
-            processorVersion: job.processorVersion,
-          },
-        },
-        create: {
-          ownerId: job.ownerId,
-          libraryMode: job.libraryMode,
-          assetId: job.assetId,
-          assetRevision: job.assetRevision,
-          processorVersion: job.processorVersion,
-          status: terminal ? 'FAILED' : 'PENDING',
-          lastError: message,
-          completedAt: terminal ? new Date() : null,
-        },
-        update: {
-          status: terminal ? 'FAILED' : 'PENDING',
-          lastError: message,
-          completedAt: terminal ? new Date() : null,
-        },
-      });
-    }
-    if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
-      await transaction.eagleImagePyramid.updateMany({
-        where: {
-          ownerId: job.ownerId,
-          libraryMode: job.libraryMode,
-          assetId: job.assetId,
-          revision: job.assetRevision,
-          processorVersion: job.processorVersion,
-        },
-        data: {
-          status: terminal ? 'FAILED' : 'PENDING',
-          lastError: message,
-          completedAt: terminal ? new Date() : null,
-        },
-      });
-    }
-    if (job.kind === 'GENERATE_EMBEDDING') {
-      await transaction.eagleAssetEmbedding.updateMany({
-        where: {
-          ownerId: job.ownerId,
-          libraryMode: job.libraryMode,
-          assetId: job.assetId,
-          assetRevision: job.assetRevision,
-          spaceId: embeddingSpaceId,
-        },
-        data: {
-          status: 'FAILED',
-          errorCode: message.slice(0, 100),
-          completedAt: new Date(),
-        },
-      });
-    }
-    const assetFailure = terminal
-      ? terminalAssetFailure(job.kind, job.processorVersion, message)
-      : null;
-    if (assetFailure) {
-      await transaction.eagleAsset.updateMany({
-        where: {
-          id: job.assetId,
-          ownerId: job.ownerId,
-          libraryMode: job.libraryMode,
-          mediaRevision: job.assetRevision,
-          ...(assetFailure.lifecycleStatus ? {} : { lifecycleStatus: { not: 'FAILED' as const } }),
-        },
-        data: assetFailure,
-      });
-    }
-  });
-}
+const tagBuildContext = {
+  prisma,
+  embeddingSpaceId,
+  embeddingDimensions,
+  resourcePool,
+};
 
 async function deleteOwnedPrefix(ownerId: string, prefix: string): Promise<void> {
   assertOwnedKey(ownerId, `${prefix}placeholder`);
@@ -1462,12 +527,12 @@ async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<voi
   }, 60_000);
   renewal.unref();
   try {
-    await processTagSemanticBuild(build);
+    await processTagSemanticBuild(build, tagBuildContext);
     process.stdout.write(
       `${JSON.stringify({ event: 'eagle_tag_semantic_build_completed', buildId: build.id, tagId: build.tagId })}\n`,
     );
   } catch (error) {
-    await failTagSemanticBuild(build, error);
+    await failTagSemanticBuild(build, error, tagBuildContext);
     const message = error instanceof Error ? error.message : 'unknown tag semantic build error';
     process.stderr.write(`failed tag semantic build ${build.id}: ${message}\n`);
   } finally {
@@ -1504,7 +569,7 @@ async function processClaimedJob(
   }, 60_000);
   renewal.unref();
   try {
-    await processJob(job, remoteRequired);
+    await processJob(job, remoteRequired, mediaJobContext);
     process.stdout.write(
       `${JSON.stringify({
         event: 'eagle_media_job_completed',
@@ -1520,7 +585,7 @@ async function processClaimedJob(
       })}\n`,
     );
   } catch (error) {
-    if (leaseHeld) await failJob(job, error);
+    if (leaseHeld) await failJob(job, error, mediaJobContext);
     const message = error instanceof Error ? error.message : 'unknown media error';
     process.stderr.write(`failed media job ${job.id}: ${message}\n`);
   } finally {
@@ -1532,11 +597,6 @@ async function processClaimedJob(
 
 function assertOwnedKey(ownerId: string, key: string): void {
   if (!key.startsWith(`users/${ownerId}/`)) throw new Error('CROSS_OWNER_OBJECT_KEY');
-}
-
-function assertExpectedHash(expected: string | null | undefined, actual: string): void {
-  if (expected && expected !== actual)
-    throw new PermanentMediaValidationError('CONTENT_SHA256_MISMATCH');
 }
 
 function hasActiveWork(): boolean {
@@ -1682,25 +742,6 @@ function reportLoopError(error: unknown): void {
   process.stderr.write(`${message}\n`);
 }
 
-function boundedInteger(
-  raw: string | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
-  const parsed = Number(raw ?? fallback);
-  return Number.isSafeInteger(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
-}
-
-function boundedNumber(
-  raw: string | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
-  const parsed = Number(raw ?? fallback);
-  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
-}
 
 process.on('SIGTERM', () => void stop('SIGTERM'));
 process.on('SIGINT', () => void stop('SIGINT'));
