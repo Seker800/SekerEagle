@@ -5,7 +5,10 @@ import { t } from './i18n';
 import { lazy, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
-import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
+import {
+  DesktopConnectionButton,
+  type DesktopPageConnection,
+} from './components/desktop/DesktopConnectionButton';
 import { LibraryModeControl } from './components/eagle/LibraryModeControl';
 import { LibraryWorkspaceProvider } from './lib/library-workspace';
 import { createPrivacyVisibilityApi } from './lib/privacy-visibility-api';
@@ -223,7 +226,12 @@ export function App() {
       setNotice(noticeAfterLogout);
     }
   }
-  const connectionButton = <DesktopConnectionButton />;
+  const pageConnection: DesktopPageConnection = connectionUnavailable
+    ? 'offline'
+    : loading
+      ? 'checking'
+      : 'online';
+  const connectionButton = <DesktopConnectionButton pageConnection={pageConnection} />;
   if (loading) {
     return (
       <main className="auth-loading">

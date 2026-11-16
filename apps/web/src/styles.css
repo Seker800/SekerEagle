@@ -1083,6 +1083,10 @@ select:focus-visible {
   background: #22c55e;
 }
 
+.desktop-connection-button > span.is-unknown {
+  background: #94a3b8;
+}
+
 .photo-metadata {
   padding: 16px;
   border-bottom: 1px solid var(--ui-line);
