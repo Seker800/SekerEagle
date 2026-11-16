@@ -16,10 +16,10 @@ import type { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
 import { databaseBatches, databaseBatchSize, DATABASE_STATEMENTS } from './eagle-database-batches';
 import {
   canonicalLibraryCommand,
+  LibraryCommandRegistry,
   libraryCommandPayload,
   type LibraryCommandContext,
   type LibraryCommandInput,
-  type LibraryCommandRegistry,
 } from './eagle-library-command';
 import { lockOperationPublication } from './eagle-operation-cancellation';
 import { OPERATION_ADMISSION_TIMEOUT_MS } from './eagle-operation-settings';
