@@ -42,3 +42,4 @@ NAS 私有 `maintenance/upload-manager-c4d26c7e/` 保存服务快照、原 Compo
 - 未做登录后的生产浏览器交互（无生产账号凭据）；新上传窗口与预检按组件、队列和 API 测试验收，生产只核验静态资源、容器健康与匿名鉴权。
 - 预检上限 64MiB 是浏览器内存边界，超过上限的文件直接上传并由服务器去重；未在真实大批照片上测量哈希耗时。
 - 服务器入库校验仍一次处理一份，未提高并发。
+- 上述 64MiB 预检上限已由同日 [流式指纹修正](main-production-release-2026-11-16-upload-streamhash.md) 取消；当前运行版为 `sekereagle/web:upload-streamhash-38dd0da6`。
