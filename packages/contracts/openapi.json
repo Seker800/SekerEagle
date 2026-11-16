@@ -317,6 +317,32 @@
         "tags": ["DesktopBootstrap"]
       }
     },
+    "/api/eagle/assets/{assetId}/processing-retry": {
+      "post": {
+        "operationId": "EagleController_retryAssetProcessing",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/duplicates": {
       "get": {
         "operationId": "EagleController_listDuplicates",
@@ -4827,6 +4853,32 @@
           }
         },
         "tags": ["EagleVector"]
+      }
+    },
+    "/api/photos/assets/{assetId}/processing-retry": {
+      "post": {
+        "operationId": "PhotosController_retryAssetProcessing",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
       }
     },
     "/api/photos/duplicates": {

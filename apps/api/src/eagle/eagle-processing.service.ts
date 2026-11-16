@@ -196,6 +196,23 @@ export class EagleProcessingService {
     if (!retried) throw new NotFoundException('没有可重试的处理任务。');
     return { retried };
   }
+  async retryAsset(ownerId: string, assetId: string, includePrivate = false) {
+    const job = await this.prisma.eagleAssetProcessingJob.findFirst({
+      where: {
+        ownerId,
+        assetId,
+        libraryMode: this.libraryMode,
+        status: 'FAILED',
+        kind: { not: 'GENERATE_AI_TAGS' },
+        ...(includePrivate ? {} : { asset: { isPrivate: false } }),
+      },
+      select: { id: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (!job) throw new NotFoundException('没有可重试的处理任务。');
+    return this.retry(ownerId, job.id, includePrivate);
+  }
+
   async retryFailed(
     ownerId: string,
     includePrivate = false,

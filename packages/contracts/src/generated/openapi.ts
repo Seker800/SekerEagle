@@ -260,6 +260,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/processing-retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_retryAssetProcessing'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/duplicates': {
     parameters: {
       query?: never;
@@ -2014,6 +2030,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['EagleVectorController_reviewBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/{assetId}/processing-retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_retryAssetProcessing'];
     delete?: never;
     options?: never;
     head?: never;
@@ -5361,6 +5393,25 @@ export interface operations {
       };
     };
   };
+  EagleController_retryAssetProcessing: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleController_listDuplicates: {
     parameters: {
       query?: {
@@ -8154,6 +8205,25 @@ export interface operations {
         content: {
           'application/json': components['schemas']['EagleOperationSummaryResponseDto'];
         };
+      };
+    };
+  };
+  PhotosController_retryAssetProcessing: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

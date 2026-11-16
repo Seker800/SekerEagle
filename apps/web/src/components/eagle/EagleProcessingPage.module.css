@@ -58,7 +58,9 @@
   padding: 3px;
   border: 1px solid var(--line-subtle);
   border-radius: var(--ui-radius-control);
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--ui-panel);
 }
 .tabs {

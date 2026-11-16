@@ -98,6 +98,7 @@ import {
   UpdateSmartFolderDto,
 } from './eagle.dto';
 import { EagleService } from './eagle.service';
+import { EagleProcessingService } from './eagle-processing.service';
 import { EaglePrivacyService } from './eagle-privacy.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
@@ -114,7 +115,18 @@ export class EagleController {
     private readonly privacy: EaglePrivacyService,
     @Optional() private readonly operations?: EagleAssetOperationService,
     @Optional() private readonly duplicates?: EagleDuplicateService,
+    @Optional() private readonly processing?: EagleProcessingService,
   ) {}
+
+  @Post('assets/:assetId/processing-retry')
+  @UseGuards(BrowserOriginGuard)
+  retryAssetProcessing(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+  ) {
+    if (!this.processing) throw new Error('Processing service is unavailable');
+    return this.processing.retryAsset(principal.sub, assetId, principal.canViewPrivate);
+  }
 
   @Get('duplicates')
   listDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Query() input: DuplicateListDto) {

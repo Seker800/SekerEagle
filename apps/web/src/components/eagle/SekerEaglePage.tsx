@@ -1,4 +1,6 @@
 import { EagleTrashConfirmation } from './EagleTrashConfirmation';
+import { EagleConfirmationDialog } from './EagleConfirmationDialog';
+import { mediaProcessingFailure } from '../../lib/media-processing-error';
 import { awaitWorkspaceRefreshBaseline } from '../../lib/workspace-refresh';
 import { EagleOperationNotices } from './EagleOperationNotices';
 import { EagleDuplicates } from './EagleDuplicates';
@@ -64,6 +66,7 @@ import {
 import {
   hashKey,
   useInfiniteQuery,
+  useMutation,
   useQuery,
   useQueryClient,
   type InfiniteData,
@@ -313,6 +316,7 @@ export function SekerEaglePage({
       listEagleAssets,
       listEagleTrash,
       fetchEagleReviewSummary,
+      retryEagleAssetProcessing,
     },
   } = useLibraryWorkspace();
 
@@ -408,6 +412,8 @@ export function SekerEaglePage({
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
+  const [failedAssetAction, setFailedAssetAction] = useState<EagleAssetListItem | null>(null);
+  const [failedAssetError, setFailedAssetError] = useState<string | null>(null);
   const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
   const editingScope = `${storeScope}:${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
   const metadataDraft = useEagleMetadataDraft(editingScope);
@@ -726,6 +732,21 @@ export function SekerEaglePage({
       if (activeSmartFolderId === folder.id) navigateLibrary({ view: 'ACTIVE' });
     },
   });
+  const retryAssetProcessingMutation = useMutation({
+    mutationFn: (assetId: string) => retryEagleAssetProcessing(accessToken, assetId),
+    onSuccess: async () => {
+      setFailedAssetAction(null);
+      setFailedAssetError(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.assets });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.libraryCounts });
+    },
+    onError: (error) => setFailedAssetError(error instanceof Error ? error.message : t('操作失败')),
+  });
+  const handleAssetProcessingActions = (asset: EagleAssetListItem) => {
+    setAssetContextMenu(null);
+    setFailedAssetError(null);
+    setFailedAssetAction(asset);
+  };
   const loadedAssets = useMemo(() => {
     const uniqueAssets = new Map<string, EagleAssetListItem>();
     assetsQuery.data?.pages.forEach((page) => {
@@ -1417,6 +1438,7 @@ export function SekerEaglePage({
     handleAssetDragEnd,
     handleAssetDoubleClick,
     handleAssetKeyDown,
+    handleAssetProcessingActions,
   });
   cardActionsRef.current = {
     handleAssetClick,
@@ -1425,6 +1447,7 @@ export function SekerEaglePage({
     handleAssetDragEnd,
     handleAssetDoubleClick,
     handleAssetKeyDown,
+    handleAssetProcessingActions,
   };
   const cardActions = useMemo<AssetCardActions>(
     () => ({
@@ -1435,6 +1458,7 @@ export function SekerEaglePage({
       dragEnd: () => cardActionsRef.current.handleAssetDragEnd(),
       doubleClick: (asset) => cardActionsRef.current.handleAssetDoubleClick(asset),
       keyDown: (event, asset) => cardActionsRef.current.handleAssetKeyDown(event, asset),
+      processingActions: (asset) => cardActionsRef.current.handleAssetProcessingActions(asset),
     }),
     [],
   );
@@ -3056,6 +3080,45 @@ export function SekerEaglePage({
           )}
           {assetActionError ? <div role="alert">{assetActionError}</div> : null}
         </EagleAssetActionMenu>
+      )}
+
+      {failedAssetAction && (
+        <EagleConfirmationDialog
+          title={t('处理失败')}
+          description={
+            <>
+              {mediaProcessingFailure(failedAssetAction.mediaErrorCode).detail}
+              {failedAssetError ? <div role="alert">{failedAssetError}</div> : null}
+            </>
+          }
+          actions={
+            <>
+              {mediaProcessingFailure(failedAssetAction.mediaErrorCode).retryable && (
+                <button
+                  type="button"
+                  disabled={retryAssetProcessingMutation.isPending}
+                  onClick={() => retryAssetProcessingMutation.mutate(failedAssetAction.id)}
+                >
+                  {t('重试处理')}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={trashMutation.isPending}
+                onClick={() => {
+                  trashMutation.mutate([failedAssetAction.id]);
+                  setFailedAssetAction(null);
+                }}
+              >
+                {t('删除（移到回收站）')}
+              </button>
+              <button type="button" onClick={() => setFailedAssetAction(null)}>
+                {t('关闭')}
+              </button>
+            </>
+          }
+          onCancel={() => setFailedAssetAction(null)}
+        />
       )}
 
       {confirmEmptyTrash && (

@@ -674,6 +674,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }).then((result) => result.items);
   }
 
+  function retryEagleAssetProcessing(_token: string, assetId: string) {
+    return api<{ retried: number }>(
+      `/eagle/assets/${encodeURIComponent(assetId)}/processing-retry`,
+      { method: 'POST', body: '{}' },
+    );
+  }
+
   function checkEagleUploadContentBatch(
     _token: string,
     items: EagleUploadContentCheckItem[],
@@ -957,6 +964,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     uploadEagleAsset,
     getEagleUploadStatuses,
     checkEagleUploadContentBatch,
+    retryEagleAssetProcessing,
     getEagleAssetContentUrl,
     getEaglePyramidDescriptor,
     getEagleRenditionContentUrl,
@@ -1005,6 +1013,7 @@ export const {
   uploadEagleAsset,
   getEagleUploadStatuses,
   checkEagleUploadContentBatch,
+  retryEagleAssetProcessing,
   getEagleAssetContentUrl,
   getEaglePyramidDescriptor,
   getEagleRenditionContentUrl,

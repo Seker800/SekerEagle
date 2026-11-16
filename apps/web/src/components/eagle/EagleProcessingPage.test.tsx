@@ -80,6 +80,18 @@ describe('EagleProcessingPage', () => {
     expect(screen.getByDisplayValue('23:00')).toBeInTheDocument();
   });
 
+  it('confirms before retrying all failed jobs', async () => {
+    render(<EagleProcessingPage accessToken="token" />);
+    await screen.findByRole('heading', { name: '当前任务' });
+    fireEvent.click(screen.getByRole('button', { name: '重试全部失败' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/将把当前所有失败的处理任务重新排队/)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: '确认重试' }));
+    await waitFor(() =>
+      expect(api.retryAllFailedEagleProcessingJobs).toHaveBeenCalledWith('token'),
+    );
+  });
+
   it('shows owners an operational vector status without nesting labeling workflows', () => {
     render(<EagleProcessingPage canManageProcessing={false} />);
 

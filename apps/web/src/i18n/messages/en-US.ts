@@ -1736,6 +1736,24 @@ export const enUS = {
   '已上传 {{value1}}/{{value2}} · 入库 {{value3}}/{{value2}}':
     'Uploaded {{value1}}/{{value2}} · stored {{value3}}/{{value2}}',
   '已上传，入库校验中': 'Uploaded, verifying',
+  文件不完整: 'Incomplete file',
+  '该文件不完整或无法解码，请重新导出或从相机卡复制完整的文件后再上传。':
+    'This file is incomplete or cannot be decoded. Re-export it or copy the complete file from the camera card, then upload again.',
+  像素超出处理上限: 'Too many pixels to process',
+  '图片像素数量超出当前处理器的安全上限。':
+    'The image has more pixels than the current processor can safely handle.',
+  格式不支持: 'Unsupported format',
+  '当前处理器不支持该文件格式。': 'The current processor does not support this file format.',
+  内容校验失败: 'Content check failed',
+  '原文件内容与入库校验值不一致，请重新上传。':
+    'The original content does not match the stored checksum. Please upload it again.',
+  '处理失败，可尝试重新处理。': 'Processing failed; you can try again.',
+  重试处理: 'Retry processing',
+  '重试全部失败？': 'Retry all failed jobs?',
+  '将把当前所有失败的处理任务重新排队。文件本身损坏或不支持的任务仍会再次失败。':
+    'All failed processing jobs will be queued again. Tasks with damaged or unsupported files will fail again.',
+  确认重试: 'Retry',
+  已重新排队全部失败任务: 'All failed jobs have been queued again',
   '已暂停，正在上传的 {{value1}} 张会先完成。':
     'Paused; the {{value1}} upload(s) already in progress will finish first.',
   暂停全部: 'Pause all',

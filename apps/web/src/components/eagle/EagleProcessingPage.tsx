@@ -18,6 +18,7 @@ import {
 } from '../../lib/eagle-processing-admin-api';
 import styles from './EagleProcessingPage.module.css';
 import { EagleVectorProcessingPanel } from './EagleVectorProcessingPanel';
+import { EagleConfirmationDialog } from './EagleConfirmationDialog';
 const LANE_LABELS: Record<EagleProcessingLane, string> = {
   INTERACTIVE: t('上传处理'),
   BACKGROUND: t('后台分析'),
@@ -104,6 +105,7 @@ export function EagleProcessingPage({
   const [isActing, setIsActing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [confirmRetryAll, setConfirmRetryAll] = useState(false);
   const visible = usePageVisible();
   const dirtySettings = useRef(false);
   const [readFailure, setReadFailure] = useState<{ count: number; error: unknown }>({
@@ -306,7 +308,45 @@ export function EagleProcessingPage({
             );
           })}
         </nav>
+        <button
+          className={styles.secondaryButton}
+          type="button"
+          disabled={isActing}
+          onClick={() => setConfirmRetryAll(true)}
+        >
+          {t('重试全部失败')}
+        </button>
       </div>
+
+      {confirmRetryAll && (
+        <EagleConfirmationDialog
+          title={t('重试全部失败？')}
+          description={t(
+            '将把当前所有失败的处理任务重新排队。文件本身损坏或不支持的任务仍会再次失败。',
+          )}
+          actions={
+            <>
+              <button
+                type="button"
+                disabled={isActing}
+                onClick={() => {
+                  setConfirmRetryAll(false);
+                  void runAction(
+                    () => retryAllFailedEagleProcessingJobs(accessToken),
+                    t('已重新排队全部失败任务'),
+                  );
+                }}
+              >
+                {t('确认重试')}
+              </button>
+              <button type="button" onClick={() => setConfirmRetryAll(false)}>
+                {t('取消')}
+              </button>
+            </>
+          }
+          onCancel={() => setConfirmRetryAll(false)}
+        />
+      )}
 
       <div
         id="processing-panel-vector"
@@ -540,20 +580,6 @@ export function EagleProcessingPage({
                 }
               >
                 {' ' + t('扫描缺失任务') + ' '}
-              </button>
-              <button
-                className={styles.dangerButton}
-                type="button"
-                disabled={isActing || !summary?.counts.failed}
-                onClick={() => {
-                  if (window.confirm(t('重新排队全部失败任务？')))
-                    void runAction(
-                      () => retryAllFailedEagleProcessingJobs(accessToken),
-                      t('失败任务已重新排队'),
-                    );
-                }}
-              >
-                {' ' + t('重试全部失败') + ' '}
               </button>
             </div>
           </div>

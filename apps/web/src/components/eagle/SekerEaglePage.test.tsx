@@ -130,6 +130,7 @@ const emptyEagleTrashMock = vi.fn();
 const updateEagleAssetMock = vi.fn();
 const batchUpdateEagleAssetsMock = vi.fn();
 const uploadEagleAssetMock = vi.fn();
+const retryEagleAssetProcessingMock = vi.fn(async (..._args: unknown[]) => ({ retried: 1 }));
 const listEagleSmartFoldersMock = vi.fn();
 const createEagleSmartFolderMock = vi.fn();
 const updateEagleSmartFolderMock = vi.fn();
@@ -181,6 +182,7 @@ vi.mock('../../lib/eagle-api', () => {
     batchUpdateEagleAssets: (...args: unknown[]) => batchUpdateEagleAssetsMock(...args),
     uploadEagleAsset: (...args: unknown[]) => uploadEagleAssetMock(...args),
     checkEagleUploadContentBatch: async () => [],
+    retryEagleAssetProcessing: (...args: unknown[]) => retryEagleAssetProcessingMock(...args),
     listEagleSmartFolders: (...args: unknown[]) => listEagleSmartFoldersMock(...args),
     createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
     updateEagleSmartFolder: (...args: unknown[]) => updateEagleSmartFolderMock(...args),
@@ -2416,6 +2418,40 @@ describe('SekerEaglePage', () => {
     expect(fourthCard).toHaveAttribute('aria-pressed', 'true');
     fireEvent.contextMenu(fourthCard);
     expect(screen.getByRole('menu', { name: '素材操作' })).toHaveTextContent('已选择 4 项');
+  });
+
+  it('explains a damaged asset and offers deletion without a pointless retry', async () => {
+    listEagleAssetsMock.mockResolvedValue({
+      items: [
+        {
+          ...asset,
+          lifecycleStatus: 'FAILED',
+          mediaErrorCode: 'IMAGE_DECODE_FAILED: failed',
+        },
+      ],
+      nextCursor: null,
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '文件不完整' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/该文件不完整或无法解码/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: '重试处理' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '删除（移到回收站）' })).toBeInTheDocument();
+  });
+
+  it('offers retry for a transient processing failure', async () => {
+    listEagleAssetsMock.mockResolvedValue({
+      items: [{ ...asset, lifecycleStatus: 'FAILED', mediaErrorCode: null }],
+      nextCursor: null,
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '处理失败' }));
+    const dialog = await screen.findByRole('alertdialog');
+    retryEagleAssetProcessingMock.mockClear();
+    fireEvent.click(within(dialog).getByRole('button', { name: '重试处理' }));
+    await waitFor(() =>
+      expect(retryEagleAssetProcessingMock).toHaveBeenCalledWith('token', asset.id),
+    );
   });
 
   it('offers file picking alongside drag-and-drop import', async () => {

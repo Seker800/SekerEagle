@@ -5,6 +5,7 @@ import type { EagleAssetListItem, EaglePhotoStack } from '../../lib/eagle-api';
 import type { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import type { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import { getEagleLivePhotoContentUrl } from './eagle-media-sources';
+import { mediaProcessingFailure } from '../../lib/media-processing-error';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
 import { EagleStackBadge } from './EagleStackBadge';
 import styles from './SekerEaglePage.module.css';
@@ -24,6 +25,7 @@ export interface AssetCardActions {
   dragEnd: () => void;
   doubleClick: (asset: EagleAssetListItem) => void;
   keyDown: (event: KeyboardEvent<HTMLButtonElement>, asset: EagleAssetListItem) => void;
+  processingActions: (asset: EagleAssetListItem) => void;
 }
 
 interface EagleAssetCardProps {
@@ -55,6 +57,8 @@ function EagleAssetCardView({
   loadService,
   actions,
 }: EagleAssetCardProps) {
+  const failure =
+    asset.lifecycleStatus === 'FAILED' ? mediaProcessingFailure(asset.mediaErrorCode) : null;
   return (
     <button
       disabled={disabled}
@@ -99,8 +103,25 @@ function EagleAssetCardView({
           displayWidth={Math.ceil(layout?.width ?? 0)}
         />
         {asset.lifecycleStatus !== 'READY' && (
-          <span className={styles.processing}>
-            {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}
+          <span
+            className={styles.processing}
+            data-failed={asset.lifecycleStatus === 'FAILED' ? 'true' : undefined}
+            role={asset.lifecycleStatus === 'FAILED' ? 'button' : undefined}
+            tabIndex={asset.lifecycleStatus === 'FAILED' ? 0 : undefined}
+            title={failure?.detail}
+            onClick={(event) => {
+              if (!failure) return;
+              event.stopPropagation();
+              actions.processingActions(asset);
+            }}
+            onKeyDown={(event) => {
+              if (!failure || (event.key !== 'Enter' && event.key !== ' ')) return;
+              event.preventDefault();
+              event.stopPropagation();
+              actions.processingActions(asset);
+            }}
+          >
+            {failure ? failure.label : t('处理中')}
           </span>
         )}
         {asset.isPrivate && (
