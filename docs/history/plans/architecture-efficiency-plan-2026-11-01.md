@@ -1,6 +1,8 @@
 # SekerEagle 架构优化与效率提升计划
 
-> 后续评审修订：清空回收站现改为原后台操作的有界、可恢复批次；前轮3条SQL／整库单事务与5秒预算仅为历史检查点。两个旧入口改为202操作回执，当前预算、端到端成本、升级重叠和交互／刷新契约见[后续修复记录](architecture-efficiency-review-followup-2026-11-01.md)。本地候选仍未合并、推送或部署。
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
+> 后续评审修订：清空回收站现改为原后台操作的有界、可恢复批次；前轮3条SQL／整库单事务与5秒预算仅为历史检查点。两个旧入口改为202操作回执，当前预算、端到端成本、升级重叠和交互／刷新契约见[后续修复记录](../reviews/architecture-efficiency-review-followup-2026-11-01.md)。本地候选仍未合并、推送或部署。
 
 ## 1 目标与执行约定
 
@@ -14,10 +16,10 @@
 
 相关权威约定：
 
-- [工程规则](../AGENTS.md)、[产品取舍](product-frame.md)、[性能预算](performance-budget.md)。
-- [架构北极星](architecture.md)、[共享能力门禁](library-sharing-gate.md)。
-- [后台工作](background-work.md)、[任务中心核心](task-center-core.md)。
-- [现用运行状态](current-runtime.md)、[后台处理性能修复记录](background-processing-performance-2026-11-01.md)。
+- [工程规则](../../../AGENTS.md)、[产品取舍](../../product-frame.md)、[性能预算](../../performance-budget.md)。
+- [架构北极星](../../architecture.md)、[共享能力门禁](../../library-sharing-gate.md)。
+- [后台工作](../../background-work.md)、[任务中心核心](../../task-center-core.md)。
+- [现用运行状态](../../current-runtime.md)、[后台处理性能修复记录](../records/background-processing-performance-2026-11-01.md)。
 
 本计划不另建一套运行状态事实。部署、节点、模型及暂停状态始终以现用运行文档和现场核验为准。
 
@@ -27,22 +29,22 @@
 
 | 编号 | 当前事实与证据                                                                                                                                                                                                                                                               | 对计划的约束                                                           |
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| E01  | [eagle-trash.ts:9](../apps/api/src/eagle/eagle-trash.ts#L9) 的 `setEagleTrash` 与62行 resolver 已共享；五个调用文件、六个写调用点                                                                                                                                            | 不重写第二套回收，不把恢复、审批和退休混为普通删除                     |
-| E02  | [eagle-library-transfer.service.ts:458](../apps/api/src/eagle/eagle-library-transfer.service.ts#L458) 在目标发布事务内退役源项，HANDOFF 移交存储所有权                                                                                                                       | 发送成功后源项不进回收站；不能后台各自删除已被目标接管的对象           |
-| E03  | [eagle.service.ts:1150](../apps/api/src/eagle/eagle.service.ts#L1150) 清空回收站先集合 UPDATE RETURNING，随后在 Node 收集全部 ID、createMany 并用 IN 重排任务                                                                                                                | “只有一条SQL、没有ID列表”不成立；需要检查完整路径的参数和内存增长      |
-| E04  | [operations:737](../apps/api/src/eagle/eagle-asset-operations.service.ts#L737)、[1112](../apps/api/src/eagle/eagle-asset-operations.service.ts#L1112)、[duplicates:555](../apps/api/src/eagle/eagle-duplicates.service.ts#L555) 已共用元数据领取、发布及失败隔离             | 普通删除、恢复和去重共用批次属于已有成果，不能再次作为新增优化申报     |
-| E05  | [operations:442](../apps/api/src/eagle/eagle-asset-operations.service.ts#L442)、[1041](../apps/api/src/eagle/eagle-asset-operations.service.ts#L1041) 与 [DTO:5](../apps/api/src/eagle/eagle-asset-operations.dto.ts#L5) 存在开放准入和最终回收 else                         | 新增 kind 漏登记可能走删除；先封闭分派，再扩展业务                     |
-| E06  | [operation-settings:10](../apps/api/src/eagle/eagle-operation-settings.ts#L10) 默认512、上限 floor(32767/12)；查重十二处仍用500                                                                                                                                              | 统一真实数据库参数预算，不按“数字一致”合并业务循环                     |
-| E07  | [worker/main.ts:703](../apps/worker/src/main.ts#L703) 每次向量任务 upsert 模型空间和向量记录；[embedding-publication.ts:24](../apps/worker/src/embedding-publication.ts#L24)、82逐项事务发布                                                                                 | 模型配置重复写与发布开销是明确入口；存量向量激活也需覆盖               |
-| E08  | [embedding-publication.ts:74](../apps/worker/src/embedding-publication.ts#L74)、141 在向量发布事务里匹配智能文件夹并生成标签建议                                                                                                                                             | 附加处理耦合已确认；是否拆成持久任务必须比较完整成本和一致性           |
-| E09  | [embedding-space.ts:14](../apps/worker/src/embedding-space.ts#L14) 已有模型身份兼容检查；[worker/main.ts:421](../apps/worker/src/main.ts#L421) 发送向量先尝试无读图激活                                                                                                      | 不再逐张覆写共享模型身份；不破坏兼容检查或重跑已有向量                 |
-| E10  | [transfer-facts.ts:65](../apps/api/src/eagle/eagle-transfer-facts.ts#L65) 按资源逐标签查询、逐组 upsert 和逐关联 createMany                                                                                                                                                  | 同一发布批次内共享标签映射，保留隐私冲突和来源事实                     |
-| E11  | [media-resource-pool.ts:102](../apps/worker/src/media-resource-pool.ts#L102) 分 NAS、EMBEDDING、REMOTE_MEDIA 并记内存；[executor:15](../apps/api/src/asset-operation-executor.ts#L15) 是独立 operations                                                                      | 已有持久队列与独立执行器；不新增 Redis、RabbitMQ、Kafka 或通用线程池   |
-| E12  | [transfer:125](../apps/api/src/eagle/eagle-library-transfer.service.ts#L125)、393、[pyramid:97](../apps/api/src/eagle/eagle-transfer-pyramid.ts#L97) 嵌套调用每次四路的 runTransferWork                                                                                      | 旧复制路径能形成4乘4在途复制；应在叶子I/O处共享许可                    |
-| E13  | [maintenance:22](../apps/api/src/eagle/eagle-maintenance.service.ts#L22)、[upload-recovery:32](../apps/api/src/eagle/eagle-upload-recovery.service.ts#L32) 自动启动定时器；[capabilities:98](../apps/api/src/eagle/library-capabilities.ts#L98)、164注册到API                | 应修正执行宿主；不是把所有setInterval机械替换掉                        |
-| E14  | [asset-purge.ts:8](../apps/worker/src/asset-purge.ts#L8)、84和 [object-deletion-runner.ts:6](../apps/worker/src/object-deletion-runner.ts#L6) 已有物理清理及可靠outbox                                                                                                       | 不另建各模块定时扫库清孤儿；永久删除继续用现有可靠记录                 |
-| E15  | [asset-operation-refresh.ts:79](../apps/web/src/components/eagle/asset-operation-refresh.ts#L79)、132保留主图库页并应用终态回执                                                                                                                                              | 不恢复每张重取、不截第一页；清空回收站无成员回执的缓存一致性需复现核实 |
-| E16  | [TrashConfirmation:13](../apps/web/src/components/eagle/EagleTrashConfirmation.tsx#L13)、[Duplicates:82](../apps/web/src/components/eagle/EagleDuplicates.tsx#L82)、[PhotoEditor:224](../apps/web/src/components/media/photo-editor/PhotoEditor.tsx#L224) 分别管理焦点及关闭 | 可收拢交互协议，但不是后台性能主项                                     |
+| E01  | [eagle-trash.ts:9](../../../apps/api/src/eagle/eagle-trash.ts#L9) 的 `setEagleTrash` 与62行 resolver 已共享；五个调用文件、六个写调用点                                                                                                                                            | 不重写第二套回收，不把恢复、审批和退休混为普通删除                     |
+| E02  | [eagle-library-transfer.service.ts:458](../../../apps/api/src/eagle/eagle-library-transfer.service.ts#L458) 在目标发布事务内退役源项，HANDOFF 移交存储所有权                                                                                                                       | 发送成功后源项不进回收站；不能后台各自删除已被目标接管的对象           |
+| E03  | [eagle.service.ts:1150](../../../apps/api/src/eagle/eagle.service.ts#L1150) 清空回收站先集合 UPDATE RETURNING，随后在 Node 收集全部 ID、createMany 并用 IN 重排任务                                                                                                                | “只有一条SQL、没有ID列表”不成立；需要检查完整路径的参数和内存增长      |
+| E04  | [operations:737](../../../apps/api/src/eagle/eagle-asset-operations.service.ts#L737)、[1112](../../../apps/api/src/eagle/eagle-asset-operations.service.ts#L1112)、[duplicates:555](../../../apps/api/src/eagle/eagle-duplicates.service.ts#L555) 已共用元数据领取、发布及失败隔离             | 普通删除、恢复和去重共用批次属于已有成果，不能再次作为新增优化申报     |
+| E05  | [operations:442](../../../apps/api/src/eagle/eagle-asset-operations.service.ts#L442)、[1041](../../../apps/api/src/eagle/eagle-asset-operations.service.ts#L1041) 与 [DTO:5](../../../apps/api/src/eagle/eagle-asset-operations.dto.ts#L5) 存在开放准入和最终回收 else                         | 新增 kind 漏登记可能走删除；先封闭分派，再扩展业务                     |
+| E06  | [operation-settings:10](../../../apps/api/src/eagle/eagle-operation-settings.ts#L10) 默认512、上限 floor(32767/12)；查重十二处仍用500                                                                                                                                              | 统一真实数据库参数预算，不按“数字一致”合并业务循环                     |
+| E07  | [worker/main.ts:703](../../../apps/worker/src/main.ts#L703) 每次向量任务 upsert 模型空间和向量记录；[embedding-publication.ts:24](../../../apps/worker/src/embedding-publication.ts#L24)、82逐项事务发布                                                                                 | 模型配置重复写与发布开销是明确入口；存量向量激活也需覆盖               |
+| E08  | [embedding-publication.ts:74](../../../apps/worker/src/embedding-publication.ts#L74)、141 在向量发布事务里匹配智能文件夹并生成标签建议                                                                                                                                             | 附加处理耦合已确认；是否拆成持久任务必须比较完整成本和一致性           |
+| E09  | [embedding-space.ts:14](../../../apps/worker/src/embedding-space.ts#L14) 已有模型身份兼容检查；[worker/main.ts:421](../../../apps/worker/src/main.ts#L421) 发送向量先尝试无读图激活                                                                                                      | 不再逐张覆写共享模型身份；不破坏兼容检查或重跑已有向量                 |
+| E10  | [transfer-facts.ts:65](../../../apps/api/src/eagle/eagle-transfer-facts.ts#L65) 按资源逐标签查询、逐组 upsert 和逐关联 createMany                                                                                                                                                  | 同一发布批次内共享标签映射，保留隐私冲突和来源事实                     |
+| E11  | [media-resource-pool.ts:102](../../../apps/worker/src/media-resource-pool.ts#L102) 分 NAS、EMBEDDING、REMOTE_MEDIA 并记内存；[executor:15](../../../apps/api/src/asset-operation-executor.ts#L15) 是独立 operations                                                                      | 已有持久队列与独立执行器；不新增 Redis、RabbitMQ、Kafka 或通用线程池   |
+| E12  | [transfer:125](../../../apps/api/src/eagle/eagle-library-transfer.service.ts#L125)、393、[pyramid:97](../../../apps/api/src/eagle/eagle-transfer-pyramid.ts#L97) 嵌套调用每次四路的 runTransferWork                                                                                      | 旧复制路径能形成4乘4在途复制；应在叶子I/O处共享许可                    |
+| E13  | [maintenance:22](../../../apps/api/src/eagle/eagle-maintenance.service.ts#L22)、[upload-recovery:32](../../../apps/api/src/eagle/eagle-upload-recovery.service.ts#L32) 自动启动定时器；[capabilities:98](../../../apps/api/src/eagle/library-capabilities.ts#L98)、164注册到API                | 应修正执行宿主；不是把所有setInterval机械替换掉                        |
+| E14  | [asset-purge.ts:8](../../../apps/worker/src/asset-purge.ts#L8)、84和 [object-deletion-runner.ts:6](../../../apps/worker/src/object-deletion-runner.ts#L6) 已有物理清理及可靠outbox                                                                                                       | 不另建各模块定时扫库清孤儿；永久删除继续用现有可靠记录                 |
+| E15  | [asset-operation-refresh.ts:79](../../../apps/web/src/components/eagle/asset-operation-refresh.ts#L79)、132保留主图库页并应用终态回执                                                                                                                                              | 不恢复每张重取、不截第一页；清空回收站无成员回执的缓存一致性需复现核实 |
+| E16  | [TrashConfirmation:13](../../../apps/web/src/components/eagle/EagleTrashConfirmation.tsx#L13)、[Duplicates:82](../../../apps/web/src/components/eagle/EagleDuplicates.tsx#L82)、[PhotoEditor:224](../../../apps/web/src/components/media/photo-editor/PhotoEditor.tsx#L224) 分别管理焦点及关闭 | 可收拢交互协议，但不是后台性能主项                                     |
 
 “HDD 是唯一瓶颈”“批量写入等于一次顺序落盘”“一定快几十倍”均不作为结论。SQL 往返、WAL、索引维护、锁、对象读取、模型推理和浏览器刷新必须分别计量。PostgreSQL 一次批量写入仍可能更新多个页和索引，不能用请求数推断磁盘物理访问次数。
 
@@ -110,7 +112,7 @@
 5. 同一机器、数据、并发、模型和存储位置对照；先预热，再交替跑前后版本。计数用确定性门禁，耗时使用多样本分布；少量样本不称p95。
 6. 基准至少覆盖删除500项、清空500项及六万项、去重32组和千组、发送100项、向量单项和持续队列。增加共享标签和多派生产物夹具，不能只用空记录。
 
-既有基线只作参照：[性能修复记录](background-processing-performance-2026-11-01.md)记录32组执行含领取为PHOTO439／MATERIAL471 SQL、2事务、零S3，当前门禁为最多512 SQL。它不含完整HTTP准入、认证、前端刷新及物理清理，也不是本轮新测值。先前聊天中的删除497条等为特定假设下的源码模型，不作为承诺或CI阈值。
+既有基线只作参照：[性能修复记录](../records/background-processing-performance-2026-11-01.md)记录32组执行含领取为PHOTO439／MATERIAL471 SQL、2事务、零S3，当前门禁为最多512 SQL。它不含完整HTTP准入、认证、前端刷新及物理清理，也不是本轮新测值。先前聊天中的删除497条等为特定假设下的源码模型，不作为承诺或CI阈值。
 
 验收：每个准备修改的热点都有机器可读取的前后结果和夹具说明；缺失计数标为未测并说明具体缺口。不能用“看起来更快”替代基线。
 

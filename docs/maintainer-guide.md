@@ -1,5 +1,7 @@
 # 维护者接手指南
 
+> 状态：现行 | 核验日期：2026-11-16 | 对应提交：319c087a
+
 这份文档是接手 SekerEagle 的入口。它说明项目为什么存在、哪些边界不能破坏，以及日常
 维护应从哪里开始。具体操作仍以链接的架构、运行和发布文档为准。
 
@@ -17,12 +19,13 @@ Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量�
 
 先阅读：
 
-1. [`architecture.md`](architecture.md)：北极星、依赖方向和核心不变量。
-2. [`adr/0001-independent-runtime.md`](adr/0001-independent-runtime.md)：为什么必须使用独立运行时和空库重导。
-3. [`operations-runbook.md`](operations-runbook.md)：启动、诊断和停止方式。
-4. [`environment-model.md`](environment-model.md)：环境变量与安全目标。
-5. [`../AGENTS.md`](../AGENTS.md)：本仓库的强制开发规则。
-6. [`internationalization.md`](internationalization.md)：中英文词典、隐藏切换方式和错误本地化边界。
+1. [`start-here.md`](start-here.md)：先弄清现在跑什么、第一条命令和三条阅读路径。
+2. [`glossary.md`](glossary.md)：Eagle、Operation、MediaJob、reader 等词先对齐。
+3. [`product-frame.md`](product-frame.md)：产品定位、优先级和“不做什么”。
+4. [`architecture.md`](architecture.md)：只读 North star、能力归属和 Invariants。
+5. [`operations-runbook.md`](operations-runbook.md) 或 [`current-runtime.md`](current-runtime.md)：新环境启动 vs 现用部署核验。
+
+其余文档按需查：ADR、环境变量、国际化和各能力手册不再要求首日通读。
 
 ## 不能破坏的边界
 

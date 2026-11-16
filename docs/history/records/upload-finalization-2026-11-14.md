@@ -1,5 +1,7 @@
 # 上传校验异步化与有界内存（2026-11-14）
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 ## 背景与结论
 
 2026-11-14 晚间手机批量上传期间，生产 API（`sekereagle/api:map-delete-snapshot-d5fd0e8f91d2`，群晖 `sekereagle-nas-staging-api-1`）匿名内存涨到 2GiB cgroup 上限，内核在 22:10:49 杀死 node 进程，容器自动重启；网关同期出现 78 次 504。排查结论：

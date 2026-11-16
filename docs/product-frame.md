@@ -1,5 +1,7 @@
 # 产品定位与取舍（SekerEagle）
 
+> 状态：现行 | 核验日期：2026-11-16 | 对应提交：319c087a
+
 > 这份文档是 `AGENTS.md`「产品定位与取舍」的展开。目标：当需求没写全时，所有 agent 默认选择「多用户自托管、效率优先」的实现，而不是大型公开多租户 SaaS 的防御式默认值。
 
 ## 1. 使用者与部署形态
@@ -76,7 +78,7 @@
 | 审批通过每 5 条一个请求                                        | `PhotoAgentReview.tsx`                                                                  |
 | 智能文件夹 31 条件 / 30 规则后「添加」静默无效                 | `EagleRuleBuilder.tsx`                                                                  |
 
-完整证据与成本推算见 [发送到素材复核](send-to-material-review-2026-10-31.md)。
+完整证据与成本推算见 [发送到素材复核](history/reviews/send-to-material-review-2026-10-31.md)。
 
 ## 8. 评审问题清单
 
@@ -101,5 +103,5 @@
 - [架构北极星](architecture.md)
 - [素材/照片共享门禁](library-sharing-gate.md)
 - [性能预算](performance-budget.md)
-- [发送到素材复核（2026-10-31）](send-to-material-review-2026-10-31.md)
+- [发送到素材复核（2026-10-31）](history/reviews/send-to-material-review-2026-10-31.md)
 - [现用运行状态](current-runtime.md)

@@ -1,5 +1,7 @@
 # DeepSeek 独立审核
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../../current-runtime.md)。
+
 - 状态：report_received
 - 提交范围：`b01fc9eb64ec6689a6f708b786beac208d176613..8289926d3d2ee2c21461771c19b799d7751e2535`
 - 完成时间（UTC）：2026-10-31T14:55:08.037404+00:00
@@ -18,7 +20,7 @@
 ### 1. 低：architecture.md 的“当前版本”交叉引用已被本次新发布变成过期指向
 
 - 文件行号：`docs/architecture.md:19`（本次改动在 `:17`，但 `:19` 属被审文件且被本次新增记录变为过期）。
-- 触发条件及证据：`:19` 写“2026-10-31 21:05 发布状态……当前版本和验证见 [全业务发布记录](production-main-release-2026-10-31.md)”。该发布记录 `docs/production-main-release-2026-10-31.md:8,10` 仍写 API／web 为 `integrated-d0ad3b6d941b`、71 项迁移；而本次新增的 `docs/current-runtime.md:3` 与 `docs/people-review-duplicates-2026-10-31.md:23` 已记录 `people-cleanup-a6ffa551e9ad`／`people-cleanup-b01fc9eb64ec`、73 项迁移。
+- 触发条件及证据：`:19` 写“2026-10-31 21:05 发布状态……当前版本和验证见 [全业务发布记录](../../releases/production-main-release-2026-10-31.md)”。该发布记录 `docs/production-main-release-2026-10-31.md:8,10` 仍写 API／web 为 `integrated-d0ad3b6d941b`、71 项迁移；而本次新增的 `docs/current-runtime.md:3` 与 `docs/people-review-duplicates-2026-10-31.md:23` 已记录 `people-cleanup-a6ffa551e9ad`／`people-cleanup-b01fc9eb64ec`、73 项迁移。
 - 实际影响：从 North star 顺着链接查“当前版本”的读者或后续代理会读到被覆盖的镜像号与迁移数；做健康核对或回退时可能参照错误版本。运行文档本身是对的，但架构入口的指引已不成立。
 - 修复方向：把该句限定为“截至 21:05 的版本”，或改为指向 `current-runtime.md`/本次修复记录；不需要改代码。
 

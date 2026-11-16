@@ -1,5 +1,7 @@
 # 全业务分支整合与生产发布验收
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 核验日期：2026-10-31，21:05 +0800。用户本次明确授权合并全部分支到 main 并发布生产，覆盖前几轮暂不推送／部署的要求。
 
 ## 实际发布
@@ -17,7 +19,7 @@
 
 主搜索仍支持完整精确遍历，不用固定全局ANN候选上限截掉后续结果；只有样例预览使用HNSW。发送关键事务不插入READY向量索引，复用独立业务worker在现用任务策略下激活；没有新增API后台定时执行器。数据库缓存配置只是可选维护文件，本次未启用，也未重启PostgreSQL。
 
-实现与端到端成本见[删除交互](deletion-ux-local-2026-10-31.md)、[发送发布](send-publication-2026-10-31.md)、[搜索取舍](search-query-2026-10-31.md)、[日常效率](browse-background-efficiency-2026-10-31.md)及[人物确认](photo-people-review.md)。这些文件的早期“本地候选”段落是当时状态，由本次实际发布记录覆盖。
+实现与端到端成本见[删除交互](../records/deletion-ux-local-2026-10-31.md)、[发送发布](../records/send-publication-2026-10-31.md)、[搜索取舍](../records/search-query-2026-10-31.md)、[日常效率](../plans/browse-background-efficiency-2026-10-31.md)及[人物确认](../../photo-people-review.md)。这些文件的早期“本地候选”段落是当时状态，由本次实际发布记录覆盖。
 
 ## 验证与数据保护
 

@@ -1,5 +1,7 @@
 # 图库边界与能力归属门禁
 
+> 状态：现行 | 核验日期：2026-11-16 | 对应提交：319c087a
+
 现行契约见[架构北极星](architecture.md#north-star)。本文件描述可执行的门禁范围；历史变更保存在[归档](history/library-sharing-gate-through-2026-11-01.md)。上线状态只读[现用运行](current-runtime.md)。
 
 ## 共用范围与允许差异
@@ -54,7 +56,7 @@
 
 ## 数据库批次门禁的边界
 
-五个已登记持久化路径禁止500／512裸目标、直接本地别名、旧OPERATION_DB_BATCH_SIZE导入别名及简单传递别名。它防止旧写法回归，不证明未知size、跨函数数据流或未登记文件的预算。命名预算的字段宽度、固定绑定、Prisma隐含参数仍须真实数据库边界与审查共同证明；新增路径要决定是否扩展登记并补反例。详细范围和验收契约见[后续修复](architecture-efficiency-review-followup-2026-11-01.md)。
+五个已登记持久化路径禁止500／512裸目标、直接本地别名、旧OPERATION_DB_BATCH_SIZE导入别名及简单传递别名。它防止旧写法回归，不证明未知size、跨函数数据流或未登记文件的预算。命名预算的字段宽度、固定绑定、Prisma隐含参数仍须真实数据库边界与审查共同证明；新增路径要决定是否扩展登记并补反例。详细范围和验收契约见[后续修复](history/reviews/architecture-efficiency-review-followup-2026-11-01.md)。
 
 ## 界面提交变化边界
 

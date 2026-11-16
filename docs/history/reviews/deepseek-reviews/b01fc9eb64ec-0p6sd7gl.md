@@ -1,5 +1,7 @@
 # DeepSeek 独立审核
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../../current-runtime.md)。
+
 - 状态：report_received
 - 提交范围：`a6ffa551e9ada50792709e301f50cf244a90838f..b01fc9eb64ec6689a6f708b786beac208d176613`
 - 完成时间（UTC）：2026-10-31T14:50:16.701712+00:00

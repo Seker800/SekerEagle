@@ -1,5 +1,7 @@
 # 0.2.0 安卓原生首版
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 ## 实现范围
 
 本轮将 Android launcher 切换为独立 NativeActivity／Jetpack Compose。网页源代码零改动；服务器业务与 API、数据库 schema 零改动。旧 MainActivity 不再对外导出，原生核心流程不创建 WebView。已有 Java 备份和释放空间通过 SessionApi 继续利用；不是复制备份引擎，也没有把本机文件能力交给 JavaScript。

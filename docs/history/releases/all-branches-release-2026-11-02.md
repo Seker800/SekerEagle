@@ -1,5 +1,7 @@
 # 2026年11月2日全部分支整合
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 ## 范围与授权
 
 用户要求全部分支、工作区修改合到 main 并推送生产，随后明确确认未合并的 Dependabot 分支也应合并；已合并的自动分支可删除。整合前远端 main 为 `c83842b15c979cbaecc81a17a5c064ca84be59b3`，现场 API／operations 为 `refresh-ff0c9ac7`，网页为 `refresh-cc4d1978-complete`。

@@ -1,5 +1,7 @@
 # 运行效率与页面读取优化生产发布
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 2026-11-01。用户明确授权“先这样，帮我推送生产环境”。main 已推送，应用固定源码为 `df6d3688305a648a66e3bd621f094a8ef452546e`；后续文档提交不代表重建运行镜像。原生产应用为 `727ef115cf2e`，此次同时发布此前尚未上线的架构与批处理修改，不能将整轮收益归于最后三处读取优化。
 
 ## 实际运行版本
@@ -22,7 +24,7 @@ NAS worker 继续停止且 restart=no。PostgreSQL、MinIO、协调器、中继�
 - 清空回收站由原持久命令在独立执行器分批推进，繁忙保留同一任务恢复；进度和终态校准保留列表分页、滚动与用户草稿。
 - 人物先分页再取代表头像；统计先按日期和设备聚合；语义智能文件夹在排名分页前执行完整筛选，减少被淘汰候选的重复读取。
 
-实现、SQL／事务／S3 与刷新成本及其测量边界分别见[后台批处理](background-processing-performance-2026-11-01.md)、[架构效率](architecture-efficiency-review-followup-2026-11-01.md)、[页面读取](read-path-efficiency-2026-11-01.md)和[性能预算](performance-budget.md)。没有增加产品操作数量限制、数据库缓存或并发配置，没有替用户重放真实清理。
+实现、SQL／事务／S3 与刷新成本及其测量边界分别见[后台批处理](../records/background-processing-performance-2026-11-01.md)、[架构效率](../reviews/architecture-efficiency-review-followup-2026-11-01.md)、[页面读取](../plans/read-path-efficiency-2026-11-01.md)和[性能预算](../../performance-budget.md)。没有增加产品操作数量限制、数据库缓存或并发配置，没有替用户重放真实清理。
 
 ## 备份、切换与中间问题
 

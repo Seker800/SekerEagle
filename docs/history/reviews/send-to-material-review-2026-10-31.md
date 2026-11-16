@@ -1,5 +1,7 @@
 # 发送到素材：数量限制、前端卡顿与发送算法复核（2026-10-31）
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 > 这是只读复核，没有修改任何代码。基线是提交 `af2c7384`（main）；已核对线上 API 镜像源码 `e332c5f4` 与线上 web 源码 `eb242582` 在这些发送／进度文件上与 `af2c7384` 没有差异，所以下面引用的行号对线上同样成立。复核期间 `codex/asset-operation-efficiency` 分支上出现了 `8b66443f`（移除 1000/20 上限、SEND 4 路并发）、`26e6daeb`（独占存储接管）等修复提交；它们不在 main，本文不把它们当基线，只在第 5 节说明。复核期间仓库里另有两个提交：`0c8a1ad7`（RED 测试）和 `8b66443f`（GREEN：移除 1000/20 上限、分批准入、SEND 4 路并发）。本文把“基线现状”“修复提交”“线上是否已部署”分开写，避免混在一起；第 5 节专门评估 `8b66443f`。
 > 文中耗时是按代码路径、对象数量和 S3 往返推算的量级，不是生产实测；要精确数字按第 7 节复测。
 
@@ -175,7 +177,7 @@ const candidates =
 
 ## 6. 建议（按“先解决什么”排序，不是排期）
 
-> 本文的取舍规则与预算已沉淀为 [`docs/product-frame.md`](product-frame.md) 和 [`docs/performance-budget.md`](performance-budget.md)。
+> 本文的取舍规则与预算已沉淀为 [`docs/product-frame.md`](../../product-frame.md) 和 [`docs/performance-budget.md`](../../performance-budget.md)。
 
 ### 6.1 先让前端不被发送拖住
 

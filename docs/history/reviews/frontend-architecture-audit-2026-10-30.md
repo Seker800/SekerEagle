@@ -1,5 +1,7 @@
 # SekerEagle 网页与桌面前端架构检查
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 > 本文记录审查当时的状态；后续已修复项、仍保留的结构建议和验收限制见[修复记录](frontend-architecture-remediation-2026-10-30.md)，不能把本文原始发现当作当前缺陷清单。
 
 检查日期：2026 年 10 月 30 日。范围为网页、Electron 桌面适配及其共享前端基础设施。结论：共享图库和业务隔离的方向合理，但异步任务、查询缓存、实体仓库之间缺少统一的生命周期与一致性契约，已经产生可复现的问题。应先修复这些契约，再拆分工作区职责。
@@ -12,7 +14,7 @@
 
 ### F1 P1 上传队列没有绑定认证会话的有效期
 
-位置：[useEagleUploadController](../apps/web/src/components/eagle/useEagleUploadController.ts#L23)、[浏览器认证客户端](../apps/web/src/lib/api-client.ts#L51)、[App 工作区装配](../apps/web/src/App.tsx#L299)。
+位置：[useEagleUploadController](../../../apps/web/src/components/eagle/useEagleUploadController.ts#L23)、[浏览器认证客户端](../../../apps/web/src/lib/api-client.ts#L51)、[App 工作区装配](../../../apps/web/src/App.tsx#L299)。
 
 队列捕获了模式 API 和查询键，但没有取消信号、会话代次或卸载后的停止领取守卫。App 按 owner／mode 重建 Provider；卸载只移除了上传进度界面，旧 Promise 和剩余 File 仍被队列闭包持有。API 的 token 参数实际被忽略，请求使用当前 Cookie。单次请求的 authEpoch 能拒绝跨会话返回，却不能拒绝旧队列在新会话开始后发出的下一条请求。
 
@@ -24,7 +26,7 @@
 
 ### F2 P2 查询回收不能释放其独占的规范化实体
 
-位置：[工作区缓存](../apps/web/src/components/eagle/eagle-workspace-cache.ts#L82)、[实体仓库](../apps/web/src/components/eagle/eagle-asset-entity-store.ts#L34)。
+位置：[工作区缓存](../../../apps/web/src/components/eagle/eagle-workspace-cache.ts#L82)、[实体仓库](../../../apps/web/src/components/eagle/eagle-asset-entity-store.ts#L34)。
 
 Query 页面只保留 ID，实体写入独立 Map。移除查询时只尝试销毁整个工作区；只要工作区仍被页面持有，或另一条列表查询仍存在，就不会回收任何历史实体。实体仓库没有逐项删除或按页面引用回收能力。
 
@@ -34,7 +36,7 @@ Query 页面只保留 ID，实体写入独立 Map。移除查询时只尝试销�
 
 ### F3 P2 实体合并缺少版本顺序守卫
 
-位置：[upsertMany 与 mergeProcessingUpdates](../apps/web/src/components/eagle/eagle-asset-entity-store.ts#L34)、[列表读取](../apps/web/src/components/eagle/SekerEaglePage.tsx#L574)。
+位置：[upsertMany 与 mergeProcessingUpdates](../../../apps/web/src/components/eagle/eagle-asset-entity-store.ts#L34)、[列表读取](../../../apps/web/src/components/eagle/SekerEaglePage.tsx#L574)。
 
 不同搜索／筛选查询可以并行读取同一资源，所有响应都无条件写入同一个实体 Map。React Query 按查询键管理请求，不能替独立实体仓库判断不同键之间的新旧。
 
@@ -44,7 +46,7 @@ Query 页面只保留 ID，实体写入独立 Map。移除查询时只尝试销�
 
 ### F4 P2 批量写入的提前失败与写后刷新脱节
 
-位置：[并发工具](../apps/web/src/lib/async-pool.ts#L13)、[标签批量更新与删除](../apps/web/src/components/eagle/useEagleMutations.ts#L182)。
+位置：[并发工具](../../../apps/web/src/lib/async-pool.ts#L13)、[标签批量更新与删除](../../../apps/web/src/components/eagle/useEagleMutations.ts#L182)。
 
 工具用 Promise.all 等待多个循环。一个循环抛错后，调用者立即收到失败，其他循环仍会完成当前写入并领取后续项。标签更新和删除只在整体 onSuccess 中刷新查询，没有为部分提交提供结算和刷新路径。
 
@@ -54,7 +56,7 @@ Query 页面只保留 ID，实体写入独立 Map。移除查询时只尝试销�
 
 ### F5 P2 推荐确认后的刷新没有覆盖共享图库
 
-位置：[推荐确认](../apps/web/src/components/eagle/EagleVectorWorkspace.tsx#L279)、[确认后的处理](../apps/web/src/components/eagle/EagleVectorWorkspace.tsx#L337)、[公共列表新鲜期](../apps/web/src/components/eagle/SekerEaglePage.tsx#L599)。
+位置：[推荐确认](../../../apps/web/src/components/eagle/EagleVectorWorkspace.tsx#L279)、[确认后的处理](../../../apps/web/src/components/eagle/EagleVectorWorkspace.tsx#L337)、[公共列表新鲜期](../../../apps/web/src/components/eagle/SekerEaglePage.tsx#L599)。
 
 普通 ACCEPT 会改变人工标签关系，但该路径只重载向量工作区自己的本地数据、清理桌面媒体缓存；仅在 privacyChanged 时调用父级重置。它没有失效共享列表、详情和人工标签相关查询。
 
@@ -64,7 +66,7 @@ Query 页面只保留 ID，实体写入独立 Map。移除查询时只尝试销�
 
 ### F6 P3 评分写回与详情查询使用不同的键
 
-位置：[评分成功回写](../apps/web/src/components/eagle/useEagleMutations.ts#L103)、[详情查询](../apps/web/src/components/eagle/SekerEaglePage.tsx#L788)。
+位置：[评分成功回写](../../../apps/web/src/components/eagle/useEagleMutations.ts#L103)、[详情查询](../../../apps/web/src/components/eagle/SekerEaglePage.tsx#L788)。
 
 评分成功写入 `assetDetail(id)`，详情实际读取的是该键追加 libraryView 后的查询；随后只失效 assets。复现运行真实 mutation hook 后，短键数据变成版本 2，详情查询仍是版本 1。
 

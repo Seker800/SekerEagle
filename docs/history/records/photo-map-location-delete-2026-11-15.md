@@ -1,5 +1,7 @@
 # 地图位置行删除立即失效（2026-11-15）
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 ## 问题
 
 `20261114212500_photo_map_delete_keeps_snapshot` 把 `mark_photo_map_dirty()` 的所有 `DELETE` 都当作非敏感变化，只设置 `dirtyAt`。删除 `EaglePhotoLocation`／`EaglePhotoMetadata` 行（例如撤销照片代理的城市建议）会移除坐标，但 `visibilityVersion` 不提升，旧地图快照继续通过成员查询提供该位置，直到后台重建完成；成员查询只按 `EagleAsset.mediaRevision` 过滤，不会发现位置行已删除。

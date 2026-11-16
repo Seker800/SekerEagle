@@ -1,5 +1,7 @@
 # 2026-10-31 主干整合与生产发布
 
+> 状态：历史记录 | 归档日期：2026-11-16 | 不代表当前运行状态；现行事实读 [current-runtime](../../current-runtime.md)。
+
 核验时间：2026-10-31 15:56 +0800。用户授权检查全部代码、合并 main、推送并发布生产；没有改动 SekerChat。
 
 ## 主干与发布范围
@@ -38,6 +40,6 @@ NAS 维护目录 `maintenance/all-main-20261031` 保存 856434824 字节一致�
 
 若回退 API／网页，必须保留兼容 HANDOFF 的新 worker 和 operations。旧 API 内置执行器须禁用，避免旧代码处理新日志；不能用旧 worker 清理已接管对象，不能用历史数据库备份覆盖现用并发数据。精确回滚文件已保留，本次未触发回滚。
 
-存量其他接口的数量墙与成本仍按 [效率验收](asset-operation-efficiency-2026-10-31.md) 的剩余项记录，不声称全仓已无任何限制。推送时 GitHub 的跨生态依赖告警汇总不等于当前 npm 锁文件结果；本轮 npm 全图 audit 为零 high／critical、30 moderate／1 low，生产依赖图仅有 Vite 开发服务器中危，生产运行静态 nginx，未启动该开发服务器。本次没有把大版本依赖升级或 GitHub 所有告警清零冒充已完成。
+存量其他接口的数量墙与成本仍按 [效率验收](../plans/asset-operation-efficiency-2026-10-31.md) 的剩余项记录，不声称全仓已无任何限制。推送时 GitHub 的跨生态依赖告警汇总不等于当前 npm 锁文件结果；本轮 npm 全图 audit 为零 high／critical、30 moderate／1 low，生产依赖图仅有 Vite 开发服务器中危，生产运行静态 nginx，未启动该开发服务器。本次没有把大版本依赖升级或 GitHub 所有告警清零冒充已完成。
 
 本次源码 push 已按技能启动固定 `af2c7384…4ac84da6` 的独立后台审查，报告归本项目 `docs/deepseek-reviews/`。启动不等于通过，不等待它、不把它作为发布门禁、不自动采纳或递归修改。后续仅文档 push 同样按实际范围启动后台审查。
