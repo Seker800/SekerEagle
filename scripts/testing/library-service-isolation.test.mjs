@@ -12,6 +12,7 @@ import { PrismaClient } from '@prisma/client';
 import { NotFoundException } from '@nestjs/common';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { setEagleTrash } from '../../apps/api/dist/eagle/eagle-trash.js';
 import { EagleMediaService } from '../../apps/api/dist/eagle/eagle-media.service.js';
 import { EagleUploadService } from '../../apps/api/dist/eagle/eagle-upload.service.js';
 
@@ -84,12 +85,23 @@ async function fixtures() {
         lifecycleStatus: 'READY',
       },
     });
+  const service = (libraryMode) => {
+    const eagle = new EagleService(prisma, undefined, libraryMode);
+    // Keep the fixture's historical setTrash surface while exercising the shared primitive.
+    return Object.assign(eagle, {
+      setTrash: async (ownerId, assetIds, restore, includePrivate = false) => ({
+        affectedAssetCount: await prisma.$transaction((transaction) =>
+          setEagleTrash(transaction, { ownerId, libraryMode }, assetIds, restore, includePrivate),
+        ),
+      }),
+    });
+  };
   return {
     ownerId,
     material: await create('MATERIAL'),
     photo: await create('PHOTO'),
-    materials: new EagleService(prisma, undefined, 'MATERIAL'),
-    photos: new EagleService(prisma, undefined, 'PHOTO'),
+    materials: service('MATERIAL'),
+    photos: service('PHOTO'),
   };
 }
 

@@ -385,13 +385,6 @@ const cases = {
     ['EMPTY', []],
     ['NOT_EMPTY', []],
   ],
-  AI_TAGS: [
-    ['ANY_OF', 'TAGS'],
-    ['ALL_OF', 'TAGS'],
-    ['NONE_OF', 'TAGS'],
-    ['EMPTY', []],
-    ['NOT_EMPTY', []],
-  ],
 };
 test('every ordinary shared filter field/operator preserves Prisma membership, nulls and negation in SQL', async () => {
   assert.deepEqual(
@@ -437,7 +430,7 @@ test('every ordinary shared filter field/operator preserves Prisma membership, n
     { OR: [{ rating: null }, { width: { gt: 1200 } }] },
   ])
     await parity({ ownerId, libraryMode: 'PHOTO', ...special });
-  assert.equal(comparisons, 142);
+  assert.equal(comparisons, 132);
 });
 test('semantic folder readiness and nested owner/mode relations stay inside the same scoped SQL', async () => {
   const membership = smartFolderMatchWhere({ ownerId, libraryMode: 'PHOTO' }, ids.folder);

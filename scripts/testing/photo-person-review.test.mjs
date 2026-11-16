@@ -281,7 +281,6 @@ test('two thousand identities yield bounded recommendations including a target b
         : i === count - 1
           ? vector(0.8, 0.6)
           : [0, 0, ...Array.from({ length: 126 }, (_, j) => (j === i % 126 ? 1 : 0))],
-    name: i === count - 1 ? 'Last named identity' : null,
   }));
   try {
     await db.user.create({
