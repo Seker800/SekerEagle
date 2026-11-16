@@ -15,6 +15,8 @@ import { EagleProcessingService } from './eagle-processing.service';
 import { EagleTaskCenterService } from './eagle-task-center.service';
 import { EagleVectorService } from './eagle-vector.service';
 import { EagleService } from './eagle.service';
+import { LibraryManualTagService } from './library-manual-tag.service';
+import { LibrarySmartFolderService } from './library-smart-folder.service';
 import { EaglePrivacyService } from './eagle-privacy.service';
 import { EagleUploadService } from './eagle-upload.service';
 import { EagleUploadRecoveryService } from './eagle-upload-recovery.service';
@@ -38,7 +40,12 @@ export const EAGLE_LIBRARY_CAPABILITIES = [
   {
     id: 'assets',
     modes: ['MATERIAL', 'PHOTO'],
-    providers: [EagleService, EaglePrivacyService],
+    providers: [
+      EagleService,
+      EaglePrivacyService,
+      LibraryManualTagService,
+      LibrarySmartFolderService,
+    ],
     tables: [
       'EagleAsset',
       'EagleLibraryReadState',

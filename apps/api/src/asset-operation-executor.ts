@@ -24,6 +24,8 @@ import { objectStorageRuntimeOptions } from './config/runtime-config';
 import { EagleAssetOperationService } from './eagle/eagle-asset-operations.service';
 import { EagleLibraryTransferService } from './eagle/eagle-library-transfer.service';
 import { EagleService } from './eagle/eagle.service';
+import { LibraryManualTagService } from './eagle/library-manual-tag.service';
+import { LibrarySmartFolderService } from './eagle/library-smart-folder.service';
 import { AssetOperationBackground } from './asset-operation-background';
 import { EagleUploadService } from './eagle/eagle-upload.service';
 import { EagleUploadInspectionService } from './eagle/eagle-upload-inspection.service';
@@ -44,7 +46,13 @@ export function createAssetOperationExecutors(
 ) {
   return (['MATERIAL', 'PHOTO'] as const).map((mode) => {
     const commands = new LibraryCommandRegistry();
-    const eagle = new EagleService(prisma, undefined, mode);
+    const eagle = new EagleService(
+      prisma,
+      undefined,
+      mode,
+      new LibraryManualTagService(prisma, mode),
+      new LibrarySmartFolderService(prisma, mode),
+    );
     const transfers = new EagleLibraryTransferService(prisma, storage, mode);
     registerSharedLibraryCommands(commands, {
       eagle,
