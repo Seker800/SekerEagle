@@ -1,6 +1,6 @@
 # 接手入口（Start here）
 
-> 状态：现行 | 核验日期：2026-11-16 | 对应提交：319c087a
+> 状态：现行 | 核验日期：2026-11-16 | 对应提交：1cf41261
 >
 > 这份文档只回答三个问题：现在跑什么、先读什么、第一条命令是什么。具体设计边界见
 > [architecture](architecture.md)，现用部署事实见 [current-runtime](current-runtime.md)。

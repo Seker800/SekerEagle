@@ -1,6 +1,6 @@
 # 图库边界与能力归属门禁
 
-> 状态：现行 | 核验日期：2026-11-16 | 对应提交：319c087a
+> 状态：现行 | 核验日期：2026-11-16 | 对应提交：1cf41261
 
 现行契约见[架构北极星](architecture.md#north-star)。本文件描述可执行的门禁范围；历史变更保存在[归档](history/library-sharing-gate-through-2026-11-01.md)。上线状态只读[现用运行](current-runtime.md)。
 
