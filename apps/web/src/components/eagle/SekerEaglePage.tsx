@@ -53,12 +53,10 @@ import {
   lazy,
   useCallback,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
-  type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactNode,
@@ -71,6 +69,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
+
 import { readEagleSemanticIntent, toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
@@ -98,8 +97,8 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import sekerEagleLogo from '../../assets/seker-eagle-logo.svg';
-import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useEagleAssetPreview } from './useEagleAssetPreview';
+import { useEagleBrowseSession } from './useEagleBrowseSession';
 import {
   type EagleAsset,
   type EagleAssetListItem,
@@ -109,9 +108,8 @@ import {
   type EagleSmartFolder,
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
-import { canCopyImageToClipboard, copyImageToClipboard } from '../../lib/image-clipboard';
+import { canCopyImageToClipboard } from '../../lib/image-clipboard';
 import { EagleDownloadQueue } from './EagleDownloadQueue';
-import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import {
@@ -141,7 +139,6 @@ import { EagleSmartFolderTree } from './EagleSmartFolderTree';
 import {
   EagleQuickFilterBar,
   buildEagleQuickFilterQuery,
-  countActiveEagleQuickFilters,
   createEmptyEagleQuickFilterState,
 } from './EagleQuickFilterBar';
 import { EagleTagPage } from './EagleTagPage';
@@ -149,8 +146,8 @@ import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import type { EagleSelectionGesture } from './eagle-selection';
 import { useEagleMetadataDraft } from './useEagleMetadataDraft';
 import { useEagleSelectionController } from './useEagleSelectionController';
-import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
-import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
+import { isFileDrag } from './eagle-asset-drag';
+import { useEagleAssetTransferActions } from './useEagleAssetTransferActions';
 import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
 import {
   getEagleWorkspaceCache,
@@ -202,20 +199,6 @@ type EagleTagPickerState = {
   mode: 'add' | 'remove';
   assetIds: string[];
 };
-type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS' | 'TASKS';
-
-function getWorkspaceSection(view: EagleLibraryView): EagleWorkspaceSection | null {
-  if (view === 'MANUAL_TAGS') return 'TAGS';
-  if (view === 'PROCESSING') return 'TASKS';
-  if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED') {
-    return 'PENDING';
-  }
-  if (view === 'VECTOR_TAGS' || view === 'ACCOUNT') {
-    return 'SETTINGS';
-  }
-  return null;
-}
-
 function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceView | null {
   if (view === 'VECTOR_REVIEW') return 'REVIEW';
   if (view === 'VECTOR_TAGS') return 'TAGS';
@@ -268,29 +251,10 @@ function EagleWorkspaceNavigation({
 const EAGLE_PAGE_SIZE = 40;
 const ASSET_LIST_STALE_TIME_MS = 5 * 60000;
 const ASSET_LIST_GC_TIME_MS = 30 * 60000;
-const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
-const DEFAULT_THUMBNAIL_SIZE = 210;
-function readThumbnailSize(preferencesKey = EAGLE_PREFERENCES_KEY): number {
-  try {
-    const preferences: unknown = JSON.parse(window.localStorage.getItem(preferencesKey) ?? '{}');
-    const value =
-      typeof preferences === 'object' && preferences !== null && 'thumbnailSize' in preferences
-        ? preferences.thumbnailSize
-        : undefined;
-    return typeof value === 'number' && value >= 140 && value <= 320
-      ? value
-      : DEFAULT_THUMBNAIL_SIZE;
-  } catch {
-    return DEFAULT_THUMBNAIL_SIZE;
-  }
-}
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
-}
-function isFileDrag(event: DragEvent<HTMLElement>): boolean {
-  return event.dataTransfer?.types?.includes('Files') === true;
 }
 export function SekerEaglePage({
   modeSwitcher,
@@ -305,7 +269,6 @@ export function SekerEaglePage({
 }: SekerEaglePageProps) {
   const { libraryMode } = useLibraryWorkspace();
   const storeScope = JSON.stringify([ownerId, libraryMode]);
-  const preferencesKey = `${EAGLE_PREFERENCES_KEY}:${storeScope}`;
   const {
     api: {
       getEagleAsset,
@@ -338,31 +301,11 @@ export function SekerEaglePage({
   );
   const thumbnailLoadService = workspaceCache.thumbnails;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
-  const dragDepthRef = useRef(0);
-  const importDragActiveRef = useRef(false);
   const privacyStateRef = useRef(
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
-  const [photoView, setPhotoView] = useState<EaglePhotoView>(() =>
-    !privateVisible ? (workspaceCache.browse?.photoView ?? 'timeline') : 'timeline',
-  );
-  const [search, setSearch] = useState(() =>
-    privateVisible ? '' : (workspaceCache.browse?.search ?? ''),
-  );
-  const [libraryView, setLibraryView] = useState<EagleLibraryView>(() => {
-    const saved = !privateVisible ? workspaceCache.browse?.libraryView : undefined;
-    return saved && saved !== 'PRIVATE' ? saved : 'ACTIVE';
-  });
-  const [smartFolderOrder, setSmartFolderOrder] = useState<'DATE' | 'RELEVANCE'>(() =>
-    privateVisible ? 'DATE' : (workspaceCache.browse?.smartFolderOrder ?? 'DATE'),
-  );
-  const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(() =>
-    !privateVisible && libraryView === 'ACTIVE' && photoView === 'timeline'
-      ? (workspaceCache.browse?.activeSmartFolderId ?? null)
-      : null,
-  );
   const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false);
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
@@ -383,36 +326,51 @@ export function SekerEaglePage({
     clear: clearAssetSelection,
   } = selection;
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
-  const [filterResetKey, setFilterResetKey] = useState(0);
-  const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250, filterResetKey);
-  const [quickFilters, setQuickFilters] = useState(
-    () =>
-      (!privateVisible && workspaceCache.browse?.quickFilters) ||
-      createEmptyEagleQuickFilterState(),
-  );
-  const deferredQuickFilters = useDebouncedValue(quickFilters, 150, filterResetKey);
-  const filterInputsPending =
-    hashKey([quickFilters]) !== hashKey([deferredQuickFilters]) ||
-    search.normalize('NFKC').trim() !== deferredSearch;
-  const [filtersExpanded, setFiltersExpanded] = useState(
-    () => !privateVisible && (workspaceCache.browse?.filtersExpanded ?? false),
-  );
-  const filterPanelId = useId();
-  const [isInspectorVisible, setIsInspectorVisible] = useState(
-    () => !privateVisible && (workspaceCache.browse?.isInspectorVisible ?? false),
-  );
-  const [isDragging, setIsDragging] = useState(false);
-  const [originalFileError, setOriginalFileError] = useState<{
-    message: string;
-    id: number;
-  } | null>(null);
-  const [assetDragStatus, setAssetDragStatus] = useState<DesktopAssetDragStatus>(null);
-  const [isBatchDownloading, setIsBatchDownloading] = useState(false);
-  const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
-  const [assetActionError, setAssetActionError] = useState<string | null>(null);
+  const {
+    photoView,
+    setPhotoView,
+    search,
+    setSearch,
+    libraryView,
+    setLibraryView,
+    smartFolderOrder,
+    setSmartFolderOrder,
+    activeSmartFolderId,
+    setActiveSmartFolderId,
+    setFilterResetKey,
+    quickFilters,
+    setQuickFilters,
+    deferredSearch,
+    deferredQuickFilters,
+    filterInputsPending,
+    filtersExpanded,
+    setFiltersExpanded,
+    filterPanelId,
+    isInspectorVisible,
+    setIsInspectorVisible,
+    timelineCursor,
+    setTimelineCursor,
+    thumbnailSize,
+    setThumbnailSize,
+    activeFilterCount,
+    appliedFilterCount,
+    filterQuery,
+    workspaceSection,
+    isAssetView,
+    showsAssetControls,
+    isPhotoTimeline,
+    hasTimelineNavigation,
+  } = useEagleBrowseSession({
+    ownerId,
+    libraryMode,
+    privateVisible,
+    compact,
+    privacyRulesRevision,
+    workspaceCache,
+    selection,
+  });
   const [failedAssetAction, setFailedAssetAction] = useState<EagleAssetListItem | null>(null);
   const [failedAssetError, setFailedAssetError] = useState<string | null>(null);
-  const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
   const editingScope = `${storeScope}:${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
   const metadataDraft = useEagleMetadataDraft(editingScope);
   const imagePreview = useEagleAssetPreview(editingScope);
@@ -438,38 +396,6 @@ export function SekerEaglePage({
     dismissUploads,
     retryUpload,
   } = useEagleUploadController(accessToken, queryKeys.assets);
-  useEffect(() => {
-    window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize }));
-  }, [thumbnailSize, preferencesKey]);
-  useEffect(() => {
-    setOriginalFileError(null);
-    setAssetDragStatus(null);
-  }, [ownerId, libraryMode]);
-  useEffect(() => {
-    if (!originalFileError) return undefined;
-    const timer = window.setTimeout(() => setOriginalFileError(null), 6_000);
-    return () => window.clearTimeout(timer);
-  }, [originalFileError]);
-  const workspaceSection = getWorkspaceSection(libraryView);
-  const isAssetView =
-    libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
-  const showsAssetControls = libraryMode !== 'PHOTO' || photoView === 'timeline';
-  const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
-  const appliedFilterCount = countActiveEagleQuickFilters(deferredQuickFilters);
-  const filterQuery = useMemo(
-    () => buildEagleQuickFilterQuery(deferredQuickFilters),
-    [deferredQuickFilters],
-  );
-  const isPhotoTimeline =
-    libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH';
-  const hasTimelineNavigation =
-    isPhotoTimeline &&
-    !compact &&
-    libraryView === 'ACTIVE' &&
-    !deferredSearch &&
-    !activeFilterCount &&
-    !activeSmartFolderId;
-  const [timelineCursor, setTimelineCursor] = useState('');
   const assetLocator = useEagleAssetLocation({
     getLocation: getEagleAssetLocation,
     scopeKey: `${storeScope}:${privateVisible}:${privacyRulesRevision}`,
@@ -515,16 +441,6 @@ export function SekerEaglePage({
     assetLocator.clearLocation,
   ]);
 
-  useEffect(() => {
-    setTimelineCursor('');
-  }, [
-    deferredSearch,
-    activeFilterCount,
-    activeSmartFolderId,
-    privateVisible,
-    privacyRulesRevision,
-    libraryView,
-  ]);
   const timelineIndex = usePhotoTimeline(
     hasTimelineNavigation,
     queryKeys.assets,
@@ -546,39 +462,6 @@ export function SekerEaglePage({
   const assetViewport = useEagleAssetViewport(hashKey(listKey), workspaceCache.scrollPositions);
   const assetViewportRef = assetViewport.elementRef;
   const { scrollTop, viewportHeight } = assetViewport;
-  useEffect(() => {
-    if (!privateVisible && libraryView !== 'PRIVATE') {
-      workspaceCache.browse = {
-        search,
-        quickFilters,
-        activeSmartFolderId,
-        smartFolderOrder,
-        libraryView,
-        photoView,
-        filtersExpanded,
-        selectedAssetIds,
-        selectedAssetId,
-        isInspectorVisible,
-        isBatchSelection,
-        selectionMode,
-      };
-    }
-  }, [
-    workspaceCache,
-    privateVisible,
-    libraryView,
-    search,
-    quickFilters,
-    activeSmartFolderId,
-    smartFolderOrder,
-    photoView,
-    filtersExpanded,
-    selectedAssetIds,
-    selectedAssetId,
-    isInspectorVisible,
-    isBatchSelection,
-    selectionMode,
-  ]);
   const assetStore = workspaceCache.store;
   useEffect(() => workspaceCache.retain(privateVisible), [workspaceCache, privateVisible]);
   const assetStoreRevision = useSyncExternalStore(
@@ -1208,6 +1091,39 @@ export function SekerEaglePage({
       assetId,
       gesture,
     );
+  const {
+    desktopAssetDragBridge,
+    assetDragSession,
+    isDragging,
+    originalFileError,
+    setOriginalFileError,
+    assetDragStatus,
+    isBatchDownloading,
+    assetActionPending,
+    assetActionError,
+    setAssetActionError,
+    saveSelectedOriginal,
+    copySelectedImage,
+    handleAssetDragStart,
+    batchDownloadSelectedOriginals,
+    handleAssetDragEnd,
+    handleDragEnter,
+    handleDragLeave,
+    handleDrop,
+  } = useEagleAssetTransferActions({
+    libraryMode,
+    libraryView,
+    ownerId,
+    accessToken,
+    assets,
+    selectedAssetIds,
+    contextMenuAsset,
+    workspaceCache,
+    getEagleAsset,
+    selectAsset,
+    setAssetContextMenu,
+    importFiles,
+  });
   useEffect(() => {
     if (tagPicker) return undefined;
     if (!selectionMode && !isBatchSelection && !assetContextMenu) return undefined;
@@ -1252,141 +1168,6 @@ export function SekerEaglePage({
       y: Math.max(8, Math.min(y, window.innerHeight - 280)),
     });
   };
-  const desktopAssetDragBridge = useMemo(
-    () => getDesktopAssetDragBridge(libraryMode),
-    [libraryMode],
-  );
-  const assetDragSession = useMemo(
-    () =>
-      desktopAssetDragBridge
-        ? new DesktopAssetDragSession(
-            desktopAssetDragBridge,
-            (error) => {
-              setAssetDragStatus(null);
-              const message = error instanceof Error ? error.message : t('原文件拖出失败。');
-              setOriginalFileError((current) => ({
-                message,
-                id: (current?.id ?? 0) + 1,
-              }));
-            },
-            setAssetDragStatus,
-          )
-        : null,
-    [desktopAssetDragBridge, ownerId],
-  );
-  useEffect(
-    () => () => {
-      assetDragSession?.reset();
-    },
-    [assetDragSession],
-  );
-  useEffect(() => {
-    if (!assetDragSession) return undefined;
-    const endPendingGesture = () => {
-      if (!assetDragSession.hasNativeDragStarted()) assetDragSession.end('cancelled');
-    };
-    window.addEventListener('pointerup', endPendingGesture, true);
-    window.addEventListener('pointercancel', endPendingGesture, true);
-    return () => {
-      window.removeEventListener('pointerup', endPendingGesture, true);
-      window.removeEventListener('pointercancel', endPendingGesture, true);
-    };
-  }, [assetDragSession]);
-  const getDragAssetIds = (assetId: string) =>
-    getAssetDragIds({
-      orderedIds: assets.map((asset) => asset.id),
-      selectedIds: selectedAssetIds,
-      draggedId: assetId,
-    });
-  const queueOriginalDownloads = async (selected: EagleAssetListItem[]) => {
-    const epoch = workspaceCache.downloads.epoch;
-    const originals = new Map(selected.map((asset) => [asset.id, asset]));
-    for (const asset of selected) {
-      const id = asset.livePhotoMotion?.assetId;
-      if (id && !originals.has(id)) originals.set(id, await getEagleAsset(accessToken, id));
-    }
-    if (epoch !== workspaceCache.downloads.epoch)
-      throw new DOMException('Scope revoked', 'AbortError');
-    return downloadOriginalFiles([...originals.values()], {
-      queueBrowserDownloads: (items) => workspaceCache.downloads.enqueue(items),
-    });
-  };
-  const saveSelectedOriginal = () => {
-    if (!contextMenuAsset || assetActionPending) return;
-    setAssetActionPending('save');
-    setAssetActionError(null);
-    const download = contextMenuAsset.livePhotoMotion
-      ? queueOriginalDownloads([contextMenuAsset])
-      : saveOriginalFile(contextMenuAsset);
-    void download.then(
-      () => {
-        setAssetActionPending(null);
-        setAssetContextMenu(null);
-      },
-      () => {
-        setAssetActionPending(null);
-        setAssetActionError(
-          t('另存原文件失败{{value1}}', {
-            value1: t('，请重试。'),
-          }),
-        );
-      },
-    );
-  };
-  const copySelectedImage = () => {
-    const previewUrl = contextMenuAsset ? getEaglePreviewContentUrl(contextMenuAsset) : null;
-    if (!contextMenuAsset?.mimeType.startsWith('image/') || !previewUrl || assetActionPending) {
-      return;
-    }
-    setAssetActionPending('copy');
-    setAssetActionError(null);
-    void copyImageToClipboard(previewUrl).then(
-      () => {
-        setAssetActionPending(null);
-        setAssetContextMenu(null);
-      },
-      (error: unknown) => {
-        setAssetActionPending(null);
-        const detail = error instanceof Error ? `：${error.message}` : t('，请重试。');
-        setAssetActionError(
-          t('复制图片失败{{value1}}', {
-            value1: detail,
-          }),
-        );
-      },
-    );
-  };
-  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
-    event.preventDefault();
-    if (!assetDragSession || libraryView === 'TRASH') return;
-    const assetIds = getDragAssetIds(assetId);
-    if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
-    setAssetContextMenu(null);
-    setOriginalFileError(null);
-    assetDragSession.begin(assetIds);
-  };
-  const batchDownloadSelectedOriginals = () => {
-    if (isBatchDownloading) return;
-    const selected = new Set(selectedAssetIds);
-    const selectedAssets = assets.filter((asset) => selected.has(asset.id));
-    if (selectedAssets.length < 2) return;
-    setIsBatchDownloading(true);
-    setOriginalFileError(null);
-    void queueOriginalDownloads(selectedAssets).then(
-      () => {
-        setAssetContextMenu(null);
-        setIsBatchDownloading(false);
-      },
-      () => {
-        setAssetContextMenu(null);
-        setIsBatchDownloading(false);
-        setOriginalFileError((current) => ({
-          message: t('批量下载原文件失败。'),
-          id: (current?.id ?? 0) + 1,
-        }));
-      },
-    );
-  };
   const locationId = assetLocator.location?.assetId;
   const locationCoverId =
     (locationId ? photoStacksByAsset.get(locationId)?.cover.id : undefined) ??
@@ -1404,11 +1185,6 @@ export function SekerEaglePage({
     const items = context ?? (assetsById.has(asset.id) ? [] : [asset]);
     if (imagePreview.open(asset, items, photoStacksByAsset.has(asset.id)) === 'image')
       preloadEagleImageViewer();
-  };
-  const handleAssetDragEnd = () => {
-    assetDragSession?.end();
-    dragDepthRef.current = 0;
-    setIsDragging(false);
   };
   const handleAssetDoubleClick = (asset: EagleAssetListItem) => {
     if (!selectionMode) openAssetPreview(asset);
@@ -1473,41 +1249,6 @@ export function SekerEaglePage({
   const showAssetsForTag = (tagId: string) => {
     changeLibraryView('ACTIVE');
     setQuickFilters({ ...createEmptyEagleQuickFilterState(), manualTagIds: [tagId] });
-  };
-  const handleDragEnter = (event: DragEvent<HTMLElement>) => {
-    if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
-    if (assetDragSession?.isOutboundDrag()) return;
-    if (!isFileDrag(event)) return;
-    event.preventDefault();
-    importDragActiveRef.current = true;
-    dragDepthRef.current += 1;
-    setIsDragging(true);
-  };
-  const handleDragLeave = (event: DragEvent<HTMLElement>) => {
-    if (!importDragActiveRef.current) return;
-    event.preventDefault();
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) {
-      importDragActiveRef.current = false;
-      setIsDragging(false);
-    }
-  };
-  const handleDrop = (event: DragEvent<HTMLElement>) => {
-    if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
-    if (assetDragSession?.isOutboundDrag()) {
-      event.preventDefault();
-      assetDragSession.end();
-      importDragActiveRef.current = false;
-      dragDepthRef.current = 0;
-      setIsDragging(false);
-      return;
-    }
-    if (!isFileDrag(event) && event.dataTransfer.files.length === 0) return;
-    event.preventDefault();
-    importDragActiveRef.current = false;
-    dragDepthRef.current = 0;
-    setIsDragging(false);
-    void importFiles([...event.dataTransfer.files]);
   };
   const peopleOptionsAction =
     libraryMode === 'PHOTO' ? (

@@ -1,3 +1,4 @@
+import type { DragEvent } from 'react';
 import type { LibraryMode } from '../../lib/library-api-scope';
 import type { SekerDesktopBridge } from '../../lib/media-resolver';
 
@@ -8,6 +9,10 @@ export type DesktopAssetDragBridge = Required<
     SekerDesktopBridge,
     'cancelAssetDragPreparation' | 'discardPreparedAssetDrag' | 'onAssetDragPreparationProgress'
   >;
+
+export function isFileDrag(event: DragEvent<HTMLElement>): boolean {
+  return event.dataTransfer?.types?.includes('Files') === true;
+}
 
 export function getDesktopAssetDragBridge(
   libraryMode: LibraryMode = 'MATERIAL',
