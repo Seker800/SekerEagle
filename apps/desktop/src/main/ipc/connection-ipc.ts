@@ -26,8 +26,7 @@ export function registerConnectionIpc(ctx: DesktopContext, owner: AuthenticatedO
   ipcMain.handle('desktop:retry-connections', async (event) => {
     ctx.assertConnectionPageSender(event);
     const snapshot = await ctx.currentConnectionService().retry();
-    if (snapshot.active)
-      setTimeout(() => void applyConnection(ctx, snapshot, owner), 0).unref();
+    if (snapshot.active) setTimeout(() => void applyConnection(ctx, snapshot, owner), 0).unref();
     return snapshot;
   });
   ipcMain.handle('desktop:save-connections', async (event, input: unknown) => {

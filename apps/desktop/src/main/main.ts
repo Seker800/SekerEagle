@@ -152,18 +152,20 @@ if (hasSingleInstanceLock)
     const originalDragExporter = new OriginalDragExporter({
       rootPath: path.join(app.getPath('temp'), 'SekerEagle', 'OriginalDrag'),
       fetchOriginal: (assetId, signal, libraryMode) =>
-        ctx.currentBrowserSession().fetch(
-          `/api/${libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${assetId}/original`,
-          {
-            credentials: 'include',
-            signal,
-            headers: {
-              accept: 'application/octet-stream',
-              'accept-encoding': 'identity',
-              'cache-control': 'no-store',
+        ctx
+          .currentBrowserSession()
+          .fetch(
+            `/api/${libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${assetId}/original`,
+            {
+              credentials: 'include',
+              signal,
+              headers: {
+                accept: 'application/octet-stream',
+                'accept-encoding': 'identity',
+                'cache-control': 'no-store',
+              },
             },
-          },
-        ),
+          ),
     });
     await originalDragExporter.cleanupExpired().catch(() => undefined);
     ctx.clearPreparedOriginalDrags = registerOriginalDragIpc(ctx, owner, originalDragExporter);
@@ -184,11 +186,7 @@ if (hasSingleInstanceLock)
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         const active = ctx.connectionService?.current()?.active;
-        createWindow(
-          ctx,
-          active ? active.url : connectionPageUrl(ctx.desktopLocale),
-          owner,
-        );
+        createWindow(ctx, active ? active.url : connectionPageUrl(ctx.desktopLocale), owner);
       }
     });
   });

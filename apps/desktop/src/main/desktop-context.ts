@@ -64,7 +64,11 @@ export class DesktopContext {
 
   assertConnectionPageSender(event: IpcMainInvokeEvent): void {
     const senderUrl = event.senderFrame?.url;
-    if (event.sender !== this.mainWindow?.webContents || !senderUrl || !isConnectionPageUrl(senderUrl)) {
+    if (
+      event.sender !== this.mainWindow?.webContents ||
+      !senderUrl ||
+      !isConnectionPageUrl(senderUrl)
+    ) {
       throw new Error('拒绝不受信任的连接配置调用。');
     }
   }

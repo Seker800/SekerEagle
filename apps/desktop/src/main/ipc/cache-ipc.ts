@@ -2,7 +2,11 @@ import { ipcMain, shell } from 'electron';
 import type { AuthenticatedOwner } from '../authenticated-owner';
 import type { DesktopContext } from '../desktop-context';
 import type { DesktopSettingsStore } from '../desktop-settings';
-import { accountCacheNamespaces, readAccountCacheStats, removeAccountCache } from '../account-media-cache';
+import {
+  accountCacheNamespaces,
+  readAccountCacheStats,
+  removeAccountCache,
+} from '../account-media-cache';
 import { availableBytesForPath, ensureCacheDirectory } from '../cache-filesystem';
 import { currentCache, currentDesktopCacheRoot, setCacheLimitBytes } from '../cache-process';
 import { emptyCacheRequestStats } from '../media-cache-controller';

@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type NativeImage } from 'electron';
+import {
+  app,
+  ipcMain,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  type NativeImage,
+} from 'electron';
 import type { AuthenticatedOwner } from '../authenticated-owner';
 import type { DesktopContext } from '../desktop-context';
 import { buildNamespaceId } from '../../shared/media-identity';
