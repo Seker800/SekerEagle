@@ -132,6 +132,79 @@ describe('LibraryUploadQueue', () => {
     queue.dispose();
   });
 
+  it('marks pre-upload duplicates as skipped and keeps the file out of the upload path', async () => {
+    const queue = createQueue();
+    const run = vi.fn(async () => ({ duplicate: true }));
+    await queue.add([file('duplicate.jpg')], assetsKey, run);
+    expect(queue.snapshot()[0].state).toBe('duplicate');
+    expect(run).toHaveBeenCalledOnce();
+    queue.dispose();
+  });
+
+  it('shows a server-detected duplicate as skipped after finalization', async () => {
+    vi.useFakeTimers();
+    const queue = createQueue();
+    const poll = vi.fn<UploadStatusPoll>(async (ids) =>
+      ids.map((id) =>
+        status(id, {
+          status: 'COMPLETED',
+          eagleAssetId: `asset-${id}`,
+          objectCleanupPending: true,
+        }),
+      ),
+    );
+    const run = vi.fn(async () => ({ sessionId: 'session-duplicate' }));
+    const done = queue.add([file('duplicate.jpg')], assetsKey, run, poll);
+    await vi.advanceTimersByTimeAsync(1_500);
+    await done;
+    expect(queue.snapshot()[0].state).toBe('duplicate');
+    queue.dispose();
+  });
+
+  it('pauses between files and resumes without restarting the batch', async () => {
+    const queue = createQueue();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started: string[] = [];
+    const run = vi.fn(async (input: File) => {
+      started.push(input.name);
+      await gate;
+    });
+    const done = queue.add(
+      Array.from({ length: UPLOAD_FILE_CONCURRENCY + 2 }, (_, index) => file(`p${index}.jpg`)),
+      assetsKey,
+      run,
+    );
+    await vi.waitFor(() => expect(started).toHaveLength(UPLOAD_FILE_CONCURRENCY));
+    queue.pauseAll();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(started).toHaveLength(UPLOAD_FILE_CONCURRENCY);
+    expect(queue.paused).toBe(true);
+    queue.resumeAll();
+    await done;
+    expect(started).toHaveLength(UPLOAD_FILE_CONCURRENCY + 2);
+    expect(queue.snapshot().every((item) => item.state === 'completed')).toBe(true);
+    queue.dispose();
+  });
+
+  it('retries every failed file in one action', async () => {
+    const queue = createQueue();
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('连接断开'))
+      .mockRejectedValueOnce(new Error('连接断开'))
+      .mockResolvedValue(undefined);
+    await queue.add([file('a.jpg'), file('b.jpg')], assetsKey, run);
+    expect(queue.snapshot().every((item) => item.state === 'failed')).toBe(true);
+    await queue.retryAllFailed();
+    expect(run).toHaveBeenCalledTimes(4);
+    expect(queue.snapshot().every((item) => item.state === 'completed')).toBe(true);
+    queue.dispose();
+  });
+
   it('surfaces a terminal finalization failure without re-uploading', async () => {
     vi.useFakeTimers();
     const queue = createQueue();

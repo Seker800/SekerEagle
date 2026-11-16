@@ -180,6 +180,7 @@ vi.mock('../../lib/eagle-api', () => {
     updateEagleAsset: (...args: unknown[]) => updateEagleAssetMock(...args),
     batchUpdateEagleAssets: (...args: unknown[]) => batchUpdateEagleAssetsMock(...args),
     uploadEagleAsset: (...args: unknown[]) => uploadEagleAssetMock(...args),
+    checkEagleUploadContentBatch: async () => [],
     listEagleSmartFolders: (...args: unknown[]) => listEagleSmartFoldersMock(...args),
     createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
     updateEagleSmartFolder: (...args: unknown[]) => updateEagleSmartFolderMock(...args),

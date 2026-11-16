@@ -1,5 +1,4 @@
 import { hashKey, type QueryKey } from '@tanstack/react-query';
-import { mapWithConcurrency } from './async-pool';
 import { getBrowserSessionSignal } from './api-client';
 import type { EagleUploadSessionStatus } from './eagle-api';
 import { t } from '../i18n';
@@ -10,19 +9,26 @@ export interface EagleUploadItem {
   name: string;
   size: number;
   percent: number;
-  state: 'queued' | 'uploading' | 'uploaded' | 'completed' | 'failed';
+  state: 'queued' | 'checking' | 'uploading' | 'uploaded' | 'duplicate' | 'completed' | 'failed';
   phase?: 'validating';
   error?: string;
 }
 export interface UploadFinalization {
   sessionId: string;
 }
+export interface UploadOutcome extends Partial<UploadFinalization> {
+  duplicate?: boolean;
+}
+export type UploadProgress = (value: {
+  percent: number;
+  phase?: 'checking' | 'validating';
+}) => void;
 export type UploadStatusPoll = (
   sessionIds: string[],
   signal: AbortSignal,
 ) => Promise<EagleUploadSessionStatus[]>;
 type Job = {
-  run: (signal: AbortSignal) => Promise<UploadFinalization | void>;
+  run: (signal: AbortSignal) => Promise<UploadOutcome | void>;
   key: QueryKey;
   pending: boolean;
 };
@@ -49,6 +55,8 @@ export class LibraryUploadQueue {
   #waiters: FinalizationWaiter[] = [];
   #active = new Set<number>();
   #releaseRetain?: () => void;
+  #paused = false;
+  #resumeWaiters: Array<() => void> = [];
   constructor(
     private readonly invalidate: (key: QueryKey) => Promise<unknown>,
     private readonly retain: () => () => void,
@@ -75,6 +83,8 @@ export class LibraryUploadQueue {
     this.#jobs.clear();
     this.#active.clear();
     this.#pendingFinalizations.clear();
+    this.#paused = false;
+    this.#resumeWaiters.splice(0).forEach((resume) => resume());
     this.#resolveWaiters();
     if (this.#pollTimer !== undefined) clearTimeout(this.#pollTimer);
     this.#pollTimer = undefined;
@@ -86,14 +96,34 @@ export class LibraryUploadQueue {
     this.#session.removeEventListener('abort', this.clear);
     this.clear();
   }
+  get paused() {
+    return this.#paused;
+  }
+  pauseAll = () => {
+    if (this.#paused) return;
+    this.#paused = true;
+    this.#publish([...this.#items]);
+  };
+  resumeAll = () => {
+    if (!this.#paused) return;
+    this.#paused = false;
+    this.#resumeWaiters.splice(0).forEach((resume) => resume());
+    this.#publish([...this.#items]);
+  };
+  retryAllFailed = (scope?: string) =>
+    this.enqueue(
+      this.#items
+        .filter((item) => item.state === 'failed' && (!scope || item.scope === scope))
+        .map((item) => item.id),
+    );
   add(
     files: File[],
     key: QueryKey,
     run: (
       file: File,
-      progress: (value: { percent: number; phase?: 'validating' }) => void,
+      progress: UploadProgress,
       signal: AbortSignal,
-    ) => Promise<UploadFinalization | void>,
+    ) => Promise<UploadOutcome | void>,
     poll?: UploadStatusPoll,
   ) {
     this.#session.throwIfAborted();
@@ -107,10 +137,14 @@ export class LibraryUploadQueue {
           run(
             file,
             (progress) =>
-              this.#update(id, {
-                percent: progress.percent,
-                ...(progress.phase ? { phase: progress.phase } : {}),
-              }),
+              this.#update(
+                id,
+                progress.phase === 'checking'
+                  ? { state: 'checking', percent: 0, phase: undefined }
+                  : progress.phase === 'validating'
+                    ? { state: 'uploaded', percent: 100, phase: 'validating' }
+                    : { state: 'uploading', percent: progress.percent },
+              ),
             signal,
           ),
       });
@@ -143,30 +177,43 @@ export class LibraryUploadQueue {
     // Upload slots advance as soon as bytes are accepted. Finalization is tracked
     // separately so a queued server-side check never idles a transfer slot.
     const transfer = this.#tail.then(async () => {
-      await mapWithConcurrency(ready, UPLOAD_FILE_CONCURRENCY, async (id) => {
-        const job = this.#jobs.get(id);
-        if (signal.aborted || !job) return;
-        this.#update(id, { state: 'uploading' });
-        try {
-          const outcome = await job.run(signal);
-          signal.throwIfAborted();
-          keys.set(hashKey(job.key), job.key);
-          if (outcome?.sessionId) {
-            this.#pendingFinalizations.set(id, {
-              sessionId: outcome.sessionId,
-              deadline: Date.now() + FINALIZATION_DEADLINE_MS,
-            });
-            this.#update(id, { state: 'uploaded', percent: 100, phase: undefined });
-            this.#schedulePoll();
-          } else {
-            this.#finish(id, 'completed');
+      let next = 0;
+      const worker = async () => {
+        for (;;) {
+          await this.#waitWhilePaused(signal);
+          if (signal.aborted) return;
+          const id = ready[next];
+          next += 1;
+          if (id === undefined) return;
+          const job = this.#jobs.get(id);
+          if (!job) continue;
+          this.#update(id, { state: 'uploading', percent: 0, phase: undefined });
+          try {
+            const outcome = await job.run(signal);
+            signal.throwIfAborted();
+            keys.set(hashKey(job.key), job.key);
+            if (outcome?.duplicate) {
+              this.#finish(id, 'duplicate');
+            } else if (outcome?.sessionId) {
+              this.#pendingFinalizations.set(id, {
+                sessionId: outcome.sessionId,
+                deadline: Date.now() + FINALIZATION_DEADLINE_MS,
+              });
+              this.#update(id, { state: 'uploaded', percent: 100, phase: undefined });
+              this.#schedulePoll();
+            } else {
+              this.#finish(id, 'completed');
+            }
+          } catch (error) {
+            if (!signal.aborted) this.#finish(id, 'failed', errorMessage(error));
+          } finally {
+            job.pending = false;
           }
-        } catch (error) {
-          if (!signal.aborted) this.#finish(id, 'failed', errorMessage(error));
-        } finally {
-          job.pending = false;
         }
-      });
+      };
+      await Promise.all(
+        Array.from({ length: Math.min(UPLOAD_FILE_CONCURRENCY, ready.length) }, worker),
+      );
     });
     this.#tail = transfer.catch(() => undefined);
     const settled = transfer
@@ -188,14 +235,40 @@ export class LibraryUploadQueue {
     ids.forEach((id) => this.#jobs.delete(id));
     this.#publish(this.#items.filter((item) => !ids.has(item.id)));
   }
-  #finish(id: number, state: 'completed' | 'failed', error?: string) {
+  #finish(id: number, state: 'completed' | 'duplicate' | 'failed', error?: string) {
     this.#pendingFinalizations.delete(id);
     this.#active.delete(id);
-    if (state === 'completed') this.#jobs.delete(id);
+    if (state !== 'failed') this.#jobs.delete(id);
     this.#update(id, {
       state,
-      ...(state === 'completed' ? { percent: 100 } : {}),
+      ...(state !== 'failed' ? { percent: 100 } : {}),
       ...(error ? { error } : {}),
+    });
+    // A paused queue with nothing left to transfer must not silently pause new imports later.
+    if (!this.#active.size && this.#paused) {
+      this.#paused = false;
+      this.#resumeWaiters.splice(0).forEach((resume) => resume());
+      this.#publish([...this.#items]);
+    }
+  }
+  #waitWhilePaused(signal: AbortSignal) {
+    if (!this.#paused) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const resume = () => {
+        cleanup();
+        resolve();
+      };
+      const onAbort = () => {
+        cleanup();
+        resolve();
+      };
+      const cleanup = () => {
+        const index = this.#resumeWaiters.indexOf(resume);
+        if (index >= 0) this.#resumeWaiters.splice(index, 1);
+        signal.removeEventListener('abort', onAbort);
+      };
+      this.#resumeWaiters.push(resume);
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
   #waitForFinalizations(ids: number[]) {
@@ -243,7 +316,7 @@ export class LibraryUploadQueue {
         if (!this.#pendingFinalizations.has(itemId)) continue;
         const status = byId.get(pending.sessionId);
         if (status?.status === 'COMPLETED' && status.eagleAssetId) {
-          this.#finish(itemId, 'completed');
+          this.#finish(itemId, status.objectCleanupPending ? 'duplicate' : 'completed');
         } else if (status?.status === 'ABORTED') {
           this.#finish(itemId, 'failed', status.lastError || t('上传文件校验已取消。'));
         } else if (

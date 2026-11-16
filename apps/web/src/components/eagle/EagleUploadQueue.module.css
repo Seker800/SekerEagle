@@ -1,36 +1,144 @@
 .queue {
   margin: 8px 0;
-  padding: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--ui-line);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: var(--ui-surface, transparent);
   font-size: 12px;
 }
-.queue header,
-.queue li {
+.header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
 }
-.queue header {
-  justify-content: space-between;
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--ui-line);
+  font-variant-numeric: tabular-nums;
+}
+.status {
+  color: var(--ui-muted, inherit);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.actions button {
+  padding: 3px 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.actions button:hover:not(:disabled) {
+  background: var(--ui-line);
+}
+.actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.overall {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.overall progress {
+  flex: 1;
+  height: 8px;
+}
+.percent {
+  min-width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.speed {
+  min-width: 150px;
+  text-align: right;
+  color: var(--ui-muted, inherit);
+  font-variant-numeric: tabular-nums;
+}
+.counts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  color: var(--ui-muted, inherit);
+  font-variant-numeric: tabular-nums;
+}
+.counts span:first-child {
+  color: inherit;
+  font-weight: 600;
+}
+.hint {
+  margin: 6px 0 0;
+  color: var(--ui-muted, inherit);
 }
 .queue ul {
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
-  max-height: 180px;
+  margin: 10px 0 0;
+  max-height: 220px;
   overflow: auto;
 }
 .queue li {
-  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--ui-line);
+}
+.queue li:first-child {
+  border-top: none;
 }
 .name {
-  max-width: 220px;
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.queue progress {
+.size {
+  min-width: 62px;
+  color: var(--ui-muted, inherit);
+  font-variant-numeric: tabular-nums;
+}
+.queue li progress {
   width: 120px;
+}
+.stateText {
+  min-width: 96px;
+}
+.failedText {
+  min-width: 96px;
+  color: var(--ui-danger, inherit);
+}
+.error {
+  color: var(--ui-danger, inherit);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 260px;
+}
+.queue li button {
+  padding: 2px 9px;
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }

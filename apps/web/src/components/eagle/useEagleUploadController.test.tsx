@@ -4,18 +4,26 @@ import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import { useEagleUploadController } from './useEagleUploadController';
-const { material, photo, statuses } = vi.hoisted(() => ({
+const { material, photo, statuses, dedupeCheck } = vi.hoisted(() => ({
   material: vi.fn(),
   photo: vi.fn(),
   statuses: vi.fn(),
+  dedupeCheck: vi.fn(async () => ({ sha256: 'a'.repeat(64), exists: false })),
 }));
 vi.mock('../../lib/eagle-api', () => ({
   uploadEagleAsset: material,
   getEagleUploadStatuses: statuses,
+  checkEagleUploadContentBatch: vi.fn(async () => []),
   createEagleApi: (mode: string) => ({
     uploadEagleAsset: mode === 'PHOTO' ? photo : material,
     getEagleUploadStatuses: statuses,
+    checkEagleUploadContentBatch: vi.fn(async () => []),
   }),
+}));
+vi.mock('../../lib/upload-dedupe', () => ({
+  UploadDedupeChecker: class {
+    check = dedupeCheck;
+  },
 }));
 it('pins every file of a drag batch to the mode at drop time, including queued files after switching modes', async () => {
   let release!: () => void;
@@ -58,6 +66,30 @@ it('pins every file of a drag batch to the mode at drop time, including queued f
   expect(photo).toHaveBeenCalledOnce();
 });
 
+it('skips a file found by the pre-upload check without calling the upload API', async () => {
+  dedupeCheck.mockResolvedValueOnce({ sha256: 'b'.repeat(64), exists: true });
+  material.mockReset();
+  material.mockResolvedValue({});
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const view = renderHook(
+    () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
+    { wrapper },
+  );
+  await act(async () => {
+    await view.result.current.importFiles([new File(['same'], 'same.jpg')]);
+  });
+  expect(material).not.toHaveBeenCalled();
+  expect(view.result.current.uploads[0]?.state).toBe('duplicate');
+  expect(view.result.current.summary.duplicate).toBe(1);
+});
+
 it('keeps independent file progress, all failures and a dismissible success summary', async () => {
   const client = new QueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -96,14 +128,14 @@ it('keeps independent file progress, all failures and a dismissible success summ
     await pending;
   });
   expect(view.result.current.uploads.every((item) => item.state === 'completed')).toBe(true);
-  expect(view.result.current.uploadStatus).toContain('2/2');
+  expect(view.result.current.summary.completed).toBe(2);
   act(() => view.result.current.dismissUploads());
   expect(view.result.current.uploads).toHaveLength(0);
   await act(async () => {
     await view.result.current.importFiles([]);
     await view.result.current.retryUpload(-1);
   });
-  expect(view.result.current.uploadStatus).toBeNull();
+  expect(view.result.current.summary.total).toBe(0);
   material.mockRejectedValue(new Error('网络断开'));
   await act(async () => {
     await view.result.current.importFiles([new File(['c'], 'c.jpg'), new File(['d'], 'd.jpg')]);

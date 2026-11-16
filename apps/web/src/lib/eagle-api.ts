@@ -139,6 +139,11 @@ export interface EagleUploadAccepted {
   duplicate?: boolean;
 }
 
+export interface EagleUploadContentCheckItem {
+  contentSha256: string;
+  size: number;
+}
+
 const UPLOAD_PART_CONCURRENCY = 3;
 
 export interface EagleAssetFilters {
@@ -669,6 +674,18 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }).then((result) => result.items);
   }
 
+  function checkEagleUploadContentBatch(
+    _token: string,
+    items: EagleUploadContentCheckItem[],
+    signal?: AbortSignal,
+  ): Promise<boolean[]> {
+    return api<{ exists: boolean[] }>('/eagle/uploads/check-content-batch', {
+      method: 'POST',
+      body: JSON.stringify({ items }),
+      signal,
+    }).then((result) => result.exists);
+  }
+
   type UploadOptions = {
     duplicatePolicy?: 'CREATE_COPY';
     signal?: AbortSignal;
@@ -677,6 +694,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     editRecipe?: PhotoEditRecipe;
     retry?: boolean;
     waitForFinalization?: boolean;
+    contentSha256?: string;
   };
   function uploadEagleAsset(
     _token: string,
@@ -731,6 +749,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
               (file.type || 'application/octet-stream'),
             size: file.size,
             ...(options ? { duplicatePolicy: options.duplicatePolicy } : {}),
+            ...(options?.contentSha256 ? { contentSha256: options.contentSha256 } : {}),
             ...(options?.copySourceAssetId
               ? {
                   copySourceAssetId: options.copySourceAssetId,
@@ -937,6 +956,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     getBatchEaglePhotoEditContext,
     uploadEagleAsset,
     getEagleUploadStatuses,
+    checkEagleUploadContentBatch,
     getEagleAssetContentUrl,
     getEaglePyramidDescriptor,
     getEagleRenditionContentUrl,
@@ -984,6 +1004,7 @@ export const {
   getBatchEaglePhotoEditContext,
   uploadEagleAsset,
   getEagleUploadStatuses,
+  checkEagleUploadContentBatch,
   getEagleAssetContentUrl,
   getEaglePyramidDescriptor,
   getEagleRenditionContentUrl,

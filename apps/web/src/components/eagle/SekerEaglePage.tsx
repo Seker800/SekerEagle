@@ -424,8 +424,16 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     photoEditing.open(asset);
   };
-  const { importFiles, uploadStatus, uploads, dismissUploads, retryUpload } =
-    useEagleUploadController(accessToken, queryKeys.assets);
+  const {
+    importFiles,
+    uploads,
+    summary: uploadSummary,
+    pauseUploads,
+    resumeUploads,
+    retryAllFailed,
+    dismissUploads,
+    retryUpload,
+  } = useEagleUploadController(accessToken, queryKeys.assets);
   useEffect(() => {
     window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize }));
   }, [thumbnailSize, preferencesKey]);
@@ -2220,7 +2228,10 @@ export function SekerEaglePage({
               {selectionToolbar}
               <EagleUploadQueue
                 items={uploads}
-                status={uploadStatus}
+                summary={uploadSummary}
+                onPause={pauseUploads}
+                onResume={resumeUploads}
+                onRetryAll={retryAllFailed}
                 onRetry={retryUpload}
                 onDismiss={dismissUploads}
               />
