@@ -2,6 +2,7 @@
 
 ## 接手现用系统
 
+- 新接手先读 `docs/start-here.md` 与 `docs/glossary.md`；前者给入口、进程和第一条命令，后者统一术语。
 - 诊断、部署、重启或清理前，先读 `docs/current-runtime.md`；它记录现用群晖部署、Mac 模型依赖、独立任务及状态核验方式。历史安装手册不代表当前运行状态。
 - 本地提交、远程分支、线上镜像分别核对；用户要求暂不推送／部署时继续遵守，不因合并到 main 自动发布。
 - 改变部署、处理开关、长期任务或模型位置后，同步更新现用运行文档的核验日期与证据；动态进度从检查点读取，不把文档快照当实时值。
@@ -44,8 +45,10 @@
 - 每个里程碑至少运行 lint、typecheck、unit test 和 build。
 - API 镜像发布前必须对最终镜像执行 `npm run test:api-image -- <镜像标签>`，验证独立依赖、隔离迁移及实际服务就绪；本地源码启动或镜像构建成功不能替代成品镜像启动验收。
 - 素材／照片通用能力变更必须通过 `npm run architecture:check` 与共用契约测试；不得通过新增照片版通用组件、覆盖通用 Controller 或替换共用 provider 绕过门禁。新增专属能力或调整装配边界时，先更新北极星与 `docs/library-sharing-gate.md` 的理由，再同步门禁及反例测试。
+- 命名：新增共享能力使用 `Library*`，照片专属使用 `Photo*`；`Eagle*` 仅保留历史命名和 Eagle App 导入，不再新增。新增或调整能力、进程、任务种类时，同步更新 `docs/process-map.md`、`library-capabilities.ts` 或任务注册表，并补反例测试。单文件超过 800 行作为评审提醒，不作为硬门禁。
+- 文档：现行文档头写“状态/核验日期/对应提交”；带日期的发布、评审、计划只放 `docs/history/`；`current-runtime.md` 只保留现用状态，不追加发布快照。
 - 修改批量操作、后台任务、进度刷新或新增上限时，按 `docs/product-frame.md` 说明取舍，按 `docs/performance-budget.md` 给出端到端成本。
-- 新增后台批量元数据操作，先复用 `EagleAssetOperationService` 的批次领取与 `publishMetadataBatch` 发布流程；业务能力只提供同一事务内的规则，不另写权限、租约、事务与终态回执编排。发送 journal、扫描解码等外部工作仍按架构中的专属发布边界执行。必须同时验证整批入队与执行成本，检查事务、SQL、S3及唤醒查询的数据访问量；真实数据库性能回归随 `test:library-integration` 进入 CI，不以单项、小库或仅单测通过替代。现行契约与样本见 `docs/background-processing-performance-2026-11-01.md`。
+- 新增后台批量元数据操作，先复用 `EagleAssetOperationService` 的批次领取与 `publishMetadataBatch` 发布流程；业务能力只提供同一事务内的规则，不另写权限、租约、事务与终态回执编排。发送 journal、扫描解码等外部工作仍按架构中的专属发布边界执行。必须同时验证整批入队与执行成本，检查事务、SQL、S3及唤醒查询的数据访问量；真实数据库性能回归随 `test:library-integration` 进入 CI，不以单项、小库或仅单测通过替代。现行契约与样本见 `docs/history/records/background-processing-performance-2026-11-01.md`。
 - 任何新上限必须写清防的真实资源、到顶 UX 和环境变量开关；写不出「防谁」就不加。
 - 使用中文提交类型：`新增`、`修复`、`重构`、`清理`、`文档`。
 - Agent 可自行判断并执行提交与 push，无需另行征求用户许可。
