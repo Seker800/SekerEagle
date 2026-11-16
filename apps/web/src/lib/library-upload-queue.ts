@@ -228,7 +228,9 @@ export class LibraryUploadQueue {
     const ids = new Set(
       this.#items
         .filter(
-          (item) => item.scope === scope && (item.state === 'completed' || item.state === 'failed'),
+          (item) =>
+            item.scope === scope &&
+            (item.state === 'completed' || item.state === 'duplicate' || item.state === 'failed'),
         )
         .map((item) => item.id),
     );

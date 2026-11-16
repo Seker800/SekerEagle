@@ -1,3 +1,4 @@
+import { hashKey } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LibraryUploadQueue,
@@ -138,6 +139,24 @@ describe('LibraryUploadQueue', () => {
     await queue.add([file('duplicate.jpg')], assetsKey, run);
     expect(queue.snapshot()[0].state).toBe('duplicate');
     expect(run).toHaveBeenCalledOnce();
+    queue.dispose();
+  });
+
+  it('clears finished items including duplicate skips', async () => {
+    const queue = createQueue();
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ duplicate: true })
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('连接断开'));
+    await queue.add([file('duplicate.jpg'), file('done.jpg'), file('failed.jpg')], assetsKey, run);
+    expect(queue.snapshot().map((item) => item.state)).toEqual([
+      'duplicate',
+      'completed',
+      'failed',
+    ]);
+    queue.dismiss(hashKey(assetsKey));
+    expect(queue.snapshot()).toHaveLength(0);
     queue.dispose();
   });
 

@@ -91,6 +91,7 @@ it('pauses and resumes the batch with clear feedback', () => {
 });
 
 it('collapses the list and labels duplicate skips', () => {
+  const onDismiss = vi.fn();
   render(
     <EagleUploadQueue
       items={[item(1, 'duplicate', 'same.jpg')]}
@@ -106,10 +107,12 @@ it('collapses the list and labels duplicate skips', () => {
       onResume={vi.fn()}
       onRetryAll={vi.fn(async () => undefined)}
       onRetry={vi.fn()}
-      onDismiss={vi.fn()}
+      onDismiss={onDismiss}
     />,
   );
   expect(screen.getByText('重复跳过')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '清除已结束' }));
+  expect(onDismiss).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole('button', { name: '收起列表' }));
   expect(screen.queryByText('same.jpg')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '展开列表' }));
