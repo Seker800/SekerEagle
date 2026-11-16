@@ -169,7 +169,10 @@ export class EagleImportController {
   @Post(':runId/items/:itemId/finish')
   @RequirePatScopes('import:write', 'asset:write')
   @UseGuards(BrowserOrPatOriginGuard)
-  finishItem() {
+  finishItem(
+    @Param('runId', new ParseUUIDPipe({ version: '4' })) _runId: string,
+    @Param('itemId', new ParseUUIDPipe({ version: '4' })) _itemId: string,
+  ) {
     return retiredImportFinish();
   }
 

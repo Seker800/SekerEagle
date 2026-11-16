@@ -4840,9 +4840,6 @@ export interface components {
     };
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
-    FinishEagleImportItemDto: {
-      assetId: string;
-    };
     UpdateEagleProcessingSettingsDto: {
       /** @enum {string} */
       mode: 'ALWAYS' | 'NIGHT' | 'MANUAL';
@@ -7509,11 +7506,7 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['FinishEagleImportItemDto'];
-      };
-    };
+    requestBody?: never;
     responses: {
       201: {
         headers: {

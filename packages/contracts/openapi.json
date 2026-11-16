@@ -4165,16 +4165,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FinishEagleImportItemDto"
-              }
-            }
-          }
-        },
         "responses": {
           "201": {
             "description": ""
@@ -12142,15 +12132,6 @@
       "EagleImportManifestChunkDto": {
         "type": "object",
         "properties": {}
-      },
-      "FinishEagleImportItemDto": {
-        "type": "object",
-        "properties": {
-          "assetId": {
-            "type": "string"
-          }
-        },
-        "required": ["assetId"]
       },
       "UpdateEagleProcessingSettingsDto": {
         "type": "object",
