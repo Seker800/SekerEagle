@@ -516,6 +516,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           <div className={styles.tabs} role="group" aria-label={t('查重类型')}>
             {[
               ['EXACT', t('完全重复')],
+              // Legacy protocol value; the user-facing name is "按条件查找".
               ['SIMILAR', t('按条件查找')],
             ].map(([value, label]) => (
               <button

@@ -23,9 +23,9 @@
 
 ## 查询键耦合点
 
-`workspace-refresh.ts:116` 和 `eagle-workspace-cache.ts:225` 仍用位置协议读
-`key[3]`、要求 `key.length === 6`。新增查询键必须复用 `createEagleQueryKeys` 工厂；
-不要手工拼数组。后续应把键形状收进带类型的构造器，位置协议只是当前实现细节。
+位置解析集中在 `eagle-query-keys.ts` 的 `eagleQuerySection`、`isEagleAssetListShape` 和
+`eagleAssetListFilters`；消费者不要直接读 `key[3]` 或猜 `key.length`。新增查询键必须复用
+`createEagleQueryKeys` 工厂，不要手工拼数组。
 
 ## 验收
 

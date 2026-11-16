@@ -28,7 +28,9 @@
 - API 只受理、认证、持久化意图和读取状态；耗时写入、扫描和渲染必须进独立进程／队列。
 - operations 的领域服务在 API 模块中保持惰性；构造或模块生命周期不得自行启动业务定时器。
 - worker 的任务种类、车道和处理器版本从 `library-core` 同一规则包导出；新增种类必须登记，
-  不能只改 `main.ts`。
+  不能只改 `handlers/registry.ts`。
+- operations 的查询/受理已拆到 `library-operation-query.service.ts` 与
+  `library-operation-admission.service.ts`，执行核心仍在 `eagle-asset-operations.service.ts`。
 - 任何“后台”改动先回答：在哪个进程、谁领取、失败后如何恢复、是否会拉低前台 p95。
 
 ## 更新顺序

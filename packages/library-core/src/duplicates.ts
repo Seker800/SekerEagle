@@ -78,6 +78,7 @@ export function findVerifiedPixelGroups(input: readonly DuplicateCandidate[]): D
     );
 }
 export interface DuplicateGroup {
+  /** 'SIMILAR' is the legacy protocol value for condition-based matching ("按条件查找"). */
   kind: 'EXACT' | 'SIMILAR';
   assetIds: string[];
   recommendedId: string;

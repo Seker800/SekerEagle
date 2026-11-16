@@ -390,6 +390,7 @@ export class AssetOperationRefresher {
         }),
       ]),
     ];
+    // Transport adapter for receipt reconciliation; business reads still use the workspace API.
     const api = createEagleApi(mode);
     // Bound response memory by page-sized transport batches; the user selection
     // remains one durable command, with no manual splitting or pagination reset.
