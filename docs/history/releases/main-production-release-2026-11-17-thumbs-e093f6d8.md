@@ -50,6 +50,8 @@
 - 只更新本机安装；未上传 `/downloads/desktop/`，未签名分发，Windows 包未重新构建。
 - 09:25 追加：Windows x64 便携包在 Windows 本机按 `94e207c5`（含 `e093f6d8` 的桌面主进程 12／128 上游并发）重新构建，产物 102,663,240 字节、SHA-256 `2fb311107725742c5dc01b8d12fec32f7f49c15cf0707584be798bfcd9665cdf`，app.asar SHA-256 `0893371e2a81b6eb4863078b4859033476aacbf1c2c7ddb07c55ba7d9bade849`、`main.cjs` 116,636 字节并含 `new MediaRequestLimiter(12, 128)`。
 - 已替换 `D:\SekerEagle\SekerEagle-0.1.9-windows-x64-portable.exe`；旧包（2026-11-15，102,637,078 字节，SHA-256 `bce2902f…`）备份为 `D:\SekerEagle\backup\SekerEagle-0.1.9-windows-x64-portable-20261117-before-update.exe`。`SekerEagleData` 未动，启动后连接「外网」、素材库 58,905 项正常渲染、缓存继续读写，未新增 `renderer-failures.log`。
+- macOS 26 深色外观会把完全不透明的浅色图标自动套成深色玻璃立体块，导致九点阵看起来发暗、发歪。桌面图标底色改为 90% 白（黑色圆点仍不透明），网页、安卓和插件图标保持原规则；重新生成后系统深色外观下的实际图标为平整的近白底黑点，不再出现自动立体效果。
+- 图标修复版已重新打包并替换安装；app.asar 哈希不变（仅图标变化）。安装前版本备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0908-before-icon-fix.app`，新进程启动正常、已连接服务器、无渲染崩溃日志。
 
 ## 限制
 
