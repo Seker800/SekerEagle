@@ -22,21 +22,27 @@ const priorityRank: Record<MediaLoadPriority, number> = {
   prefetch: 2,
 };
 
-export function getRecommendedMediaConcurrency(): number {
+function slowConnection(): boolean {
   const connection = (
     navigator as Navigator & {
       connection?: { saveData?: boolean; effectiveType?: string };
     }
   ).connection;
-  if (
+  return Boolean(
     connection?.saveData ||
     connection?.effectiveType === 'slow-2g' ||
-    connection?.effectiveType === '2g'
-  ) {
-    return 2;
-  }
-  if (!connection) return 3;
-  return 4;
+    connection?.effectiveType === '2g',
+  );
+}
+
+// A 60–90 card screen finishes in about a second at this rate while the burst
+// the NAS sees stays bounded; slow or metered connections stay conservative.
+export function getRecommendedMediaConcurrency(): number {
+  return slowConnection() ? 2 : 10;
+}
+
+export function getRecommendedMediaStartRate(): { startsPerSecond: number; burst: number } {
+  return slowConnection() ? { startsPerSecond: 16, burst: 8 } : { startsPerSecond: 96, burst: 48 };
 }
 
 export class MediaLoadScheduler {
@@ -52,11 +58,11 @@ export class MediaLoadScheduler {
   private rateWakeTimer: ReturnType<typeof setTimeout> | null = null;
   private cooldownUntil = 0;
 
-  constructor({
-    maxConcurrent = getRecommendedMediaConcurrency(),
-    startsPerSecond = 32,
-    burst = 16,
-  }: { maxConcurrent?: number; startsPerSecond?: number; burst?: number } = {}) {
+  constructor(options: { maxConcurrent?: number; startsPerSecond?: number; burst?: number } = {}) {
+    const recommendedRate = getRecommendedMediaStartRate();
+    const maxConcurrent = options.maxConcurrent ?? getRecommendedMediaConcurrency();
+    const startsPerSecond = options.startsPerSecond ?? recommendedRate.startsPerSecond;
+    const burst = options.burst ?? recommendedRate.burst;
     this.maxConcurrent = Math.max(1, Math.floor(maxConcurrent));
     this.startsPerMillisecond = Math.max(1, startsPerSecond) / 1_000;
     this.burst = Math.max(1, Math.floor(burst));

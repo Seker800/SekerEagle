@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MediaLoadScheduler } from './mediaLoadScheduler';
+import {
+  getRecommendedMediaConcurrency,
+  getRecommendedMediaStartRate,
+  MediaLoadScheduler,
+} from './mediaLoadScheduler';
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe('MediaLoadScheduler', () => {
@@ -125,5 +130,51 @@ describe('MediaLoadScheduler', () => {
     await vi.waitFor(() => expect(started).toContain('reprioritized'));
 
     expect(started.slice(0, 2)).toEqual(['active', 'reprioritized']);
+  });
+
+  it('starts a wide grid ten at a time at the normal rate', async () => {
+    vi.stubGlobal('navigator', { connection: { saveData: false, effectiveType: '4g' } });
+    const started: string[] = [];
+    const scheduler = new MediaLoadScheduler();
+
+    for (let index = 0; index < 12; index += 1) {
+      scheduler.enqueue({
+        id: String(index),
+        priority: 'visible',
+        order: index,
+        run: () => {
+          started.push(String(index));
+          return new Promise(() => undefined);
+        },
+      });
+    }
+    await Promise.resolve();
+
+    expect(getRecommendedMediaConcurrency()).toBe(10);
+    expect(getRecommendedMediaStartRate()).toEqual({ startsPerSecond: 96, burst: 48 });
+    expect(started).toHaveLength(10);
+  });
+
+  it('keeps slow or metered connections conservative', async () => {
+    vi.stubGlobal('navigator', { connection: { saveData: false, effectiveType: '2g' } });
+    const started: string[] = [];
+    const scheduler = new MediaLoadScheduler();
+
+    for (let index = 0; index < 4; index += 1) {
+      scheduler.enqueue({
+        id: String(index),
+        priority: 'visible',
+        order: index,
+        run: () => {
+          started.push(String(index));
+          return new Promise(() => undefined);
+        },
+      });
+    }
+    await Promise.resolve();
+
+    expect(getRecommendedMediaConcurrency()).toBe(2);
+    expect(getRecommendedMediaStartRate()).toEqual({ startsPerSecond: 16, burst: 8 });
+    expect(started).toHaveLength(2);
   });
 });

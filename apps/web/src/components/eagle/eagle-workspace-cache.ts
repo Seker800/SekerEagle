@@ -121,7 +121,10 @@ class EagleWorkspaceCache {
     this.scrollPositions.clear();
   }
   readonly store;
-  readonly thumbnails = new ThumbnailLoadService({ maxEntries: 512, maxBytes: 128 * 1024 * 1024 });
+  readonly thumbnails = new ThumbnailLoadService({
+    maxEntries: 2_048,
+    maxBytes: 128 * 1024 * 1024,
+  });
   readonly #keys;
   readonly #unsubscribe;
   #references = 0;

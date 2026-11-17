@@ -22,7 +22,7 @@ export function createMediaController(
     maxEntries: Number(process.env.SEKEREAGLE_DESKTOP_SNAPSHOT_ENTRIES ?? 12_000),
   });
   ctx.librarySnapshot = snapshot;
-  const limiter = new MediaRequestLimiter(6, 64);
+  const limiter = new MediaRequestLimiter(12, 128);
   return new MediaCacheController({
     serverUrl: ctx.serverUrl,
     cache: cacheBackend(),
