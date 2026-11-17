@@ -115,6 +115,28 @@ test('percentile is deterministic for unsorted samples', () => {
   assert.equal(percentile([9, 1, 5, 3, 7], 0.95), 9);
 });
 
+test('upload paths never buffer or decode a whole original in the request process', async () => {
+  const [controller, service, inspection, dedupe] = await Promise.all([
+    readFile(
+      new URL('../../apps/api/src/eagle/eagle-upload.controller.ts', import.meta.url),
+      'utf8',
+    ),
+    readFile(new URL('../../apps/api/src/eagle/eagle-upload.service.ts', import.meta.url), 'utf8'),
+    readFile(
+      new URL('../../apps/api/src/eagle/eagle-upload-inspection.service.ts', import.meta.url),
+      'utf8',
+    ),
+    readFile(new URL('../../apps/web/src/lib/upload-dedupe.ts', import.meta.url), 'utf8'),
+  ]);
+  assert.doesNotMatch(controller, /\bsharp\b|\.arrayBuffer\(/u);
+  assert.doesNotMatch(service, /\bsharp\b/u);
+  assert.match(inspection, /createWriteStream\(/u);
+  assert.match(inspection, /sharp\(inputPath/u);
+  assert.match(dedupe, /HASH_CHUNK_BYTES/u);
+  assert.match(dedupe, /\.slice\(offset/u);
+  assert.doesNotMatch(dedupe, /UPLOAD_DEDUPE_MAX_BYTES/u);
+});
+
 test('the release memory gate covers the current 120MP policy rather than accepting 50MP-only evidence', async () => {
   const { mediaMemoryLimits } = await import('./media-memory-limits.mjs');
   const missing = evaluateMediaMemoryMeasurements({ measurements: [] }, mediaMemoryLimits);

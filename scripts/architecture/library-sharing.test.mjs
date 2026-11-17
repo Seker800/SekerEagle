@@ -107,6 +107,34 @@ test('rejects missing shared composition instead of silently skipping a moved fi
   sources.delete(page);
   assert.ok(checkLibrarySharing(sources).some((error) => error.rule === 'required-source'));
 });
+test('rejects a missing card target instead of silently skipping the card gate', () => {
+  const sources = new Map(baseline);
+  sources.delete(card);
+  assert.ok(
+    checkLibrarySharing(sources).some(
+      (error) => error.rule === 'required-source' && error.file === card,
+    ),
+  );
+});
+test('reports shared-card violations against the extracted card, not the page', () => {
+  const sources = new Map(baseline);
+  const source = sources.get(card);
+  const mutated = source.replace(
+    "className={`${styles.assetCard} ${selected ? styles.assetCardSelected : ''}`}",
+    "data-mode={libraryMode}\n      className={`${styles.assetCard} ${selected ? styles.assetCardSelected : ''}`}",
+  );
+  assert.notEqual(mutated, source, 'mutation must change the fixture');
+  sources.set(card, mutated);
+  const errors = checkLibrarySharing(sources);
+  assert.ok(
+    errors.some((error) => error.rule === 'shared-card' && error.file === card),
+    'the card violation must be reported against the card',
+  );
+  assert.ok(
+    !errors.some((error) => error.rule === 'shared-card' && error.file === page),
+    'the page must not be blamed for a violation in the extracted card',
+  );
+});
 test('does not mistake comments or ordinary strings for imports or mode branches', () => {
   const sources = new Map(baseline);
   const file = 'apps/web/src/components/eagle/eagle-masonry-layout.ts';

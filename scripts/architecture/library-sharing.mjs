@@ -523,16 +523,16 @@ export function checkLibrarySharing(sources) {
       }
     }
   }
-  const pageTree = trees.get(card);
-  if (pageTree) {
+  const cardTree = trees.get(card);
+  if (cardTree) {
     let cards = 0;
-    walk(pageTree, (node) => {
+    walk(cardTree, (node) => {
       if (!ts.isJsxElement(node)) return;
       let isCard = false;
       walk(node.openingElement.attributes, (child) => {
         if (
           ts.isPropertyAccessExpression(child) &&
-          child.expression.getText(pageTree) === 'styles' &&
+          child.expression.getText(cardTree) === 'styles' &&
           child.name.text === 'assetCard'
         )
           isCard = true;
@@ -550,7 +550,7 @@ export function checkLibrarySharing(sources) {
       });
       if (fork)
         report(
-          page,
+          card,
           'shared-card',
           'Generic cards cannot branch by library mode; only accessible wording may differ.',
         );
