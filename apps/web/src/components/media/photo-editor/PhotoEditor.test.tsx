@@ -502,6 +502,33 @@ describe('photo editor interactions', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '已保存' })).toBeDisabled());
     expect(document.querySelector('a[download]')).toBeNull();
   });
+  it('encodes a JPEG source as JPEG instead of inflating it into a full-size PNG', async () => {
+    const save = vi.fn().mockResolvedValue({ id: 'saved', name: 'Photo-已编辑.jpg' });
+    const encodings: Array<{ type?: string; quality?: number }> = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(
+      (callback, type, quality) => {
+        encodings.push({ type, quality });
+        callback(new Blob(['jpeg'], { type: 'image/jpeg' }));
+      },
+    );
+    render(
+      <PhotoEditor
+        source="/photo.jpg"
+        name="Photo.jpg"
+        sourceMimeType="image/jpeg"
+        onClose={vi.fn()}
+        onSave={save}
+      />,
+    );
+    const button = screen.getByRole('button', { name: '保存到相册' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(save).toHaveBeenCalledOnce());
+    expect(encodings).toEqual([{ type: 'image/jpeg', quality: 0.92 }]);
+    const file = save.mock.calls[0][0] as File;
+    expect(file.type).toBe('image/jpeg');
+    expect(file.name).toMatch(/^Photo-已编辑-.*\.jpg$/);
+  });
   it('does not save the full crop workspace or the original comparison as the edited result', async () => {
     const save = vi.fn();
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={save} />);

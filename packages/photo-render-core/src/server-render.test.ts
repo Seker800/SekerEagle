@@ -18,6 +18,18 @@ test('renders original resolution rather than the phone preview, including crop 
   assert.equal(info.width, 800);
   assert.ok(info.height! > 800);
 });
+test('encodes the finished copy as JPEG when the save asks for it', async () => {
+  const source = await sharp({
+    create: { width: 64, height: 48, channels: 3, background: '#4477aa' },
+  })
+    .jpeg()
+    .toBuffer();
+  const output = await renderServerPhoto(source, DEFAULT_PHOTO_EDITS, {}, undefined, 'jpeg');
+  const info = await sharp(output).metadata();
+  assert.equal(info.format, 'jpeg');
+  assert.equal(info.width, 64);
+  assert.equal(info.height, 48);
+});
 test('renders a straightened, inset crop without empty corners at server resolution', async () => {
   const source = await sharp({
     create: { width: 400, height: 200, channels: 4, background: '#4477aa' },

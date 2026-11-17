@@ -4,7 +4,7 @@ export interface SavedPhoto {
   id: string;
   name: string;
 }
-export function editedPhotoName(name: string, now = new Date()): string {
+export function editedPhotoName(name: string, extension = 'png', now = new Date()): string {
   const base =
     Array.from(
       name
@@ -20,5 +20,5 @@ export function editedPhotoName(name: string, now = new Date()): string {
     .replace('T', '-')
     .replace('Z', '')
     .replace('.', '-');
-  return `${base}-${t('已编辑')}-${timestamp}.png`;
+  return `${base}-${t('已编辑')}-${timestamp}.${extension}`;
 }

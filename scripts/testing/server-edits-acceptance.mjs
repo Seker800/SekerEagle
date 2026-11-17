@@ -112,11 +112,13 @@ export async function verifyServerEdits({
   assert.ok(copy.height > 1920, 'server renders watermark at original resolution');
   assert.ok(copy.manualTagLinks.some((link) => link.tag.name === '已编辑'));
   assert.equal(copy.editRecipe.baseAssetId, source.id);
+  assert.equal(copy.mimeType, 'image/jpeg');
+  assert.match(copy.originalObjectKey, /\/original\.jpg$/);
   const object = await storage.send(
     new GetObjectCommand({ Bucket: bucket, Key: copy.originalObjectKey }),
   );
   const rendered = Buffer.from(await object.Body.transformToByteArray());
-  const expected = await renderServerPhoto(bytes, recipe.edits, {});
+  const expected = await renderServerPhoto(bytes, recipe.edits, {}, undefined, 'jpeg');
   assert.equal(
     createHash('sha256').update(rendered).digest('hex'),
     createHash('sha256').update(expected).digest('hex'),

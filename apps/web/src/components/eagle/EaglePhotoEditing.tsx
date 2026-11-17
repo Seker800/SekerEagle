@@ -75,6 +75,7 @@ export interface PhotoEditSession {
   previewSource?: string;
   sourceSize?: { width: number; height: number };
   name: string;
+  sourceMimeType?: string;
   initialMetadata: PhotoMetadata;
   initialEdits?: PhotoEdits;
   watermarkPresets?: WatermarkPresets;
@@ -156,6 +157,7 @@ export function useEaglePhotoEditing({ ownerId, scopeKey }: { ownerId: string; s
       source,
       ...preview,
       name: asset.displayName,
+      sourceMimeType: asset.mimeType,
       initialMetadata: eaglePhotoWatermarkMetadata(asset),
       initialEdits,
       watermarkPresets,

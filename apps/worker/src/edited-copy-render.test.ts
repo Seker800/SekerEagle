@@ -48,10 +48,12 @@ test('a lost render lease cannot publish a copy and retains durable cleanup for 
     },
     $transaction: async (run: (value: unknown) => Promise<boolean>) => run(tx),
   } as unknown as PrismaClient;
+  let put: PutObjectCommand | undefined;
   const storage = {
     send: async (command: unknown) => {
       if (command instanceof GetObjectCommand) return { Body: Readable.from([bytes]) };
       assert.ok(command instanceof PutObjectCommand);
+      put = command;
       events.push('put');
       return {};
     },
@@ -65,6 +67,9 @@ test('a lost render lease cannot publish a copy and retains durable cleanup for 
     leaseVersion: 1,
   } as EagleAssetProcessingJob);
   assert.deepEqual(events, ['outbox', 'put', 'cleanup-retry']);
+  assert.match(put!.input.Key!, /\/original\.jpg$/);
+  assert.equal(put!.input.ContentType, 'image/jpeg');
+  assert.equal((await sharp(put!.input.Body as Buffer).metadata()).format, 'jpeg');
 });
 test('source scope is verified before an original can be read', async () => {
   let reads = 0;
@@ -92,7 +97,7 @@ test('source scope is verified before an original can be read', async () => {
   assert.equal(reads, 0);
 });
 
-test('a HEIC source is decoded by the bounded native decoder and rendered into a PNG copy', async () => {
+test('a HEIC source is decoded by the bounded native decoder and rendered into a JPEG copy', async () => {
   const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');

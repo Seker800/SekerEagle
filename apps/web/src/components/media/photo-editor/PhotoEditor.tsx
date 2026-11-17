@@ -97,6 +97,7 @@ export function PhotoEditor({
   previewSource,
   sourceSize,
   name,
+  sourceMimeType,
   onClose,
   onSave,
   onSaveRecipe,
@@ -116,6 +117,7 @@ export function PhotoEditor({
   previewSource?: string;
   sourceSize?: { width: number; height: number };
   name: string;
+  sourceMimeType?: string;
   initialMetadata?: PhotoMetadata;
   initialEdits?: PhotoEdits;
   onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
@@ -617,7 +619,14 @@ export function PhotoEditor({
         try {
           if (original.naturalWidth !== imageWidth || original.naturalHeight !== imageHeight)
             throw new Error('PHOTO_SOURCE_DIMENSIONS_CHANGED');
-          file = await renderEditedPhotoFile(original, edits, metadata, rendererRef.current, name);
+          file = await renderEditedPhotoFile(
+            original,
+            edits,
+            metadata,
+            rendererRef.current,
+            name,
+            sourceMimeType,
+          );
           if (controller.signal.aborted) return;
           pendingSaveRef.current = { key: saveKey, file };
         } finally {

@@ -22,7 +22,9 @@ function LocalPhotoCard({ photo, onOpen }: { photo: LocalPhoto; onOpen: () => vo
 
 /** Development-only workbench. Its test album is explicitly separate from the server library. */
 export function PhotoEditorLab() {
-  const [photo, setPhoto] = useState<{ source: string; name: string } | null>(null);
+  const [photo, setPhoto] = useState<{ source: string; name: string; mimeType: string } | null>(
+    null,
+  );
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -41,6 +43,7 @@ export function PhotoEditorLab() {
       key={photo.source}
       source={photo.source}
       name={photo.name}
+      sourceMimeType={photo.mimeType}
       onClose={() => setPhoto(null)}
       onSave={async (file) => {
         const result = await saveLocalPhoto(file);
@@ -70,13 +73,15 @@ export function PhotoEditorLab() {
                 return;
               }
               setError('');
-              setPhoto({ source: URL.createObjectURL(file), name: file.name });
+              setPhoto({ source: URL.createObjectURL(file), name: file.name, mimeType: file.type });
             }}
           />
         </label>
         <button
           type="button"
-          onClick={() => setPhoto({ source: sampleImage, name: 'Fronalpstock.jpg' })}
+          onClick={() =>
+            setPhoto({ source: sampleImage, name: 'Fronalpstock.jpg', mimeType: 'image/jpeg' })
+          }
         >
           {t('使用高清实拍照片')}
         </button>
@@ -89,7 +94,9 @@ export function PhotoEditorLab() {
           <button
             type="button"
             className={styles.card}
-            onClick={() => setPhoto({ source: sampleImage, name: 'Fronalpstock.jpg' })}
+            onClick={() =>
+              setPhoto({ source: sampleImage, name: 'Fronalpstock.jpg', mimeType: 'image/jpeg' })
+            }
           >
             <img src={sampleImage} alt={t('高清实拍原图')} />
             <span>Fronalpstock · {t('原图')} · 6000 × 2696</span>
@@ -98,7 +105,13 @@ export function PhotoEditorLab() {
             <LocalPhotoCard
               key={entry.id}
               photo={entry}
-              onOpen={() => setPhoto({ source: URL.createObjectURL(entry.blob), name: entry.name })}
+              onOpen={() =>
+                setPhoto({
+                  source: URL.createObjectURL(entry.blob),
+                  name: entry.name,
+                  mimeType: entry.blob.type,
+                })
+              }
             />
           ))}
         </div>

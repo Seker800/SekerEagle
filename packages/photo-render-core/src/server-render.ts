@@ -10,12 +10,14 @@ import { renderPhotoWatermark } from './photo-editor-watermark';
 import type { PhotoMetadata } from './photo-watermark-model';
 import type { PhotoLut } from './photo-lut';
 let ready = false;
+export type ServerPhotoFormat = 'png' | 'jpeg';
 /** Same pixel, crop and watermark code as the phone preview; source bytes stay on the server. */
 async function renderServerPhotoLocal(
   source: Buffer,
   input: PhotoEdits,
   metadata: PhotoMetadata,
   lut?: PhotoLut,
+  format: ServerPhotoFormat = 'png',
 ): Promise<Buffer> {
   const edits = readPhotoEditRecipe({ version: 1, edits: input }).edits;
   if (!ready) {
@@ -36,8 +38,8 @@ async function renderServerPhotoLocal(
   const create = () => createCanvas(1, 1) as unknown as HTMLCanvasElement;
   const cropped = create();
   drawPhoto(cropped, canvas as unknown as HTMLCanvasElement, edits);
-  const output = renderPhotoWatermark(cropped, edits, metadata, create);
-  return (output as unknown as Canvas).toBuffer('image/png');
+  const output = renderPhotoWatermark(cropped, edits, metadata, create) as unknown as Canvas;
+  return format === 'jpeg' ? output.toBuffer('image/jpeg', 92) : output.toBuffer('image/png');
 }
 
 /** Keep CPU-bound pixels off the lease/heartbeat event loop. One worker per bounded NAS slot. */
@@ -46,10 +48,11 @@ export async function renderServerPhoto(
   input: PhotoEdits,
   metadata: PhotoMetadata,
   lut?: PhotoLut,
+  format: ServerPhotoFormat = 'png',
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(__filename, {
-      workerData: { photoRender: true, source, input, metadata, lut },
+      workerData: { photoRender: true, source, input, metadata, lut, format },
     });
     let finished = false;
     const timer = setTimeout(() => {
@@ -80,10 +83,17 @@ const task = workerData as
       input: PhotoEdits;
       metadata: PhotoMetadata;
       lut?: PhotoLut;
+      format?: ServerPhotoFormat;
     }
   | undefined;
 if (!isMainThread && task?.photoRender) {
-  void renderServerPhotoLocal(Buffer.from(task.source), task.input, task.metadata, task.lut).then(
+  void renderServerPhotoLocal(
+    Buffer.from(task.source),
+    task.input,
+    task.metadata,
+    task.lut,
+    task.format,
+  ).then(
     (output) => parentPort?.postMessage({ output }),
     (reason: unknown) =>
       parentPort?.postMessage({

@@ -60,6 +60,7 @@ export function NativeEditorApp({ request }: { request: Request }) {
         asset.width && asset.height ? { width: asset.width, height: asset.height } : undefined
       }
       name={asset.displayName || asset.originalName}
+      sourceMimeType={asset.mimeType}
       initialMetadata={eaglePhotoWatermarkMetadata(asset)}
       initialEdits={edits}
       onDraftChange={(recipe) => request('draft', { recipe })}

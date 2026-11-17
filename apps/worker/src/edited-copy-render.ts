@@ -54,6 +54,7 @@ export async function renderEditedCopy(
         recipe.edits,
         {},
         lut ? readPortableLut(lut) : undefined,
+        'jpeg',
       ),
     false,
     'EDIT',
@@ -61,7 +62,7 @@ export async function renderEditedCopy(
   if (source.sha256 && source.sha256 !== sha256) throw new Error('EDIT_SOURCE_HASH_MISMATCH');
   const dimensions = await sharp(bytes).metadata();
   const id = randomUUID();
-  const key = `users/${job.ownerId}/assets/${id}/original.png`;
+  const key = `users/${job.ownerId}/assets/${id}/original.jpg`;
   const digest = createHash('sha256').update(bytes).digest('hex');
   // An outbox precedes PUT: a crash or ambiguous storage response cannot strand an object.
   // Publication removes it atomically; uncertain DB commits never trigger an unsafe direct delete.
@@ -77,7 +78,7 @@ export async function renderEditedCopy(
   let committed = false;
   try {
     await storage.send(
-      new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: 'image/png' }),
+      new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: 'image/jpeg' }),
     );
     committed = await db.$transaction(
       async (tx) => {
@@ -106,7 +107,7 @@ export async function renderEditedCopy(
         });
         if (retained.count !== 1) throw new Error('EDIT_PUBLICATION_EXPIRED');
         const tag = await editedCopyTag(tx, job.ownerId, job.libraryMode);
-        const name = `${source.displayName || source.originalName.replace(/\.[^.]+$/, '')}-已编辑.png`;
+        const name = `${source.displayName || source.originalName.replace(/\.[^.]+$/, '')}-已编辑.jpg`;
         await tx.eagleAsset.create({
           data: {
             id,
@@ -115,8 +116,8 @@ export async function renderEditedCopy(
             originalName: name,
             displayName: name,
             normalizedDisplayName: name.normalize('NFKC').toLowerCase(),
-            mimeType: 'image/png',
-            format: 'png',
+            mimeType: 'image/jpeg',
+            format: 'jpeg',
             mediaRevision: 1,
             byteSize: BigInt(bytes.length),
             originalObjectKey: key,
