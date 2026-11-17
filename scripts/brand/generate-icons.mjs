@@ -4,8 +4,9 @@
  *
  * 几何只有一个来源：128 单位画布、白色圆角块、3×3 黑色圆点。网页、桌面、
  * 安卓、浏览器扩展和 Eagle 导入插件都从这里派生，避免各端手改后再次漂移。
- * 白底与黑点必须不透明，只有圆角外侧允许透明。唯一例外是 macOS 桌面图标：
- * 底色使用 90% 白，避免 macOS 26 深色外观把不透明浅色图标自动套成深色玻璃块。
+ * 白底与黑点必须不透明，只有圆角外侧允许透明。macOS 桌面图标例外：使用满画布
+ * 不透明正方形、不预切圆角，由系统裁切圆角；预切圆角会被 macOS 26 当成旧式图标
+ * 缩进灰色玻璃模板。
  *
  * 用法：
  *   node scripts/brand/generate-icons.mjs          生成并写回仓库
@@ -26,7 +27,6 @@ const TILE_RADIUS = 28;
 const DOT_RADIUS = 13;
 const DOT_CENTERS = [32, 64, 96];
 const DOT_FILL = '#000000';
-const DESKTOP_TILE_OPACITY = 0.9;
 
 /** 安卓自适应图标：108dp 图层、其中 72dp 是启动器保证可见的区域。 */
 const ADAPTIVE_LAYER = 108;
@@ -39,12 +39,12 @@ function circles(fill, centers = DOT_CENTERS, radius = DOT_RADIUS) {
 }
 
 /** 仓库里的规范文件：网页引用、桌面连接页复制、插件 logo 都用它。 */
-function markSvg(opacity = 1) {
+function markSvg({ square = false } = {}) {
   return [
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">',
-    `  <rect width="128" height="128" rx="${TILE_RADIUS}" fill="white"${
-      opacity < 1 ? ` fill-opacity="${opacity}"` : ''
-    }/>`,
+    square
+      ? '  <rect width="128" height="128" fill="white"/>'
+      : `  <rect width="128" height="128" rx="${TILE_RADIUS}" fill="white"/>`,
     `  <g fill="${DOT_FILL}">`,
     `    ${circles(DOT_FILL).join('')}`,
     '  </g>',
@@ -54,41 +54,36 @@ function markSvg(opacity = 1) {
 }
 
 /** 按目标像素尺寸渲染时补上宽高，让 sharp 直接从矢量栅格化而不是放大小图。 */
-function renderSvg(size, opacity = 1) {
-  return markSvg(opacity).replace(
+function renderSvg(size, options = {}) {
+  return markSvg(options).replace(
     'viewBox="0 0 128 128"',
     `width="${size}" height="${size}" viewBox="0 0 128 128"`,
   );
 }
 
-async function png(size, opacity = 1) {
-  const buffer = await sharp(Buffer.from(renderSvg(size, opacity)))
+async function png(size, options = {}) {
+  const buffer = await sharp(Buffer.from(renderSvg(size, options)))
     .png({ compressionLevel: 9 })
     .toBuffer();
-  await assertOpaqueCore(buffer, size, opacity);
+  await assertOpaqueCore(buffer, size);
   return buffer;
 }
 
-/** 底色与圆点必须达到目标不透明度：中部 40% 的 alpha 不得低于目标，且存在完全不透明的圆点。 */
-async function assertOpaqueCore(buffer, size, opacity = 1) {
+/** 白底和黑点必须不透明：图标中部 40% 的 alpha 全部为 255，且白色、黑色都在。 */
+async function assertOpaqueCore(buffer, size) {
   const { data } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const core = Math.floor(size * 0.4);
   const start = Math.floor((size - core) / 2);
   const rgbAt = (x, y) => Array.from(data.subarray((y * size + x) * 4, (y * size + x) * 4 + 3));
   const alphaAt = (x, y) => data[(y * size + x) * 4 + 3];
-  const minimumAlpha = Math.round(opacity * 255) - 2;
-  let sawOpaqueDot = false;
 
   for (let y = start; y < start + core; y += 1) {
     for (let x = start; x < start + core; x += 1) {
-      const alpha = alphaAt(x, y);
-      if (alpha < minimumAlpha) {
-        throw new Error(`${size}px 图标在 (${x},${y}) 的 alpha 低于目标，底色透明度不足`);
+      if (alphaAt(x, y) !== 255) {
+        throw new Error(`${size}px 图标在 (${x},${y}) 出现透明像素，白底必须不透明`);
       }
-      if (alpha === 255) sawOpaqueDot = true;
     }
   }
-  if (!sawOpaqueDot) throw new Error(`${size}px 图标缺少完全不透明的黑色圆点`);
 
   if (size >= 128) {
     const dot = rgbAt(Math.round((32 / CANVAS) * size), Math.round((32 / CANVAS) * size));
@@ -230,14 +225,15 @@ async function textOutputs() {
 
 async function pngOutputs() {
   const sizes = [
-    ['apps/desktop/build/icon.png', 1024, DESKTOP_TILE_OPACITY],
-    ['plugins/browser-capture/icons/icon-16.png', 16, 1],
-    ['plugins/browser-capture/icons/icon-32.png', 32, 1],
-    ['plugins/browser-capture/icons/icon-48.png', 48, 1],
-    ['plugins/browser-capture/icons/icon-128.png', 128, 1],
+    ['apps/desktop/build/icon.png', 1024, {}],
+    ['apps/desktop/build/icon-mac.png', 1024, { square: true }],
+    ['plugins/browser-capture/icons/icon-16.png', 16, {}],
+    ['plugins/browser-capture/icons/icon-32.png', 32, {}],
+    ['plugins/browser-capture/icons/icon-48.png', 48, {}],
+    ['plugins/browser-capture/icons/icon-128.png', 128, {}],
   ];
   return Promise.all(
-    sizes.map(async ([file, size, opacity]) => ({ file, content: await png(size, opacity) })),
+    sizes.map(async ([file, size, options]) => ({ file, content: await png(size, options) })),
   );
 }
 

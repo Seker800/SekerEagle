@@ -39,7 +39,7 @@
     },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "mac": {
-      "icon": "build/icon.png",
+      "icon": "build/icon-mac.png",
       "category": "public.app-category.graphics-design",
       "minimumSystemVersion": "13.0",
       "hardenedRuntime": true,

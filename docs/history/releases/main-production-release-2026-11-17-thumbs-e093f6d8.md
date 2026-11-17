@@ -50,12 +50,11 @@
 - 只更新本机安装；未上传 `/downloads/desktop/`，未签名分发，Windows 包未重新构建。
 - 09:25 追加：Windows x64 便携包在 Windows 本机按 `94e207c5`（含 `e093f6d8` 的桌面主进程 12／128 上游并发）重新构建，产物 102,663,240 字节、SHA-256 `2fb311107725742c5dc01b8d12fec32f7f49c15cf0707584be798bfcd9665cdf`，app.asar SHA-256 `0893371e2a81b6eb4863078b4859033476aacbf1c2c7ddb07c55ba7d9bade849`、`main.cjs` 116,636 字节并含 `new MediaRequestLimiter(12, 128)`。
 - 已替换 `D:\SekerEagle\SekerEagle-0.1.9-windows-x64-portable.exe`；旧包（2026-11-15，102,637,078 字节，SHA-256 `bce2902f…`）备份为 `D:\SekerEagle\backup\SekerEagle-0.1.9-windows-x64-portable-20261117-before-update.exe`。`SekerEagleData` 未动，启动后连接「外网」、素材库 58,905 项正常渲染、缓存继续读写，未新增 `renderer-failures.log`。
-- macOS 26 深色外观会把完全不透明的浅色图标自动套成深色玻璃立体块，导致九点阵看起来发暗、发歪。桌面图标底色改为 90% 白（黑色圆点仍不透明），网页、安卓和插件图标保持原规则；重新生成后系统深色外观下的实际图标为平整的近白底黑点，不再出现自动立体效果。
-- 图标修复版已重新打包并替换安装；app.asar 哈希不变（仅图标变化）。安装前版本备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0908-before-icon-fix.app`，新进程启动正常、已连接服务器、无渲染崩溃日志。
-- 随后发现 macOS 26 仍会把仅含 `.icns` 的旧式图标缩进灰色／玻璃模板，白块外出现深色边框并显得缩小。客户端启动时调用 `app.dock.setIcon` 直接设置原始图标，绕过该处理；新 app.asar SHA-256 `c70e9701ac51c257d692a903bf3b8966a99835186429ed7b9391bf8ea3e23869`。安装前版本备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0920-before-dockicon.app`，启动后进程正常、已连接服务器、无渲染崩溃日志。
+- macOS 26 会把预切圆角的旧式 `.icns` 图标缩进灰色玻璃模板，白块看起来发暗、缩小并多出外框。中间尝试过 90% 透明底色和运行时 `app.dock.setIcon`，均未消除外框；最终把 macOS 桌面图标改为满画布不透明正方形、不预切圆角，由系统裁切。系统深色外观下的实际图标为完整白底黑点，无外框、无缩小。`apps/desktop/build/icon-mac.png` 专用于 macOS，Windows 继续使用圆角的 `icon.png`；运行时 Dock 覆盖代码已移除。
+- 仅图标变化，app.asar 内容不变；最终安装的 app.asar SHA-256 为 `7b27c68fcca3ebb58fc0f6101938f097a3e5d71b425947880f65a10454e5c953`，安装前版本备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0925-before-square-icon.app`。重新打包安装后进程正常、已连接服务器、无渲染崩溃日志。
 
 ## 限制
 
 - 未做登录后的真实浏览器或桌面交互，也未在现网测量首屏回填时间；预期改善来自调度限速的推算。
 - 桌面客户端的 12 并发仅存在于源码，需重新打包安装才会生效。
-- `app.dock.setIcon` 只修复 Dock；Finder／Launchpad 仍会把旧式 `.icns` 放进系统模板。彻底消除需用 Xcode 26 的 Icon Composer 生成 `.icon`／`Assets.car`，本机未安装 `actool`，未在本轮实施。
+- 满画布正方形图标由系统统一裁切，Dock、Finder、Launchpad 使用同一份 `.icns`；本轮未保留运行时图标覆盖。

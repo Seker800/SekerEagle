@@ -1,13 +1,4 @@
-import {
-  app,
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  nativeImage,
-  powerMonitor,
-  protocol,
-  session,
-} from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, protocol, session } from 'electron';
 import path from 'node:path';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from './app-config';
 import { AuthenticatedOwner } from './authenticated-owner';
@@ -104,14 +95,6 @@ app.on('second-instance', () => {
 
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
-    // macOS 26 会给不透明浅色图标自动加深色玻璃层；运行时设置原始图标可绕过该处理。
-    if (process.platform === 'darwin') {
-      const iconPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'icon.icns')
-        : path.join(app.getAppPath(), 'build', 'icon.png');
-      const icon = nativeImage.createFromPath(iconPath);
-      if (!icon.isEmpty()) app.dock?.setIcon(icon);
-    }
     ctx.desktopLocale = normalizeDesktopLocale(app.getLocale());
     const settings = new DesktopSettingsStore(
       app.getPath('userData'),
