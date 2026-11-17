@@ -52,8 +52,10 @@
 - 已替换 `D:\SekerEagle\SekerEagle-0.1.9-windows-x64-portable.exe`；旧包（2026-11-15，102,637,078 字节，SHA-256 `bce2902f…`）备份为 `D:\SekerEagle\backup\SekerEagle-0.1.9-windows-x64-portable-20261117-before-update.exe`。`SekerEagleData` 未动，启动后连接「外网」、素材库 58,905 项正常渲染、缓存继续读写，未新增 `renderer-failures.log`。
 - macOS 26 深色外观会把完全不透明的浅色图标自动套成深色玻璃立体块，导致九点阵看起来发暗、发歪。桌面图标底色改为 90% 白（黑色圆点仍不透明），网页、安卓和插件图标保持原规则；重新生成后系统深色外观下的实际图标为平整的近白底黑点，不再出现自动立体效果。
 - 图标修复版已重新打包并替换安装；app.asar 哈希不变（仅图标变化）。安装前版本备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0908-before-icon-fix.app`，新进程启动正常、已连接服务器、无渲染崩溃日志。
+- 随后发现 macOS 26 仍会把仅含 `.icns` 的旧式图标缩进灰色／玻璃模板，白块外出现深色边框并显得缩小。客户端启动时调用 `app.dock.setIcon` 直接设置原始图标，绕过该处理；新 app.asar SHA-256 `c70e9701ac51c257d692a903bf3b8966a99835186429ed7b9391bf8ea3e23869`。安装前版本备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0920-before-dockicon.app`，启动后进程正常、已连接服务器、无渲染崩溃日志。
 
 ## 限制
 
 - 未做登录后的真实浏览器或桌面交互，也未在现网测量首屏回填时间；预期改善来自调度限速的推算。
 - 桌面客户端的 12 并发仅存在于源码，需重新打包安装才会生效。
+- `app.dock.setIcon` 只修复 Dock；Finder／Launchpad 仍会把旧式 `.icns` 放进系统模板。彻底消除需用 Xcode 26 的 Icon Composer 生成 `.icon`／`Assets.car`，本机未安装 `actool`，未在本轮实施。
