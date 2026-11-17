@@ -55,8 +55,9 @@ function ImageCopyAction({ asset, sourceUrl }: { asset?: EagleAssetListItem; sou
       pending.current = false;
     }
   };
-  const pendingLabel = share ? t('正在准备 4K…') : t('正在复制…');
-  const copiedLabel = share ? t('已复制 4K') : t('已复制');
+  const fourK = share && Math.max(asset?.width ?? 0, asset?.height ?? 0) >= 4_096;
+  const pendingLabel = fourK ? t('正在准备 4K…') : share ? t('正在准备…') : t('正在复制…');
+  const copiedLabel = fourK ? t('已复制 4K') : t('已复制');
   return (
     <div className={styles.root}>
       <button

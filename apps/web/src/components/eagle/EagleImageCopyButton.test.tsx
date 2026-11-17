@@ -12,7 +12,15 @@ const imageAsset = {
   id: 'asset-1',
   mimeType: 'image/jpeg',
   libraryMode: 'MATERIAL',
+  width: 8_000,
+  height: 6_000,
 } as unknown as EagleAssetListItem;
+const smallImageAsset = {
+  ...imageAsset,
+  id: 'asset-2',
+  width: 1_600,
+  height: 1_200,
+} as EagleAssetListItem;
 
 describe('EagleImageCopyButton', () => {
   beforeEach(() => {
@@ -26,6 +34,12 @@ describe('EagleImageCopyButton', () => {
     expect(copyShare).toHaveBeenCalledWith('/api/eagle/assets/asset-1/share-image');
     expect(copy).not.toHaveBeenCalled();
     expect(await screen.findByRole('status')).toHaveTextContent('已复制 4K');
+  });
+  it('does not claim 4K when the copied share version is smaller', async () => {
+    copyShare.mockResolvedValue(undefined);
+    render(<EagleImageCopyButton asset={smallImageAsset} sourceUrl="preview.webp" />);
+    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/^已复制$/);
   });
   it('prevents concurrent writes and resets feedback when the photo changes', async () => {
     let complete!: () => void;
