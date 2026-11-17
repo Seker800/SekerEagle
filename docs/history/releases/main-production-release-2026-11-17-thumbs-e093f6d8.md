@@ -41,6 +41,14 @@
 - 证据目录：NAS 私有 `maintenance/thumbs-e093f6d8/`，含 `before-web.private.json`、`before-others.private.json`、`images.json`、`rollback.json`、`compose-diff.json`、`public-verification.json`、`active.json`。
 - 回退执行 `up -d --no-deps web` 使用 `rollback.json`；不需要回退 API 或数据库。
 
+## 本机桌面客户端重打包
+
+- 源码 `7faf120c` 重新构建 macOS arm64 客户端，版本仍为 0.1.9，按 app.asar 哈希区分。
+- 新安装包 app.asar SHA-256：`7b27c68fcca3ebb58fc0f6101938f097a3e5d71b425947880f65a10454e5c953`，已确认包含 `MediaRequestLimiter(12, 128)`。
+- 已替换 `/Applications/SekerEagle.app`；原客户端完整备份在 `~/SekerEagle-client-backups/SekerEagle-0.1.9-20261117-0907.app`（app.asar `b64eb3e8…`）。
+- 启动后进程正常、已建立到服务器的连接、媒体缓存继续读写，未生成 `renderer-failures.log`。
+- 只更新本机安装；未上传 `/downloads/desktop/`，未签名分发，Windows 包未重新构建。
+
 ## 限制
 
 - 未做登录后的真实浏览器或桌面交互，也未在现网测量首屏回填时间；预期改善来自调度限速的推算。
