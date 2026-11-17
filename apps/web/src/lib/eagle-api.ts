@@ -821,6 +821,10 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     return libraryApiPath(`/api/eagle/assets/${encodeURIComponent(id)}/original`, mode);
   }
 
+  function getEagleShareImageUrl(id: string, mode: LibraryMode = libraryMode) {
+    return libraryApiPath(`/api/eagle/assets/${encodeURIComponent(id)}/share-image`, mode);
+  }
+
   function getEaglePyramidDescriptor(assetId: string, signal?: AbortSignal) {
     return api<EaglePyramidDescriptor>(`/eagle/assets/${encodeURIComponent(assetId)}/pyramid`, {
       signal,
@@ -925,6 +929,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     checkEagleUploadContentBatch,
     retryEagleAssetProcessing,
     getEagleAssetContentUrl,
+    getEagleShareImageUrl,
     getEaglePyramidDescriptor,
     getEagleRenditionContentUrl,
   };
@@ -973,6 +978,7 @@ export const {
   checkEagleUploadContentBatch,
   retryEagleAssetProcessing,
   getEagleAssetContentUrl,
+  getEagleShareImageUrl,
   getEaglePyramidDescriptor,
   getEagleRenditionContentUrl,
 } = createEagleApi();

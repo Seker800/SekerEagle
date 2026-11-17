@@ -60,26 +60,28 @@ const imageAsset: EagleAssetListItem = {
   ],
 };
 
-const { copyImageMock } = vi.hoisted(() => ({ copyImageMock: vi.fn() }));
+const { copyImageMock, copyShareImageMock } = vi.hoisted(() => ({
+  copyImageMock: vi.fn(),
+  copyShareImageMock: vi.fn(),
+}));
 vi.mock('openseadragon', () => ({ default: () => ({ addHandler() {}, destroy() {}, open() {} }) }));
-vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: copyImageMock }));
+vi.mock('../../lib/image-clipboard', () => ({
+  copyImageToClipboard: copyImageMock,
+  copyShareImageToClipboard: copyShareImageMock,
+}));
 
 describe('EagleAssetLightbox', () => {
-  it('copies the current photo preview and keeps native image context menus', () => {
-    copyImageMock.mockResolvedValue(undefined);
+  it('copies the 4K share rendition and keeps native image context menus', () => {
+    copyShareImageMock.mockResolvedValue(undefined);
     const view = render(<EagleAssetLightbox asset={imageAsset} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
-    expect(copyImageMock).toHaveBeenLastCalledWith(
-      '/api/eagle/assets/image-1/renditions/preview-1',
-    );
+    expect(copyShareImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-1/share-image');
     expect(fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'))).toBe(true);
     view.rerender(
       <EagleAssetLightbox asset={{ ...imageAsset, id: 'image-2' }} onClose={vi.fn()} />,
     );
     fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
-    expect(copyImageMock).toHaveBeenLastCalledWith(
-      '/api/eagle/assets/image-2/renditions/preview-1',
-    );
+    expect(copyShareImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-2/share-image');
     view.rerender(<EagleAssetLightbox asset={videoAsset} onClose={vi.fn()} />);
     expect(screen.queryByRole('button', { name: '复制图片' })).not.toBeInTheDocument();
   });

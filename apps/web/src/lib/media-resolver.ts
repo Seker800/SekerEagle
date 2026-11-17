@@ -47,6 +47,10 @@ export interface SekerDesktopBridge {
     deferred: number;
   }>;
   writeClipboardImage?(pngBytes: Uint8Array): Promise<void>;
+  writeClipboardImageData?(input: {
+    contentType: 'image/png' | 'image/jpeg';
+    bytes: Uint8Array;
+  }): Promise<void>;
   getConnectionStatus?(): Promise<DesktopConnectionStatus>;
   openConnectionManager?(locale?: 'zh-CN' | 'en-US'): Promise<void>;
   prepareAssetDrag?(assetIds: string[]): Promise<{
@@ -99,7 +103,8 @@ export interface DesktopCacheStatus {
 export type DesktopCacheBridge = Required<
   Pick<SekerDesktopBridge, 'getCacheStatus' | 'setCacheLimitGiB' | 'clearCache' | 'invalidateAsset'>
 >;
-export type DesktopClipboardBridge = Required<Pick<SekerDesktopBridge, 'writeClipboardImage'>>;
+export type DesktopClipboardBridge = Required<Pick<SekerDesktopBridge, 'writeClipboardImage'>> &
+  Pick<SekerDesktopBridge, 'writeClipboardImageData'>;
 export type DesktopOriginalFileBridge = Required<Pick<SekerDesktopBridge, 'saveOriginalFile'>>;
 export type DesktopOriginalFileDownloadBridge = Required<
   Pick<SekerDesktopBridge, 'downloadOriginalFiles'>

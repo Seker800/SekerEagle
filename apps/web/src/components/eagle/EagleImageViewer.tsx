@@ -169,6 +169,7 @@ export function EagleImageViewer({
 }) {
   const compact = useCompactLayout();
   const [zoomActivated, setZoomActivated] = useState(false);
+  const [detailFailed, setDetailFailed] = useState(false);
   const [loadedOriginalSrc, setLoadedOriginalSrc] = useState<string | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const [originalPercent, setOriginalPercent] = useState<number | null>(null);
@@ -177,6 +178,7 @@ export function EagleImageViewer({
   useEffect(() => {
     rotation.current = 0;
     setZoomActivated(false);
+    setDetailFailed(false);
     setLoadedOriginalSrc(null);
     setOriginalLoading(false);
     setOriginalPercent(null);
@@ -191,6 +193,7 @@ export function EagleImageViewer({
     if (!zoomActivated || descriptor || !highResolutionSrc || loadedOriginalSrc) return;
     const controller = new AbortController();
     let cancelled = false;
+    setDetailFailed(false);
     setOriginalLoading(true);
     setOriginalPercent(null);
     void (async () => {
@@ -228,6 +231,7 @@ export function EagleImageViewer({
         if (!cancelled && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setOriginalLoading(false);
           setOriginalPercent(null);
+          setDetailFailed(true);
           // Allow the next zoom gesture to retry instead of leaving the effect dormant.
           setZoomActivated(false);
         }
@@ -303,6 +307,7 @@ export function EagleImageViewer({
     detailKeyRef.current = pending.key;
     detailSettledRef.current = false;
     setDetailSettled(false);
+    setDetailFailed(false);
     setDetailLoading(Boolean(descriptorRef.current));
     setTileProgress({ loaded: 0, total: 0 });
     loadedTilesRef.current.clear();
@@ -333,6 +338,7 @@ export function EagleImageViewer({
         detailItemRef.current = null;
         setDetailLoading(false);
         setOriginalLoading(false);
+        setDetailFailed(true);
         setZoomActivated(false);
       },
     });
@@ -561,6 +567,7 @@ export function EagleImageViewer({
     detailKeyRef.current = null;
     detailSettledRef.current = false;
     setDetailSettled(false);
+    setDetailFailed(false);
     lastInteractionAtRef.current = Date.now();
     scheduleDetailOpenRef.current();
   }, [highResolutionSource, highResolutionKey]);
@@ -573,6 +580,7 @@ export function EagleImageViewer({
     }
     detailSettledRef.current = false;
     setDetailSettled(false);
+    setDetailFailed(false);
     setDetailLoading(false);
     setOriginalLoading(false);
     setStatus('loading');
@@ -585,40 +593,49 @@ export function EagleImageViewer({
     tileProgress.total > 0 &&
     tileProgress.loaded > 0 &&
     tileProgress.loaded < tileProgress.total;
-  const showOriginalProgress = originalLoading;
-  const showOriginalBar = showOriginalProgress && originalPercent !== null;
+  const showOriginalBar = originalLoading && originalPercent !== null;
   const canLoadDetail = Boolean(descriptor || highResolutionSrc);
-  const showPreviewHint = previewLimited && canLoadDetail && !detailSettled;
-  const qualityNotice =
-    displayStatus === 'ready' && !loading
-      ? descriptor
-        ? detailLoading
-          ? t('正在加载高清细节…')
-          : showPreviewHint
-            ? t('预览图 · 放大加载高清')
-            : ''
-        : showPreviewHint
-          ? showOriginalProgress
-            ? t('正在加载原图…')
-            : t('预览图 · 放大加载高清')
-          : ''
-      : '';
-  const qualityPercent = showDetailProgress
+  const showSourceStatus = previewLimited && canLoadDetail && displayStatus === 'ready' && !loading;
+  const sourceState: 'preview' | 'loading' | 'original' | 'failed' = detailFailed
+    ? 'failed'
+    : detailSettled
+      ? 'original'
+      : zoomActivated
+        ? 'loading'
+        : 'preview';
+  const sourcePercent = showDetailProgress
     ? Math.round((tileProgress.loaded / tileProgress.total) * 100)
     : showOriginalBar
       ? originalPercent
       : null;
-  const qualityCount = showDetailProgress
-    ? `${tileProgress.loaded}/${tileProgress.total}`
-    : showOriginalBar
-      ? `${originalPercent}%`
-      : null;
+  const sourceCount =
+    sourceState === 'loading'
+      ? showDetailProgress
+        ? `${tileProgress.loaded}/${tileProgress.total}`
+        : showOriginalBar
+          ? `${originalPercent}%`
+          : ''
+      : '';
+  const sourceLabel =
+    sourceState === 'preview'
+      ? t('预览图')
+      : sourceState === 'loading'
+        ? t('正在加载原图…')
+        : sourceState === 'original'
+          ? t('原图')
+          : t('原图加载失败');
+  const sourceHint =
+    sourceState === 'preview'
+      ? t('放大加载原图')
+      : sourceState === 'failed'
+        ? t('仍显示预览图')
+        : sourceCount;
   const secondary = (
     <>
       {!loading && !error && onLocate && image.assetId && (
         <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
       )}
-      <EagleImageCopyButton sourceUrl={image.src} />
+      <EagleImageCopyButton asset={asset} sourceUrl={image.src} />
       {actions}
       {collection}
     </>
@@ -657,7 +674,7 @@ export function EagleImageViewer({
           {!loading && !error && onLocate && image.assetId && (
             <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
           )}
-          {!loading && !error && <EagleImageCopyButton sourceUrl={image.src} />}
+          {!loading && !error && <EagleImageCopyButton asset={asset} sourceUrl={image.src} />}
           {!loading && !error && onEdit && (
             <button type="button" data-viewer-primary onClick={onEdit}>
               <IconAdjustments size={17} />
@@ -673,18 +690,23 @@ export function EagleImageViewer({
         posterUrl={image.src}
       />
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
-      {qualityNotice && (
-        <div className={styles.qualityNotice} role="status" aria-live="polite">
-          <div className={styles.qualityLabel}>
-            <span className={styles.qualityDot} aria-hidden="true" />
-            <span>{qualityNotice}</span>
-            {qualityCount && <span className={styles.qualityCount}>{qualityCount}</span>}
+      {showSourceStatus && (
+        <div className={styles.sourceStatus} data-state={sourceState}>
+          <div className={styles.sourceLine}>
+            <span className={styles.sourceDot} aria-hidden="true" />
+            <span className={styles.sourceLabel} aria-live="polite">
+              {sourceLabel}
+            </span>
+            <span className={styles.sourceMeta}>{sourceHint}</span>
           </div>
-          {qualityPercent !== null && (
-            <div className={styles.qualityTrack} aria-hidden="true">
-              <div className={styles.qualityBar} style={{ width: `${qualityPercent}%` }} />
-            </div>
-          )}
+          <div className={styles.sourceTrack} aria-hidden="true">
+            {sourceState === 'loading' &&
+              (sourcePercent !== null ? (
+                <div className={styles.sourceBar} style={{ width: `${sourcePercent}%` }} />
+              ) : (
+                <div className={styles.sourcePulse} />
+              ))}
+          </div>
         </div>
       )}
       {displayStatus !== 'ready' ? (

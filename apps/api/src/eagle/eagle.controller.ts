@@ -551,6 +551,26 @@ export class EagleController {
     return this.getRendition(principal, assetId, renditionId, ifNoneMatch, response, range);
   }
 
+  @Get('assets/:assetId/share-image')
+  async getShareImage(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const abortSignal = createMediaAbortSignal(response);
+    const rendered = await this.media.renderShareImage(
+      principal.sub,
+      assetId,
+      principal.canViewPrivate,
+      abortSignal,
+    );
+    response.setHeader('Content-Type', 'image/jpeg');
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('Content-Length', String(rendered.byteSize));
+    return new StreamableFile(rendered.buffer);
+  }
+
   @Get('assets/:assetId/pyramid')
   getPyramidDescriptor(
     @CurrentPrincipal() principal: AuthPrincipal,

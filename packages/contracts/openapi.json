@@ -1898,6 +1898,32 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/{assetId}/share-image": {
+      "get": {
+        "operationId": "EagleController_getShareImage",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/{assetId}/pyramid": {
       "get": {
         "operationId": "EagleController_getPyramidDescriptor",
@@ -6417,6 +6443,32 @@
             "required": false,
             "in": "header",
             "description": "Optional single byte range for video playback",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/{assetId}/share-image": {
+      "get": {
+        "operationId": "PhotosController_getShareImage",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
             "schema": {
               "type": "string"
             }

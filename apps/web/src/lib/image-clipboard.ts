@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { fetchWithBrowserSession } from './api-client';
 import { getDesktopClipboardBridge, resolveClipboardImageUrl } from './media-resolver';
 const MAX_CLIPBOARD_PIXELS = 16000000;
 interface ImageClipboardDependencies {
@@ -47,6 +48,68 @@ export async function copyImageToClipboard(
   const pngPromise = loadClipboardPng(sourceUrl, dependencies);
   await writeClipboard([createClipboardItem({ 'image/png': pngPromise })]);
 }
+/** The desktop builds a 4K share JPEG server-side and hands its path to the native clipboard;
+ *  browsers can only publish PNG, so the same JPEG is converted before the clipboard write. */
+export async function copyShareImageToClipboard(shareUrl: string): Promise<void> {
+  const desktop = getDesktopClipboardBridge();
+  if (desktop) {
+    const jpeg = await fetchShareJpeg(shareUrl);
+    if (desktop.writeClipboardImageData) {
+      await desktop.writeClipboardImageData({
+        contentType: jpeg.contentType,
+        bytes: new Uint8Array(jpeg.buffer),
+      });
+      return;
+    }
+    // Desktop builds before the JPEG bridge still accept PNG through the original IPC.
+    const png = await convertJpegToPng(jpeg);
+    await desktop.writeClipboardImage(new Uint8Array(await png.arrayBuffer()));
+    return;
+  }
+  const createClipboardItem = (items: Record<string, Blob | PromiseLike<string | Blob>>) =>
+    new globalThis.ClipboardItem(items);
+  const writeClipboard = globalThis.navigator?.clipboard?.write?.bind(
+    globalThis.navigator.clipboard,
+  );
+  if (
+    globalThis.isSecureContext === false ||
+    !writeClipboard ||
+    typeof globalThis.ClipboardItem !== 'function'
+  ) {
+    throw new Error(
+      globalThis.isSecureContext === false
+        ? t('当前网页地址不支持复制图片，请使用 localhost 或 HTTPS。')
+        : t('当前环境不支持复制图片。'),
+    );
+  }
+  // Start the clipboard write inside the click gesture; the promise resolves after the render.
+  await writeClipboard([
+    createClipboardItem({ 'image/png': fetchShareJpeg(shareUrl).then(convertJpegToPng) }),
+  ]);
+}
+
+interface ShareJpeg {
+  buffer: ArrayBuffer;
+  contentType: 'image/jpeg';
+}
+
+async function fetchShareJpeg(shareUrl: string): Promise<ShareJpeg> {
+  const response = await fetchWithBrowserSession(shareUrl, {}, 120_000);
+  if (!response.ok)
+    throw new Error(
+      t('读取图片失败（{{value1}}）。', {
+        value1: response.status,
+      }),
+    );
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0]?.toLowerCase();
+  if (contentType !== 'image/jpeg') throw new Error(t('复制来源不是图片。'));
+  return { buffer: await response.arrayBuffer(), contentType: 'image/jpeg' };
+}
+
+function convertJpegToPng(jpeg: ShareJpeg): Promise<Blob> {
+  return convertImageToPng(new Blob([jpeg.buffer], { type: jpeg.contentType }));
+}
+
 async function loadClipboardPng(
   sourceUrl: string,
   dependencies: ImageClipboardDependencies,

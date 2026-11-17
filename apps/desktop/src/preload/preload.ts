@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
       bytes: pngBytes,
     });
   },
+  writeClipboardImageData(input: { contentType: 'image/png' | 'image/jpeg'; bytes: Uint8Array }) {
+    return ipcRenderer.invoke('desktop:write-clipboard-image', input);
+  },
   getConnectionStatus() {
     return ipcRenderer.invoke('desktop:get-connection-status');
   },

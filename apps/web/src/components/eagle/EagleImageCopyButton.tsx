@@ -1,19 +1,29 @@
 import { IconCopy } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
-import { copyImageToClipboard } from '../../lib/image-clipboard';
+import type { EagleAssetListItem } from '../../lib/eagle-api';
+import { getEagleShareImageUrl } from '../../lib/eagle-api';
+import { copyImageToClipboard, copyShareImageToClipboard } from '../../lib/image-clipboard';
 import styles from './EagleImageCopyButton.module.css';
 
-export function EagleImageCopyButton({ sourceUrl }: { sourceUrl: string }) {
+export function EagleImageCopyButton({
+  asset,
+  sourceUrl,
+}: {
+  asset?: EagleAssetListItem;
+  sourceUrl: string;
+}) {
   // Each image owns its feedback; a previous photo's pending copy cannot update the next photo.
-  return <ImageCopyAction key={sourceUrl} sourceUrl={sourceUrl} />;
+  const key = asset ? `${asset.libraryMode ?? ''}:${asset.id}` : sourceUrl;
+  return <ImageCopyAction key={key} asset={asset} sourceUrl={sourceUrl} />;
 }
 
-function ImageCopyAction({ sourceUrl }: { sourceUrl: string }) {
+function ImageCopyAction({ asset, sourceUrl }: { asset?: EagleAssetListItem; sourceUrl: string }) {
   const [status, setStatus] = useState<'idle' | 'pending' | 'copied' | 'error'>('idle');
   const [error, setError] = useState('');
   const active = useRef(true);
   const pending = useRef(false);
+  const share = Boolean(asset?.mimeType.startsWith('image/'));
   useEffect(() => {
     active.current = true;
     return () => {
@@ -24,9 +34,13 @@ function ImageCopyAction({ sourceUrl }: { sourceUrl: string }) {
     if (pending.current) return;
     pending.current = true;
     setStatus('pending');
+    setError('');
     try {
-      // Call within the click gesture so the browser can authorize clipboard.write.
-      await copyImageToClipboard(sourceUrl);
+      if (asset && share) {
+        await copyShareImageToClipboard(getEagleShareImageUrl(asset.id, asset.libraryMode));
+      } else {
+        await copyImageToClipboard(sourceUrl);
+      }
       if (active.current) setStatus('copied');
     } catch (cause) {
       if (active.current) {
@@ -41,6 +55,8 @@ function ImageCopyAction({ sourceUrl }: { sourceUrl: string }) {
       pending.current = false;
     }
   };
+  const pendingLabel = share ? t('正在准备 4K…') : t('正在复制…');
+  const copiedLabel = share ? t('已复制 4K') : t('已复制');
   return (
     <div className={styles.root}>
       <button
@@ -48,14 +64,16 @@ function ImageCopyAction({ sourceUrl }: { sourceUrl: string }) {
         type="button"
         aria-label={t('复制图片')}
         disabled={status === 'pending'}
+        data-pending={status === 'pending' || undefined}
         onClick={() => void copy()}
       >
         <IconCopy size={16} />
         <span data-viewer-secondary-label>
-          {status === 'pending' ? t('正在复制…') : t('复制图片')}
+          {status === 'pending' ? pendingLabel : t('复制图片')}
         </span>
+        {status === 'pending' && <span className={styles.pendingTrack} aria-hidden="true" />}
       </button>
-      {status === 'copied' && <small role="status">{t('已复制')}</small>}
+      {status === 'copied' && <small role="status">{copiedLabel}</small>}
       {status === 'error' && <small role="alert">{error}</small>}
     </div>
   );

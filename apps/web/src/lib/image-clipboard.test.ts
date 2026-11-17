@@ -1,6 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SekerDesktopBridge } from './media-resolver';
-import { canCopyImageToClipboard, copyImageToClipboard } from './image-clipboard';
+import {
+  canCopyImageToClipboard,
+  copyImageToClipboard,
+  copyShareImageToClipboard,
+} from './image-clipboard';
+
+const { fetchWithBrowserSessionMock } = vi.hoisted(() => ({
+  fetchWithBrowserSessionMock: vi.fn(),
+}));
+vi.mock('./api-client', () => ({
+  fetchWithBrowserSession: (...args: unknown[]) => fetchWithBrowserSessionMock(...args),
+}));
 
 const pngBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const png = {
@@ -9,6 +20,7 @@ const png = {
 } as unknown as Blob;
 
 afterEach(() => {
+  fetchWithBrowserSessionMock.mockReset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   delete (navigator as unknown as { clipboard?: Clipboard }).clipboard;
@@ -192,5 +204,125 @@ describe('image clipboard', () => {
           ),
       }),
     ).rejects.toThrow(/不是图片/);
+  });
+
+  it('hands the 4K JPEG straight to the desktop clipboard bridge', async () => {
+    const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]);
+    fetchWithBrowserSessionMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+      arrayBuffer: async () => jpegBytes.buffer,
+    });
+    const writeClipboardImageData = vi.fn();
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      writeClipboardImage: vi.fn(),
+      writeClipboardImageData,
+    };
+
+    await copyShareImageToClipboard('/api/eagle/assets/asset-1/share-image');
+
+    expect(fetchWithBrowserSessionMock).toHaveBeenCalledWith(
+      '/api/eagle/assets/asset-1/share-image',
+      {},
+      120_000,
+    );
+    expect(writeClipboardImageData).toHaveBeenCalledWith({
+      contentType: 'image/jpeg',
+      bytes: jpegBytes,
+    });
+  });
+
+  it('falls back to the original PNG bridge on desktop builds without JPEG support', async () => {
+    const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]);
+    fetchWithBrowserSessionMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+      arrayBuffer: async () => jpegBytes.buffer,
+    });
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      toBlob: vi.fn((resolve: (blob: Blob | null) => void) => resolve(png)),
+    };
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockResolvedValue({ width: 4_096, height: 2_731, close: vi.fn() }),
+    );
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas as unknown as HTMLCanvasElement);
+    const writeClipboardImage = vi.fn();
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      writeClipboardImage,
+    };
+
+    await copyShareImageToClipboard('/api/eagle/assets/asset-1/share-image');
+
+    expect(writeClipboardImage).toHaveBeenCalledWith(pngBytes);
+  });
+
+  it('converts the 4K JPEG before writing the browser clipboard', async () => {
+    const jpegBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]);
+    fetchWithBrowserSessionMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'image/jpeg' }),
+      arrayBuffer: async () => jpegBytes.buffer,
+    });
+    const close = vi.fn();
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage: vi.fn() })),
+      toBlob: vi.fn((resolve: (blob: Blob | null) => void) => resolve(png)),
+    };
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn().mockResolvedValue({ width: 4_096, height: 2_731, close }),
+    );
+    vi.spyOn(document, 'createElement').mockReturnValue(canvas as unknown as HTMLCanvasElement);
+    class TestClipboardItem {
+      constructor(readonly items: Record<string, Blob | PromiseLike<string | Blob>>) {}
+    }
+    vi.stubGlobal('ClipboardItem', TestClipboardItem);
+    const write = vi.fn(async ([item]: TestClipboardItem[]) => {
+      await item.items['image/png'];
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { write },
+    });
+
+    await copyShareImageToClipboard('/api/eagle/assets/asset-1/share-image');
+
+    expect(write).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+    expect(canvas.width).toBe(4_096);
+  });
+
+  it('rejects non-JPEG share responses before touching the clipboard', async () => {
+    fetchWithBrowserSessionMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/html' }),
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+    const writeClipboardImageData = vi.fn();
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      writeClipboardImage: vi.fn(),
+      writeClipboardImageData,
+    };
+
+    await expect(
+      copyShareImageToClipboard('/api/eagle/assets/asset-1/share-image'),
+    ).rejects.toThrow(/不是图片/);
+    expect(writeClipboardImageData).not.toHaveBeenCalled();
   });
 });

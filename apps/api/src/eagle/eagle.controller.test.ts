@@ -50,6 +50,34 @@ test('private-tag settings stay browser-only and require same-origin writes', ()
   );
 });
 
+test('share image responses are 4K JPEGs that never enter a shared cache', async () => {
+  const headers = new Map<string, string>();
+  const response = {
+    setHeader: (name: string, value: string) => headers.set(name, value),
+    once: () => undefined,
+  };
+  const controller = new EagleController(
+    {} as never,
+    {} as never,
+    {
+      renderShareImage: async () => ({
+        buffer: Buffer.from('jpeg'),
+        byteSize: 4,
+        width: 4_096,
+        height: 2_731,
+      }),
+    } as never,
+    {} as never,
+  );
+
+  await controller.getShareImage({ sub: 'owner-a' } as never, 'asset-1', response as never);
+
+  assert.equal(headers.get('Content-Type'), 'image/jpeg');
+  assert.equal(headers.get('Content-Length'), '4');
+  assert.equal(headers.get('Cache-Control'), 'private, no-store');
+  assert.equal(headers.get('X-Content-Type-Options'), 'nosniff');
+});
+
 test('public derived media must revalidate because tag rules can make the asset private', async () => {
   const headers = new Map<string, string>();
   const response = {

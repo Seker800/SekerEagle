@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { t } from '../../i18n';
-import { copyImageToClipboard } from '../../lib/image-clipboard';
+import { copyShareImageToClipboard } from '../../lib/image-clipboard';
+import { getEagleShareImageUrl } from '../../lib/eagle-api';
 import type { LibraryMode } from '../../lib/library-api-scope';
 import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
@@ -159,7 +160,9 @@ export function useEagleAssetTransferActions(options: {
     }
     setAssetActionPending('copy');
     setAssetActionError(null);
-    void copyImageToClipboard(previewUrl).then(
+    void copyShareImageToClipboard(
+      getEagleShareImageUrl(contextMenuAsset.id, contextMenuAsset.libraryMode),
+    ).then(
       () => {
         setAssetActionPending(null);
         setAssetContextMenu(null);

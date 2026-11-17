@@ -1,11 +1,32 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
-const { copy } = vi.hoisted(() => ({ copy: vi.fn() }));
-vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: copy }));
+const { copy, copyShare } = vi.hoisted(() => ({ copy: vi.fn(), copyShare: vi.fn() }));
+vi.mock('../../lib/image-clipboard', () => ({
+  copyImageToClipboard: copy,
+  copyShareImageToClipboard: copyShare,
+}));
+
+const imageAsset = {
+  id: 'asset-1',
+  mimeType: 'image/jpeg',
+  libraryMode: 'MATERIAL',
+} as unknown as EagleAssetListItem;
 
 describe('EagleImageCopyButton', () => {
-  beforeEach(() => copy.mockReset());
+  beforeEach(() => {
+    copy.mockReset();
+    copyShare.mockReset();
+  });
+  it('copies the 4K share rendition when the viewer knows the asset', async () => {
+    copyShare.mockResolvedValue(undefined);
+    render(<EagleImageCopyButton asset={imageAsset} sourceUrl="preview.webp" />);
+    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    expect(copyShare).toHaveBeenCalledWith('/api/eagle/assets/asset-1/share-image');
+    expect(copy).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('已复制 4K');
+  });
   it('prevents concurrent writes and resets feedback when the photo changes', async () => {
     let complete!: () => void;
     copy.mockImplementationOnce(

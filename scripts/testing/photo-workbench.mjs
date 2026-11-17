@@ -588,6 +588,22 @@ try {
       assert.equal(item.height, sample.height);
     }
   }
+  const shareAssetId = aspectAssetIds.get('photos:landscape');
+  const shareHeaders = { cookie: `sekereagle_access=${accessToken}` };
+  const shareResponse = await fetch(`${origin}/api/photos/assets/${shareAssetId}/share-image`, {
+    headers: shareHeaders,
+  });
+  assert.equal(shareResponse.status, 200);
+  assert.equal(shareResponse.headers.get('content-type'), 'image/jpeg');
+  assert.equal(shareResponse.headers.get('cache-control'), 'private, no-store');
+  const shareBytes = Buffer.from(await shareResponse.arrayBuffer());
+  assert.equal(shareBytes.subarray(0, 2).toString('hex'), 'ffd8');
+  const shareMetadata = await sharp(shareBytes).metadata();
+  assert.ok(Math.max(shareMetadata.width, shareMetadata.height) <= 4_096);
+  const crossModeShare = await fetch(`${origin}/api/eagle/assets/${shareAssetId}/share-image`, {
+    headers: shareHeaders,
+  });
+  assert.equal(crossModeShare.status, 404);
   const capturedPhoto = photos.items.find((item) => item.id === b.assetId);
   assert.equal(capturedPhoto.photoMetadata.cameraModel, 'Test Camera');
   assert.equal(capturedPhoto.photoMetadata.capturedAt, '2024-03-01T04:30:01.000Z');

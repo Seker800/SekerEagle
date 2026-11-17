@@ -2694,7 +2694,7 @@ export function SekerEaglePage({
               onClick={copySelectedImage}
             >
               <IconCopy size={15} />
-              {assetActionPending === 'copy' ? t('正在复制…') : t('复制图片')}
+              {assetActionPending === 'copy' ? t('正在准备 4K…') : t('复制图片')}
             </button>
           ) : null}
           {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (
