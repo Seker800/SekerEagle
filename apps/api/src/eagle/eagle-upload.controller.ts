@@ -25,6 +25,8 @@ import {
   CheckUploadContentResultDto,
   CompleteEagleUploadDto,
   InitiateEagleUploadDto,
+  PresignUploadPartsDto,
+  PresignUploadPartsResultDto,
   UploadStatusBatchDto,
   UploadStatusBatchResultDto,
 } from './eagle-upload.dto';
@@ -89,6 +91,17 @@ export class EagleUploadController {
     @Param('uploadSessionId', new ParseUUIDPipe({ version: '4' })) uploadSessionId: string,
   ) {
     return this.uploads.getSession(principal.sub, uploadSessionId);
+  }
+
+  @Post(':uploadSessionId/parts')
+  @ApiCreatedResponse({ type: PresignUploadPartsResultDto })
+  @UseGuards(BrowserOrPatOriginGuard)
+  presignParts(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('uploadSessionId', new ParseUUIDPipe({ version: '4' })) uploadSessionId: string,
+    @Body() input: PresignUploadPartsDto,
+  ): Promise<PresignUploadPartsResultDto> {
+    return this.uploads.presignParts(principal.sub, uploadSessionId, input.partNumbers);
   }
 
   @Post(':uploadSessionId/parts/:partNumber')

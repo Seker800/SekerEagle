@@ -33,6 +33,14 @@ afterEach(() => {
 });
 
 describe('LibraryUploadQueue', () => {
+  it('exposes an import-preparation signal that aborts when the queue is cleared', () => {
+    const queue = createQueue();
+    const signal = queue.signal;
+    expect(signal.aborted).toBe(false);
+    queue.clear();
+    expect(signal.aborted).toBe(true);
+  });
+
   it('runs four files concurrently instead of two', async () => {
     const queue = createQueue();
     let active = 0;

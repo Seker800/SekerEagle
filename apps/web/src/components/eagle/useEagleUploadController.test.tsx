@@ -193,6 +193,57 @@ it('revoking the browser session aborts active uploads and never starts the queu
   vi.unstubAllGlobals();
 });
 
+it('starts hashing every imported file before an upload slot frees', async () => {
+  dedupeCheck.mockReset();
+  let releaseHash!: () => void;
+  const hashGate = new Promise<void>((resolve) => {
+    releaseHash = resolve;
+  });
+  dedupeCheck.mockImplementation(async () => {
+    await hashGate;
+    return { sha256: 'd'.repeat(64), exists: false };
+  });
+  material.mockReset();
+  let releaseUpload!: () => void;
+  const uploadGate = new Promise<void>((resolve) => {
+    releaseUpload = resolve;
+  });
+  material.mockImplementation(() => uploadGate.then(() => ({})));
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const view = renderHook(
+    () => useEagleUploadController(['eagle', 'owner', 'MATERIAL', 'assets']),
+    { wrapper },
+  );
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = view.result.current.importFiles(
+      ['a', 'b', 'c', 'd', 'e'].map((name) => new File(['data'], `${name}.jpg`)),
+    );
+  });
+  // All five files hash while the four upload slots are still busy, so a queued
+  // file no longer waits for a transfer slot just to compute its digest.
+  expect(dedupeCheck).toHaveBeenCalledTimes(5);
+  expect(material).not.toHaveBeenCalled();
+  await act(async () => {
+    releaseHash();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(material).toHaveBeenCalledTimes(4);
+  await act(async () => {
+    releaseUpload();
+    await pending;
+  });
+  expect(view.result.current.uploads.every((item) => item.state === 'completed')).toBe(true);
+  dedupeCheck.mockImplementation(async () => ({ sha256: 'a'.repeat(64), exists: false }));
+});
+
 it('remounting a mode subscribes to its original upload queue', async () => {
   material.mockReset();
   let release!: () => void;

@@ -719,26 +719,46 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       const pending = Array.from({ length: count }, (_, index) => index).filter(
         (index) => !sent.has(index + 1),
       );
+      const uploadUrls = new Map<number, string>();
+      if (pending.length) {
+        // One request signs every part of this file; the PUTs then start without
+        // queueing control requests behind each other on the browser's connections.
+        const presigned = await api<{
+          parts: Array<{ partNumber: number; uploadUrl: string }>;
+        }>(`/eagle/uploads/${session.id}/parts`, {
+          method: 'POST',
+          body: JSON.stringify({ partNumbers: pending.map((index) => index + 1) }),
+          signal,
+        });
+        for (const part of presigned.parts) uploadUrls.set(part.partNumber, part.uploadUrl);
+      }
       try {
         await mapWithConcurrency(pending, UPLOAD_PART_CONCURRENCY, async (index) => {
           signal.throwIfAborted();
           const partNumber = index + 1;
-          const { uploadUrl } = await api<{
-            uploadUrl: string;
-          }>(`/eagle/uploads/${session.id}/parts/${partNumber}`, {
-            method: 'POST',
-            body: '{}',
-            signal,
-          });
-          const response = await fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
-            method: 'PUT',
-            body: file.slice(
-              index * session.partSize,
-              Math.min(file.size, (index + 1) * session.partSize),
-            ),
-            credentials: 'omit',
-            signal,
-          });
+          const putPart = (uploadUrl: string) =>
+            fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
+              method: 'PUT',
+              body: file.slice(
+                index * session.partSize,
+                Math.min(file.size, (index + 1) * session.partSize),
+              ),
+              credentials: 'omit',
+              signal,
+            });
+          const uploadUrl = uploadUrls.get(partNumber);
+          if (!uploadUrl) throw new Error(t('服务器未返回分片上传地址。'));
+          let response = await putPart(uploadUrl);
+          if (response.status === 403) {
+            // Signed part URLs expire after 15 minutes; a large file on a slow link
+            // can outlast the batch signed when its transfer started.
+            signal.throwIfAborted();
+            const refreshed = await api<{ uploadUrl: string }>(
+              `/eagle/uploads/${session.id}/parts/${partNumber}`,
+              { method: 'POST', body: '{}', signal },
+            );
+            response = await putPart(refreshed.uploadUrl);
+          }
           if (!response.ok)
             throw new Error(
               t('上传分片失败（{{value1}}）', {

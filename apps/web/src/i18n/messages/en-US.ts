@@ -1187,6 +1187,7 @@ export const enUS = {
   '对象存储上传地址不属于当前 SekerEagle。':
     'Object storage upload URL does not belong to current SekerEagle.',
   '对象存储未返回分片校验值。': 'Object storage did not return chunk validation value.',
+  '服务器未返回分片上传地址。': 'The server did not return a chunk upload URL.',
   返回标签推荐设置: 'Back to recommendation settings',
   '分析会在缩略图就绪后后台执行，不会阻塞素材导入。':
     'Analysis runs in the background after thumbnails are ready, without blocking asset import.',

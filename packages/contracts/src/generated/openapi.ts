@@ -1316,6 +1316,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/uploads/{uploadSessionId}/parts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleUploadController_listParts'];
+    put?: never;
+    post: operations['EagleUploadController_presignParts'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/uploads/{uploadSessionId}/parts/{partNumber}': {
     parameters: {
       query?: never;
@@ -1326,22 +1342,6 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['EagleUploadController_presignPart'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/eagle/uploads/{uploadSessionId}/parts': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['EagleUploadController_listParts'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3636,6 +3636,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/uploads/{uploadSessionId}/parts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoUploadsController_listParts'];
+    put?: never;
+    post: operations['PhotoUploadsController_presignParts'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/uploads/{uploadSessionId}/parts/{partNumber}': {
     parameters: {
       query?: never;
@@ -3646,22 +3662,6 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['PhotoUploadsController_presignPart'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/photos/uploads/{uploadSessionId}/parts': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['PhotoUploadsController_listParts'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -4837,6 +4837,17 @@ export interface components {
     UploadStatusBatchResultDto: {
       /** @description Sessions owned by the authenticated principal in the current library mode. */
       items: components['schemas']['UploadSessionStatusDto'][];
+    };
+    PresignUploadPartsDto: {
+      partNumbers: number[];
+    };
+    PresignedUploadPartDto: {
+      partNumber: number;
+      uploadUrl: string;
+      expiresInSeconds: number;
+    };
+    PresignUploadPartsResultDto: {
+      parts: components['schemas']['PresignedUploadPartDto'][];
     };
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
@@ -7228,6 +7239,50 @@ export interface operations {
       };
     };
   };
+  EagleUploadController_listParts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        uploadSessionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleUploadController_presignParts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        uploadSessionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PresignUploadPartsDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PresignUploadPartsResultDto'];
+        };
+      };
+    };
+  };
   EagleUploadController_presignPart: {
     parameters: {
       query?: never;
@@ -7241,25 +7296,6 @@ export interface operations {
     requestBody?: never;
     responses: {
       201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleUploadController_listParts: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        uploadSessionId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -10851,6 +10887,50 @@ export interface operations {
       };
     };
   };
+  PhotoUploadsController_listParts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        uploadSessionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoUploadsController_presignParts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        uploadSessionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PresignUploadPartsDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PresignUploadPartsResultDto'];
+        };
+      };
+    };
+  };
   PhotoUploadsController_presignPart: {
     parameters: {
       query?: never;
@@ -10864,25 +10944,6 @@ export interface operations {
     requestBody?: never;
     responses: {
       201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PhotoUploadsController_listParts: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        uploadSessionId: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
         headers: {
           [name: string]: unknown;
         };

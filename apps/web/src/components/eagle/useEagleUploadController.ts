@@ -2,7 +2,7 @@ import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { hashKey, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
-import { UploadDedupeChecker } from '../../lib/upload-dedupe';
+import { UploadDedupeChecker, type UploadDedupeResult } from '../../lib/upload-dedupe';
 export type { EagleUploadItem } from '../../lib/library-upload-queue';
 
 export interface EagleUploadSummary {
@@ -50,6 +50,24 @@ export function useEagleUploadController(assetsQueryKey: QueryKey) {
     () => new UploadDedupeChecker((items, signal) => checkEagleUploadContentBatch(items, signal)),
     [checkEagleUploadContentBatch],
   );
+  const prepared = useMemo(() => {
+    const pending = new WeakMap<File, { promise: Promise<UploadDedupeResult>; failed: boolean }>();
+    return (file: File) => {
+      const cached = pending.get(file);
+      if (cached && !cached.failed) return cached.promise;
+      const entry: { promise: Promise<UploadDedupeResult>; failed: boolean } = {
+        promise: dedupe.check(file, queue.signal),
+        failed: false,
+      };
+      // Started ahead of the upload slots, so a cleared queue must not surface it,
+      // and a failed hash must not be reused by a later retry of the same File.
+      void entry.promise.catch(() => {
+        entry.failed = true;
+      });
+      pending.set(file, entry);
+      return entry.promise;
+    };
+  }, [dedupe, queue]);
   const scope = hashKey(assetsQueryKey);
   const uploads = allItems.filter((item) => item.scope === scope);
   const completed = uploads.filter((item) => item.state === 'completed').length;
@@ -99,13 +117,18 @@ export function useEagleUploadController(assetsQueryKey: QueryKey) {
   };
 
   return {
-    importFiles: (files: File[]) =>
-      queue.add(
+    importFiles: (files: File[]) => {
+      // Hash ahead of the transfer workers, so an upload slot never sits idle
+      // while the browser computes a whole-file digest for the file it just took.
+      for (const file of files) void prepared(file);
+      return queue.add(
         files,
         assetsQueryKey,
         async (file, progress, signal) => {
           progress({ percent: 0, phase: 'checking' });
-          const { sha256, exists } = await dedupe.check(file, signal);
+          signal.throwIfAborted();
+          const { sha256, exists } = await prepared(file);
+          signal.throwIfAborted();
           if (exists) return { duplicate: true };
           const result = await uploadEagleAsset(file, progress, {
             signal,
@@ -116,7 +139,8 @@ export function useEagleUploadController(assetsQueryKey: QueryKey) {
           return result.assetId ? undefined : { sessionId: result.uploadSessionId };
         },
         (sessionIds, signal) => getEagleUploadStatuses(sessionIds, signal),
-      ),
+      );
+    },
     uploads,
     summary,
     pauseUploads: queue.pauseAll,

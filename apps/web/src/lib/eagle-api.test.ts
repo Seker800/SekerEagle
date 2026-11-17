@@ -56,7 +56,12 @@ describe('listEagleAssetUpdates', () => {
       .mockResolvedValueOnce(Response.json({ id: 'edit-session', partSize: 10 }))
       .mockResolvedValueOnce(
         Response.json({
-          uploadUrl: 'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test',
+          parts: [
+            {
+              partNumber: 1,
+              uploadUrl: 'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test',
+            },
+          ],
         }),
       )
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: 'etag' } }))
@@ -74,7 +79,7 @@ describe('listEagleAssetUpdates', () => {
     expect(result.asset.id).toBe('copy');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/eagle/uploads',
-      '/api/eagle/uploads/edit-session/parts/1',
+      '/api/eagle/uploads/edit-session/parts',
       'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test',
       '/api/eagle/uploads/edit-session/complete',
       '/api/eagle/assets/copy',
@@ -89,7 +94,12 @@ describe('listEagleAssetUpdates', () => {
       .mockResolvedValueOnce(Response.json({ id: 'session-1', partSize: 10 }))
       .mockResolvedValueOnce(
         Response.json({
-          uploadUrl: 'http://localhost:8180/sekereagle-assets/part?X-Amz-Signature=test',
+          parts: [
+            {
+              partNumber: 1,
+              uploadUrl: 'http://localhost:8180/sekereagle-assets/part?X-Amz-Signature=test',
+            },
+          ],
         }),
       )
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: 'etag' } }))
@@ -124,8 +134,13 @@ describe('listEagleAssetUpdates', () => {
       .mockResolvedValueOnce(
         Response.json(
           {
-            uploadUrl:
-              'http://localhost:8180/sekereagle-assets/users/user-1/file.png?X-Amz-Signature=signed',
+            parts: [
+              {
+                partNumber: 1,
+                uploadUrl:
+                  'http://localhost:8180/sekereagle-assets/users/user-1/file.png?X-Amz-Signature=signed',
+              },
+            ],
           },
           { status: 201 },
         ),
@@ -157,9 +172,14 @@ it('session revocation cancels an object PUT and prevents completion or cleanup 
     if (url === '/api/auth/logout' || url === '/api/auth/login')
       return new Response(null, { status: 204 });
     if (url === '/api/eagle/uploads') return Response.json({ id: 'session', partSize: 10 });
-    if (url.endsWith('/parts/1'))
+    if (url.endsWith('/parts'))
       return Response.json({
-        uploadUrl: `${window.location.origin}/sekereagle-assets/part?X-Amz-Signature=test`,
+        parts: [
+          {
+            partNumber: 1,
+            uploadUrl: `${window.location.origin}/sekereagle-assets/part?X-Amz-Signature=test`,
+          },
+        ],
       });
     if (init?.method === 'PUT') {
       putSignal = init.signal!;
@@ -235,14 +255,13 @@ describe('upload throughput', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url === '/api/eagle/uploads') return Response.json({ id: 'session-multi', partSize: 5 });
-      if (url.includes('/parts/')) {
-        const partNumber = Number(url.slice(url.lastIndexOf('/') + 1));
-        active += 1;
-        peak = Math.max(peak, active);
-        await new Promise((resolve) => setTimeout(resolve, 5));
-        active -= 1;
+      if (url.endsWith('/parts')) {
+        const body = JSON.parse(init?.body as string) as { partNumbers: number[] };
         return Response.json({
-          uploadUrl: `http://localhost:8180/sekereagle-assets/part-${partNumber}?X-Amz-Signature=test`,
+          parts: body.partNumbers.map((partNumber) => ({
+            partNumber,
+            uploadUrl: `http://localhost:8180/sekereagle-assets/part-${partNumber}?X-Amz-Signature=test`,
+          })),
         });
       }
       if (init?.method === 'PUT') {
@@ -278,14 +297,107 @@ describe('upload throughput', () => {
     expect(completedParts).toEqual([[1, 2, 3]]);
   });
 
+  it('signs every part of a file in one request instead of one request per part', async () => {
+    vi.stubGlobal('window', { location: { origin: 'http://localhost:8180' } });
+    const presigns: number[][] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/eagle/uploads') return Response.json({ id: 'session-batch', partSize: 5 });
+      if (url.endsWith('/parts')) {
+        const body = JSON.parse(init?.body as string) as { partNumbers: number[] };
+        presigns.push(body.partNumbers);
+        return Response.json({
+          parts: body.partNumbers.map((partNumber) => ({
+            partNumber,
+            uploadUrl: `http://localhost:8180/sekereagle-assets/part-${partNumber}?X-Amz-Signature=test`,
+          })),
+        });
+      }
+      if (init?.method === 'PUT') {
+        const partNumber = Number(/part-(\d+)/.exec(url)![1]);
+        return new Response(null, { status: 200, headers: { etag: `etag-${partNumber}` } });
+      }
+      if (url.endsWith('/complete'))
+        return Response.json(
+          { uploadSessionId: 'session-batch', status: 'ASSEMBLED' },
+          { status: 202 },
+        );
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    await uploadEagleAsset(
+      new File([new Uint8Array(12)], 'batch.jpg', { type: 'image/jpeg' }),
+      vi.fn(),
+      { waitForFinalization: false },
+    );
+
+    expect(presigns).toEqual([[1, 2, 3]]);
+  });
+
+  it('re-signs only the part whose signed URL expired and retries it once', async () => {
+    vi.stubGlobal('window', { location: { origin: 'http://localhost:8180' } });
+    const puts: string[] = [];
+    const refreshed: number[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === '/api/eagle/uploads') return Response.json({ id: 'session-expiry', partSize: 5 });
+      if (url.endsWith('/parts')) {
+        const body = JSON.parse(init?.body as string) as { partNumbers: number[] };
+        return Response.json({
+          parts: body.partNumbers.map((partNumber) => ({
+            partNumber,
+            uploadUrl: `http://localhost:8180/sekereagle-assets/part-${partNumber}?X-Amz-Signature=expired`,
+          })),
+        });
+      }
+      if (url.endsWith('/parts/2')) {
+        refreshed.push(2);
+        return Response.json({
+          partNumber: 2,
+          uploadUrl: 'http://localhost:8180/sekereagle-assets/part-2?X-Amz-Signature=fresh',
+          expiresInSeconds: 900,
+        });
+      }
+      if (init?.method === 'PUT') {
+        puts.push(url);
+        if (url.includes('part-2?X-Amz-Signature=expired'))
+          return new Response(null, { status: 403 });
+        const partNumber = Number(/part-(\d+)/.exec(url)![1]);
+        return new Response(null, { status: 200, headers: { etag: `etag-${partNumber}` } });
+      }
+      if (url.endsWith('/complete'))
+        return Response.json(
+          { uploadSessionId: 'session-expiry', status: 'ASSEMBLED' },
+          { status: 202 },
+        );
+      throw new Error(`unexpected request: ${url}`);
+    });
+
+    const result = await uploadEagleAsset(
+      new File([new Uint8Array(12)], 'expiry.jpg', { type: 'image/jpeg' }),
+      vi.fn(),
+      { waitForFinalization: false },
+    );
+
+    expect(result).toEqual({ uploadSessionId: 'session-expiry' });
+    expect(refreshed).toEqual([2]);
+    expect(puts).toHaveLength(4);
+    expect(puts.filter((url) => url.includes('part-2')).length).toBe(2);
+  });
+
   it('returns an already-published asset without polling finalization', async () => {
     vi.stubGlobal('window', { location: { origin: 'http://localhost:8180' } });
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (url === '/api/eagle/uploads') return Response.json({ id: 'session-fast', partSize: 10 });
-      if (url.includes('/parts/'))
+      if (url.endsWith('/parts'))
         return Response.json({
-          uploadUrl: 'http://localhost:8180/sekereagle-assets/part?X-Amz-Signature=test',
+          parts: [
+            {
+              partNumber: 1,
+              uploadUrl: 'http://localhost:8180/sekereagle-assets/part?X-Amz-Signature=test',
+            },
+          ],
         });
       if (init?.method === 'PUT')
         return new Response(null, { status: 200, headers: { etag: 'etag-1' } });

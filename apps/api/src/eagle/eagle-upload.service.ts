@@ -262,8 +262,34 @@ export class EagleUploadService {
         session.multipartUploadId,
         partNumber,
       ),
-      expiresInSeconds: 900,
+      expiresInSeconds: PART_URL_EXPIRES_IN_SECONDS,
     };
+  }
+
+  /** One session lookup for a whole file's parts instead of one request per part. */
+  async presignParts(ownerId: string, uploadSessionId: string, partNumbers: number[]) {
+    const unique = [...new Set(partNumbers)].sort((left, right) => left - right);
+    if (
+      !unique.length ||
+      unique.some(
+        (partNumber) => !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000,
+      )
+    ) {
+      throw new BadRequestException('分片编号无效。');
+    }
+    const session = await this.requireInitiated(ownerId, uploadSessionId);
+    const parts = await Promise.all(
+      unique.map(async (partNumber) => ({
+        partNumber,
+        uploadUrl: await this.storage.presignUploadPart(
+          session.objectKey,
+          session.multipartUploadId,
+          partNumber,
+        ),
+        expiresInSeconds: PART_URL_EXPIRES_IN_SECONDS,
+      })),
+    );
+    return { parts };
   }
 
   async listParts(ownerId: string, uploadSessionId: string) {
@@ -956,8 +982,21 @@ export class EagleUploadService {
   }
 }
 
+const PART_URL_EXPIRES_IN_SECONDS = 900;
+/** Files at or below this size upload as a single part. */
+const TARGET_PART_SIZE_BYTES = 16 * 1024 * 1024;
+/**
+ * The Android backup transport rejects a session whose partSize is below 5 MiB
+ * (MultipartTransport), so small single-part files keep this floor as well.
+ */
+const MIN_PART_SIZE_BYTES = 5 * 1024 * 1024;
+
 function choosePartSize(size: number): number {
-  return Math.max(5 * 1024 * 1024, Math.ceil(size / 10000));
+  // One part for ordinary photos keeps presign requests, round trips and NAS
+  // object writes to one each. Larger media stays at 16 MiB, which also keeps
+  // every part under the gateway's 32 MiB request limit and under 10,000 parts.
+  if (size <= TARGET_PART_SIZE_BYTES) return Math.max(MIN_PART_SIZE_BYTES, size);
+  return Math.max(TARGET_PART_SIZE_BYTES, Math.ceil(size / 10000));
 }
 
 function normalizeParts(parts: CompleteEagleUploadDto['parts']) {

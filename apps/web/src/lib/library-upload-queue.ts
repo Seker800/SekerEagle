@@ -99,6 +99,10 @@ export class LibraryUploadQueue {
   get paused() {
     return this.#paused;
   }
+  /** Aborts with the browser session and with clear()/dispose(). */
+  get signal() {
+    return AbortSignal.any([this.#session, this.#controller.signal]);
+  }
   pauseAll = () => {
     if (this.#paused) return;
     this.#paused = true;

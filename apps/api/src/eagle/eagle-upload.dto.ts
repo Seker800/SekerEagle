@@ -86,6 +86,28 @@ export class CompleteUploadPartDto {
   etag!: string;
 }
 
+export class PresignUploadPartsDto {
+  @ApiProperty({ type: [Number], minItems: 1, maxItems: 10000 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10000)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(10000, { each: true })
+  partNumbers!: number[];
+}
+
+export class PresignedUploadPartDto {
+  @ApiProperty({ minimum: 1, maximum: 10000 }) partNumber!: number;
+  @ApiProperty() uploadUrl!: string;
+  @ApiProperty() expiresInSeconds!: number;
+}
+
+export class PresignUploadPartsResultDto {
+  @ApiProperty({ type: [PresignedUploadPartDto] })
+  parts!: PresignedUploadPartDto[];
+}
+
 export class CompleteEagleUploadDto {
   @ApiProperty({ type: [CompleteUploadPartDto], maxItems: 10000 })
   @IsArray()

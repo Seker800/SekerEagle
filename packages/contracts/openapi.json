@@ -3649,6 +3649,79 @@
         "tags": ["eagle-uploads"]
       }
     },
+    "/api/eagle/uploads/{uploadSessionId}/parts": {
+      "post": {
+        "operationId": "EagleUploadController_presignParts",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignUploadPartsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignUploadPartsResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads"]
+      },
+      "get": {
+        "operationId": "EagleUploadController_listParts",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads"]
+      }
+    },
     "/api/eagle/uploads/{uploadSessionId}/parts/{partNumber}": {
       "post": {
         "operationId": "EagleUploadController_presignPart",
@@ -3672,35 +3745,6 @@
         ],
         "responses": {
           "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "tags": ["eagle-uploads"]
-      }
-    },
-    "/api/eagle/uploads/{uploadSessionId}/parts": {
-      "get": {
-        "operationId": "EagleUploadController_listParts",
-        "parameters": [
-          {
-            "name": "uploadSessionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
             "description": ""
           }
         },
@@ -9325,6 +9369,79 @@
         "tags": ["eagle-uploads", "photo-uploads"]
       }
     },
+    "/api/photos/uploads/{uploadSessionId}/parts": {
+      "post": {
+        "operationId": "PhotoUploadsController_presignParts",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignUploadPartsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignUploadPartsResultDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads", "photo-uploads"]
+      },
+      "get": {
+        "operationId": "PhotoUploadsController_listParts",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads", "photo-uploads"]
+      }
+    },
     "/api/photos/uploads/{uploadSessionId}/parts/{partNumber}": {
       "post": {
         "operationId": "PhotoUploadsController_presignPart",
@@ -9348,35 +9465,6 @@
         ],
         "responses": {
           "201": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          }
-        ],
-        "tags": ["eagle-uploads", "photo-uploads"]
-      }
-    },
-    "/api/photos/uploads/{uploadSessionId}/parts": {
-      "get": {
-        "operationId": "PhotoUploadsController_listParts",
-        "parameters": [
-          {
-            "name": "uploadSessionId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
             "description": ""
           }
         },
@@ -12124,6 +12212,49 @@
           }
         },
         "required": ["items"]
+      },
+      "PresignUploadPartsDto": {
+        "type": "object",
+        "properties": {
+          "partNumbers": {
+            "minItems": 1,
+            "maxItems": 10000,
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": ["partNumbers"]
+      },
+      "PresignedUploadPartDto": {
+        "type": "object",
+        "properties": {
+          "partNumber": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "uploadUrl": {
+            "type": "string"
+          },
+          "expiresInSeconds": {
+            "type": "number"
+          }
+        },
+        "required": ["partNumber", "uploadUrl", "expiresInSeconds"]
+      },
+      "PresignUploadPartsResultDto": {
+        "type": "object",
+        "properties": {
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresignedUploadPartDto"
+            }
+          }
+        },
+        "required": ["parts"]
       },
       "CreateEagleImportRunDto": {
         "type": "object",
