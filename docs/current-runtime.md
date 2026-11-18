@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 10:28（北京时间） | 对应提交：5d4d0ce0
+> 状态：现行 | 核验日期：2026-11-18 11:00（北京时间） | 对应提交：5d4d0ce0
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -60,6 +60,11 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 - API 回退：`sekereagle/api:refactor-93b5d583`；operations／reader 本轮未变。
 - Mac worker 回退：`.runtime/business-worker/releases/worker-b852071b`；plist 备份在
   `.omx/artifacts/release-93b5d583/worker-before.plist`。
+- 2026-11-18 11:00 本地清理：删除了 18 个旧 worker release（保留现用 `worker-93b5d583` 与回退
+  `worker-b852071b`）及本机 Docker 中全部非回退项目镜像。本地 `sekereagle/web:share4k-e57b7ab7`、
+  `sekereagle/web:viewer5d4d0ce0`、`sekereagle/api:share4k-e57b7ab7` 镜像缓存已不存在；生产镜像在群晖
+  独立保存不受影响，本地如需对应版本可从 git 提交 `e57b7ab7`／`5d4d0ce0` 经 `deploy/mac` 重新构建。
+  `.omx/artifacts` 中未被文档引用的 7 天前产物已删除（1.4 GB），文档引用证据全部保留。
 - 最近一致性备份：936,861,410 字节，SHA-256 `da13a914c04e6e69a94699f85642a20ed0b14d446a5c3c080a05d66f9f968bc1`（本轮无数据写入，未新建备份）。
 - 证据目录：本次发布见 NAS 私有 `maintenance/viewer5d4d0ce0/`；上一轮见
   `maintenance/share4k-e57b7ab7/`。完整回退清单与历史备份见
