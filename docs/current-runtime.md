@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 13:05（北京时间） | 对应提交：13b1fbef
+> 状态：现行 | 核验日期：2026-11-18 13:25（北京时间） | 对应提交：4d5ae6e9
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -8,17 +8,18 @@
 
 ## 现用状态
 
-| 项目                              | 当前值                                                                                          |
-| --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                       |
-| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `13b1fbef`；operations／reader `93b5d583`（本轮未更新） |
-| API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`    |
-| Web                               | `sekereagle/web:cacheopt-67e99d52`                                                              |
-| macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                   |
-| 数据库                            | 100 项迁移，待应用 0；本轮无迁移、无 schema 变化                                                |
-| Mac 业务执行器                    | `.runtime/business-worker/releases/worker-93b5d583`（launchd；不是 Compose `worker`）           |
-| 未改动                            | 网关、Postgres、MinIO、计算协调器、中继；不要为排查重启或重建                                   |
-| 计数                              | MATERIAL / PHOTO / 回收站 / 草稿从运行检查点读取，本文不维护动态百分比                          |
+| 项目                              | 当前值                                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                                                  |
+| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `13b1fbef`；operations／reader `93b5d583`（本轮未更新）                            |
+| API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`                               |
+| Web                               | `sekereagle/web:cacheopt-67e99d52`                                                                                         |
+| macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                                              |
+| Windows 便携客户端（本机）        | `D:\SekerEagle\SekerEagle-0.1.9-windows-x64-portable.exe`，0.1.9（`13b1fbef` 源码；exe `597acca0…`、app.asar `e0fa70c0…`） |
+| 数据库                            | 100 项迁移，待应用 0；本轮无迁移、无 schema 变化                                                                           |
+| Mac 业务执行器                    | `.runtime/business-worker/releases/worker-93b5d583`（launchd；不是 Compose `worker`）                                      |
+| 未改动                            | 网关、Postgres、MinIO、计算协调器、中继；不要为排查重启或重建                                                              |
+| 计数                              | MATERIAL / PHOTO / 回收站 / 草稿从运行检查点读取，本文不维护动态百分比                                                     |
 
 Web 最近三次覆盖：`cacheopt-67e99d52`（11-18 11:18）→ `cacheopt-abb4c3e3`（11-18 11:08）
 → `viewer5d4d0ce0`（11-18 10:27）。API 保持 `share4k-e57b7ab7`；
@@ -76,9 +77,14 @@ operations／reader 保持 `refactor-93b5d583` 未变。
   当前 5.1 MiB v3 缓存完整保留；全局与当前账号占比变为 100% / 0%。缓存不按时间过期，
   只有容量上限、手动清理或库身份/账号/方案变化才会失效。完整回退清单与历史备份见
   [归档](history/releases/2026-11.md) 和 `rollback.json`。
+- 2026-11-18 13:25 本机 Windows 便携客户端升级：用 `13b1fbef` 源码原生重建并替换
+  `D:\SekerEagle\SekerEagle-0.1.9-windows-x64-portable.exe`（exe `597acca0…`，app.asar
+  `e0fa70c0…`）；旧 exe `2fb31110…` 备份在 `D:\SekerEagle\backup\`，`SekerEagleData` 未动。
+  实机确认图库正常加载（数万项）、缓存控制台为 10.0 GiB 并含旧缓存清理入口；核验用的调试端口已关闭。
 
 ## 最新发布摘要
 
+- [2026-11-18 13:25 本机 Windows 客户端升级到 13b1fbef 原生构建](history/releases/main-production-release-2026-11-18-windows-native-install.md)
 - [2026-11-18 13:05 Windows 便携版与 Mac 桌面端对齐](history/releases/main-production-release-2026-11-18-desktop-parity.md)
 - [2026-11-18 13:00 清理旧版桌面缓存并锁定缓存键（本机客户端）](history/releases/main-production-release-2026-11-18-cache-legacy-cleanup.md)
 - [2026-11-18 11:55 缓存设置页改为仪器面板控制台（本机客户端）](history/releases/main-production-release-2026-11-18-cache-console-ui.md)

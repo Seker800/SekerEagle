@@ -29,7 +29,7 @@ Desktop 0.1.8 adds capability-negotiated PHOTO and MATERIAL media URLs, isolated
 - Cache entries are isolated by deployment and account. Signing out locks old entries; clearing the current account does not delete server media.
 - Physical quota includes media allocation, SQLite/WAL files, and active partial files. Writes preserve 5% free space, bounded to a 1–5 GiB reserve so a large volume does not disable caching unnecessarily; cache eviction runs before a write is rejected.
 - macOS data lives in `~/Library/Caches/SekerEagle/MediaCache/v2`, is excluded from Spotlight and Time Machine, and may be removed by the OS or user at any time.
-- The Windows portable build creates `SekerEagleData` beside its executable. Browser profile, cookies, connection settings, and desktop settings live in `SekerEagleData\Profile`; derived media lives in `SekerEagleData\MediaCache\v2`. The portable default capacity is 2 GiB and remains configurable from 1–100 GiB.
+- The Windows portable build creates `SekerEagleData` beside its executable. Browser profile, cookies, connection settings, and desktop settings live in `SekerEagleData\Profile`; derived media lives in `SekerEagleData\MediaCache\v2`. The portable default capacity is 10 GiB and remains configurable from 1–100 GiB.
 - A non-portable Windows development or setup build continues to use `%LOCALAPPDATA%\SekerEagle\MediaCache\v2` and the normal Electron user profile directories.
 
 ## Failure and recovery
