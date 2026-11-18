@@ -29,25 +29,18 @@ const messages = {
     saveAndConnect: '保存并连接',
     changeLibrary: '更换为另一套图库…',
     localStorage: '本机存储',
-    cacheDescription: '常用缩略图、预览图和大图切片保存在本机，并按账号隔离。',
-    cacheStatus: '缓存状态',
-    allAccountsUsage: '全部账号占用',
+    allAccountsUsage: '这台电脑全部缓存',
     currentAccountUsage: '当前账号占用',
     cacheFiles: '缓存文件',
-    hitRate: '磁盘直接读取（本次连接）',
-    memoryReuseNote: '已在内存中的缩略图直接显示，不计入下方读取次数。',
-    revalidated: '联网确认后复用',
-    cacheMisses: '联网读取',
-    coalesced: '等待同批下载',
+    memoryReuseNote: '已在内存中的缩略图直接显示，不计入上面的读取次数。',
+    revalidated: '联网确认',
+    cacheMisses: '联网下载',
+    coalesced: '同批等待',
     cacheErrors: '读取失败',
-    trafficSaved: '免传图片内容（本次连接）',
-    diskAvailable: '磁盘剩余',
     cacheLimit: '缓存容量上限',
     cacheLimitDescription: '允许 1–100 GiB；达到上限后自动淘汰较少使用的文件。',
-    saveCacheSettings: '保存缓存设置',
     clearCurrentAccountCache: '清空当前账号缓存',
     cacheDirectory: '缓存目录',
-    openInFileManager: '在访达中打开',
     resetConfirm: '这会解除当前图库身份绑定。仅在这些地址确实属于另一套图库时继续。',
     cacheSettingsSaved: '缓存容量设置已保存。',
     clearCacheConfirm: '确定清空当前账号的本地媒体缓存吗？',
@@ -73,8 +66,42 @@ const messages = {
     connected: '已连接素材库',
     connectionSettings: '连接设置',
     connectionSettingsHint: '更改地址或查看连接问题',
-    cacheSimpleDescription: '常用图片保存在这台电脑上，空间不足时会自动清理。',
-    cacheManagement: '管理缓存',
+    cacheHeroDescription: '常用图片留在本机；本地、局域网、外网共用一套缓存。',
+    longTermStats: '长期使用',
+    longTermHint: '跨重启累计，从当前缓存空间建立后开始。',
+    longTermHitRate: '本机命中率',
+    longTermHitRateHint: '从本机读取的比例',
+    longTermSaved: '累计免下载',
+    longTermSavedHint: '图片正文总量',
+    connectionStats: '本次连接',
+    connectionStatsHint: '只统计本次打开客户端后，重启归零。',
+    localDirect: '本地直读',
+    connectionSaved: '本次免下载',
+    cacheHelp: '这些数字是什么？',
+    cacheHelpHit:
+      '本机命中率：长期从本机读取图片内容的比例，包含联网确认后复用，不等同于完全免网。',
+    cacheHelpSaved: '累计免下载：长期从本机读取的图片正文总量，不是网页总流量。',
+    cacheHelpConnection:
+      '本次连接：只统计本次打开客户端后的读取，重启归零；完全免网只计算本地直读。',
+    cacheHelpGlobal: '这台电脑全部缓存：包含其他账号和旧地址键缓存，无法按账号拆分。',
+    cacheLimitLabel: '容量',
+    saveCache: '保存',
+    openCacheFolder: '打开缓存文件夹',
+    clearCacheHint: '清空后，本机缓存的图片需要重新下载。',
+    usedOfLimit: '已用',
+    cacheMaintenance: '维护',
+    legendCurrent: '当前账号',
+    legendOther: '其他或旧缓存',
+    accountShare: '占这台电脑缓存 {{percent}}',
+    averageSize: '平均 {{value}}',
+    diskFreeValue: '磁盘剩余 {{value}}',
+    offlineRate: '本次完全免网 {{percent}}',
+    noReadsYet: '暂无图片读取',
+    longTermEmpty: '还没有长期数据',
+    noCacheYet: '尚无缓存',
+    globalMeterLabel: '当前账号 {{account}}，其他或旧缓存 {{other}}',
+    connectionMeterLabel:
+      '本地 {{local}}，联网确认 {{revalidated}}，联网下载 {{network}}，同批等待 {{shared}}，失败 {{failed}}',
   },
   'en-US': {
     pageTitle: 'SekerEagle Desktop Settings',
@@ -107,28 +134,20 @@ const messages = {
     saveAndConnect: 'Save and Connect',
     changeLibrary: 'Connect to Another Library…',
     localStorage: 'Local Storage',
-    cacheDescription:
-      'Frequently used thumbnails, previews, and image tiles are cached locally and isolated by account.',
-    cacheStatus: 'Cache status',
-    allAccountsUsage: 'All accounts',
+    allAccountsUsage: 'All cache on this computer',
     currentAccountUsage: 'Current account',
     cacheFiles: 'Cached files',
-    hitRate: 'Direct disk reads (this connection)',
     memoryReuseNote:
-      'Thumbnails already in memory display immediately and are not included in these read counts.',
-    revalidated: 'Reused after online validation',
-    cacheMisses: 'Loaded from network',
-    coalesced: 'Waited for a shared download',
+      'Thumbnails already in memory display immediately and are not included in the read counts above.',
+    revalidated: 'Online confirmed',
+    cacheMisses: 'Downloaded',
+    coalesced: 'Shared download',
     cacheErrors: 'Failed reads',
-    trafficSaved: 'Image bytes avoided (this connection)',
-    diskAvailable: 'Disk available',
     cacheLimit: 'Cache capacity limit',
     cacheLimitDescription:
       'Choose 1–100 GiB. Less-used files are evicted automatically at the limit.',
-    saveCacheSettings: 'Save Cache Settings',
     clearCurrentAccountCache: 'Clear Current Account Cache',
     cacheDirectory: 'Cache directory',
-    openInFileManager: 'Open in File Manager',
     resetConfirm:
       'This removes the current library identity binding. Continue only if these addresses belong to another library.',
     cacheSettingsSaved: 'Cache capacity saved.',
@@ -157,9 +176,45 @@ const messages = {
     connected: 'Connected to the library',
     connectionSettings: 'Connection settings',
     connectionSettingsHint: 'Change addresses or inspect connection problems',
-    cacheSimpleDescription:
-      'Common images are stored on this computer and cleaned up when space is low.',
-    cacheManagement: 'Manage cache',
+    cacheHeroDescription:
+      'Common images stay on this computer; local, LAN and public entries share one cache.',
+    longTermStats: 'Long-term use',
+    longTermHint: 'Accumulated across restarts, starting when this cache space was created.',
+    longTermHitRate: 'Local hit rate',
+    longTermHitRateHint: 'Served from this computer',
+    longTermSaved: 'Bytes avoided',
+    longTermSavedHint: 'Image bodies from disk',
+    connectionStats: 'This connection',
+    connectionStatsHint: 'Counts since the client opened; reset on restart.',
+    localDirect: 'Local reads',
+    connectionSaved: 'Avoided this connection',
+    cacheHelp: 'What do these numbers mean?',
+    cacheHelpHit:
+      'Local hit rate: the long-term share of image reads served from this computer, including online confirmation; it is not a fully-offline rate.',
+    cacheHelpSaved:
+      'Bytes avoided: long-term image bodies read from this computer, not total page traffic.',
+    cacheHelpConnection:
+      'This connection: counts since the client opened; reset on restart. Fully offline counts local reads only.',
+    cacheHelpGlobal:
+      'All cache on this computer includes other accounts and old address-keyed cache; it cannot be split by account.',
+    cacheLimitLabel: 'Limit',
+    saveCache: 'Save',
+    openCacheFolder: 'Open cache folder',
+    clearCacheHint: 'Cleared images will be downloaded again when needed.',
+    usedOfLimit: 'used',
+    cacheMaintenance: 'Maintenance',
+    legendCurrent: 'Current account',
+    legendOther: 'Other or legacy',
+    accountShare: "{{percent}} of this computer's cache",
+    averageSize: '{{value}} average',
+    diskFreeValue: '{{value}} free on disk',
+    offlineRate: 'Fully offline this connection: {{percent}}',
+    noReadsYet: 'No reads yet',
+    longTermEmpty: 'No long-term data yet',
+    noCacheYet: 'No cache yet',
+    globalMeterLabel: 'Current account {{account}}, other or legacy {{other}}',
+    connectionMeterLabel:
+      'Local {{local}}, online confirmed {{revalidated}}, network {{network}}, shared {{shared}}, failed {{failed}}',
   },
 };
 const form = document.querySelector('#connection-form');
@@ -197,9 +252,6 @@ testButton.addEventListener('click', () => {
   void run(async () => renderProbes(await bridge.testConnections(settings)));
 });
 cancelButton.addEventListener('click', () => void bridge.cancelConnectionManager());
-document
-  .querySelector('#online-return')
-  .addEventListener('click', () => void bridge.cancelConnectionManager());
 document.querySelector('#show-connection-settings').addEventListener('click', () => {
   connectionDetails.open = true;
   connectionDetails.scrollIntoView({ behavior: 'smooth' });
@@ -264,15 +316,53 @@ async function retryConnection() {
 async function loadCacheStatus() {
   const state = await bridge.getCacheManagerStatus();
   const account = state.currentAccountStats;
-  document.querySelector('#cache-global-usage').textContent =
-    `${formatBytes(state.globalAllocatedBytes)} / ${formatBytes(state.limitBytes)}`;
-  document.querySelector('#cache-account-usage').textContent = account
-    ? formatBytes(account.allocatedBytes)
-    : tr('signedOut');
-  document.querySelector('#cache-entry-count').textContent = (
-    account?.entryCount ?? state.globalEntryCount
-  ).toLocaleString(locale);
   const requests = account?.requests;
+  const globalBytes = state.globalAllocatedBytes;
+  const accountBytes = account?.allocatedBytes ?? 0;
+  const otherBytes = Math.max(0, globalBytes - accountBytes);
+  const accountShare = globalBytes > 0 ? accountBytes / globalBytes : 0;
+  const longAttempts = account ? account.hitCount + account.missCount : 0;
+  const longHitRate = account && longAttempts > 0 ? account.hitCount / longAttempts : null;
+  const totalReads = requests
+    ? requests.localHitCount +
+      requests.revalidatedHitCount +
+      requests.missCount +
+      requests.coalescedCount +
+      requests.errorCount
+    : 0;
+
+  setText('cache-account-usage', account ? formatBytes(accountBytes) : tr('signedOut'));
+  setText(
+    'cache-account-share',
+    account
+      ? globalBytes > 0
+        ? tr('accountShare', { percent: formatPercent(accountShare) })
+        : tr('noCacheYet')
+      : '',
+  );
+  setText('cache-global-usage', `${formatBytes(globalBytes)} / ${formatBytes(state.limitBytes)}`);
+  const globalShare = state.limitBytes > 0 ? globalBytes / state.limitBytes : 0;
+  setText('cache-global-percent', formatPercent(globalShare));
+  setMeter('cache-meter-account', accountShare);
+  setMeter('cache-meter-other', globalBytes > 0 ? otherBytes / globalBytes : 0);
+  setText(
+    'cache-long-hit-rate',
+    longHitRate === null ? tr('longTermEmpty') : formatPercent(longHitRate),
+  );
+  setMeter('cache-long-hit-bar', longHitRate ?? 0);
+  setText('cache-long-saved', account ? formatBytes(account.savedBytes) : '—');
+  setText(
+    'cache-entry-count',
+    (account?.entryCount ?? state.globalEntryCount).toLocaleString(locale),
+  );
+  setText(
+    'cache-average-size',
+    account && account.entryCount > 0
+      ? tr('averageSize', { value: formatBytes(account.allocatedBytes / account.entryCount) })
+      : '—',
+  );
+  setText('cache-free-space', tr('diskFreeValue', { value: formatBytes(state.availableBytes) }));
+
   for (const [id, counter] of [
     ['cache-hit-rate', 'localHitCount'],
     ['cache-revalidated', 'revalidatedHitCount'],
@@ -280,18 +370,60 @@ async function loadCacheStatus() {
     ['cache-coalesced', 'coalescedCount'],
     ['cache-errors', 'errorCount'],
   ]) {
-    document.querySelector(`#${id}`).textContent = requests
-      ? requests[counter].toLocaleString(locale)
-      : '—';
+    setText(id, requests ? requests[counter].toLocaleString(locale) : '—');
   }
-  document.querySelector('#cache-saved-bytes').textContent = requests
-    ? formatBytes(requests.savedBytes)
-    : '—';
-  document.querySelector('#cache-free-space').textContent = formatBytes(state.availableBytes);
-  document.querySelector('#cache-path').textContent = state.cachePath;
+  setText(
+    'cache-offline-rate',
+    requests && totalReads > 0
+      ? tr('offlineRate', {
+          percent: formatPercent(requests.localHitCount / totalReads),
+        })
+      : requests
+        ? tr('noReadsYet')
+        : '—',
+  );
+  setMeter('cache-connection-local', totalReads > 0 ? requests.localHitCount / totalReads : 0);
+  setMeter(
+    'cache-connection-revalidated',
+    totalReads > 0 ? requests.revalidatedHitCount / totalReads : 0,
+  );
+  setMeter('cache-connection-miss', totalReads > 0 ? requests.missCount / totalReads : 0);
+  setMeter('cache-connection-coalesced', totalReads > 0 ? requests.coalescedCount / totalReads : 0);
+  setText('cache-saved-bytes', requests ? formatBytes(requests.savedBytes) : '—');
+
+  document.querySelector('#cache-global-meter').setAttribute(
+    'aria-label',
+    tr('globalMeterLabel', {
+      account: formatBytes(accountBytes),
+      other: formatBytes(otherBytes),
+    }),
+  );
+  document.querySelector('#cache-connection-meter').setAttribute(
+    'aria-label',
+    tr('connectionMeterLabel', {
+      local: requests?.localHitCount ?? 0,
+      revalidated: requests?.revalidatedHitCount ?? 0,
+      network: requests?.missCount ?? 0,
+      shared: requests?.coalescedCount ?? 0,
+      failed: requests?.errorCount ?? 0,
+    }),
+  );
+  setText('cache-path', state.cachePath);
   cacheForm.elements.cacheLimitGiB.value = String(Math.round(state.limitBytes / 1024 ** 3));
   canClearCurrentAccount = Boolean(account);
   clearCacheButton.disabled = !canClearCurrentAccount;
+}
+
+function setText(id, value) {
+  document.querySelector(`#${id}`).textContent = value;
+}
+
+function setMeter(id, ratio) {
+  document.querySelector(`#${id}`).style.width = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+}
+
+function formatPercent(ratio) {
+  return `${Math.round(ratio * 100)}%`;
 }
 
 function formValue() {

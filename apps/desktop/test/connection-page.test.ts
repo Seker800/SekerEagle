@@ -3,7 +3,92 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 
 describe('offline-capable desktop connection page', () => {
-  it('displays request outcomes for this connection instead of the historical SQLite hit rate', async () => {
+  it('shows long-term cache efficiency and this-connection outcomes', async () => {
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
+    const script = await readFile(
+      new URL('../src/connection-page/connection.js', import.meta.url),
+      'utf8',
+    );
+    const dom = new JSDOM(html, { url: 'https://connection.invalid/', runScripts: 'outside-only' });
+    Object.defineProperty(dom.window, 'sekerDesktop', {
+      value: {
+        getConnectionManagerState: async () => ({
+          settings: { mode: 'AUTO' },
+          active: null,
+          probes: [],
+        }),
+        getCacheManagerStatus: async () => ({
+          globalAllocatedBytes: 4096,
+          limitBytes: 1024 ** 3,
+          globalEntryCount: 3,
+          availableBytes: 1024 ** 3,
+          cachePath: '/tmp/cache',
+          currentAccountStats: {
+            entryCount: 2,
+            allocatedBytes: 2048,
+            hitCount: 990,
+            missCount: 10,
+            savedBytes: 1000000,
+            requests: {
+              localHitCount: 0,
+              revalidatedHitCount: 7,
+              missCount: 3,
+              coalescedCount: 2,
+              errorCount: 1,
+              savedBytes: 1024,
+            },
+          },
+        }),
+      },
+    });
+    try {
+      dom.window.eval(script);
+      await vi.waitFor(() => {
+        expect(dom.window.document.querySelector('#cache-long-hit-rate')?.textContent).toBe('99%');
+        expect(dom.window.document.querySelector('#cache-long-saved')?.textContent).toBe('977 KiB');
+        expect(dom.window.document.querySelector('#cache-account-usage')?.textContent).toBe(
+          '2 KiB',
+        );
+        expect(dom.window.document.querySelector('#cache-account-share')?.textContent).toBe(
+          '占这台电脑缓存 50%',
+        );
+        expect(dom.window.document.querySelector('#cache-global-usage')?.textContent).toBe(
+          '4 KiB / 1.0 GiB',
+        );
+        expect(dom.window.document.querySelector('#cache-free-space')?.textContent).toBe(
+          '磁盘剩余 1.0 GiB',
+        );
+        expect(dom.window.document.querySelector('#cache-entry-count')?.textContent).toBe('2');
+        expect(dom.window.document.querySelector('#cache-average-size')?.textContent).toBe(
+          '平均 1 KiB',
+        );
+        expect(dom.window.document.querySelector('#cache-hit-rate')?.textContent).toBe('0');
+        expect(dom.window.document.querySelector('#cache-revalidated')?.textContent).toBe('7');
+        expect(dom.window.document.querySelector('#cache-misses')?.textContent).toBe('3');
+        expect(dom.window.document.querySelector('#cache-coalesced')?.textContent).toBe('2');
+        expect(dom.window.document.querySelector('#cache-errors')?.textContent).toBe('1');
+        expect(dom.window.document.querySelector('#cache-saved-bytes')?.textContent).toBe('1 KiB');
+        expect(dom.window.document.querySelector('#cache-offline-rate')?.textContent).toBe(
+          '本次完全免网 0%',
+        );
+        expect(dom.window.document.querySelector('#cache-global-percent')?.textContent).toBe('0%');
+        expect(dom.window.document.querySelector('#cache-path')?.textContent).toBe('/tmp/cache');
+        const hitBarStyle =
+          dom.window.document.querySelector('#cache-long-hit-bar')?.getAttribute('style') ?? '';
+        expect(Number.parseFloat(/width:\s*([\d.]+)%/u.exec(hitBarStyle)?.[1] ?? '')).toBeCloseTo(
+          99,
+          0,
+        );
+      });
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it('shows an empty long-term state and no-read state without dividing by zero', async () => {
     const html = await readFile(
       new URL('../src/connection-page/index.html', import.meta.url),
       'utf8',
@@ -23,22 +108,22 @@ describe('offline-capable desktop connection page', () => {
         getCacheManagerStatus: async () => ({
           globalAllocatedBytes: 0,
           limitBytes: 1024 ** 3,
-          globalEntryCount: 2,
+          globalEntryCount: 0,
           availableBytes: 1024 ** 3,
           cachePath: '/tmp/cache',
           currentAccountStats: {
-            entryCount: 2,
+            entryCount: 0,
             allocatedBytes: 0,
-            hitCount: 990,
-            missCount: 10,
-            savedBytes: 1000000,
+            hitCount: 0,
+            missCount: 0,
+            savedBytes: 0,
             requests: {
               localHitCount: 0,
-              revalidatedHitCount: 7,
-              missCount: 3,
-              coalescedCount: 2,
-              errorCount: 1,
-              savedBytes: 1024,
+              revalidatedHitCount: 0,
+              missCount: 0,
+              coalescedCount: 0,
+              errorCount: 0,
+              savedBytes: 0,
             },
           },
         }),
@@ -47,17 +132,22 @@ describe('offline-capable desktop connection page', () => {
     try {
       dom.window.eval(script);
       await vi.waitFor(() => {
-        expect(dom.window.document.querySelector('#cache-hit-rate')?.textContent).toBe('0');
-        expect(dom.window.document.querySelector('#cache-revalidated')?.textContent).toBe('7');
-        expect(dom.window.document.querySelector('#cache-misses')?.textContent).toBe('3');
-        expect(dom.window.document.querySelector('#cache-coalesced')?.textContent).toBe('2');
-        expect(dom.window.document.querySelector('#cache-errors')?.textContent).toBe('1');
-        expect(dom.window.document.querySelector('#cache-saved-bytes')?.textContent).toBe('1 KiB');
+        expect(dom.window.document.querySelector('#cache-long-hit-rate')?.textContent).toBe(
+          '还没有长期数据',
+        );
+        expect(dom.window.document.querySelector('#cache-account-share')?.textContent).toBe(
+          '尚无缓存',
+        );
+        expect(dom.window.document.querySelector('#cache-average-size')?.textContent).toBe('—');
+        expect(dom.window.document.querySelector('#cache-offline-rate')?.textContent).toBe(
+          '暂无图片读取',
+        );
       });
     } finally {
       dom.window.close();
     }
   });
+
   it('ships local, LAN and public inputs without inline executable code', async () => {
     const html = await readFile(
       new URL('../src/connection-page/index.html', import.meta.url),
@@ -85,6 +175,13 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="cache-hit-rate"');
     expect(html).toContain('id="cache-saved-bytes"');
     expect(html).toContain('id="cache-free-space"');
+    expect(html).toContain('id="cache-long-hit-rate"');
+    expect(html).toContain('id="cache-long-saved"');
+    expect(html).toContain('id="cache-account-share"');
+    expect(html).toContain('id="cache-average-size"');
+    expect(html).toContain('id="cache-offline-rate"');
+    expect(html).toContain('id="cache-global-meter"');
+    expect(html).toContain('id="cache-connection-meter"');
     expect(html).toContain('id="cache-path"');
     expect(html).toContain('id="save-cache"');
     expect(html).toContain('id="clear-cache"');
@@ -105,7 +202,7 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="retry"');
     expect(html).toContain('id="show-connection-settings"');
     expect(html).toContain('<details id="connection-details"');
-    expect(html).toContain('class="cache-summary"');
+    expect(html).toContain('class="cache-heading"');
     expect(html).toContain('src="/seker-eagle-logo.svg"');
     expect(css).toContain('.status-panel');
     expect(css).toContain('.settings-group');

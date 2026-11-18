@@ -7,6 +7,7 @@ declare module 'jsdom' {
       document: {
         querySelector(selector: string): {
           hasAttribute(name: string): boolean;
+          getAttribute(name: string): string | null;
           click(): void;
           textContent: string | null;
         } | null;
