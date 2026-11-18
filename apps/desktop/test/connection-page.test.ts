@@ -20,6 +20,7 @@ describe('offline-capable desktop connection page', () => {
           active: null,
           probes: [],
         }),
+        clearLegacyCache: vi.fn(async () => ({ deleted: 1, deferred: 0, namespaces: 1 })),
         getCacheManagerStatus: async () => ({
           globalAllocatedBytes: 4096,
           limitBytes: 1024 ** 3,
@@ -72,6 +73,12 @@ describe('offline-capable desktop connection page', () => {
         expect(dom.window.document.querySelector('#cache-global-percent')?.textContent).toBe(
           '占上限 0%',
         );
+        expect(dom.window.document.querySelector('#cache-legacy-hint')?.textContent).toBe(
+          '2 KiB 无法复用；清理只删除缓存，不影响原图。',
+        );
+        expect(
+          dom.window.document.querySelector('#clear-legacy-cache')?.hasAttribute('disabled'),
+        ).toBe(false);
         expect(dom.window.document.querySelector('#cache-path')?.textContent).toBe('/tmp/cache');
         const hitBarStyle =
           dom.window.document.querySelector('#cache-long-hit-bar')?.getAttribute('style') ?? '';
@@ -80,6 +87,69 @@ describe('offline-capable desktop connection page', () => {
           0,
         );
       });
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it('clears legacy cache only after confirmation and reports the result', async () => {
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
+    const script = await readFile(
+      new URL('../src/connection-page/connection.js', import.meta.url),
+      'utf8',
+    );
+    const dom = new JSDOM(html, { url: 'https://connection.invalid/', runScripts: 'outside-only' });
+    const clearLegacyCache = vi.fn(async () => ({ deleted: 3, deferred: 0, namespaces: 1 }));
+    Object.defineProperty(dom.window, 'confirm', { value: () => true, configurable: true });
+    Object.defineProperty(dom.window, 'sekerDesktop', {
+      value: {
+        getConnectionManagerState: async () => ({
+          settings: { mode: 'AUTO' },
+          active: null,
+          probes: [],
+        }),
+        clearLegacyCache,
+        getCacheManagerStatus: async () => ({
+          globalAllocatedBytes: 4096,
+          limitBytes: 1024 ** 3,
+          globalEntryCount: 3,
+          availableBytes: 1024 ** 3,
+          cachePath: '/tmp/cache',
+          currentAccountStats: {
+            entryCount: 2,
+            allocatedBytes: 2048,
+            hitCount: 10,
+            missCount: 0,
+            savedBytes: 100,
+            requests: {
+              localHitCount: 0,
+              revalidatedHitCount: 0,
+              missCount: 0,
+              coalescedCount: 0,
+              errorCount: 0,
+              savedBytes: 0,
+            },
+          },
+        }),
+      },
+    });
+    try {
+      dom.window.eval(script);
+      await vi.waitFor(() => {
+        expect(
+          dom.window.document.querySelector('#clear-legacy-cache')?.hasAttribute('disabled'),
+        ).toBe(false);
+      });
+      dom.window.document.querySelector('#clear-legacy-cache')?.click();
+      await vi.waitFor(() => expect(clearLegacyCache).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() =>
+        expect(dom.window.document.querySelector('#cache-message')?.textContent).toBe(
+          '已清理 3 个旧版缓存文件。',
+        ),
+      );
     } finally {
       dom.window.close();
     }
@@ -136,6 +206,12 @@ describe('offline-capable desktop connection page', () => {
         expect(dom.window.document.querySelector('#cache-offline-note')?.textContent).toBe(
           '暂无图片读取',
         );
+        expect(dom.window.document.querySelector('#cache-legacy-hint')?.textContent).toBe(
+          '没有可清理的旧版缓存。',
+        );
+        expect(
+          dom.window.document.querySelector('#clear-legacy-cache')?.hasAttribute('disabled'),
+        ).toBe(true);
       });
     } finally {
       dom.window.close();
@@ -179,6 +255,8 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="cache-path"');
     expect(html).toContain('id="save-cache"');
     expect(html).toContain('id="clear-cache"');
+    expect(html).toContain('id="clear-legacy-cache"');
+    expect(html).toContain('id="cache-legacy-hint"');
     expect(html).toContain('id="open-cache-folder"');
   });
 

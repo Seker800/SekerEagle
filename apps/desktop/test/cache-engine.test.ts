@@ -260,6 +260,21 @@ describe('CacheEngine', () => {
     expect(engine.getStats().entryCount).toBe(0);
   });
 
+  it('clears only namespaces outside the current account set', async () => {
+    await writeReady(engine, 30, namespaceA, 'keep');
+    await writeReady(engine, 31, namespaceB, 'legacy');
+
+    await expect(engine.clearOtherNamespaces([namespaceA])).resolves.toEqual({
+      deleted: 1,
+      deferred: 0,
+      namespaces: 1,
+    });
+    expect(engine.getNamespaceStats(namespaceA).entryCount).toBe(1);
+    expect(engine.getNamespaceStats(namespaceB).entryCount).toBe(0);
+    expect(await engine.acquire(hash(30), namespaceA, 50)).not.toBeNull();
+    expect(await engine.acquire(hash(31), namespaceB, 50)).toBeNull();
+  });
+
   it('clears only the selected namespace and supports changing the capacity limit', async () => {
     await writeReady(engine, 24, namespaceA, 'owner-a', asset(24));
     await writeReady(engine, 25, namespaceB, 'owner-b', asset(25));

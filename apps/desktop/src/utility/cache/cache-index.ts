@@ -460,6 +460,28 @@ export class CacheIndex {
     );
   }
 
+  listNamespaceIds(): string[] {
+    const rows = this.database
+      .prepare(
+        `SELECT namespace_id FROM cache_entries
+         UNION
+         SELECT namespace_id FROM cache_stats`,
+      )
+      .all() as Array<{ namespace_id: string }>;
+    return rows.map(({ namespace_id }) => namespace_id);
+  }
+
+  deleteNamespaceStats(namespaceIds: readonly string[]): void {
+    if (!namespaceIds.length) return;
+    const remove = this.database.prepare('DELETE FROM cache_stats WHERE namespace_id = ?');
+    this.transaction(() => {
+      for (const namespaceId of namespaceIds) {
+        assertNamespace(namespaceId);
+        remove.run(namespaceId);
+      }
+    });
+  }
+
   recoverInterruptedWrites(): Buffer[] {
     const rows = this.database
       .prepare(`SELECT key_hash FROM cache_entries WHERE state = 'WRITING'`)

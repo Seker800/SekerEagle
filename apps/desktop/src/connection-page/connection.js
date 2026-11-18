@@ -99,6 +99,16 @@ const messages = {
     cacheHelpConnection:
       '本次连接：只统计本次打开客户端后的读取，重启归零；完全免网只计算本地直读。',
     cacheHelpGlobal: '这台电脑全部缓存：包含其他账号和旧地址键缓存，无法按账号拆分。',
+    cacheHelpPersistence:
+      '缓存不会按时间过期：只有达到容量上限、清理旧版缓存或手动清空时才会移除。',
+    cachePersistenceNote: '缓存不按时间过期；只有达到容量上限或手动清理时才会移除。',
+    legacyCacheTitle: '旧版缓存',
+    legacyCacheHint: '{{size}} 无法复用；清理只删除缓存，不影响原图。',
+    legacyCacheEmpty: '没有可清理的旧版缓存。',
+    clearLegacyCache: '清理旧版缓存',
+    clearLegacyCacheConfirm:
+      '清理这台电脑上不属于当前缓存空间的旧版/其他账号缓存？只删除缓存，不影响原图或服务器素材。',
+    legacyCacheCleared: '已清理 {{deleted}} 个旧版缓存文件{{deferred}}。',
     cacheLimitLabel: '容量',
     saveCache: '保存',
     openCacheFolder: '打开缓存文件夹',
@@ -223,6 +233,17 @@ const messages = {
       'This connection: counts since the client opened; reset on restart. Fully offline counts local reads only.',
     cacheHelpGlobal:
       'All cache on this computer includes other accounts and old address-keyed cache; it cannot be split by account.',
+    cacheHelpPersistence:
+      'Cache does not expire with time: it is removed only at the capacity limit, when clearing legacy cache, or when cleared manually.',
+    cachePersistenceNote:
+      'Cache does not expire with time; it is removed only at the capacity limit or when cleared manually.',
+    legacyCacheTitle: 'Legacy cache',
+    legacyCacheHint: '{{size}} cannot be reused; clearing only removes cache, not originals.',
+    legacyCacheEmpty: 'No legacy cache to clear.',
+    clearLegacyCache: 'Clear legacy cache',
+    clearLegacyCacheConfirm:
+      'Clear legacy or other-account cache outside the current cache space? Only cache is removed; originals and server assets are untouched.',
+    legacyCacheCleared: 'Cleared {{deleted}} legacy cache files{{deferred}}.',
     cacheLimitLabel: 'Limit',
     saveCache: 'Save',
     openCacheFolder: 'Open cache folder',
@@ -250,10 +271,12 @@ const cacheForm = document.querySelector('#cache-form');
 const cacheMessage = document.querySelector('#cache-message');
 const saveCacheButton = document.querySelector('#save-cache');
 const clearCacheButton = document.querySelector('#clear-cache');
+const clearLegacyCacheButton = document.querySelector('#clear-legacy-cache');
 const openCacheFolderButton = document.querySelector('#open-cache-folder');
 const retryButton = document.querySelector('#retry');
 const connectionDetails = document.querySelector('#connection-details');
 let canClearCurrentAccount = false;
+let canClearLegacy = false;
 let retryPromise = null;
 let connectionBusy = false;
 
@@ -300,6 +323,19 @@ clearCacheButton.addEventListener('click', () => {
     const result = await bridge.clearCache();
     await loadCacheStatus();
     cacheMessage.textContent = tr('cacheCleared', {
+      deleted: result.deleted.toLocaleString(locale),
+      deferred: result.deferred
+        ? tr('deferredCleanup', { count: result.deferred.toLocaleString(locale) })
+        : '',
+    });
+  });
+});
+clearLegacyCacheButton.addEventListener('click', () => {
+  if (!window.confirm(tr('clearLegacyCacheConfirm'))) return;
+  void runCache(async () => {
+    const result = await bridge.clearLegacyCache();
+    await loadCacheStatus();
+    cacheMessage.textContent = tr('legacyCacheCleared', {
       deleted: result.deleted.toLocaleString(locale),
       deferred: result.deferred
         ? tr('deferredCleanup', { count: result.deferred.toLocaleString(locale) })
@@ -430,6 +466,16 @@ async function loadCacheStatus() {
       failed: requests?.errorCount ?? 0,
     }),
   );
+  setText(
+    'cache-legacy-hint',
+    account
+      ? otherBytes > 0
+        ? tr('legacyCacheHint', { size: formatBytes(otherBytes) })
+        : tr('legacyCacheEmpty')
+      : tr('signedOut'),
+  );
+  canClearLegacy = Boolean(account) && otherBytes > 0;
+  clearLegacyCacheButton.disabled = !canClearLegacy;
   setText('cache-path', state.cachePath);
   cacheForm.elements.cacheLimitGiB.value = String(Math.round(state.limitBytes / 1024 ** 3));
   canClearCurrentAccount = Boolean(account);
@@ -558,6 +604,7 @@ function setCacheBusy(busy) {
   for (const element of cacheForm.elements) element.disabled = busy;
   saveCacheButton.disabled = busy;
   clearCacheButton.disabled = busy || !canClearCurrentAccount;
+  clearLegacyCacheButton.disabled = busy || !canClearLegacy;
   openCacheFolderButton.disabled = busy;
 }
 

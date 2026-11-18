@@ -16,6 +16,7 @@ type CacheRpcMethod =
   | 'setLimitBytes'
   | 'invalidateAsset'
   | 'clearNamespace'
+  | 'clearOtherNamespaces'
   | 'expireAuthorizations'
   | 'close';
 
@@ -184,6 +185,14 @@ export class CacheRpcClient {
     };
   }
 
+  async clearOtherNamespaces(keepNamespaceIds: string[]) {
+    return asRecord(await this.call('clearOtherNamespaces', { keepNamespaceIds })) as unknown as {
+      deleted: number;
+      deferred: number;
+      namespaces: number;
+    };
+  }
+
   async expireAuthorizations(): Promise<number> {
     return asNumber(await this.call('expireAuthorizations', {}));
   }
@@ -308,6 +317,8 @@ export class CacheRpcDispatcher {
         return engine.invalidateAsset(asString(params.namespaceId), asString(params.assetId));
       case 'clearNamespace':
         return engine.clearNamespace(asString(params.namespaceId));
+      case 'clearOtherNamespaces':
+        return engine.clearOtherNamespaces(asStringArray(params.keepNamespaceIds));
       case 'expireAuthorizations':
         return engine.expireAuthorizations();
       case 'close':
@@ -323,6 +334,11 @@ export class CacheRpcDispatcher {
     if (!this.engine) throw new Error('缓存引擎尚未初始化。');
     return this.engine;
   }
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new Error('RPC 字符串数组无效。');
+  return value.map((item) => asString(item));
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

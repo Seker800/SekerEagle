@@ -287,6 +287,24 @@ export class CacheEngine {
     return this.removeEntries(this.index.listNamespaceEntries(namespaceId));
   }
 
+  async clearOtherNamespaces(
+    keepNamespaceIds: readonly string[],
+  ): Promise<{ deleted: number; deferred: number; namespaces: number }> {
+    const keep = new Set(keepNamespaceIds);
+    const namespaceIds = this.index
+      .listNamespaceIds()
+      .filter((namespaceId) => !keep.has(namespaceId));
+    let deleted = 0;
+    let deferred = 0;
+    for (const namespaceId of namespaceIds) {
+      const result = await this.clearNamespace(namespaceId);
+      deleted += result.deleted;
+      deferred += result.deferred;
+    }
+    this.index.deleteNamespaceStats(namespaceIds);
+    return { deleted, deferred, namespaces: namespaceIds.length };
+  }
+
   renewAuthorization(
     keyHash: Buffer,
     namespaceId: string,

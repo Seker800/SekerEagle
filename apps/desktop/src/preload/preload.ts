@@ -61,6 +61,9 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   clearCache() {
     return ipcRenderer.invoke('desktop:clear-cache');
   },
+  clearLegacyCache() {
+    return ipcRenderer.invoke('desktop:clear-legacy-cache');
+  },
   openCacheFolder() {
     return ipcRenderer.invoke('desktop:open-cache-folder');
   },

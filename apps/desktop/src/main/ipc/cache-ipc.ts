@@ -80,6 +80,12 @@ export function registerCacheIpc(
   ipcMain.handle('desktop:clear-cache', async (event) =>
     removeAccountCache(currentCache(), await namespaces(event, true)),
   );
+  ipcMain.handle('desktop:clear-legacy-cache', async (event) => {
+    ctx.assertTrustedConnectionSender(event);
+    const identity = await owner.get();
+    if (!identity) throw new Error('需要重新登录。');
+    return currentCache().clearOtherNamespaces(accountCacheNamespaces(identity));
+  });
   ipcMain.handle('desktop:open-cache-folder', async (event) => {
     ctx.assertConnectionPageSender(event);
     const cacheRoot = currentDesktopCacheRoot();

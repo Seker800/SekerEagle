@@ -42,6 +42,11 @@ export interface SekerDesktopBridge {
     deleted: number;
     deferred: number;
   }>;
+  clearLegacyCache?(): Promise<{
+    deleted: number;
+    deferred: number;
+    namespaces: number;
+  }>;
   invalidateAsset?(assetId: string): Promise<{
     deleted: number;
     deferred: number;

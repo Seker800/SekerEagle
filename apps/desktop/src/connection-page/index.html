@@ -128,6 +128,10 @@
             </div>
           </article>
 
+          <p class="cache-note" data-i18n="cachePersistenceNote">
+            缓存不按时间过期；只有达到容量上限或手动清理时才会移除。
+          </p>
+
           <section class="cache-block">
             <div class="section-head">
               <span class="num">02 / TELEMETRY</span>
@@ -215,6 +219,9 @@
               <li data-i18n="cacheHelpGlobal">
                 这台电脑全部缓存：包含其他账号和旧地址键缓存，无法按账号拆分。
               </li>
+              <li data-i18n="cacheHelpPersistence">
+                缓存不会按时间过期：只有达到容量上限、清理旧版缓存或手动清空时才会移除。
+              </li>
             </ul>
           </details>
 
@@ -265,6 +272,15 @@
                 </div>
                 <button id="open-cache-folder" type="button" data-i18n="openCacheFolder">
                   打开缓存文件夹
+                </button>
+              </div>
+              <div class="row">
+                <div>
+                  <h3 data-i18n="legacyCacheTitle">旧版缓存</h3>
+                  <p id="cache-legacy-hint">—</p>
+                </div>
+                <button id="clear-legacy-cache" type="button" data-i18n="clearLegacyCache">
+                  清理旧版缓存
                 </button>
               </div>
               <div class="row danger-row">

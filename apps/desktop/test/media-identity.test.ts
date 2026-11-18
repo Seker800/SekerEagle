@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCacheIdentity,
+  buildNamespaceId,
   createDesktopMediaUrl,
   hashCacheIdentity,
   parseDesktopMediaUrl,
@@ -45,6 +46,22 @@ describe('desktop media identity', () => {
     'sekereagle-media://rendition/../../etc/passwd',
   ])('rejects an untrusted media target: %s', (url) => {
     expect(() => parseDesktopMediaUrl(url)).toThrow();
+  });
+
+  it('locks the v3 cache scope so long-lived caches survive ordinary upgrades', () => {
+    // Changing these values invalidates every existing cache; add a migration path first.
+    expect(buildNamespaceId('owner-a', deploymentId, 'MATERIAL')).toBe(
+      'ffb862c83b19e04768800e2fbc4d21234537847d32265f8f5fa8a8b585b85956',
+    );
+    expect(buildNamespaceId('owner-a', deploymentId, 'PHOTO')).toBe(
+      '4d52a5d2c79b02350d67f137cff8015212ca2c7bab08605d71c019fe9aaa9cb2',
+    );
+    const media = parseDesktopMediaUrl(
+      `sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`,
+    );
+    expect(
+      hashCacheIdentity(buildCacheIdentity('owner-a', deploymentId, media)).toString('hex'),
+    ).toBe('e36f311caf37a59dd197a1dba09f52c5566e4eb0c1d7cd2a6e55743cf98bb29d');
   });
 
   it('keys cache identity by library, owner and media without the connection origin', () => {
