@@ -152,17 +152,16 @@
   background: var(--ui-accent-text);
   color: var(--ui-on-accent);
 }
+/* The footer clips overflow, so feedback must sit inside the action bar, not float above it. */
 .actions small {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  min-width: 100%;
+  min-width: 0;
   max-width: 260px;
   padding: 7px;
   border-radius: 5px;
   background: #25272b;
   color: #c4c7cc;
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 @media (max-width: 600px) {
   .header {
