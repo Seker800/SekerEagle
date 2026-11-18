@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 13:00（北京时间） | 对应提交：d9d87ce8
+> 状态：现行 | 核验日期：2026-11-18 13:05（北京时间） | 对应提交：13b1fbef
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -11,7 +11,7 @@
 | 项目                              | 当前值                                                                                          |
 | --------------------------------- | ----------------------------------------------------------------------------------------------- |
 | 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                       |
-| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `d9d87ce8`；operations／reader `93b5d583`（本轮未更新） |
+| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `13b1fbef`；operations／reader `93b5d583`（本轮未更新） |
 | API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`    |
 | Web                               | `sekereagle/web:cacheopt-67e99d52`                                                              |
 | macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                   |
@@ -79,6 +79,7 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 
 ## 最新发布摘要
 
+- [2026-11-18 13:05 Windows 便携版与 Mac 桌面端对齐](history/releases/main-production-release-2026-11-18-desktop-parity.md)
 - [2026-11-18 13:00 清理旧版桌面缓存并锁定缓存键（本机客户端）](history/releases/main-production-release-2026-11-18-cache-legacy-cleanup.md)
 - [2026-11-18 11:55 缓存设置页改为仪器面板控制台（本机客户端）](history/releases/main-production-release-2026-11-18-cache-console-ui.md)
 - [2026-11-18 11:40 缓存设置页改为卡片仪表盘（本机客户端）](history/releases/main-production-release-2026-11-18-cache-settings-ui.md)
