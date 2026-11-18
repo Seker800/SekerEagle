@@ -34,10 +34,6 @@ import {
   resolvePortableDataRoot,
 } from './portable-data';
 import { createWindow, lockDownSession } from './window';
-import {
-  DEFAULT_CACHE_LIMIT_BYTES,
-  PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
-} from '../utility/cache/cache-policy';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -96,10 +92,7 @@ app.on('second-instance', () => {
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
     ctx.desktopLocale = normalizeDesktopLocale(app.getLocale());
-    const settings = new DesktopSettingsStore(
-      app.getPath('userData'),
-      portableDataRoot ? PORTABLE_DEFAULT_CACHE_LIMIT_BYTES : DEFAULT_CACHE_LIMIT_BYTES,
-    );
+    const settings = new DesktopSettingsStore(app.getPath('userData'));
     const connectionSettings = new DesktopConnectionSettingsStore(
       app.getPath('userData'),
       connectionSettingsForServerUrl(initialServerUrl),
