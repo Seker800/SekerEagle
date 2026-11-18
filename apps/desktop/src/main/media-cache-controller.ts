@@ -54,12 +54,22 @@ interface CacheBackend {
     },
   ): boolean | Promise<boolean>;
   invalidate(keyHash: Buffer): Promise<boolean>;
+  invalidateAsset(
+    namespaceId: string,
+    assetId: string,
+  ): Promise<{ deleted: number; deferred: number }>;
+}
+
+export interface MediaRevokedEvent {
+  assetId: string;
+  libraryMode: 'MATERIAL' | 'PHOTO';
+  status: number;
 }
 
 export type MediaResolution =
   | {
       source: 'cache';
-      cacheResult: 'LOCAL' | 'REVALIDATED' | 'MISS' | 'COALESCED';
+      cacheResult: 'LOCAL' | 'REVALIDATED' | 'MISS' | 'COALESCED' | 'OPTIMISTIC';
       leaseId: string;
       filePath: string;
       contentType: string;
@@ -106,7 +116,10 @@ export class MediaCacheController {
   ) => Promise<Response>;
   private readonly now: () => number;
   private readonly canReadLocal: CanReadLocal;
+  private readonly deniesLocal: CanReadLocal;
+  private readonly onMediaRevoked: ((event: MediaRevokedEvent) => void) | undefined;
   private readonly populating = new Map<string, Promise<void>>();
+  private readonly backgroundValidations = new Map<string, Promise<void>>();
   private readonly requestStats = new Map<string, CacheRequestStats>();
 
   constructor(options: {
@@ -119,6 +132,8 @@ export class MediaCacheController {
     ) => Promise<Response>;
     now?: () => number;
     canReadLocal?: CanReadLocal;
+    deniesLocal?: CanReadLocal;
+    onMediaRevoked?: (event: MediaRevokedEvent) => void;
   }) {
     this.serverUrl = options.serverUrl;
     this.cache = options.cache;
@@ -126,6 +141,8 @@ export class MediaCacheController {
     this.fetchUpstream = options.fetchUpstream;
     this.now = options.now ?? Date.now;
     this.canReadLocal = options.canReadLocal ?? (() => false);
+    this.deniesLocal = options.deniesLocal ?? (() => false);
+    this.onMediaRevoked = options.onMediaRevoked;
   }
 
   /** Per media request, for this connection. SQLite acquisitions are internal IO,
@@ -168,7 +185,8 @@ export class MediaCacheController {
     else if (result.source === 'upstream' || result.cacheResult === 'MISS') stats.missCount++;
     else if (result.cacheResult === 'COALESCED') stats.coalescedCount++;
     else {
-      if (result.cacheResult === 'LOCAL') stats.localHitCount++;
+      if (result.cacheResult === 'LOCAL' || result.cacheResult === 'OPTIMISTIC')
+        stats.localHitCount++;
       else stats.revalidatedHitCount++;
       stats.savedBytes += result.logicalBytes;
     }
@@ -195,6 +213,10 @@ export class MediaCacheController {
       if (existing && this.canReadLocal(media, identity, existing))
         return cacheResolution(existing);
       if (existing) {
+        if (media.kind === 'RENDITION' && !this.deniesLocal(media, identity, existing)) {
+          this.validateInBackground(media, keyHash, namespaceId, existing);
+          return cacheResolution(existing, 'OPTIMISTIC');
+        }
         await this.cache.release(existing.leaseId);
         return await this.revalidate(media, keyHash, namespaceId, existing, signal);
       }
@@ -205,6 +227,79 @@ export class MediaCacheController {
         source: 'upstream',
         response: await this.fetchUpstream(upstreamPath(media), signal ? { signal } : {}),
       };
+    }
+  }
+
+  /** Media bytes for one server identity are immutable; only current visibility can
+   * change. An existing rendition is therefore shown before that check completes,
+   * and a revoked asset is removed from the cache with a page notification. */
+  private validateInBackground(
+    media: DesktopMediaIdentity,
+    keyHash: Buffer,
+    namespaceId: string,
+    existing: ReadyCacheEntry,
+  ): void {
+    const keyHex = keyHash.toString('hex');
+    if (this.backgroundValidations.has(keyHex)) return;
+    const work = this.runBackgroundValidation(media, keyHash, namespaceId, existing)
+      .catch(() => undefined)
+      .finally(() => this.backgroundValidations.delete(keyHex));
+    this.backgroundValidations.set(keyHex, work);
+  }
+
+  private async runBackgroundValidation(
+    media: DesktopMediaIdentity,
+    keyHash: Buffer,
+    namespaceId: string,
+    existing: ReadyCacheEntry,
+  ): Promise<void> {
+    let response: Response;
+    try {
+      response = await this.fetchUpstream(
+        upstreamPath(media),
+        existing.etag ? { ifNoneMatch: existing.etag } : {},
+      );
+    } catch {
+      return;
+    }
+    try {
+      if (response.status === 304 && isEligible(response)) {
+        const now = this.now();
+        await this.cache.renewAuthorization(keyHash, namespaceId, {
+          verifiedAt: now,
+          authorizationLeaseUntil: now + AUTHORIZATION_LEASE_MS,
+          etag: response.headers.get('etag'),
+          lastModified: response.headers.get('last-modified'),
+        });
+        return;
+      }
+      if (isTransientRevalidationFailure(response.status)) return;
+      if (isCacheable(response, media)) {
+        await this.cache.invalidate(keyHash).catch(() => false);
+        const result = await this.populateResponse(media, keyHash, namespaceId, response);
+        if (result.source === 'cache') await this.cache.release(result.leaseId);
+        return;
+      }
+      await this.revoke(media, namespaceId, response.status);
+    } finally {
+      if (response.body && !response.bodyUsed) await response.body.cancel().catch(() => undefined);
+    }
+  }
+
+  private async revoke(
+    media: DesktopMediaIdentity,
+    namespaceId: string,
+    status: number,
+  ): Promise<void> {
+    await this.cache.invalidateAsset(namespaceId, media.assetId).catch(() => undefined);
+    try {
+      this.onMediaRevoked?.({
+        assetId: media.assetId,
+        libraryMode: media.libraryMode ?? 'MATERIAL',
+        status,
+      });
+    } catch {
+      // A page notification failure must not break media serving.
     }
   }
 

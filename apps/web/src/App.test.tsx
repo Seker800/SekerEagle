@@ -47,6 +47,7 @@ function userResponse() {
 afterEach(() => {
   requestMock.mockReset();
   accountFailure.enabled = false;
+  delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
 });
 
 describe('startup session recovery', () => {
@@ -248,6 +249,33 @@ it('checks the session when a visible window regains focus', async () => {
   await waitFor(() =>
     expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2),
   );
+});
+
+it('refreshes library evidence when desktop revokes an optimistically shown image', async () => {
+  let revoke:
+    ((event: { assetId: string; libraryMode: string; status: number }) => void) | undefined;
+  (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+    onMediaRevoked: (
+      listener: (event: { assetId: string; libraryMode: string; status: number }) => void,
+    ) => {
+      revoke = listener;
+      return () => undefined;
+    },
+  };
+  requestMock.mockImplementation(async (path: string) =>
+    path === '/api/auth/me' ? userResponse() : { enabled: false, expiresAt: null },
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  render(
+    <QueryClientProvider client={client}>
+      <App />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('素材图库')).toBeVisible();
+  await waitFor(() => expect(revoke).toBeTypeOf('function'));
+  act(() => revoke?.({ assetId: 'asset-1', libraryMode: 'PHOTO', status: 404 }));
+  await waitFor(() => expect(invalidate).toHaveBeenCalled());
 });
 
 it('keeps the gallery visible when an account chunk fails to load', async () => {

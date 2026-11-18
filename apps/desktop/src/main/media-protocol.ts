@@ -28,6 +28,12 @@ export function createMediaController(
     cache: cacheBackend(),
     authenticatedOwner: () => owner.get(),
     canReadLocal: (media, identity, file) => snapshot.allows(media, identity, file),
+    deniesLocal: (media, identity, file) => snapshot.denies(media, identity, file),
+    onMediaRevoked: (event) => {
+      ctx.librarySnapshot?.invalidateAsset(event.assetId);
+      if (ctx.shuttingDown || !ctx.mainWindow || ctx.mainWindow.isDestroyed()) return;
+      ctx.mainWindow.webContents.send('desktop:media-revoked', event);
+    },
     fetchUpstream: (mediaPath, options) =>
       limiter.fetch(
         (signal) =>

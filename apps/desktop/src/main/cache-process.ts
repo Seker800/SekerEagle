@@ -119,6 +119,8 @@ export function cacheBackend() {
       currentCache().renewAuthorization(...args),
     invalidate: (...args: Parameters<CacheRpcClient['invalidate']>) =>
       currentCache().invalidate(...args),
+    invalidateAsset: (...args: Parameters<CacheRpcClient['invalidateAsset']>) =>
+      currentCache().invalidateAsset(...args),
   };
 }
 

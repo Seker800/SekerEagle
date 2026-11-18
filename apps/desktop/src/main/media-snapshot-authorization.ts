@@ -3,9 +3,15 @@ import type { DesktopMediaIdentity } from '../shared/media-identity';
 import { isLibraryReadPath, type LibraryReadResponse } from '../shared/library-read';
 
 type Rendition = { kind: string; bytes: number; contentType: string };
-type Projection = { sequence: number; renditions: Map<string, Rendition> };
+type Projection = {
+  sequence: number;
+  renditions: Map<string, Rendition>;
+  pyramid?: { id: string; revision: number };
+};
 type CachedFile = { logicalBytes: number; contentType: string };
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const UUID_BODY = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+const UUID = new RegExp(`^${UUID_BODY}$`, 'iu');
+const PYRAMID_READ = new RegExp(`^/api/(eagle|photos)/assets/(${UUID_BODY})/pyramid$`, 'i');
 const record = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -44,10 +50,28 @@ export class MediaSnapshotAuthorization {
     for (const key of this.assets.keys()) if (key.endsWith(`\n${assetId}`)) this.assets.delete(key);
   }
 
+  /** A projection for this exact asset exists but does not authorize the cached file:
+   * the page already knows it was deleted, made private or changed. */
+  denies(media: DesktopMediaIdentity, identity: AuthenticatedIdentity, file: CachedFile): boolean {
+    const key = this.key(identity, media.libraryMode ?? 'MATERIAL', media.assetId);
+    return this.assets.has(key) && !this.allows(media, identity, file);
+  }
+
   allows(media: DesktopMediaIdentity, identity: AuthenticatedIdentity, file: CachedFile): boolean {
-    if (media.kind !== 'RENDITION') return false;
     const key = this.key(identity, media.libraryMode ?? 'MATERIAL', media.assetId);
     const projection = this.assets.get(key);
+    if (media.kind === 'TILE') {
+      if (
+        !projection?.pyramid ||
+        projection.pyramid.id !== media.pyramidId ||
+        file.contentType !== 'image/webp' ||
+        !(file.logicalBytes > 0)
+      )
+        return false;
+      this.assets.delete(key);
+      this.assets.set(key, projection);
+      return true;
+    }
     const rendition = projection?.renditions.get(media.renditionId);
     if (
       !rendition ||
@@ -86,7 +110,10 @@ export class MediaSnapshotAuthorization {
       const contentType = response.headers.get('content-type') ?? 'application/json';
       if (response.ok) {
         const value: unknown = JSON.parse(body);
-        if (path.split('?', 1)[0] === '/api/library/changes') this.observeChanges(value);
+        const pathname = path.split('?', 1)[0]!;
+        if (pathname === '/api/library/changes') this.observeChanges(value);
+        else if (PYRAMID_READ.test(pathname))
+          this.observePyramid(pathname, value, identity, sequence);
         else this.observeAssets(path, value, identity, sequence);
       } else this.reset();
       return { status: response.status, body, contentType };
@@ -126,6 +153,37 @@ export class MediaSnapshotAuthorization {
     this.changes = next;
   }
 
+  private observePyramid(
+    path: string,
+    value: unknown,
+    identity: AuthenticatedIdentity,
+    sequence: number,
+  ): void {
+    const match = PYRAMID_READ.exec(path);
+    if (!match) {
+      this.reset();
+      return;
+    }
+    const mode = match[1]!.toLowerCase() === 'photos' ? 'PHOTO' : 'MATERIAL';
+    const assetId = match[2]!.toLowerCase();
+    const body = record(value);
+    const id = typeof body?.id === 'string' && UUID.test(body.id) ? body.id.toLowerCase() : null;
+    const revision = body?.revision;
+    if (!id || typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) {
+      this.reset();
+      return;
+    }
+    const key = this.key(identity, mode, assetId);
+    const previous = this.assets.get(key);
+    if (previous && previous.sequence > sequence) return;
+    const projection: Projection = previous ?? { sequence, renditions: new Map() };
+    projection.sequence = sequence;
+    projection.pyramid = { id, revision };
+    this.assets.delete(key);
+    this.assets.set(key, projection);
+    while (this.assets.size > this.maxEntries) this.assets.delete(this.assets.keys().next().value!);
+  }
+
   private observeAssets(
     path: string,
     value: unknown,
@@ -145,17 +203,20 @@ export class MediaSnapshotAuthorization {
     for (const value of [...items, ...covers]) {
       const asset = record(value);
       if (typeof asset?.id !== 'string' || !UUID.test(asset.id)) continue;
-      const key = this.key(identity, mode, asset.id);
-      if ((this.assets.get(key)?.sequence ?? 0) > sequence) continue;
+      const assetId = asset.id.toLowerCase();
+      const key = this.key(identity, mode, assetId);
+      const previous = this.assets.get(key);
+      if ((previous?.sequence ?? 0) > sequence) continue;
       const renditions = new Map<string, Rendition>();
-      if (
+      const renditionRows = Array.isArray(asset.renditions) ? asset.renditions : null;
+      const eligible =
         asset.isPrivate === false &&
         asset.deletedAt === null &&
         asset.libraryMode === mode &&
         Number.isSafeInteger(asset.mediaRevision) &&
-        Array.isArray(asset.renditions)
-      ) {
-        for (const value of asset.renditions) {
+        renditionRows !== null;
+      if (eligible && renditionRows) {
+        for (const value of renditionRows) {
           const r = record(value);
           if (
             typeof r?.id === 'string' &&
@@ -173,8 +234,11 @@ export class MediaSnapshotAuthorization {
             });
         }
       }
+      const previousPyramid = previous?.pyramid;
+      const pyramid =
+        eligible && previousPyramid?.revision === asset.mediaRevision ? previousPyramid : undefined;
       this.assets.delete(key);
-      this.assets.set(key, { sequence, renditions });
+      this.assets.set(key, { sequence, renditions, ...(pyramid ? { pyramid } : {}) });
       while (this.assets.size > this.maxEntries)
         this.assets.delete(this.assets.keys().next().value!);
     }

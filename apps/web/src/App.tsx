@@ -124,6 +124,25 @@ export function App() {
     };
   }, [checkSession]);
   useEffect(() => {
+    const bridge = (
+      globalThis as {
+        sekerDesktop?: {
+          onMediaRevoked?: (
+            listener: (event: { assetId: string; libraryMode: string; status: number }) => void,
+          ) => () => void;
+        };
+      }
+    ).sekerDesktop;
+    if (typeof bridge?.onMediaRevoked !== 'function') return;
+    return bridge.onMediaRevoked((event) => {
+      if (event.status === 401 || event.status === 403) {
+        void checkSession();
+        return;
+      }
+      void queryClient.invalidateQueries();
+    });
+  }, [checkSession, queryClient]);
+  useEffect(() => {
     const timer =
       isOnline && (connectionUnavailable || user)
         ? window.setInterval(

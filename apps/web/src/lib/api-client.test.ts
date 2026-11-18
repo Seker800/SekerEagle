@@ -53,6 +53,28 @@ describe('browser session recovery', () => {
     expect(events).toEqual(['reset', 'fetch']);
   });
 
+  it('routes a pyramid descriptor through the observed desktop library read', async () => {
+    const assetId = '00000000-0000-4000-8000-000000000001';
+    const readLibrary = vi.fn(async () => ({
+      status: 200,
+      body: '{"id":"00000000-0000-4000-8000-000000000002","revision":1}',
+      contentType: 'application/json',
+    }));
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      canReadLibrary: (path: string) => path.endsWith('/pyramid'),
+      readLibrary,
+    };
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    await expect(request(`/api/eagle/assets/${assetId}/pyramid`)).resolves.toMatchObject({
+      revision: 1,
+    });
+    expect(readLibrary).toHaveBeenCalledWith(
+      `/api/eagle/assets/${assetId}/pyramid`,
+      expect.any(String),
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('cancels a desktop list through main without issuing a second browser request', async () => {
     const readLibrary = vi.fn(
       (_path: string, _requestId: string) => new Promise<never>(() => undefined),

@@ -78,7 +78,7 @@ describe('MediaCacheController', () => {
     expect(fetchUpstream).toHaveBeenCalledTimes(2);
   });
 
-  it('revalidates cached media authorization before every local-file hit', async () => {
+  it('serves a cached rendition from disk and revalidates its authorization in the background', async () => {
     const fetchUpstream = vi
       .fn()
       .mockResolvedValueOnce(eligibleResponse('cached-image', '"etag-1"'))
@@ -100,16 +100,163 @@ describe('MediaCacheController', () => {
     await engine.release(first.leaseId);
 
     const second = await controller.resolve(mediaUrl);
-    expect(second.source).toBe('cache');
+    expect(second).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
     if (second.source === 'cache') {
       expect(await readFile(second.filePath, 'utf8')).toBe('cached-image');
       engine.release(second.leaseId);
     }
-    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(fetchUpstream).toHaveBeenCalledTimes(2));
     expect(fetchUpstream).toHaveBeenLastCalledWith(
       `/api/eagle/assets/${assetId}/renditions/${renditionId}`,
       { ifNoneMatch: '"etag-1"' },
     );
+    expect(engine.getStats().entryCount).toBe(1);
+  });
+
+  it('serves a cached rendition before background validation finishes', async () => {
+    let releaseValidation!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseValidation = resolve;
+    });
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image', '"etag-1"'))
+      .mockImplementationOnce(async () => {
+        await gate;
+        return new Response(null, {
+          status: 304,
+          headers: {
+            etag: '"etag-1"',
+            'x-sekereagle-desktop-cache': 'public-derived-v1',
+          },
+        });
+      });
+    const onMediaRevoked = vi.fn();
+    const controller = createController(engine, fetchUpstream, () => now, onMediaRevoked);
+
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'cache') await engine.release(first.leaseId);
+    const second = await controller.resolve(mediaUrl);
+    expect(second).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
+    if (second.source === 'cache') engine.release(second.leaseId);
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+    expect(onMediaRevoked).not.toHaveBeenCalled();
+    releaseValidation();
+    await vi.waitFor(() => expect(engine.getStats().entryCount).toBe(1));
+    expect(onMediaRevoked).not.toHaveBeenCalled();
+  });
+
+  it('never shows a cached rendition optimistically when the current list already denies it', async () => {
+    const identity = { ownerId: 'owner-a', deploymentId: 'd'.repeat(64) };
+    const snapshot = new MediaSnapshotAuthorization({
+      authenticatedOwner: async () => identity,
+      fetch: async () =>
+        Response.json({
+          items: [
+            {
+              id: assetId,
+              libraryMode: 'MATERIAL',
+              isPrivate: true,
+              deletedAt: null,
+              mediaRevision: 1,
+              renditions: [],
+            },
+          ],
+        }),
+    });
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image'))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    const onMediaRevoked = vi.fn();
+    const controller = new MediaCacheController({
+      serverUrl: 'https://example.com',
+      cache: engine,
+      authenticatedOwner: async () => identity,
+      fetchUpstream,
+      now: () => now,
+      canReadLocal: (media, owner, file) => snapshot.allows(media, owner, file),
+      deniesLocal: (media, owner, file) => snapshot.denies(media, owner, file),
+      onMediaRevoked,
+    });
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'cache') await engine.release(first.leaseId);
+    await snapshot.read('/api/eagle/assets');
+    const second = await controller.resolve(mediaUrl);
+    expect(second.source).toBe('upstream');
+    if (second.source === 'upstream') expect(second.response.status).toBe(404);
+    await vi.waitFor(() => expect(engine.getStats().entryCount).toBe(0));
+    expect(onMediaRevoked).not.toHaveBeenCalled();
+  });
+
+  it('withdraws an optimistically served image when the server answers 404', async () => {
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image'))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    const onMediaRevoked = vi.fn();
+    const controller = createController(engine, fetchUpstream, () => now, onMediaRevoked);
+
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'cache') await engine.release(first.leaseId);
+    const second = await controller.resolve(mediaUrl);
+    expect(second).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
+    if (second.source === 'cache') engine.release(second.leaseId);
+
+    await vi.waitFor(() =>
+      expect(onMediaRevoked).toHaveBeenCalledWith({
+        assetId,
+        libraryMode: 'MATERIAL',
+        status: 404,
+      }),
+    );
+    await vi.waitFor(() => expect(engine.getStats().entryCount).toBe(0));
+  });
+
+  it('keeps an optimistically served image when background validation fails transiently', async () => {
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image'))
+      .mockResolvedValueOnce(new Response('try-later', { status: 503 }));
+    const onMediaRevoked = vi.fn();
+    const controller = createController(engine, fetchUpstream, () => now, onMediaRevoked);
+
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'cache') await engine.release(first.leaseId);
+    const second = await controller.resolve(mediaUrl);
+    expect(second).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
+    if (second.source === 'cache') engine.release(second.leaseId);
+
+    await vi.waitFor(() => expect(fetchUpstream).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(engine.getStats().entryCount).toBe(1);
+    expect(onMediaRevoked).not.toHaveBeenCalled();
+  });
+
+  it('never serves a tile optimistically without current pyramid evidence', async () => {
+    const pyramidId = '00000000-0000-4000-8000-00000000000a';
+    const tileUrl = `sekereagle-media://tile/${assetId}/${pyramidId}/0/0/0`;
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('tile-image'))
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 304,
+          headers: {
+            etag: '"etag-1"',
+            'x-sekereagle-desktop-cache': 'public-derived-v1',
+          },
+        }),
+      );
+    const controller = createController(engine, fetchUpstream, () => now);
+
+    const first = await controller.resolve(tileUrl);
+    if (first.source === 'cache') await engine.release(first.leaseId);
+    const second = await controller.resolve(tileUrl);
+
+    expect(second).toMatchObject({ source: 'cache', cacheResult: 'REVALIDATED' });
+    if (second.source === 'cache') engine.release(second.leaseId);
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
   });
 
   it('deduplicates concurrent cache misses for the same immutable media key', async () => {
@@ -272,8 +419,9 @@ describe('MediaCacheController', () => {
 
     const result = await controller.resolve(mediaUrl);
 
-    expect(result.source).toBe('upstream');
-    expect(engine.getStats().entryCount).toBe(0);
+    expect(result).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
+    if (result.source === 'cache') engine.release(result.leaseId);
+    await vi.waitFor(() => expect(engine.getStats().entryCount).toBe(0));
   });
 
   it.each([429, 503])(
@@ -289,8 +437,10 @@ describe('MediaCacheController', () => {
       now += 5 * 60_000 + 1;
 
       const result = await controller.resolve(mediaUrl);
-
-      expect(result).toMatchObject({ source: 'upstream' });
+      expect(result).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
+      if (result.source === 'cache') engine.release(result.leaseId);
+      await vi.waitFor(() => expect(fetchUpstream).toHaveBeenCalledTimes(2));
+      await new Promise((resolve) => setTimeout(resolve, 0));
       expect(engine.getStats().entryCount).toBe(1);
     },
   );
@@ -310,12 +460,18 @@ describe('MediaCacheController', () => {
     expect(engine.getStats().entryCount).toBe(0);
   });
 
-  it('does not redownload a revalidated response when its cache write fails', async () => {
+  it('does not redownload a revalidated response when its background cache write fails', async () => {
+    let releaseValidation!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseValidation = resolve;
+    });
     const fetchUpstream = vi
       .fn()
       .mockResolvedValueOnce(eligibleResponse('cached-image'))
-      .mockResolvedValueOnce(eligibleResponse('new-image', '"etag-2"'))
-      .mockResolvedValueOnce(eligibleResponse('new-image', '"etag-2"'));
+      .mockImplementationOnce(async () => {
+        await gate;
+        return eligibleResponse('new-image', '"etag-2"');
+      });
     const controller = createController(engine, fetchUpstream, () => now);
     const first = await controller.resolve(mediaUrl);
     if (first.source === 'cache') await engine.release(first.leaseId);
@@ -325,10 +481,11 @@ describe('MediaCacheController', () => {
 
     const result = await controller.resolve(mediaUrl);
 
-    expect(result.source).toBe('upstream');
-    if (result.source === 'upstream') expect(await result.response.text()).toBe('new-image');
+    expect(result).toMatchObject({ source: 'cache', cacheResult: 'OPTIMISTIC' });
+    if (result.source === 'cache') engine.release(result.leaseId);
+    releaseValidation();
     await vi.waitFor(() => expect(abortWrite).toHaveBeenCalledTimes(1));
-    expect(fetchUpstream).toHaveBeenCalledTimes(3);
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
   });
 
   it('refuses a thumbnail above the dedicated 8 MiB admission ceiling', async () => {
@@ -357,6 +514,7 @@ function createController(
     options: { ifNoneMatch?: string; signal?: AbortSignal },
   ) => Promise<Response>,
   clock: () => number,
+  onMediaRevoked?: (event: { assetId: string; libraryMode: string; status: number }) => void,
 ) {
   return new MediaCacheController({
     serverUrl: 'https://example.com',
@@ -364,6 +522,7 @@ function createController(
     authenticatedOwner: async () => ({ ownerId: 'owner-a', deploymentId: 'd'.repeat(64) }),
     fetchUpstream,
     now: clock,
+    ...(onMediaRevoked ? { onMediaRevoked } : {}),
   });
 }
 

@@ -46,6 +46,9 @@ export interface SekerDesktopBridge {
     deleted: number;
     deferred: number;
   }>;
+  onMediaRevoked?(
+    listener: (event: { assetId: string; libraryMode: LibraryMode; status: number }) => void,
+  ): () => void;
   writeClipboardImage?(pngBytes: Uint8Array): Promise<void>;
   writeClipboardImageData?(input: {
     contentType: 'image/png' | 'image/jpeg';

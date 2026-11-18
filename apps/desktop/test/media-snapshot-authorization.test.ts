@@ -13,6 +13,29 @@ const media = {
   libraryMode: 'PHOTO' as const,
 };
 const entry = { logicalBytes: 5, contentType: 'image/webp' };
+const pyramidId = '00000000-0000-4000-8000-00000000000a';
+const otherPyramidId = '00000000-0000-4000-8000-00000000000b';
+const tileMedia = {
+  kind: 'TILE' as const,
+  assetId,
+  pyramidId,
+  level: 0,
+  x: 0,
+  y: 0,
+  libraryMode: 'PHOTO' as const,
+};
+const tileEntry = { logicalBytes: 12, contentType: 'image/webp' };
+const pyramid = {
+  id: pyramidId,
+  revision: 2,
+  width: 512,
+  height: 512,
+  tileSize: 256,
+  overlap: 0,
+  format: 'webp',
+  maxLevel: 1,
+  tileUrlTemplate: `/api/photos/assets/${assetId}/pyramids/${pyramidId}/tiles/{level}/{x}/{y}`,
+};
 const asset = (extra = {}) => ({
   id: assetId,
   libraryMode: 'PHOTO',
@@ -144,6 +167,20 @@ describe('server list authority for desktop media', () => {
     expect(snapshot.allows(media, identity, entry)).toBe(false);
   });
 
+  it('distinguishes a known denial from missing evidence', async () => {
+    const { snapshot, fetch } = setup({}, 100);
+    expect(snapshot.denies(media, identity, entry)).toBe(false);
+    expect(snapshot.denies(tileMedia, identity, tileEntry)).toBe(false);
+    fetch.mockResolvedValueOnce(Response.json({ items: [asset({ isPrivate: true })] }));
+    await snapshot.read('/api/photos/assets');
+    expect(snapshot.allows(media, identity, entry)).toBe(false);
+    expect(snapshot.denies(media, identity, entry)).toBe(true);
+    expect(snapshot.denies(tileMedia, identity, tileEntry)).toBe(true);
+    fetch.mockResolvedValueOnce(Response.json({ items: [asset()] }));
+    await snapshot.read('/api/photos/assets');
+    expect(snapshot.denies(media, identity, entry)).toBe(false);
+  });
+
   it('drops old evidence when a changes check is cancelled or times out', async () => {
     const { snapshot, fetch } = setup();
     await snapshot.read('/api/photos/assets');
@@ -171,6 +208,84 @@ describe('server list authority for desktop media', () => {
     await snapshot.read('/api/photos/assets');
     expect(snapshot.allows(media, identity, entry)).toBe(false);
   });
+  it('authorizes tiles only after a real pyramid descriptor read for the same asset, mode and revision', async () => {
+    const { snapshot, fetch } = setup({}, 100);
+    expect(isLibraryReadPath(`/api/photos/assets/${assetId}/pyramid`)).toBe(true);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
+    fetch.mockResolvedValueOnce(Response.json(pyramid));
+    await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+    expect(snapshot.allows({ ...tileMedia, pyramidId: otherPyramidId }, identity, tileEntry)).toBe(
+      false,
+    );
+    expect(snapshot.allows({ ...tileMedia, libraryMode: 'MATERIAL' }, identity, tileEntry)).toBe(
+      false,
+    );
+    expect(snapshot.allows(tileMedia, { ...identity, ownerId: 'other' }, tileEntry)).toBe(false);
+    expect(snapshot.allows(tileMedia, identity, { ...tileEntry, contentType: 'image/png' })).toBe(
+      false,
+    );
+    expect(snapshot.allows(tileMedia, identity, { ...tileEntry, logicalBytes: 0 })).toBe(false);
+  });
+  it.each([{ mediaRevision: 3 }, { isPrivate: true }, { deletedAt: '2026-11-02' }])(
+    'drops tile authority when a later list changes the asset projection %j',
+    async (extra) => {
+      const { snapshot, fetch } = setup({}, 100);
+      fetch.mockResolvedValueOnce(Response.json(pyramid));
+      await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+      expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+      fetch.mockResolvedValueOnce(Response.json({ items: [asset(extra)] }));
+      await snapshot.read('/api/photos/assets');
+      expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
+    },
+  );
+  it('clears tile authority when the server change revision advances', async () => {
+    const { snapshot, fetch } = setup({}, 100);
+    fetch.mockResolvedValueOnce(Response.json(changes()));
+    await snapshot.read('/api/library/changes');
+    fetch.mockResolvedValueOnce(Response.json(pyramid));
+    await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+    fetch.mockResolvedValueOnce(Response.json(changes('2')));
+    await snapshot.read('/api/library/changes');
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
+  });
+  it.each([
+    { id: 'not-a-uuid', revision: 2 },
+    { id: pyramidId, revision: '2' },
+    { id: pyramidId, revision: -1 },
+    { revision: 2 },
+    {},
+  ])('fails closed on malformed pyramid descriptor %j', async (body) => {
+    const { snapshot, fetch } = setup({}, 100);
+    fetch.mockResolvedValueOnce(Response.json(body));
+    await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
+  });
+  it('fails closed when the pyramid descriptor read is rejected', async () => {
+    const { snapshot, fetch } = setup({}, 100);
+    fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
+  });
+  it('never lets an older list response revoke a newer pyramid descriptor', async () => {
+    const { snapshot, fetch } = setup({}, 100);
+    let releaseList!: (response: Response) => void;
+    fetch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseList = resolve;
+        }),
+    );
+    const olderList = snapshot.read('/api/photos/assets');
+    await vi.waitFor(() => expect(releaseList).toBeTypeOf('function'));
+    fetch.mockResolvedValueOnce(Response.json(pyramid));
+    await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+    releaseList(Response.json({ items: [asset({ mediaRevision: 3 })] }));
+    await olderList;
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+  });
   it('allows only exact relative read routes and refuses originals, arbitrary URLs and encoded traversal', async () => {
     const { snapshot, fetch } = setup();
     for (const path of [
@@ -180,6 +295,8 @@ describe('server list authority for desktop media', () => {
       '/api/photos/assets/%2e%2e',
       '/api/photos/assets?x=1#fragment',
       `/api/photos/assets/${assetId}/original`,
+      `/api/photos/assets/${assetId}/pyramid/original`,
+      `/api/photos/assets/${assetId}/pyramid/../${assetId}`,
     ]) {
       expect(isLibraryReadPath(path)).toBe(false);
       await expect(snapshot.read(path)).rejects.toThrow();

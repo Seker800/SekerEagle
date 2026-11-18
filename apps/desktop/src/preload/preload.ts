@@ -67,6 +67,29 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   invalidateAsset(assetId: string) {
     return ipcRenderer.invoke('desktop:invalidate-asset', assetId);
   },
+  onMediaRevoked(
+    listener: (event: {
+      assetId: string;
+      libraryMode: 'MATERIAL' | 'PHOTO';
+      status: number;
+    }) => void,
+  ) {
+    if (typeof listener !== 'function') throw new Error('媒体撤回监听器无效。');
+    const handle = (_event: Electron.IpcRendererEvent, input: unknown) => {
+      const value = input as { assetId?: unknown; libraryMode?: unknown; status?: unknown };
+      const { assetId, libraryMode, status } = value ?? {};
+      if (
+        typeof assetId !== 'string' ||
+        (libraryMode !== 'MATERIAL' && libraryMode !== 'PHOTO') ||
+        typeof status !== 'number' ||
+        !Number.isSafeInteger(status)
+      )
+        return;
+      listener({ assetId, libraryMode, status });
+    };
+    ipcRenderer.on('desktop:media-revoked', handle);
+    return () => ipcRenderer.removeListener('desktop:media-revoked', handle);
+  },
   writeClipboardImage(pngBytes: Uint8Array) {
     return ipcRenderer.invoke('desktop:write-clipboard-image', {
       contentType: 'image/png',
