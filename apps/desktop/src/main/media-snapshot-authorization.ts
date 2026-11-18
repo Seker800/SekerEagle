@@ -6,7 +6,8 @@ type Rendition = { kind: string; bytes: number; contentType: string };
 type Projection = {
   sequence: number;
   renditions: Map<string, Rendition>;
-  pyramid?: { id: string; revision: number };
+  mediaRevision?: number;
+  pyramid?: { id: string; revision?: number };
 };
 type CachedFile = { logicalBytes: number; contentType: string };
 const UUID_BODY = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
@@ -168,8 +169,14 @@ export class MediaSnapshotAuthorization {
     const assetId = match[2]!.toLowerCase();
     const body = record(value);
     const id = typeof body?.id === 'string' && UUID.test(body.id) ? body.id.toLowerCase() : null;
-    const revision = body?.revision;
-    if (!id || typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) {
+    const reportedRevision = body?.revision;
+    if (
+      !id ||
+      (reportedRevision !== undefined &&
+        (typeof reportedRevision !== 'number' ||
+          !Number.isSafeInteger(reportedRevision) ||
+          reportedRevision < 0))
+    ) {
       this.reset();
       return;
     }
@@ -178,7 +185,9 @@ export class MediaSnapshotAuthorization {
     if (previous && previous.sequence > sequence) return;
     const projection: Projection = previous ?? { sequence, renditions: new Map() };
     projection.sequence = sequence;
-    projection.pyramid = { id, revision };
+    const revision =
+      typeof reportedRevision === 'number' ? reportedRevision : previous?.mediaRevision;
+    projection.pyramid = revision === undefined ? { id } : { id, revision };
     this.assets.delete(key);
     this.assets.set(key, projection);
     while (this.assets.size > this.maxEntries) this.assets.delete(this.assets.keys().next().value!);
@@ -209,11 +218,14 @@ export class MediaSnapshotAuthorization {
       if ((previous?.sequence ?? 0) > sequence) continue;
       const renditions = new Map<string, Rendition>();
       const renditionRows = Array.isArray(asset.renditions) ? asset.renditions : null;
+      const mediaRevision = Number.isSafeInteger(asset.mediaRevision)
+        ? (asset.mediaRevision as number)
+        : undefined;
       const eligible =
         asset.isPrivate === false &&
         asset.deletedAt === null &&
         asset.libraryMode === mode &&
-        Number.isSafeInteger(asset.mediaRevision) &&
+        mediaRevision !== undefined &&
         renditionRows !== null;
       if (eligible && renditionRows) {
         for (const value of renditionRows) {
@@ -235,10 +247,18 @@ export class MediaSnapshotAuthorization {
         }
       }
       const previousPyramid = previous?.pyramid;
+      const expectedRevision = previousPyramid?.revision ?? previous?.mediaRevision;
       const pyramid =
-        eligible && previousPyramid?.revision === asset.mediaRevision ? previousPyramid : undefined;
+        eligible && previousPyramid && expectedRevision === mediaRevision
+          ? previousPyramid
+          : undefined;
       this.assets.delete(key);
-      this.assets.set(key, { sequence, renditions, ...(pyramid ? { pyramid } : {}) });
+      this.assets.set(key, {
+        sequence,
+        renditions,
+        ...(mediaRevision !== undefined ? { mediaRevision } : {}),
+        ...(pyramid ? { pyramid } : {}),
+      });
       while (this.assets.size > this.maxEntries)
         this.assets.delete(this.assets.keys().next().value!);
     }

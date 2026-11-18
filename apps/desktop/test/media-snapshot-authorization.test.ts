@@ -27,7 +27,6 @@ const tileMedia = {
 const tileEntry = { logicalBytes: 12, contentType: 'image/webp' };
 const pyramid = {
   id: pyramidId,
-  revision: 2,
   width: 512,
   height: 512,
   tileSize: 256,
@@ -239,6 +238,20 @@ describe('server list authority for desktop media', () => {
       expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
     },
   );
+  it('keeps descriptor authority while the list revision stays the same', async () => {
+    const { snapshot, fetch } = setup({ items: [asset()] }, 100);
+    await snapshot.read('/api/photos/assets');
+    fetch.mockResolvedValueOnce(Response.json(pyramid));
+    await snapshot.read(`/api/photos/assets/${assetId}/pyramid`);
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+    fetch.mockResolvedValueOnce(Response.json({ items: [asset()] }));
+    await snapshot.read('/api/photos/assets');
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(true);
+    fetch.mockResolvedValueOnce(Response.json({ items: [asset({ mediaRevision: 3 })] }));
+    await snapshot.read('/api/photos/assets');
+    expect(snapshot.allows(tileMedia, identity, tileEntry)).toBe(false);
+  });
+
   it('clears tile authority when the server change revision advances', async () => {
     const { snapshot, fetch } = setup({}, 100);
     fetch.mockResolvedValueOnce(Response.json(changes()));

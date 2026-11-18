@@ -938,7 +938,8 @@ export function SekerEaglePage({
     queryFn: ({ signal }) => getEaglePyramidDescriptor(imagePreview.previewImage!.assetId!, signal),
     enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
     retry: false,
-    staleTime: Number.POSITIVE_INFINITY,
+    // Re-read on each viewer open: the main process uses this real server response
+    // as current evidence for direct tile reads. One request per open, not per tile.
     // The high-resolution pyramid may still be generated after the preview opens.
     // Keep checking the open image so it upgrades without a manual refresh.
     refetchInterval: (query) => (query.state.data ? false : 15_000),
