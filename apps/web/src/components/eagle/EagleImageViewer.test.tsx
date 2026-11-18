@@ -146,6 +146,7 @@ describe('EagleImageViewer', () => {
     detailHandlers.clear();
     getFullyLoadedMock.mockReturnValue(true);
     getHomeZoomMock.mockReturnValue(1);
+    window.localStorage.setItem('sekereagle:viewer-zoom-hint', '1');
   });
 
   it('copies the complete image even when viewing pyramid tiles', async () => {
@@ -192,16 +193,41 @@ describe('EagleImageViewer', () => {
     );
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
-    expect(screen.getByText('预览图')).toBeInTheDocument();
-    expect(screen.getByText('放大加载原图')).toBeInTheDocument();
+    expect(screen.getByText('预览')).toBeInTheDocument();
+    expect(screen.queryByText('放大加载原图')).not.toBeInTheDocument();
   });
 
   it('does not promise high-resolution loading when the format has no viewer source', async () => {
     render(<EagleImageViewer image={image} previewLimited onClose={vi.fn()} />);
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
-    expect(screen.queryByText('预览图')).not.toBeInTheDocument();
-    expect(screen.queryByText('放大加载原图')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('viewer-source-status')).not.toBeInTheDocument();
+    expect(screen.queryByText('预览')).not.toBeInTheDocument();
+  });
+
+  it('shows the zoom hint once and remembers it', async () => {
+    window.localStorage.removeItem('sekereagle:viewer-zoom-hint');
+    const viewer = (key: string) => (
+      <EagleImageViewer
+        key={key}
+        image={image}
+        previewLimited
+        highResolutionSrc="/original.jpg"
+        onClose={vi.fn()}
+      />
+    );
+    const first = render(viewer('first'));
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.getByText('滚轮或双指放大，自动加载原图')).toBeInTheDocument();
+    expect(window.localStorage.getItem('sekereagle:viewer-zoom-hint')).toBe('1');
+    first.unmount();
+
+    handlers.clear();
+    render(viewer('second'));
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.queryByText('滚轮或双指放大，自动加载原图')).not.toBeInTheDocument();
   });
 
   it('loads high-resolution tiles only after zooming and reports real tile progress', async () => {
@@ -211,7 +237,7 @@ describe('EagleImageViewer', () => {
     );
     await waitFor(() => expect(handlers.has('open')).toBe(true));
     act(() => handlers.get('open')?.());
-    expect(screen.getByText('预览图')).toBeInTheDocument();
+    expect(screen.getByText('预览')).toBeInTheDocument();
     expect(screen.queryByText('正在加载原图…')).toBeNull();
     expect(addTiledImageMock).not.toHaveBeenCalled();
 
@@ -231,14 +257,17 @@ describe('EagleImageViewer', () => {
       }),
     );
     expect(screen.getByText('正在加载原图…')).toBeInTheDocument();
-    expect(screen.queryByText('0/48')).toBeNull();
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+    expect(screen.queryByText('0%')).toBeNull();
     act(() => handlers.get('tile-loaded')?.({ tile: { level: 12, x: 0, y: 0 } }));
     expect(screen.getByText('正在加载原图…')).toBeInTheDocument();
-    expect(screen.getByText('1/48')).toBeInTheDocument();
+    expect(screen.getByText('2%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2');
     getFullyLoadedMock.mockReturnValue(true);
     act(() => detailHandlers.get('fully-loaded-change')?.());
     expect(screen.queryByText('正在加载原图…')).toBeNull();
     expect(screen.getByText('原图')).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).toBeNull();
     expect(removeItemMock).toHaveBeenCalledOnce();
     vi.useRealTimers();
   });
@@ -263,7 +292,7 @@ describe('EagleImageViewer', () => {
       );
       await waitFor(() => expect(handlers.has('open')).toBe(true));
       act(() => handlers.get('open')?.());
-      expect(screen.getByText('预览图')).toBeInTheDocument();
+      expect(screen.getByText('预览')).toBeInTheDocument();
       expect(addTiledImageMock).not.toHaveBeenCalled();
 
       act(() => handlers.get('zoom')?.());
@@ -304,7 +333,7 @@ describe('EagleImageViewer', () => {
       );
       await waitFor(() => expect(handlers.has('open')).toBe(true));
       act(() => handlers.get('open')?.());
-      expect(screen.getByText('预览图')).toBeInTheDocument();
+      expect(screen.getByText('预览')).toBeInTheDocument();
       act(() => handlers.get('zoom')?.());
       expect(await screen.findByText('原图加载失败')).toBeInTheDocument();
       expect(screen.getByText('仍显示预览图')).toBeInTheDocument();

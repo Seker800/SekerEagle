@@ -17,6 +17,8 @@ export function EagleViewerShell({
   title,
   mobile,
   subtitle,
+  status,
+  headerProgress,
   children,
   actions,
   collection,
@@ -26,6 +28,8 @@ export function EagleViewerShell({
   title: string;
   mobile?: EagleMobileViewerPresentation;
   subtitle?: string;
+  status?: ReactNode;
+  headerProgress?: { percent: number | null } | null;
   children: ReactNode;
   actions?: ReactNode;
   collection?: ReactNode;
@@ -35,6 +39,7 @@ export function EagleViewerShell({
   const dialog = useRef<HTMLElement>(null);
   const latest = useRef({ navigation, onClose });
   latest.current = { navigation, onClose };
+  const meta = mobile?.time ?? subtitle;
   useEffect(() => {
     const previous = document.activeElement;
     const overflow = document.body.style.overflow;
@@ -124,7 +129,12 @@ export function EagleViewerShell({
           )}
           <div className={styles.information}>
             <strong title={title}>{mobile?.date ?? title}</strong>
-            {(mobile?.time ?? subtitle) && <span>{mobile?.time ?? subtitle}</span>}
+            {(meta || status) && (
+              <span>
+                {meta}
+                {status}
+              </span>
+            )}
           </div>
           {!mobile && navigation && (
             <span className={styles.counter} aria-live="polite" aria-atomic="true">
@@ -150,6 +160,26 @@ export function EagleViewerShell({
               <IconX size={21} />
             </button>
           )}
+          {headerProgress ? (
+            <div
+              className={styles.headerProgress}
+              role="progressbar"
+              aria-label={t('原图加载进度')}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={headerProgress.percent ?? undefined}
+            >
+              <span
+                className={styles.headerProgressBar}
+                data-indeterminate={headerProgress.percent === null || undefined}
+                style={
+                  headerProgress.percent === null
+                    ? undefined
+                    : { width: `${headerProgress.percent}%` }
+                }
+              />
+            </div>
+          ) : null}
         </header>
         <div className={styles.stage}>
           {children}

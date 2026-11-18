@@ -12,106 +12,100 @@
 }
 
 .sourceStatus {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 6;
-  display: grid;
-  grid-template-rows: auto 2px;
-  gap: 5px;
-  min-width: 196px;
-  padding: 6px 10px 5px;
-  color: #e7ecf3;
-  background: #10141ce6;
-  border: 1px solid #ffffff1f;
-  border-radius: 8px;
-  font-size: 12px;
-  pointer-events: none;
-  backdrop-filter: blur(8px);
-  transition:
-    opacity 0.28s ease,
-    border-color 0.28s ease;
-}
-.sourceLine {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 7px;
-}
-.sourceLabel {
-  font-weight: 500;
-}
-.sourceMeta {
-  margin-left: auto;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
+  gap: 5px;
+  margin-left: 8px;
+  vertical-align: middle;
   white-space: nowrap;
 }
-.sourceMeta:empty {
-  display: none;
+.sourceStatus[data-tone='preview'] {
+  color: #8b929a;
 }
-.sourceDot {
-  width: 7px;
-  height: 7px;
+.sourceStatus[data-tone='done'] {
+  color: #8fae9b;
+}
+.sourceStatus[data-tone='loading'] {
+  color: #aeb6c0;
+}
+.sourceStatus[data-tone='warning'] {
+  color: var(--ui-warning);
+}
+.sourcePercent {
+  color: var(--ui-accent-text);
+  font-variant-numeric: tabular-nums;
+}
+.sourceSpinner {
+  width: 10px;
+  height: 10px;
   flex: none;
+  border: 1.5px solid rgb(255 255 255 / 18%);
+  border-top-color: var(--ui-accent-text);
   border-radius: 50%;
-  background: var(--ui-accent);
-  transition: background 0.3s ease;
+  animation: sourceSpin 0.85s linear infinite;
 }
-.sourceTrack {
-  position: relative;
+.sourceCenter {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.sourceCenterSpinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgb(255 255 255 / 22%);
+  border-top-color: #e3e9f0;
+  border-radius: 50%;
+  background: rgb(9 10 12 / 42%);
+  box-shadow: 0 0 0 8px rgb(9 10 12 / 42%);
+  backdrop-filter: blur(2px);
+  animation: sourceSpin 0.85s linear infinite;
+}
+.zoomHint {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 5;
+  max-width: calc(100% - 32px);
+  padding: 7px 14px;
   overflow: hidden;
-  border-radius: 999px;
-  background: transparent;
-  transition: background 0.2s ease;
+  color: #e3e8ee;
+  background: rgb(13 15 18 / 88%);
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 5px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 35%);
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: sourceHintIn 0.18s ease-out;
 }
-.sourceStatus[data-state='loading'] .sourceTrack {
-  background: #ffffff24;
+@keyframes sourceSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
-.sourceBar {
-  height: 100%;
-  border-radius: inherit;
-  background: var(--ui-accent);
-  transition: width 0.25s ease;
-}
-.sourcePulse {
-  width: 38%;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, transparent, var(--ui-accent), transparent);
-  animation: sourceSweep 1.1s ease-in-out infinite;
-}
-.sourceStatus[data-state='preview'] .sourceDot {
-  opacity: 0.55;
-}
-.sourceStatus[data-state='original'] {
-  opacity: 0.62;
-}
-.sourceStatus[data-state='original'] .sourceDot {
-  background: #5bd39a;
-}
-.sourceStatus[data-state='failed'] {
-  color: #f2dfae;
-  border-color: #e6b84b47;
-}
-.sourceStatus[data-state='failed'] .sourceDot {
-  background: #e6b84b;
-}
-@keyframes sourceSweep {
+@keyframes sourceHintIn {
   from {
-    transform: translateX(-120%);
+    opacity: 0;
+    transform: translate(-50%, 4px);
   }
   to {
-    transform: translateX(320%);
+    opacity: 1;
+    transform: translate(-50%, 0);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sourcePulse {
-    width: 100%;
-    opacity: 0.4;
+  .sourceSpinner,
+  .sourceCenterSpinner {
     animation: none;
   }
-  .sourceBar {
-    transition: none;
+  .zoomHint {
+    animation: none;
   }
 }
 

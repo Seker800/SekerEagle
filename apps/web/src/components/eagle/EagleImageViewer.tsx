@@ -14,6 +14,7 @@ import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleLocateAssetButton } from './EagleLocateAssetButton';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleImageViewer.module.css';
+const ZOOM_HINT_KEY = 'sekereagle:viewer-zoom-hint';
 type ViewerStatus = 'loading' | 'ready' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = {
@@ -170,6 +171,8 @@ export function EagleImageViewer({
   const compact = useCompactLayout();
   const [zoomActivated, setZoomActivated] = useState(false);
   const [detailFailed, setDetailFailed] = useState(false);
+  const [originalNotice, setOriginalNotice] = useState(false);
+  const [zoomHintVisible, setZoomHintVisible] = useState(false);
   const [loadedOriginalSrc, setLoadedOriginalSrc] = useState<string | null>(null);
   const [originalLoading, setOriginalLoading] = useState(false);
   const [originalPercent, setOriginalPercent] = useState<number | null>(null);
@@ -608,28 +611,65 @@ export function EagleImageViewer({
     : showOriginalBar
       ? originalPercent
       : null;
-  const sourceCount =
-    sourceState === 'loading'
-      ? showDetailProgress
-        ? `${tileProgress.loaded}/${tileProgress.total}`
-        : showOriginalBar
-          ? `${originalPercent}%`
-          : ''
-      : '';
-  const sourceLabel =
-    sourceState === 'preview'
-      ? t('预览图')
-      : sourceState === 'loading'
-        ? t('正在加载原图…')
-        : sourceState === 'original'
-          ? t('原图')
-          : t('原图加载失败');
-  const sourceHint =
-    sourceState === 'preview'
-      ? t('放大加载原图')
-      : sourceState === 'failed'
-        ? t('仍显示预览图')
-        : sourceCount;
+  useEffect(() => {
+    if (!showSourceStatus || sourceState !== 'preview') {
+      setZoomHintVisible(false);
+      return;
+    }
+    const seen = (() => {
+      try {
+        return window.localStorage.getItem(ZOOM_HINT_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })();
+    if (seen) return;
+    setZoomHintVisible(true);
+    try {
+      window.localStorage.setItem(ZOOM_HINT_KEY, '1');
+    } catch {
+      /* The hint still shows; losing the flag only means it repeats next time. */
+    }
+    const timer = window.setTimeout(() => setZoomHintVisible(false), 3500);
+    return () => window.clearTimeout(timer);
+  }, [showSourceStatus, sourceState]);
+  useEffect(() => {
+    if (sourceState !== 'original') {
+      setOriginalNotice(false);
+      return;
+    }
+    setOriginalNotice(true);
+    const timer = window.setTimeout(() => setOriginalNotice(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [sourceState]);
+  const sourceStatusNode = !showSourceStatus ? undefined : sourceState === 'loading' ? (
+    <span className={styles.sourceStatus} data-tone="loading" data-testid="viewer-source-status">
+      {sourcePercent === null && <span className={styles.sourceSpinner} aria-hidden="true" />}
+      <span aria-live="polite">{t('正在加载原图…')}</span>
+      {sourcePercent !== null && <span className={styles.sourcePercent}>{sourcePercent}%</span>}
+    </span>
+  ) : sourceState === 'failed' ? (
+    <span
+      className={styles.sourceStatus}
+      data-tone="warning"
+      data-testid="viewer-source-status"
+      role="status"
+    >
+      <span>{t('原图加载失败')}</span>
+      <span aria-hidden="true">·</span>
+      <span>{t('仍显示预览图')}</span>
+    </span>
+  ) : sourceState === 'original' && originalNotice ? (
+    <span className={styles.sourceStatus} data-tone="done" data-testid="viewer-source-status">
+      <span aria-hidden="true">·</span>
+      <span>{t('原图')}</span>
+    </span>
+  ) : sourceState === 'preview' ? (
+    <span className={styles.sourceStatus} data-tone="preview" data-testid="viewer-source-status">
+      <span aria-hidden="true">·</span>
+      <span>{t('预览')}</span>
+    </span>
+  ) : undefined;
   const secondary = (
     <>
       {!loading && !error && onLocate && image.assetId && (
@@ -660,6 +700,10 @@ export function EagleImageViewer({
       }
       title={loading ? t('正在加载…') : image.alt}
       subtitle={loading ? undefined : subtitle}
+      status={loading ? undefined : sourceStatusNode}
+      headerProgress={
+        showSourceStatus && sourceState === 'loading' ? { percent: sourcePercent } : null
+      }
       navigation={navigation}
       onClose={onClose}
       collection={collection}
@@ -690,23 +734,14 @@ export function EagleImageViewer({
         posterUrl={image.src}
       />
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
-      {showSourceStatus && (
-        <div className={styles.sourceStatus} data-state={sourceState}>
-          <div className={styles.sourceLine}>
-            <span className={styles.sourceDot} aria-hidden="true" />
-            <span className={styles.sourceLabel} aria-live="polite">
-              {sourceLabel}
-            </span>
-            <span className={styles.sourceMeta}>{sourceHint}</span>
-          </div>
-          <div className={styles.sourceTrack} aria-hidden="true">
-            {sourceState === 'loading' &&
-              (sourcePercent !== null ? (
-                <div className={styles.sourceBar} style={{ width: `${sourcePercent}%` }} />
-              ) : (
-                <div className={styles.sourcePulse} />
-              ))}
-          </div>
+      {showSourceStatus && sourceState === 'loading' && sourcePercent === null && (
+        <div className={styles.sourceCenter} aria-hidden="true">
+          <span className={styles.sourceCenterSpinner} />
+        </div>
+      )}
+      {showSourceStatus && sourceState === 'preview' && zoomHintVisible && (
+        <div className={styles.zoomHint} role="status">
+          {t('滚轮或双指放大，自动加载原图')}
         </div>
       )}
       {displayStatus !== 'ready' ? (

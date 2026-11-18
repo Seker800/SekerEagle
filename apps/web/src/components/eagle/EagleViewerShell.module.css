@@ -16,6 +16,7 @@
   overflow: hidden;
 }
 .header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 18px;
@@ -23,6 +24,44 @@
   min-height: 60px;
   padding: max(6px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 6px
     max(20px, env(safe-area-inset-left));
+}
+.headerProgress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 6%);
+}
+.headerProgressBar {
+  display: block;
+  height: 100%;
+  border-radius: 0 999px 999px 0;
+  background: var(--ui-accent-text);
+  transition: width 0.25s ease;
+}
+.headerProgressBar[data-indeterminate] {
+  width: 34%;
+  animation: headerProgressSweep 1.15s ease-in-out infinite;
+}
+@keyframes headerProgressSweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .headerProgressBar {
+    transition: none;
+  }
+  .headerProgressBar[data-indeterminate] {
+    width: 100%;
+    opacity: 0.35;
+    animation: none;
+  }
 }
 .information {
   display: grid;
