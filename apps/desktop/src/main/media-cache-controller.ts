@@ -107,7 +107,6 @@ type CanReadLocal = (
 ) => boolean;
 
 export class MediaCacheController {
-  private readonly serverUrl: string;
   private readonly cache: CacheBackend;
   private readonly authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
   private readonly fetchUpstream: (
@@ -123,7 +122,6 @@ export class MediaCacheController {
   private readonly requestStats = new Map<string, CacheRequestStats>();
 
   constructor(options: {
-    serverUrl: string;
     cache: CacheBackend;
     authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
     fetchUpstream: (
@@ -135,7 +133,6 @@ export class MediaCacheController {
     deniesLocal?: CanReadLocal;
     onMediaRevoked?: (event: MediaRevokedEvent) => void;
   }) {
-    this.serverUrl = options.serverUrl;
     this.cache = options.cache;
     this.authenticatedOwner = options.authenticatedOwner;
     this.fetchUpstream = options.fetchUpstream;
@@ -162,10 +159,8 @@ export class MediaCacheController {
     if (!identity) return { source: 'error', status: 401, message: '需要重新登录。' };
     const { ownerId, deploymentId } = identity;
 
-    const namespaceId = buildNamespaceId(this.serverUrl, ownerId, deploymentId, media.libraryMode);
-    const keyHash = hashCacheIdentity(
-      buildCacheIdentity(this.serverUrl, ownerId, deploymentId, media),
-    );
+    const namespaceId = buildNamespaceId(ownerId, deploymentId, media.libraryMode);
+    const keyHash = hashCacheIdentity(buildCacheIdentity(ownerId, deploymentId, media));
     try {
       const result = await this.resolveAuthorized(media, keyHash, namespaceId, identity, signal);
       this.recordResult(namespaceId, result);

@@ -47,41 +47,17 @@ describe('desktop media identity', () => {
     expect(() => parseDesktopMediaUrl(url)).toThrow();
   });
 
-  it('isolates cache keys by normalized server and authenticated owner', () => {
+  it('keys cache identity by library, owner and media without the connection origin', () => {
     const media = parseDesktopMediaUrl(
       `sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`,
     );
-    const first = buildCacheIdentity('https://EXAMPLE.com:443/', 'owner-a', deploymentId, media);
-    const equivalent = buildCacheIdentity('https://example.com', 'owner-a', deploymentId, media);
-    const otherOwner = buildCacheIdentity('https://example.com', 'owner-b', deploymentId, media);
-    const otherDeployment = buildCacheIdentity(
-      'https://example.com',
-      'owner-a',
-      'e'.repeat(64),
-      media,
-    );
+    const first = buildCacheIdentity('owner-a', deploymentId, media);
+    const otherOwner = buildCacheIdentity('owner-b', deploymentId, media);
+    const otherDeployment = buildCacheIdentity('owner-a', 'e'.repeat(64), media);
 
-    expect(first).toBe(equivalent);
     expect(first).not.toBe(otherOwner);
     expect(first).not.toBe(otherDeployment);
     expect(hashCacheIdentity(first)).toHaveLength(32);
-  });
-
-  it('rejects server URLs with credentials, query, fragments, or non-http protocols', () => {
-    for (const server of [
-      'file:///tmp/server',
-      'https://user:pass@example.com',
-      'https://example.com/?tenant=a',
-      'https://example.com/#fragment',
-    ]) {
-      expect(() =>
-        buildCacheIdentity(
-          server,
-          'owner-a',
-          deploymentId,
-          parseDesktopMediaUrl(`sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`),
-        ),
-      ).toThrow();
-    }
+    expect(buildCacheIdentity('owner-a', deploymentId, media)).toBe(first);
   });
 });

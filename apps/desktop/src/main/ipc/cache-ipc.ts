@@ -24,7 +24,7 @@ export function registerCacheIpc(
     else ctx.assertTrustedIpcSender(event);
     const identity = await owner.get();
     if (!identity) throw new Error('需要重新登录。');
-    return accountCacheNamespaces(ctx.serverUrl, identity);
+    return accountCacheNamespaces(identity);
   };
   ipcMain.handle('desktop:cache-status', async (event) => {
     const namespaceIds = await namespaces(event);
@@ -56,7 +56,7 @@ export function registerCacheIpc(
     const currentAccountStats = identity
       ? await readAccountCacheStats(
           currentCache(),
-          accountCacheNamespaces(ctx.serverUrl, identity),
+          accountCacheNamespaces(identity),
           (namespace) =>
             ctx.mediaController?.getRequestStats(namespace) ?? emptyCacheRequestStats(),
         )

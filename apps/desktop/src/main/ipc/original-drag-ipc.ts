@@ -71,7 +71,7 @@ export function registerOriginalDragIpc(
       const assetIds = parseAssetDragInput(input);
       const identity = await owner.get();
       if (!identity) throw new Error('需要重新登录。');
-      const namespaceId = buildNamespaceId(dragServerUrl, identity.ownerId, identity.deploymentId);
+      const namespaceId = buildNamespaceId(identity.ownerId, identity.deploymentId);
       prepared = await exporter.prepare(
         namespaceId,
         assetIds,

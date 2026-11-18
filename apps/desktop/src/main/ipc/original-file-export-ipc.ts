@@ -44,10 +44,9 @@ export function registerOriginalFileExportIpc(
       const [assetId] = parseAssetDragInput([input]);
       const identity = await owner.get();
       if (!identity) throw new Error('需要重新登录。');
-      prepared = await exporter.prepare(
-        buildNamespaceId(saveServerUrl, identity.ownerId, identity.deploymentId),
-        [assetId],
-      );
+      prepared = await exporter.prepare(buildNamespaceId(identity.ownerId, identity.deploymentId), [
+        assetId,
+      ]);
       await assertOriginalAccessStillCurrent(ctx, event, owner, saveServerUrl, identity);
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) throw new Error('桌面窗口不可用。');
@@ -91,7 +90,7 @@ export function registerOriginalFileExportIpc(
         const destinationDirectory = result.filePaths[0]!;
         await assertOriginalAccessStillCurrent(ctx, event, owner, downloadServerUrl, identity);
         prepared = await exporter.prepare(
-          buildNamespaceId(downloadServerUrl, identity.ownerId, identity.deploymentId),
+          buildNamespaceId(identity.ownerId, identity.deploymentId),
           assetIds,
         );
         await assertOriginalAccessStillCurrent(ctx, event, owner, downloadServerUrl, identity);

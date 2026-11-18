@@ -19,9 +19,9 @@ interface AccountCacheBackend {
   ): Promise<{ deleted: number; deferred: number }>;
 }
 
-export function accountCacheNamespaces(server: string, identity: AuthenticatedIdentity): string[] {
+export function accountCacheNamespaces(identity: AuthenticatedIdentity): string[] {
   return (['MATERIAL', 'PHOTO'] as const).map((mode) =>
-    buildNamespaceId(server, identity.ownerId, identity.deploymentId, mode),
+    buildNamespaceId(identity.ownerId, identity.deploymentId, mode),
   );
 }
 

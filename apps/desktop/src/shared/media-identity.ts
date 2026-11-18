@@ -84,12 +84,10 @@ export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
 }
 
 export function buildCacheIdentity(
-  serverUrl: string,
   authenticatedOwnerId: string,
   deploymentId: string,
   media: DesktopMediaIdentity,
 ): string {
-  const serverIdentity = normalizeServerIdentity(serverUrl);
   const ownerId = authenticatedOwnerId.trim();
   if (!ownerId || ownerId.length > 256 || hasControlCharacter(ownerId)) {
     throw new Error('认证主体无效。');
@@ -100,7 +98,7 @@ export function buildCacheIdentity(
       ? `rendition:${media.renditionKind}:${media.assetId}:${media.renditionId}`
       : `tile:${media.assetId}:${media.pyramidId}:${media.level}:${media.x}:${media.y}`;
   assertDeploymentId(deploymentId);
-  return `${cacheScopeIdentity(serverIdentity, ownerId, deploymentId, media.libraryMode)}\n${mediaIdentity}`;
+  return `${cacheScopeIdentity(ownerId, deploymentId, media.libraryMode)}\n${mediaIdentity}`;
 }
 
 export function hashCacheIdentity(identity: string): Buffer {
@@ -108,34 +106,31 @@ export function hashCacheIdentity(identity: string): Buffer {
 }
 
 export function buildNamespaceId(
-  serverUrl: string,
   authenticatedOwnerId: string,
   deploymentId: string,
   libraryMode: DesktopLibraryMode = 'MATERIAL',
 ): string {
-  const serverIdentity = normalizeServerIdentity(serverUrl);
   const ownerId = authenticatedOwnerId.trim();
   if (!ownerId || ownerId.length > 256 || hasControlCharacter(ownerId)) {
     throw new Error('认证主体无效。');
   }
   assertDeploymentId(deploymentId);
   return createHash('sha256')
-    .update(cacheScopeIdentity(serverIdentity, ownerId, deploymentId, libraryMode), 'utf8')
+    .update(cacheScopeIdentity(ownerId, deploymentId, libraryMode), 'utf8')
     .digest('hex');
 }
 
 function cacheScopeIdentity(
-  server: string,
   owner: string,
   deployment: string,
   mode: DesktopLibraryMode = 'MATERIAL',
 ) {
   if (mode !== 'MATERIAL' && mode !== 'PHOTO') throw new Error('图库模式无效。');
-  // v1 was exclusively MATERIAL. Preserve its existing files without ever
-  // admitting PHOTO into that key space, including on a legacy request.
-  return mode === 'MATERIAL'
-    ? `v1\n${server}\n${deployment}\n${owner}`
-    : `v2\n${server}\n${deployment}\n${owner}\nPHOTO`;
+  // v1/v2 included the connection origin; v3 deliberately omits it so the same
+  // library shares one cache across local, LAN and public entries. The previous
+  // origin-keyed files cannot be re-keyed (only hashes were stored) and remain
+  // orphaned until the cache limit evicts them.
+  return mode === 'MATERIAL' ? `v3\n${deployment}\n${owner}` : `v3\n${deployment}\n${owner}\nPHOTO`;
 }
 
 function parseLibraryMode(value: string): DesktopLibraryMode {
@@ -146,21 +141,6 @@ function parseLibraryMode(value: string): DesktopLibraryMode {
 
 function assertDeploymentId(value: string): void {
   if (!/^[0-9a-f]{64}$/u.test(value)) throw new Error('deployment identity 无效。');
-}
-
-export function normalizeServerIdentity(input: string): string {
-  const url = parseUrl(input, '服务器地址无效。');
-  if (
-    (url.protocol !== 'https:' && url.protocol !== 'http:') ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    (url.pathname !== '/' && url.pathname !== '')
-  ) {
-    throw new Error('服务器地址必须是无凭据、查询或子路径的 HTTP(S) origin。');
-  }
-  return url.origin.toLowerCase();
 }
 
 function assertUuid(value: string | undefined): string {

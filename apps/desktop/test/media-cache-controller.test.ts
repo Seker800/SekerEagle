@@ -59,7 +59,6 @@ describe('MediaCacheController', () => {
         }),
     });
     const controller = new MediaCacheController({
-      serverUrl: 'https://example.com',
       cache: engine,
       authenticatedOwner: async () => identity,
       fetchUpstream,
@@ -170,7 +169,6 @@ describe('MediaCacheController', () => {
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     const onMediaRevoked = vi.fn();
     const controller = new MediaCacheController({
-      serverUrl: 'https://example.com',
       cache: engine,
       authenticatedOwner: async () => identity,
       fetchUpstream,
@@ -300,7 +298,6 @@ describe('MediaCacheController', () => {
   it('fails closed before lookup or upstream access without a current authenticated owner', async () => {
     const fetchUpstream = vi.fn(async () => eligibleResponse('not-used'));
     const controller = new MediaCacheController({
-      serverUrl: 'https://example.com',
       cache: engine,
       authenticatedOwner: async () => null,
       fetchUpstream,
@@ -385,7 +382,6 @@ describe('MediaCacheController', () => {
         }),
     );
     const controller = new MediaCacheController({
-      serverUrl: 'https://example.com',
       cache: engine,
       authenticatedOwner,
       fetchUpstream,
@@ -517,7 +513,6 @@ function createController(
   onMediaRevoked?: (event: { assetId: string; libraryMode: string; status: number }) => void,
 ) {
   return new MediaCacheController({
-    serverUrl: 'https://example.com',
     cache,
     authenticatedOwner: async () => ({ ownerId: 'owner-a', deploymentId: 'd'.repeat(64) }),
     fetchUpstream,

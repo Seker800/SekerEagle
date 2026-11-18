@@ -20,11 +20,11 @@ describe('account cache maintenance across modes', () => {
     root = await mkdtemp(path.join(os.tmpdir(), 'sekereagle-account-cache-'));
     engine = new CacheEngine({ cacheRoot: root, limitBytes: 1024 ** 2, enforceDiskSafety: false });
     await engine.initialize();
-    const namespaces = accountCacheNamespaces('https://example.com', {
+    const namespaces = accountCacheNamespaces({
       ownerId: 'owner',
       deploymentId: 'd'.repeat(64),
     });
-    const other = accountCacheNamespaces('https://example.com', {
+    const other = accountCacheNamespaces({
       ownerId: 'other',
       deploymentId: 'd'.repeat(64),
     });

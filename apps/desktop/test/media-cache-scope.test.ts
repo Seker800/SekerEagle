@@ -14,7 +14,6 @@ import { CacheEngine } from '../src/utility/cache/cache-engine';
 const assetId = '00000000-0000-4000-8000-000000000001';
 const renditionId = '00000000-0000-4000-8000-000000000002';
 const deploymentId = 'd'.repeat(64);
-const server = 'https://example.com';
 const scopedUrl = (mode: string) =>
   `sekereagle-media://rendition/${mode}/thumbnail/${assetId}/${renditionId}`;
 
@@ -39,14 +38,14 @@ describe('mode-scoped desktop media cache', () => {
     );
     expect(photo.libraryMode).toBe('PHOTO');
     expect(createDesktopMediaUrl(photo)).toBe(scopedUrl('photo'));
-    expect(buildCacheIdentity(server, 'owner', deploymentId, photo)).not.toBe(
-      buildCacheIdentity(server, 'owner', deploymentId, material),
+    expect(buildCacheIdentity('owner', deploymentId, photo)).not.toBe(
+      buildCacheIdentity('owner', deploymentId, material),
     );
-    expect(buildCacheIdentity(server, 'owner', deploymentId, material)).toBe(
-      buildCacheIdentity(server, 'owner', deploymentId, legacy),
+    expect(buildCacheIdentity('owner', deploymentId, material)).toBe(
+      buildCacheIdentity('owner', deploymentId, legacy),
     );
-    expect(buildNamespaceId(server, 'owner', deploymentId, 'PHOTO')).not.toBe(
-      buildNamespaceId(server, 'owner', deploymentId, 'MATERIAL'),
+    expect(buildNamespaceId('owner', deploymentId, 'PHOTO')).not.toBe(
+      buildNamespaceId('owner', deploymentId, 'MATERIAL'),
     );
   });
 
@@ -87,7 +86,7 @@ describe('mode-scoped desktop media cache', () => {
         }),
       );
     const controller = makeController(upstream);
-    const namespace = buildNamespaceId(server, 'owner', deploymentId, 'PHOTO');
+    const namespace = buildNamespaceId('owner', deploymentId, 'PHOTO');
     const first = await controller.resolve(scopedUrl('photo'));
     if (first.source !== 'cache') throw new Error('Expected cache');
     await engine.release(first.leaseId);
@@ -135,13 +134,32 @@ describe('mode-scoped desktop media cache', () => {
     if (after.source === 'upstream') expect(after.response.status).toBe(404);
   });
 
-  function makeController(fetchUpstream: (url: string) => Promise<Response>) {
+  it('serves a file cached through one origin to another origin without a download', async () => {
+    const firstOrigin = vi.fn(async () => eligible('shared'));
+    const first = makeController(firstOrigin, () => true);
+    const cached = await first.resolve(scopedUrl('photo'));
+    if (cached.source !== 'cache') throw new Error('Expected cache');
+    expect(cached.cacheResult).toBe('MISS');
+    await engine.release(cached.leaseId);
+
+    const secondOrigin = vi.fn(async () => eligible('other'));
+    const second = makeController(secondOrigin, () => true);
+    const reused = await second.resolve(scopedUrl('photo'));
+    expect(reused).toMatchObject({ source: 'cache', cacheResult: 'LOCAL' });
+    if (reused.source === 'cache') engine.release(reused.leaseId);
+    expect(secondOrigin).not.toHaveBeenCalled();
+  });
+
+  function makeController(
+    fetchUpstream: (url: string) => Promise<Response>,
+    canReadLocal?: () => boolean,
+  ) {
     return new MediaCacheController({
-      serverUrl: server,
       cache: engine,
       authenticatedOwner: async () => ({ ownerId: 'owner', deploymentId }),
       fetchUpstream,
       now: () => 1000,
+      ...(canReadLocal ? { canReadLocal } : {}),
     });
   }
 });

@@ -24,7 +24,6 @@ export function createMediaController(
   ctx.librarySnapshot = snapshot;
   const limiter = new MediaRequestLimiter(12, 128);
   return new MediaCacheController({
-    serverUrl: ctx.serverUrl,
     cache: cacheBackend(),
     authenticatedOwner: () => owner.get(),
     canReadLocal: (media, identity, file) => snapshot.allows(media, identity, file),
