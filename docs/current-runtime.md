@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 11:20（北京时间） | 对应提交：67e99d52
+> 状态：现行 | 核验日期：2026-11-18 11:30（北京时间） | 对应提交：e4f45b9d
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -8,17 +8,17 @@
 
 ## 现用状态
 
-| 项目                              | 当前值                                                                                       |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                    |
-| 运行源码                          | API `e57b7ab7`；web `67e99d52`；operations／reader `93b5d583`（本轮未更新）                  |
-| API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583` |
-| Web                               | `sekereagle/web:cacheopt-67e99d52`                                                           |
-| macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                |
-| 数据库                            | 100 项迁移，待应用 0；本轮无迁移、无 schema 变化                                             |
-| Mac 业务执行器                    | `.runtime/business-worker/releases/worker-93b5d583`（launchd；不是 Compose `worker`）        |
-| 未改动                            | 网关、Postgres、MinIO、计算协调器、中继；不要为排查重启或重建                                |
-| 计数                              | MATERIAL / PHOTO / 回收站 / 草稿从运行检查点读取，本文不维护动态百分比                       |
+| 项目                              | 当前值                                                                                          |
+| --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                       |
+| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `e4f45b9d`；operations／reader `93b5d583`（本轮未更新） |
+| API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`    |
+| Web                               | `sekereagle/web:cacheopt-67e99d52`                                                              |
+| macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                   |
+| 数据库                            | 100 项迁移，待应用 0；本轮无迁移、无 schema 变化                                                |
+| Mac 业务执行器                    | `.runtime/business-worker/releases/worker-93b5d583`（launchd；不是 Compose `worker`）           |
+| 未改动                            | 网关、Postgres、MinIO、计算协调器、中继；不要为排查重启或重建                                   |
+| 计数                              | MATERIAL / PHOTO / 回收站 / 草稿从运行检查点读取，本文不维护动态百分比                          |
 
 Web 最近三次覆盖：`cacheopt-67e99d52`（11-18 11:18）→ `cacheopt-abb4c3e3`（11-18 11:08）
 → `viewer5d4d0ce0`（11-18 10:27）。API 保持 `share4k-e57b7ab7`；
@@ -69,11 +69,14 @@ operations／reader 保持 `refactor-93b5d583` 未变。
   `.omx/artifacts` 中未被文档引用的 7 天前产物已删除（1.4 GB），文档引用证据全部保留。
 - 最近一致性备份：936,861,410 字节，SHA-256 `da13a914c04e6e69a94699f85642a20ed0b14d446a5c3c080a05d66f9f968bc1`（本轮无数据写入，未新建备份）。
 - 证据目录：本次发布见 NAS 私有 `maintenance/cacheopt-67e99d52/`（首版
-  `maintenance/cacheopt-abb4c3e3/`）；上一轮见 `maintenance/viewer5d4d0ce0/`。完整回退清单与历史备份见
+  `maintenance/cacheopt-abb4c3e3/`）；上一轮见 `maintenance/viewer5d4d0ce0/`。
+- 2026-11-18 11:30 桌面缓存身份改为 v3（不含连接地址）：当前账号在新命名空间重建，
+  旧地址键文件成为一次性孤立缓存（全局仍显示约 95MB），由原容量上限淘汰；网页与 API 未变。完整回退清单与历史备份见
   [归档](history/releases/2026-11.md) 和 `rollback.json`。
 
 ## 最新发布摘要
 
+- [2026-11-18 11:30 桌面缓存身份去掉连接地址（本机客户端）](history/releases/main-production-release-2026-11-18-cachekey-e4f45b9d.md)
 - [2026-11-18 11:18 桌面切片直读与首屏先显示后校验](history/releases/main-production-release-2026-11-18-cacheopt-67e99d52.md)
 - [2026-11-18 10:27 大图查看器顶栏状态与加载进度（仅网页）](history/releases/main-production-release-2026-11-18-viewer5d4d0ce0.md)
 - [2026-11-17 17:00 4K 分享复制与预览/原图标记](history/releases/main-production-release-2026-11-17-share4k-e57b7ab7.md)
