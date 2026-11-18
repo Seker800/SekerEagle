@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 11:30（北京时间） | 对应提交：e4f45b9d
+> 状态：现行 | 核验日期：2026-11-18 11:40（北京时间） | 对应提交：63fa9119
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -11,7 +11,7 @@
 | 项目                              | 当前值                                                                                          |
 | --------------------------------- | ----------------------------------------------------------------------------------------------- |
 | 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                       |
-| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `e4f45b9d`；operations／reader `93b5d583`（本轮未更新） |
+| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `63fa9119`；operations／reader `93b5d583`（本轮未更新） |
 | API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`    |
 | Web                               | `sekereagle/web:cacheopt-67e99d52`                                                              |
 | macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                   |
@@ -76,6 +76,7 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 
 ## 最新发布摘要
 
+- [2026-11-18 11:40 缓存设置页改为卡片仪表盘（本机客户端）](history/releases/main-production-release-2026-11-18-cache-settings-ui.md)
 - [2026-11-18 11:30 桌面缓存身份去掉连接地址（本机客户端）](history/releases/main-production-release-2026-11-18-cachekey-e4f45b9d.md)
 - [2026-11-18 11:18 桌面切片直读与首屏先显示后校验](history/releases/main-production-release-2026-11-18-cacheopt-67e99d52.md)
 - [2026-11-18 10:27 大图查看器顶栏状态与加载进度（仅网页）](history/releases/main-production-release-2026-11-18-viewer5d4d0ce0.md)
