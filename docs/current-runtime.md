@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 11:55（北京时间） | 对应提交：f59f546d
+> 状态：现行 | 核验日期：2026-11-18 13:00（北京时间） | 对应提交：d9d87ce8
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -11,7 +11,7 @@
 | 项目                              | 当前值                                                                                          |
 | --------------------------------- | ----------------------------------------------------------------------------------------------- |
 | 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                       |
-| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `f59f546d`；operations／reader `93b5d583`（本轮未更新） |
+| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `d9d87ce8`；operations／reader `93b5d583`（本轮未更新） |
 | API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`    |
 | Web                               | `sekereagle/web:cacheopt-67e99d52`                                                              |
 | macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                   |
@@ -71,11 +71,15 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 - 证据目录：本次发布见 NAS 私有 `maintenance/cacheopt-67e99d52/`（首版
   `maintenance/cacheopt-abb4c3e3/`）；上一轮见 `maintenance/viewer5d4d0ce0/`。
 - 2026-11-18 11:30 桌面缓存身份改为 v3（不含连接地址）：当前账号在新命名空间重建，
-  旧地址键文件成为一次性孤立缓存（全局仍显示约 95MB），由原容量上限淘汰；网页与 API 未变。完整回退清单与历史备份见
+  旧地址键文件成为一次性孤立缓存；网页与 API 未变。
+- 2026-11-18 13:00 本机旧版缓存已清理：删除 3459 个文件、5 个旧命名空间（约 89.8 MiB），
+  当前 5.1 MiB v3 缓存完整保留；全局与当前账号占比变为 100% / 0%。缓存不按时间过期，
+  只有容量上限、手动清理或库身份/账号/方案变化才会失效。完整回退清单与历史备份见
   [归档](history/releases/2026-11.md) 和 `rollback.json`。
 
 ## 最新发布摘要
 
+- [2026-11-18 13:00 清理旧版桌面缓存并锁定缓存键（本机客户端）](history/releases/main-production-release-2026-11-18-cache-legacy-cleanup.md)
 - [2026-11-18 11:55 缓存设置页改为仪器面板控制台（本机客户端）](history/releases/main-production-release-2026-11-18-cache-console-ui.md)
 - [2026-11-18 11:40 缓存设置页改为卡片仪表盘（本机客户端）](history/releases/main-production-release-2026-11-18-cache-settings-ui.md)
 - [2026-11-18 11:30 桌面缓存身份去掉连接地址（本机客户端）](history/releases/main-production-release-2026-11-18-cachekey-e4f45b9d.md)
