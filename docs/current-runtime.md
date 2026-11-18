@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-17 17:05（北京时间） | 对应提交：e57b7ab7
+> 状态：现行 | 核验日期：2026-11-18 10:28（北京时间） | 对应提交：5d4d0ce0
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -11,16 +11,16 @@
 | 项目                              | 当前值                                                                                       |
 | --------------------------------- | -------------------------------------------------------------------------------------------- |
 | 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                    |
-| 运行源码                          | API／web `e57b7ab7`；operations／reader `93b5d583`（本轮未更新）                             |
+| 运行源码                          | API `e57b7ab7`；web `5d4d0ce0`；operations／reader `93b5d583`（本轮未更新）                  |
 | API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583` |
-| Web                               | `sekereagle/web:share4k-e57b7ab7`                                                            |
+| Web                               | `sekereagle/web:viewer5d4d0ce0`                                                              |
 | 数据库                            | 100 项迁移，待应用 0；本轮无迁移、无 schema 变化                                             |
 | Mac 业务执行器                    | `.runtime/business-worker/releases/worker-93b5d583`（launchd；不是 Compose `worker`）        |
 | 未改动                            | 网关、Postgres、MinIO、计算协调器、中继；不要为排查重启或重建                                |
 | 计数                              | MATERIAL / PHOTO / 回收站 / 草稿从运行检查点读取，本文不维护动态百分比                       |
 
-Web 最近三次覆盖：`share4k-e57b7ab7`（17:00）→ `thumbs-e093f6d8`（09:05）
-→ `refactor-93b5d583`（00:00）。API 同时切到 `share4k-e57b7ab7`；
+Web 最近三次覆盖：`viewer5d4d0ce0`（11-18 10:27）→ `share4k-e57b7ab7`（11-17 17:00）
+→ `thumbs-e093f6d8`（11-17 09:05）。API 保持 `share4k-e57b7ab7`；
 operations／reader 保持 `refactor-93b5d583` 未变。
 
 ## 进程入口
@@ -56,17 +56,18 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 
 ## 回退与证据
 
-- Web 回退：`sekereagle/web:thumbs-e093f6d8`。
+- Web 回退：`sekereagle/web:share4k-e57b7ab7`。
 - API 回退：`sekereagle/api:refactor-93b5d583`；operations／reader 本轮未变。
 - Mac worker 回退：`.runtime/business-worker/releases/worker-b852071b`；plist 备份在
   `.omx/artifacts/release-93b5d583/worker-before.plist`。
 - 最近一致性备份：936,861,410 字节，SHA-256 `da13a914c04e6e69a94699f85642a20ed0b14d446a5c3c080a05d66f9f968bc1`（本轮无数据写入，未新建备份）。
-- 证据目录：本次发布见 NAS 私有 `maintenance/share4k-e57b7ab7/`；上一轮见
-  `maintenance/thumbs-e093f6d8/`。完整回退清单与历史备份见
+- 证据目录：本次发布见 NAS 私有 `maintenance/viewer5d4d0ce0/`；上一轮见
+  `maintenance/share4k-e57b7ab7/`。完整回退清单与历史备份见
   [归档](history/releases/2026-11.md) 和 `rollback.json`。
 
 ## 最新发布摘要
 
+- [2026-11-18 10:27 大图查看器顶栏状态与加载进度（仅网页）](history/releases/main-production-release-2026-11-18-viewer5d4d0ce0.md)
 - [2026-11-17 17:00 4K 分享复制与预览/原图标记](history/releases/main-production-release-2026-11-17-share4k-e57b7ab7.md)
 - [2026-11-17 09:05 缩略图并发与缓存调优（仅网页）](history/releases/main-production-release-2026-11-17-thumbs-e093f6d8.md)
 - [2026-11-17 00:00 接手认知成本重构与审查修复](history/releases/main-production-release-2026-11-16-refactor-93b5d583.md)
