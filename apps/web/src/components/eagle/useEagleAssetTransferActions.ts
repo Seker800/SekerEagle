@@ -171,7 +171,7 @@ export function useEagleAssetTransferActions(options: {
         setAssetActionPending(null);
         const detail = error instanceof Error ? `：${error.message}` : t('，请重试。');
         setAssetActionError(
-          t('复制图片失败{{value1}}', {
+          t('复制到剪贴板失败{{value1}}', {
             value1: detail,
           }),
         );

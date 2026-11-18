@@ -41,8 +41,8 @@ export async function copyImageToClipboard(
   ) {
     throw new Error(
       globalThis.isSecureContext === false
-        ? t('当前网页地址不支持复制图片，请使用 localhost 或 HTTPS。')
-        : t('当前环境不支持复制图片。'),
+        ? t('当前网页地址不支持复制到剪贴板，请使用 localhost 或 HTTPS。')
+        : t('当前环境不支持复制到剪贴板。'),
     );
   }
   const pngPromise = loadClipboardPng(sourceUrl, dependencies);
@@ -78,8 +78,8 @@ export async function copyShareImageToClipboard(shareUrl: string): Promise<void>
   ) {
     throw new Error(
       globalThis.isSecureContext === false
-        ? t('当前网页地址不支持复制图片，请使用 localhost 或 HTTPS。')
-        : t('当前环境不支持复制图片。'),
+        ? t('当前网页地址不支持复制到剪贴板，请使用 localhost 或 HTTPS。')
+        : t('当前环境不支持复制到剪贴板。'),
     );
   }
   // Start the clipboard write inside the click gesture; the promise resolves after the render.

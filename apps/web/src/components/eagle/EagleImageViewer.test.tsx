@@ -152,7 +152,7 @@ describe('EagleImageViewer', () => {
     copyImageMock.mockResolvedValue(undefined);
     const onClose = vi.fn();
     render(<EagleImageViewer image={image} descriptor={descriptor} onClose={onClose} />);
-    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制到剪贴板' }));
     expect(copyImageMock).toHaveBeenCalledWith(image.src);
     expect(await screen.findByText('已复制')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

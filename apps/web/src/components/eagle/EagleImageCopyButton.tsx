@@ -45,7 +45,7 @@ function ImageCopyAction({ asset, sourceUrl }: { asset?: EagleAssetListItem; sou
     } catch (cause) {
       if (active.current) {
         setError(
-          t('复制图片失败{{value1}}', {
+          t('复制到剪贴板失败{{value1}}', {
             value1: cause instanceof Error ? `：${cause.message}` : '',
           }),
         );
@@ -56,21 +56,30 @@ function ImageCopyAction({ asset, sourceUrl }: { asset?: EagleAssetListItem; sou
     }
   };
   const fourK = share && Math.max(asset?.width ?? 0, asset?.height ?? 0) >= 4_096;
-  const pendingLabel = fourK ? t('正在准备 4K…') : share ? t('正在准备…') : t('正在复制…');
-  const copiedLabel = fourK ? t('已复制 4K') : t('已复制');
+  const pendingLabel = fourK
+    ? t('正在生成 4K 分享图…')
+    : share
+      ? t('正在生成分享图…')
+      : t('正在复制…');
+  const copiedLabel = fourK ? t('已复制 4K 分享图') : share ? t('已复制分享图') : t('已复制');
   return (
     <div className={styles.root}>
       <button
         className={styles.button}
         type="button"
-        aria-label={t('复制图片')}
+        aria-label={t('复制到剪贴板')}
+        title={
+          share
+            ? t('复制为分享图：JPEG，长边最多 4096 像素；小图按原尺寸，透明区域变白底。')
+            : undefined
+        }
         disabled={status === 'pending'}
         data-pending={status === 'pending' || undefined}
         onClick={() => void copy()}
       >
         <IconCopy size={16} />
         <span data-viewer-secondary-label>
-          {status === 'pending' ? pendingLabel : t('复制图片')}
+          {status === 'pending' ? pendingLabel : t('复制到剪贴板')}
         </span>
         {status === 'pending' && <span className={styles.pendingTrack} aria-hidden="true" />}
       </button>

@@ -74,16 +74,16 @@ describe('EagleAssetLightbox', () => {
   it('copies the 4K share rendition and keeps native image context menus', () => {
     copyShareImageMock.mockResolvedValue(undefined);
     const view = render(<EagleAssetLightbox asset={imageAsset} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制到剪贴板' }));
     expect(copyShareImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-1/share-image');
     expect(fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'))).toBe(true);
     view.rerender(
       <EagleAssetLightbox asset={{ ...imageAsset, id: 'image-2' }} onClose={vi.fn()} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    fireEvent.click(screen.getByRole('button', { name: '复制到剪贴板' }));
     expect(copyShareImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-2/share-image');
     view.rerender(<EagleAssetLightbox asset={videoAsset} onClose={vi.fn()} />);
-    expect(screen.queryByRole('button', { name: '复制图片' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '复制到剪贴板' })).not.toBeInTheDocument();
   });
 
   it('renders video in a stage-constrained player', () => {

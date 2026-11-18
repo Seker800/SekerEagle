@@ -800,7 +800,7 @@ describe('SekerEaglePage', () => {
     fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
     const locate = await screen.findByRole('button', { name: '定位到时间线' });
     expect(
-      locate.compareDocumentPosition(screen.getByRole('button', { name: '复制图片' })) &
+      locate.compareDocumentPosition(screen.getByRole('button', { name: '复制到剪贴板' })) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     fireEvent.click(locate);
@@ -1604,7 +1604,7 @@ describe('SekerEaglePage', () => {
       '发送到照片',
       '编辑照片',
       '另存为…',
-      '复制图片',
+      '复制到剪贴板',
       '添加标签',
       '删除人工标签',
       '删除所选素材',
@@ -1686,7 +1686,7 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制到剪贴板' }));
 
     expect(copyStarted).toBe(true);
   });
@@ -1697,7 +1697,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
     const menu = screen.getByRole('menu', { name: '素材操作' });
-    expect(within(menu).queryByRole('menuitem', { name: '复制图片' })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole('menuitem', { name: '复制到剪贴板' })).not.toBeInTheDocument();
     expect(
       within(menu).queryByRole('menuitem', { name: '打开可复制预览' }),
     ).not.toBeInTheDocument();
@@ -1738,9 +1738,9 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('复制图片失败');
-    const retry = screen.getByRole('menuitem', { name: '复制图片' });
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制到剪贴板' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('复制到剪贴板失败');
+    const retry = screen.getByRole('menuitem', { name: '复制到剪贴板' });
     expect(retry).toBeEnabled();
     fireEvent.click(retry);
 

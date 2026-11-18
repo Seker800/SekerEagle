@@ -2689,16 +2689,16 @@ export function SekerEaglePage({
             <button
               type="button"
               role="menuitem"
-              aria-label={t('复制图片')}
+              aria-label={t('复制到剪贴板')}
               disabled={assetActionPending !== null}
               onClick={copySelectedImage}
             >
               <IconCopy size={15} />
               {assetActionPending === 'copy'
                 ? Math.max(contextMenuAsset?.width ?? 0, contextMenuAsset?.height ?? 0) >= 4_096
-                  ? t('正在准备 4K…')
-                  : t('正在准备…')
-                : t('复制图片')}
+                  ? t('正在生成 4K 分享图…')
+                  : t('正在生成分享图…')
+                : t('复制到剪贴板')}
             </button>
           ) : null}
           {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (

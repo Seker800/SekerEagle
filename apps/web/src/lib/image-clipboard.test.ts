@@ -54,7 +54,7 @@ describe('image clipboard', () => {
 
     await expect(
       copyImageToClipboard('/api/eagle/assets/a/renditions/b', { fetch: fetchImage }),
-    ).rejects.toThrow(/不支持复制图片/);
+    ).rejects.toThrow(/不支持复制到剪贴板/);
     expect(fetchImage).not.toHaveBeenCalled();
   });
 
