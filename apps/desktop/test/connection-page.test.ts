@@ -52,15 +52,12 @@ describe('offline-capable desktop connection page', () => {
         expect(dom.window.document.querySelector('#cache-account-usage')?.textContent).toBe(
           '2 KiB',
         );
-        expect(dom.window.document.querySelector('#cache-account-share')?.textContent).toBe(
-          '占这台电脑缓存 50%',
-        );
+        expect(dom.window.document.querySelector('#cache-legend-account')?.textContent).toBe('50%');
+        expect(dom.window.document.querySelector('#cache-legend-other')?.textContent).toBe('50%');
         expect(dom.window.document.querySelector('#cache-global-usage')?.textContent).toBe(
           '4 KiB / 1.0 GiB',
         );
-        expect(dom.window.document.querySelector('#cache-free-space')?.textContent).toBe(
-          '磁盘剩余 1.0 GiB',
-        );
+        expect(dom.window.document.querySelector('#cache-free-space')?.textContent).toBe('1.0 GiB');
         expect(dom.window.document.querySelector('#cache-entry-count')?.textContent).toBe('2');
         expect(dom.window.document.querySelector('#cache-average-size')?.textContent).toBe(
           '平均 1 KiB',
@@ -71,10 +68,10 @@ describe('offline-capable desktop connection page', () => {
         expect(dom.window.document.querySelector('#cache-coalesced')?.textContent).toBe('2');
         expect(dom.window.document.querySelector('#cache-errors')?.textContent).toBe('1');
         expect(dom.window.document.querySelector('#cache-saved-bytes')?.textContent).toBe('1 KiB');
-        expect(dom.window.document.querySelector('#cache-offline-rate')?.textContent).toBe(
-          '本次完全免网 0%',
+        expect(dom.window.document.querySelector('#cache-offline-rate')?.textContent).toBe('0%');
+        expect(dom.window.document.querySelector('#cache-global-percent')?.textContent).toBe(
+          '占上限 0%',
         );
-        expect(dom.window.document.querySelector('#cache-global-percent')?.textContent).toBe('0%');
         expect(dom.window.document.querySelector('#cache-path')?.textContent).toBe('/tmp/cache');
         const hitBarStyle =
           dom.window.document.querySelector('#cache-long-hit-bar')?.getAttribute('style') ?? '';
@@ -132,14 +129,11 @@ describe('offline-capable desktop connection page', () => {
     try {
       dom.window.eval(script);
       await vi.waitFor(() => {
-        expect(dom.window.document.querySelector('#cache-long-hit-rate')?.textContent).toBe(
-          '还没有长期数据',
-        );
-        expect(dom.window.document.querySelector('#cache-account-share')?.textContent).toBe(
-          '尚无缓存',
-        );
+        expect(dom.window.document.querySelector('#cache-long-hit-rate')?.textContent).toBe('—');
+        expect(dom.window.document.querySelector('#cache-legend-account')?.textContent).toBe('—');
         expect(dom.window.document.querySelector('#cache-average-size')?.textContent).toBe('—');
-        expect(dom.window.document.querySelector('#cache-offline-rate')?.textContent).toBe(
+        expect(dom.window.document.querySelector('#cache-offline-rate')?.textContent).toBe('—');
+        expect(dom.window.document.querySelector('#cache-offline-note')?.textContent).toBe(
           '暂无图片读取',
         );
       });
@@ -177,11 +171,11 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="cache-free-space"');
     expect(html).toContain('id="cache-long-hit-rate"');
     expect(html).toContain('id="cache-long-saved"');
-    expect(html).toContain('id="cache-account-share"');
+    expect(html).toContain('id="cache-legend-account"');
     expect(html).toContain('id="cache-average-size"');
     expect(html).toContain('id="cache-offline-rate"');
-    expect(html).toContain('id="cache-global-meter"');
-    expect(html).toContain('id="cache-connection-meter"');
+    expect(html).toContain('id="cache-composition-bar"');
+    expect(html).toContain('id="cache-eq"');
     expect(html).toContain('id="cache-path"');
     expect(html).toContain('id="save-cache"');
     expect(html).toContain('id="clear-cache"');
@@ -202,7 +196,7 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="retry"');
     expect(html).toContain('id="show-connection-settings"');
     expect(html).toContain('<details id="connection-details"');
-    expect(html).toContain('class="cache-heading"');
+    expect(html).toContain('class="console-head"');
     expect(html).toContain('src="/seker-eagle-logo.svg"');
     expect(css).toContain('.status-panel');
     expect(css).toContain('.settings-group');

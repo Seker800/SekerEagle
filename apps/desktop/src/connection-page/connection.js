@@ -9,6 +9,20 @@ const messages = {
     localMediaCache: '本地媒体缓存',
     backToLibrary: '返回图库',
     savedOnComputer: '仅保存在这台电脑上',
+    cacheKicker: 'Local cache / 本地媒体缓存',
+    cacheConsoleTitle: '缓存',
+    cacheConsoleAccent: '控制台',
+    cacheHitLongLabel: '长期命中率',
+    cacheOrbitLabel: '长期 / 本机',
+    cacheLimitShort: '上限',
+    diskAvailable: '磁盘剩余',
+    ofCap: '占上限 {{percent}}',
+    fullyOffline: '完全免网',
+    cacheConsoleControl: '控制',
+    controlHint: '仅本机 · 不改服务端素材',
+    longTermHintShort: '跨重启累计',
+    connectionStatsHintShort: '本次启动后',
+    hitRingLabel: '本机命中率 {{percent}}',
     connectionAndStorage: '连接与本机存储',
     connectionAndStorageDescription: '管理素材库连接与本地媒体缓存，不会改变服务端素材。',
     library: '素材库',
@@ -66,7 +80,8 @@ const messages = {
     connected: '已连接素材库',
     connectionSettings: '连接设置',
     connectionSettingsHint: '更改地址或查看连接问题',
-    cacheHeroDescription: '常用图片留在本机；本地、局域网、外网共用一套缓存。',
+    cacheHeroDescription:
+      '本地、局域网、外网共用一套缓存。长期命中、存储占用和本次读取，全部在这台机器上完成。',
     longTermStats: '长期使用',
     longTermHint: '跨重启累计，从当前缓存空间建立后开始。',
     longTermHitRate: '本机命中率',
@@ -92,10 +107,7 @@ const messages = {
     cacheMaintenance: '维护',
     legendCurrent: '当前账号',
     legendOther: '其他或旧缓存',
-    accountShare: '占这台电脑缓存 {{percent}}',
     averageSize: '平均 {{value}}',
-    diskFreeValue: '磁盘剩余 {{value}}',
-    offlineRate: '本次完全免网 {{percent}}',
     noReadsYet: '暂无图片读取',
     longTermEmpty: '还没有长期数据',
     noCacheYet: '尚无缓存',
@@ -110,7 +122,21 @@ const messages = {
     connection: 'Connection',
     localMediaCache: 'Local Media Cache',
     backToLibrary: 'Back to Library',
-    savedOnComputer: 'Saved only on this computer',
+    savedOnComputer: 'LOCAL STORAGE ONLY',
+    cacheKicker: 'LOCAL CACHE / MEDIA',
+    cacheConsoleTitle: 'Cache',
+    cacheConsoleAccent: 'Console',
+    cacheHitLongLabel: 'LONG-TERM HIT RATE',
+    cacheOrbitLabel: 'LONG-TERM / LOCAL',
+    cacheLimitShort: 'CAP',
+    diskAvailable: 'Disk free',
+    ofCap: '{{percent}} of cap',
+    fullyOffline: 'Fully offline',
+    cacheConsoleControl: 'Control',
+    controlHint: 'LOCAL ONLY · NEVER TOUCHES SERVER ASSETS',
+    longTermHintShort: 'Across restarts',
+    connectionStatsHintShort: 'Since launch',
+    hitRingLabel: 'Cache hit rate {{percent}}',
     connectionAndStorage: 'Connection and Local Storage',
     connectionAndStorageDescription:
       'Manage library connections and local media cache without changing server assets.',
@@ -205,10 +231,7 @@ const messages = {
     cacheMaintenance: 'Maintenance',
     legendCurrent: 'Current account',
     legendOther: 'Other or legacy',
-    accountShare: "{{percent}} of this computer's cache",
     averageSize: '{{value}} average',
-    diskFreeValue: '{{value}} free on disk',
-    offlineRate: 'Fully offline this connection: {{percent}}',
     noReadsYet: 'No reads yet',
     longTermEmpty: 'No long-term data yet',
     noCacheYet: 'No cache yet',
@@ -321,6 +344,7 @@ async function loadCacheStatus() {
   const accountBytes = account?.allocatedBytes ?? 0;
   const otherBytes = Math.max(0, globalBytes - accountBytes);
   const accountShare = globalBytes > 0 ? accountBytes / globalBytes : 0;
+  const otherShare = globalBytes > 0 ? otherBytes / globalBytes : 0;
   const longAttempts = account ? account.hitCount + account.missCount : 0;
   const longHitRate = account && longAttempts > 0 ? account.hitCount / longAttempts : null;
   const totalReads = requests
@@ -330,25 +354,31 @@ async function loadCacheStatus() {
       requests.coalescedCount +
       requests.errorCount
     : 0;
+  const maxCount = requests
+    ? Math.max(
+        requests.localHitCount,
+        requests.revalidatedHitCount,
+        requests.missCount,
+        requests.coalescedCount,
+        requests.errorCount,
+      )
+    : 0;
 
   setText('cache-account-usage', account ? formatBytes(accountBytes) : tr('signedOut'));
-  setText(
-    'cache-account-share',
-    account
-      ? globalBytes > 0
-        ? tr('accountShare', { percent: formatPercent(accountShare) })
-        : tr('noCacheYet')
-      : '',
-  );
   setText('cache-global-usage', `${formatBytes(globalBytes)} / ${formatBytes(state.limitBytes)}`);
   const globalShare = state.limitBytes > 0 ? globalBytes / state.limitBytes : 0;
-  setText('cache-global-percent', formatPercent(globalShare));
+  setText('cache-global-percent', tr('ofCap', { percent: formatPercent(globalShare) }));
   setMeter('cache-meter-account', accountShare);
-  setMeter('cache-meter-other', globalBytes > 0 ? otherBytes / globalBytes : 0);
-  setText(
-    'cache-long-hit-rate',
-    longHitRate === null ? tr('longTermEmpty') : formatPercent(longHitRate),
-  );
+  setMeter('cache-meter-other', otherShare);
+  setText('cache-legend-account', account && globalBytes > 0 ? formatPercent(accountShare) : '—');
+  setText('cache-legend-other', account && globalBytes > 0 ? formatPercent(otherShare) : '—');
+  const hitLabel = longHitRate === null ? '—' : formatPercent(longHitRate);
+  setText('cache-long-hit-rate', hitLabel);
+  setText('cache-hit-rate-core', hitLabel);
+  setRing('cache-hit-ring', longHitRate ?? 0, 703.7);
+  document
+    .querySelector('#cache-ring-svg')
+    .setAttribute('aria-label', tr('hitRingLabel', { percent: hitLabel }));
   setMeter('cache-long-hit-bar', longHitRate ?? 0);
   setText('cache-long-saved', account ? formatBytes(account.savedBytes) : '—');
   setText(
@@ -361,7 +391,8 @@ async function loadCacheStatus() {
       ? tr('averageSize', { value: formatBytes(account.allocatedBytes / account.entryCount) })
       : '—',
   );
-  setText('cache-free-space', tr('diskFreeValue', { value: formatBytes(state.availableBytes) }));
+  setText('cache-free-space', formatBytes(state.availableBytes));
+  setText('cache-capacity', formatBytes(state.limitBytes));
 
   for (const [id, counter] of [
     ['cache-hit-rate', 'localHitCount'],
@@ -372,33 +403,24 @@ async function loadCacheStatus() {
   ]) {
     setText(id, requests ? requests[counter].toLocaleString(locale) : '—');
   }
-  setText(
-    'cache-offline-rate',
-    requests && totalReads > 0
-      ? tr('offlineRate', {
-          percent: formatPercent(requests.localHitCount / totalReads),
-        })
-      : requests
-        ? tr('noReadsYet')
-        : '—',
-  );
-  setMeter('cache-connection-local', totalReads > 0 ? requests.localHitCount / totalReads : 0);
-  setMeter(
-    'cache-connection-revalidated',
-    totalReads > 0 ? requests.revalidatedHitCount / totalReads : 0,
-  );
-  setMeter('cache-connection-miss', totalReads > 0 ? requests.missCount / totalReads : 0);
-  setMeter('cache-connection-coalesced', totalReads > 0 ? requests.coalescedCount / totalReads : 0);
+  const localRate = totalReads > 0 ? requests.localHitCount / totalReads : 0;
+  setText('cache-offline-rate', totalReads > 0 ? formatPercent(localRate) : '—');
+  setText('cache-offline-note', totalReads > 0 ? '' : tr('noReadsYet'));
+  setEq('cache-eq-local', requests?.localHitCount ?? 0, maxCount);
+  setEq('cache-eq-revalidated', requests?.revalidatedHitCount ?? 0, maxCount);
+  setEq('cache-eq-misses', requests?.missCount ?? 0, maxCount);
+  setEq('cache-eq-coalesced', requests?.coalescedCount ?? 0, maxCount);
+  setEq('cache-eq-errors', requests?.errorCount ?? 0, maxCount);
   setText('cache-saved-bytes', requests ? formatBytes(requests.savedBytes) : '—');
 
-  document.querySelector('#cache-global-meter').setAttribute(
+  document.querySelector('#cache-composition-bar').setAttribute(
     'aria-label',
     tr('globalMeterLabel', {
       account: formatBytes(accountBytes),
       other: formatBytes(otherBytes),
     }),
   );
-  document.querySelector('#cache-connection-meter').setAttribute(
+  document.querySelector('#cache-eq').setAttribute(
     'aria-label',
     tr('connectionMeterLabel', {
       local: requests?.localHitCount ?? 0,
@@ -420,6 +442,20 @@ function setText(id, value) {
 
 function setMeter(id, ratio) {
   document.querySelector(`#${id}`).style.width = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
+}
+
+function setRing(id, ratio, circumference) {
+  document
+    .querySelector(`#${id}`)
+    .setAttribute(
+      'stroke-dashoffset',
+      String(circumference * (1 - Math.max(0, Math.min(1, ratio)))),
+    );
+}
+
+function setEq(id, count, maxCount) {
+  const height = count > 0 && maxCount > 0 ? Math.max(6, Math.round((count / maxCount) * 60)) : 3;
+  document.querySelector(`#${id}`).style.height = `${height}px`;
 }
 
 function formatPercent(ratio) {
