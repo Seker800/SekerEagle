@@ -383,6 +383,28 @@
   color: #8e949d;
   background: var(--ui-raised);
 }
+.sortControl {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--eagle-line);
+  border-radius: var(--ui-radius-control);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #8e949d;
+  background: var(--ui-raised);
+}
+.sortControl select {
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.sortControl select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
 .thumbnailControl input {
   width: 72px;
   accent-color: var(--eagle-accent);

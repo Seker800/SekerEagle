@@ -6032,7 +6032,9 @@ export interface operations {
   };
   EagleController_locateAsset: {
     parameters: {
-      query?: never;
+      query?: {
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
+      };
       header?: never;
       path: {
         assetId: string;
@@ -8866,7 +8868,9 @@ export interface operations {
   };
   PhotosController_locateAsset: {
     parameters: {
-      query?: never;
+      query?: {
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
+      };
       header?: never;
       path: {
         assetId: string;
@@ -9921,7 +9925,9 @@ export interface operations {
   };
   PhotoManagementController_timeline: {
     parameters: {
-      query?: never;
+      query?: {
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
+      };
       header?: never;
       path?: never;
       cookie?: never;

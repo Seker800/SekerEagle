@@ -37,6 +37,29 @@ it('keeps one stable month key per asset without sorting or fabricating empty mo
     ['older', '2025-01'],
   ]);
 });
+it('groups by import time when sorting by added time', () => {
+  const captured = { ...date, chronologicalAt: '2024-03-01T00:30:00+08:00' };
+  expect(getPhotoTimelineMonth(captured, 'ADDED_AT')).toBe('2026-10');
+  expect(getPhotoTimelineDay(captured, 'ADDED_AT')).toBe('2026-10-19');
+  expect(
+    getPhotoTimelineMonth(
+      { ...captured, libraryAddedAt: 'invalid', createdAt: '2026-09-01T00:00:00Z' },
+      'ADDED_AT',
+    ),
+  ).toBe('2026-09');
+  expect([
+    ...createPhotoTimelineSectionKeys(
+      [
+        { ...captured, id: 'one' },
+        { ...captured, id: 'two', chronologicalAt: '2025-01-01T00:00:00Z' },
+      ],
+      'ADDED_AT',
+    ),
+  ]).toEqual([
+    ['one', '2026-10'],
+    ['two', '2026-10'],
+  ]);
+});
 it('shows the full month and year in the selected display language', async () => {
   await i18next.changeLanguage('zh-CN');
   expect(formatPhotoTimelineMonth('2026-10')).toBe('2026年10月');

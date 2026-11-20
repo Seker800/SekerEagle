@@ -137,7 +137,10 @@ export interface EagleUploadContentCheckItem {
 
 const UPLOAD_PART_CONCURRENCY = 3;
 
+export type EagleAssetSort = 'CAPTURED_AT' | 'ADDED_AT';
+
 export interface EagleAssetFilters {
+  sort?: EagleAssetSort;
   personId?: string;
   cameraModel?: string;
   lensModel?: string;
@@ -209,6 +212,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   function assetQuery(filters: EagleAssetFilters): string {
     const query = new URLSearchParams({ limit: String(filters.limit ?? 100) });
     for (const key of [
+      'sort',
       'personId',
       'cameraModel',
       'lensModel',
@@ -273,8 +277,11 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     );
   }
 
-  async function getEagleAssetLocation(id: string, signal?: AbortSignal) {
-    return api<EagleAssetLocation>(`/eagle/assets/${encodeURIComponent(id)}/location`, { signal });
+  async function getEagleAssetLocation(id: string, sort?: EagleAssetSort, signal?: AbortSignal) {
+    return api<EagleAssetLocation>(
+      `/eagle/assets/${encodeURIComponent(id)}/location${sort ? `?sort=${sort}` : ''}`,
+      { signal },
+    );
   }
 
   async function getEagleAsset(id: string, signal?: AbortSignal) {

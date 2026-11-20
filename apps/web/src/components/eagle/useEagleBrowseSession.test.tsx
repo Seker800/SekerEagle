@@ -105,7 +105,32 @@ it('reads and persists the thumbnail size per owner and mode', () => {
 
   expect(result.current.thumbnailSize).toBe(260);
   act(() => result.current.setThumbnailSize(280));
-  expect(JSON.parse(window.localStorage.getItem(key) ?? '{}')).toEqual({ thumbnailSize: 280 });
+  expect(JSON.parse(window.localStorage.getItem(key) ?? '{}')).toEqual({
+    thumbnailSize: 280,
+    photoSort: 'CAPTURED_AT',
+  });
+});
+
+it('reads and persists the photo ordering per owner and mode', () => {
+  const key = `seker-eagle.preferences.v1:${JSON.stringify(['owner', 'PHOTO'])}`;
+  window.localStorage.setItem(key, JSON.stringify({ photoSort: 'ADDED_AT' }));
+  const { result } = renderHook(() =>
+    useEagleBrowseSession({
+      ownerId: 'owner',
+      libraryMode: 'PHOTO',
+      privateVisible: false,
+      compact: false,
+      privacyRulesRevision: 0,
+      workspaceCache: makeCache(),
+      selection,
+    }),
+  );
+
+  expect(result.current.photoSort).toBe('ADDED_AT');
+  act(() => result.current.setPhotoSort('CAPTURED_AT'));
+  expect(JSON.parse(window.localStorage.getItem(key) ?? '{}')).toMatchObject({
+    photoSort: 'CAPTURED_AT',
+  });
 });
 
 it('resets the timeline cursor after the debounced search changes', () => {

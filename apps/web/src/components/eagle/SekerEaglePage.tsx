@@ -72,6 +72,7 @@ import {
 
 import { readEagleSemanticIntent, toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
+  IconArrowsSort,
   IconCheck,
   IconCopy,
   IconFilter,
@@ -103,6 +104,7 @@ import {
   type EagleAsset,
   type EagleAssetListItem,
   type EagleAssetFilters,
+  type EagleAssetSort,
   type EagleAssetVersion,
   type EagleManualTag,
   type EagleSmartFolder,
@@ -349,6 +351,8 @@ export function SekerEaglePage({
     setTimelineCursor,
     thumbnailSize,
     setThumbnailSize,
+    photoSort,
+    setPhotoSort,
     activeFilterCount,
     appliedFilterCount,
     filterQuery,
@@ -393,8 +397,9 @@ export function SekerEaglePage({
     retryUpload,
   } = useEagleUploadController(queryKeys.assets);
   const assetLocator = useEagleAssetLocation({
-    getLocation: getEagleAssetLocation,
-    scopeKey: `${storeScope}:${privateVisible}:${privacyRulesRevision}`,
+    getLocation: (assetId, signal) =>
+      getEagleAssetLocation(assetId, libraryMode === 'PHOTO' ? photoSort : undefined, signal),
+    scopeKey: `${storeScope}:${privateVisible}:${privacyRulesRevision}:${libraryMode}:${photoSort}`,
     onLocated: () => {
       setSearch('');
       setQuickFilters(createEmptyEagleQuickFilterState());
@@ -442,15 +447,17 @@ export function SekerEaglePage({
     queryKeys.assets,
     privateVisible,
     privacyRulesRevision,
+    photoSort,
   );
+  const relevanceOrder = Boolean(activeSmartFolderId && smartFolderOrder === 'RELEVANCE');
   const assetFilters: EagleAssetFilters = {
+    sort: libraryMode === 'PHOTO' && !relevanceOrder ? photoSort : undefined,
     cursor: browserCursor || undefined,
     limit: EAGLE_PAGE_SIZE,
     search: deferredSearch || undefined,
     rules: appliedFilterCount ? filterQuery : undefined,
     smartFolderId: activeSmartFolderId ?? undefined,
-    smartFolderOrder:
-      activeSmartFolderId && smartFolderOrder === 'RELEVANCE' ? 'RELEVANCE' : undefined,
+    smartFolderOrder: relevanceOrder ? 'RELEVANCE' : undefined,
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
   const listKey = queryKeys.assetList(libraryView, assetFilters);
@@ -829,8 +836,8 @@ export function SekerEaglePage({
       !colorCoverage &&
       !(activeSmartFolderId && smartFolderOrder === 'RELEVANCE')
         ? compact
-          ? createPhotoTimelineDayKeys(assets)
-          : createPhotoTimelineSectionKeys(assets)
+          ? createPhotoTimelineDayKeys(assets, photoSort)
+          : createPhotoTimelineSectionKeys(assets, photoSort)
         : undefined,
     [
       assets,
@@ -841,6 +848,7 @@ export function SekerEaglePage({
       compact,
       activeSmartFolderId,
       smartFolderOrder,
+      photoSort,
     ],
   );
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
@@ -1630,6 +1638,26 @@ export function SekerEaglePage({
           {' ' + t('清空') + ' '}
         </button>
       )}
+      {libraryMode === 'PHOTO' && photoView === 'timeline' && (
+        <label className={styles.sortControl} title={t('照片排序')}>
+          <IconArrowsSort size={17} aria-hidden="true" />
+          <select
+            aria-label={t('照片排序')}
+            value={photoSort}
+            disabled={relevanceOrder}
+            onChange={(event) => {
+              const next = event.target.value as EagleAssetSort;
+              if (next === photoSort) return;
+              setPhotoSort(next);
+              setTimelineCursor('');
+              assetLocator.clearLocation();
+            }}
+          >
+            <option value="CAPTURED_AT">{t('按拍摄时间排序')}</option>
+            <option value="ADDED_AT">{t('按添加时间排序')}</option>
+          </select>
+        </label>
+      )}
       {!compact && (
         <label
           className={styles.thumbnailControl}
@@ -2242,7 +2270,7 @@ export function SekerEaglePage({
                             (item) => item.top + item.height > scrollTop,
                           );
                           const asset = first ? assetsById.get(first.id) : undefined;
-                          return asset ? getPhotoTimelineMonth(asset) : undefined;
+                          return asset ? getPhotoTimelineMonth(asset, photoSort) : undefined;
                         })()}
                         onLatest={() => {
                           assetLocator.clearLocation();

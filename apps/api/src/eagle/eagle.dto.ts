@@ -53,6 +53,13 @@ export class AssetTimelineDto {
   timeZone = 'UTC';
 }
 
+export class AssetLocationDto {
+  @ApiPropertyOptional({ enum: ['CAPTURED_AT', 'ADDED_AT'] })
+  @IsOptional()
+  @IsIn(['CAPTURED_AT', 'ADDED_AT'])
+  sort?: EagleAssetSort;
+}
+
 export class ListEagleAssetsDto {
   @ApiPropertyOptional({ enum: ['RELEVANCE'] })
   @IsOptional()

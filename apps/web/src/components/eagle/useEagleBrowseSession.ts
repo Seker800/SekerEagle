@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { hashKey } from '@tanstack/react-query';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import type { EagleAssetSort } from '../../lib/eagle-api';
 import type { LibraryMode } from '../../lib/library-api-scope';
 import {
   buildEagleQuickFilterQuery,
@@ -39,6 +40,19 @@ function readThumbnailSize(preferencesKey = EAGLE_PREFERENCES_KEY): number {
       : DEFAULT_THUMBNAIL_SIZE;
   } catch {
     return DEFAULT_THUMBNAIL_SIZE;
+  }
+}
+
+function readPhotoSort(preferencesKey = EAGLE_PREFERENCES_KEY): EagleAssetSort {
+  try {
+    const preferences: unknown = JSON.parse(window.localStorage.getItem(preferencesKey) ?? '{}');
+    const value =
+      typeof preferences === 'object' && preferences !== null && 'photoSort' in preferences
+        ? preferences.photoSort
+        : undefined;
+    return value === 'ADDED_AT' ? 'ADDED_AT' : 'CAPTURED_AT';
+  } catch {
+    return 'CAPTURED_AT';
   }
 }
 
@@ -107,10 +121,11 @@ export function useEagleBrowseSession(options: {
   );
   const [timelineCursor, setTimelineCursor] = useState('');
   const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
+  const [photoSort, setPhotoSort] = useState<EagleAssetSort>(() => readPhotoSort(preferencesKey));
 
   useEffect(() => {
-    window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize }));
-  }, [thumbnailSize, preferencesKey]);
+    window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize, photoSort }));
+  }, [thumbnailSize, photoSort, preferencesKey]);
 
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
   const appliedFilterCount = countActiveEagleQuickFilters(deferredQuickFilters);
@@ -141,6 +156,7 @@ export function useEagleBrowseSession(options: {
     privateVisible,
     privacyRulesRevision,
     libraryView,
+    photoSort,
   ]);
 
   useEffect(() => {
@@ -204,6 +220,8 @@ export function useEagleBrowseSession(options: {
     setTimelineCursor,
     thumbnailSize,
     setThumbnailSize,
+    photoSort,
+    setPhotoSort,
     activeFilterCount,
     appliedFilterCount,
     filterQuery,

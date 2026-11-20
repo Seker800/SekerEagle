@@ -40,6 +40,13 @@ import { PhotoMapService } from './photo-map.service';
 import { MapViewportDto, MapPhotosDto } from './photo-map.dto';
 import { PhotoPersonReviewService } from './photo-person-review.service';
 import { PhotoManagementService } from './photo-management.service';
+import type { EagleAssetSort } from '../eagle/eagle-asset-order';
+export class PhotoTimelineQueryDto {
+  @ApiPropertyOptional({ enum: ['CAPTURED_AT', 'ADDED_AT'] })
+  @IsOptional()
+  @IsIn(['CAPTURED_AT', 'ADDED_AT'])
+  sort?: EagleAssetSort;
+}
 export class PeopleCursorDto {
   @ApiPropertyOptional({ maxLength: 1024 })
   @IsOptional()
@@ -144,8 +151,8 @@ export class PhotoManagementController {
     return this.map.photos(p.sub, p.canViewPrivate, cell, query.after);
   }
   @Get('timeline')
-  timeline(@CurrentPrincipal() p: AuthPrincipal) {
-    return this.photos.timeline(p.sub, p.canViewPrivate);
+  timeline(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PhotoTimelineQueryDto) {
+    return this.photos.timeline(p.sub, p.canViewPrivate, query.sort);
   }
   @Get('facets')
   facets(@CurrentPrincipal() p: AuthPrincipal) {

@@ -13,6 +13,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { encodeEagleAssetCursor } from '../eagle/eagle-cursor';
+import { defaultAssetSort, type EagleAssetSort } from '../eagle/eagle-asset-order';
 import {
   lockOwnerPrivacyProjection,
   syncAssetPrivacy,
@@ -166,9 +167,11 @@ export class PhotoManagementService {
     )
       throw new NotFoundException('组内照片不存在。');
   }
-  async timeline(ownerId: string, includePrivate: boolean) {
+  async timeline(ownerId: string, includePrivate: boolean, sort?: EagleAssetSort) {
+    const column =
+      sort === 'ADDED_AT' ? Prisma.sql`"libraryAddedAt"` : Prisma.sql`"chronologicalAt"`;
     const rows = await this.prisma.$queryRaw<Array<{ month: Date; count: bigint }>>(Prisma.sql`
-      SELECT date_trunc('month', "chronologicalAt") AS month, count(*) AS count
+      SELECT date_trunc('month', ${column}) AS month, count(*) AS count
       FROM "EagleAsset"
       WHERE "ownerId" = ${ownerId} AND "libraryMode" = 'PHOTO' AND "deletedAt" IS NULL
         ${includePrivate ? Prisma.empty : Prisma.sql`AND "isPrivate" = false`}
@@ -184,6 +187,7 @@ export class PhotoManagementService {
           cursor: encodeEagleAssetCursor(
             { libraryAddedAt: boundary, id: '00000000-0000-0000-0000-000000000000' },
             { ownerId, libraryMode: 'PHOTO' },
+            sort ?? defaultAssetSort('PHOTO'),
           ),
         };
       }),

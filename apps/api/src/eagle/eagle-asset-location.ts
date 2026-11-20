@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { PrismaClient } from '@prisma/client';
 import type { LibraryIdentity } from './library-mode';
 import { encodeEagleAssetCursor } from './eagle-cursor';
+import { assetDateField, defaultAssetSort, type EagleAssetSort } from './eagle-asset-order';
 
 /** Seek twenty preceding neighbors using the same date/id order as the normal list. */
 export async function locateEagleAsset(
@@ -9,6 +10,7 @@ export async function locateEagleAsset(
   scope: LibraryIdentity,
   assetId: string,
   includePrivate: boolean,
+  sort?: EagleAssetSort,
 ) {
   const where = { ...scope, deletedAt: null, ...(includePrivate ? {} : { isPrivate: false }) };
   const target = await db.eagleAsset.findFirst({
@@ -16,7 +18,7 @@ export async function locateEagleAsset(
     select: { id: true, chronologicalAt: true, libraryAddedAt: true },
   });
   if (!target) throw new NotFoundException('素材不存在。');
-  const field = scope.libraryMode === 'PHOTO' ? 'chronologicalAt' : 'libraryAddedAt';
+  const field = assetDateField(scope.libraryMode, sort);
   const preceding = await db.eagleAsset.findMany({
     where: {
       ...where,
@@ -30,7 +32,11 @@ export async function locateEagleAsset(
   return {
     assetId: target.id,
     cursor: boundary
-      ? encodeEagleAssetCursor({ id: boundary.id, libraryAddedAt: boundary[field] }, scope)
+      ? encodeEagleAssetCursor(
+          { id: boundary.id, libraryAddedAt: boundary[field] },
+          scope,
+          sort ?? defaultAssetSort(scope.libraryMode),
+        )
       : null,
   };
 }

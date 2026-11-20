@@ -1,7 +1,7 @@
 import type { OperationResponse } from './accepted-operation';
 import type { AssetOperationSummary } from '@sekereagle/library-core';
 import { request } from './api-client';
-import type { EagleAssetListItem } from './eagle-api';
+import type { EagleAssetListItem, EagleAssetSort } from './eagle-api';
 export interface PhotoFace {
   id: string;
   box: number[];
@@ -149,8 +149,8 @@ export interface PhotoTimelineMonth {
   count: number;
   cursor: string;
 }
-export const getPhotoTimeline = (signal?: AbortSignal) =>
-  request<{ months: PhotoTimelineMonth[] }>(`${base}/timeline`, { signal });
+export const getPhotoTimeline = (sort: EagleAssetSort, signal?: AbortSignal) =>
+  request<{ months: PhotoTimelineMonth[] }>(`${base}/timeline?sort=${sort}`, { signal });
 
 export const updatePhotoPersonPrivacy = (
   person: Pick<PhotoPerson, 'id' | 'rowVersion'>,

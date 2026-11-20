@@ -916,12 +916,13 @@ export class EagleService {
     };
   }
 
-  locateAsset(ownerId: string, assetId: string, includePrivate = false) {
+  locateAsset(ownerId: string, assetId: string, includePrivate = false, sort?: EagleAssetSort) {
     return locateEagleAsset(
       this.prisma,
       { ownerId, libraryMode: this.libraryMode },
       assetId,
       includePrivate,
+      sort,
     );
   }
 

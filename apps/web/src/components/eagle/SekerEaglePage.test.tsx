@@ -805,7 +805,11 @@ describe('SekerEaglePage', () => {
     ).toBeTruthy();
     fireEvent.click(locate);
     await waitFor(() =>
-      expect(getEagleAssetLocationMock).toHaveBeenCalledWith(asset.id, expect.any(AbortSignal)),
+      expect(getEagleAssetLocationMock).toHaveBeenCalledWith(
+        asset.id,
+        undefined,
+        expect.any(AbortSignal),
+      ),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(screen.getByRole('searchbox')).toHaveValue('');
@@ -2688,10 +2692,15 @@ describe('SekerEaglePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
     await waitFor(() =>
       expect(listEagleAssetsMock).toHaveBeenCalledWith(
-        expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
+        expect.objectContaining({
+          smartFolderId: 'scene-folder',
+          smartFolderOrder: 'RELEVANCE',
+          sort: undefined,
+        }),
         expect.anything(),
       ),
     );
+    expect(screen.getByRole('combobox', { name: '照片排序' })).toBeDisabled();
     expect(screen.queryByText('2026年4月')).not.toBeInTheDocument();
   });
 
@@ -3562,5 +3571,29 @@ describe('SekerEaglePage', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Map Video' })).not.toBeInTheDocument(),
     );
+  });
+  it('switches photo ordering to added time and remembers it for the workspace', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    renderPage();
+    const select = await screen.findByRole('combobox', { name: '照片排序' });
+    expect(select).toHaveValue('CAPTURED_AT');
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'CAPTURED_AT' }),
+        expect.anything(),
+      ),
+    );
+    fireEvent.change(select, { target: { value: 'ADDED_AT' } });
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'ADDED_AT' }),
+        expect.anything(),
+      ),
+    );
+    expect(
+      JSON.parse(
+        window.localStorage.getItem('seker-eagle.preferences.v1:["owner-test","PHOTO"]') ?? '{}',
+      ),
+    ).toMatchObject({ photoSort: 'ADDED_AT' });
   });
 });

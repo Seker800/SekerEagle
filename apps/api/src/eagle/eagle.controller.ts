@@ -20,7 +20,7 @@ import {
   UndoAssetOperationDto,
 } from './eagle-asset-operations.dto';
 import { CreateEditRenderDto } from './eagle-edit-render';
-import { AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
+import { AssetLocationDto, AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
 import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { SaveWatermarkPresetDto } from './eagle-watermark-presets';
@@ -382,8 +382,9 @@ export class EagleController {
   locateAsset(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Query() query: AssetLocationDto,
   ) {
-    return this.eagle.locateAsset(principal.sub, assetId, principal.canViewPrivate);
+    return this.eagle.locateAsset(principal.sub, assetId, principal.canViewPrivate, query.sort);
   }
 
   @ApiOkResponse({ type: EagleAssetResponseDto })

@@ -1638,6 +1638,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
           }
         ],
         "responses": {
@@ -6201,6 +6210,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
           }
         ],
         "responses": {
@@ -7946,7 +7964,17 @@
     "/api/photos/photography/timeline": {
       "get": {
         "operationId": "PhotoManagementController_timeline",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""
