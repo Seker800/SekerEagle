@@ -14,7 +14,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
 
-/** The system media index never lists dot-prefixed names; SAF directory scans must match it. */
+/**
+ * The system media index never lists dot-prefixed names, and providers strip trash prefixes from
+ * display names; directory scans must use the document id to keep trashed files out.
+ */
 public final class NativeHiddenTreeScanTest {
 
   @Test

@@ -24,9 +24,23 @@ public final class TestDocumentsProvider extends DocumentsProvider {
   };
   private static final Map<String, String[]> CHILDREN =
       Map.of(
-          ROOT, new String[] {"photo.jpg", ".deleted.jpg", "album", ".trashed"},
+          ROOT,
+              new String[] {
+                "photo.jpg",
+                ".deleted.jpg",
+                "album",
+                ".trashed",
+                ".trashed-1797000000-plain.jpg",
+                ".trashed-1797000000-album"
+              },
           "album", new String[] {"inner.jpg"},
-          ".trashed", new String[] {"gone.jpg"});
+          ".trashed", new String[] {"gone.jpg"},
+          ".trashed-1797000000-album", new String[] {"hidden-inner.jpg"});
+  // Real providers strip the trash prefix from the display name; the document id keeps it.
+  private static final Map<String, String> DISPLAY =
+      Map.of(
+          ".trashed-1797000000-plain.jpg", "plain.jpg",
+          ".trashed-1797000000-album", "album2");
 
   @Override
   public boolean onCreate() {
@@ -59,7 +73,7 @@ public final class TestDocumentsProvider extends DocumentsProvider {
       String parentDocumentId, String[] projection, String sortOrder) {
     MatrixCursor cursor = cursor(projection);
     for (String child : CHILDREN.getOrDefault(parentDocumentId, new String[0]))
-      cursor.addRow(row(cursor, child, child, mime(child), 4, 1_700_000_000_000L));
+      cursor.addRow(row(cursor, child, name(child), mime(child), 4, 1_700_000_000_000L));
     return cursor;
   }
 
@@ -102,6 +116,7 @@ public final class TestDocumentsProvider extends DocumentsProvider {
   }
 
   private static String name(String documentId) {
+    if (DISPLAY.containsKey(documentId)) return DISPLAY.get(documentId);
     return documentId.equals(ROOT) ? "test" : documentId;
   }
 

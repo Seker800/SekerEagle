@@ -60,6 +60,16 @@ public final class BackupPolicy {
     return name != null && name.startsWith(".");
   }
 
+  /**
+   * Some document providers strip trash prefixes from the display name; the document id keeps
+   * the real file name that decides whether an entry is hidden.
+   */
+  public static String documentName(String documentId) {
+    if (documentId == null) return null;
+    int split = Math.max(documentId.lastIndexOf('/'), documentId.lastIndexOf(':'));
+    return documentId.substring(split + 1);
+  }
+
   public static boolean inFolder(String folder, String path, boolean recursive) {
     if (folder.isEmpty()) return path != null && !path.isEmpty();
     String prefix = folder.endsWith("/") ? folder : folder + "/";

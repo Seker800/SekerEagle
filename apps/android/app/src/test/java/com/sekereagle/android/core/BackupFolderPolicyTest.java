@@ -6,6 +6,17 @@ import org.junit.Test;
 
 public class BackupFolderPolicyTest {
   @Test
+  public void documentIdsKeepTheRealPrefixEvenWhenDisplayNamesDoNot() {
+    assertEquals(
+        ".trashed-1797000000-plain.jpg",
+        BackupPolicy.documentName("primary:DCIM/Screenshots/.trashed-1797000000-plain.jpg"));
+    assertEquals("DCIM", BackupPolicy.documentName("primary:DCIM"));
+    assertEquals("photo.jpg", BackupPolicy.documentName("photo.jpg"));
+    assertTrue(BackupPolicy.hidden(BackupPolicy.documentName("primary:DCIM/.trashed-x.jpg")));
+    assertFalse(BackupPolicy.hidden(BackupPolicy.documentName("primary:DCIM/plain.jpg")));
+  }
+
+  @Test
   public void hiddenNamesStayOutOfDirectoryScansLikeTheMediaIndex() {
     assertTrue(BackupPolicy.hidden(".IMG_20260212_170000.jpg"));
     assertTrue(BackupPolicy.hidden(".trashed"));

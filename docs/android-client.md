@@ -1,5 +1,13 @@
 # 安卓客户端与手机备份
 
+## 0.9.22 目录扫描按真实文件名识别回收站（2026-11-20）
+
+本机安装包为 `apps/android/release/SekerEagle-0.9.22-android-debug.apk`，versionCode39，同一调试签名；已覆盖安装到小米 25128PNA1C。
+
+0.9.21 只按 `_display_name` 判断隐藏项，但系统目录接口会把回收目录和 `.trashed-` 文件的前缀从显示名里去掉：`.trashed-…-Screenshots` 显示为 `Screenshots`，`.trashed-…-Screenshot….jpg` 显示为 `Screenshot….jpg`。因此回收站里的截图仍被目录扫描放行并上传。0.9.22 同时检查文档 ID 最后一段的真实文件名（`BackupPolicy.documentName`），目录和文件都按真实名字判断隐藏。
+
+验证：JVM 单测 105 项、lint、build 通过；Android 16 模拟器设备回归新增“显示名已清洗的回收站文件和目录”场景，去掉文档 ID 判断时用例会扫到 `plain.jpg` 与 `hidden-inner.jpg` 而失败，恢复后通过；手机目录接口的实际返回也确认了清洗行为。误传的 179 次上传生成 178 个资源，均已在 03:31–03:32 进入服务器回收站，无需另行清理；另有 1 项上传未完成。未验证：真机 DCIM 扫描测试 APK 被 MIUI USB 安装限制拦截，未执行；恢复备份后的实机扫描待观察。
+
 ## 0.9.21 目录扫描跳过隐藏项（2026-11-20）
 
 本机安装包为 `apps/android/release/SekerEagle-0.9.21-android-debug.apk`，versionCode38，同一调试签名。2026-11-20 11:07 已通过 USB 覆盖安装到小米 25128PNA1C，原账号、目录规则（DCIM 目录授权）和备份台账保留。

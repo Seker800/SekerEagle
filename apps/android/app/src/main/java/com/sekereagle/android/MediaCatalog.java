@@ -306,7 +306,8 @@ final class MediaCatalog {
         String childId = cursor.getString(0),
             name = cursor.getString(1),
             mime = cursor.getString(2);
-        if (BackupPolicy.hidden(name)) continue;
+        if (BackupPolicy.hidden(name) || BackupPolicy.hidden(BackupPolicy.documentName(childId)))
+          continue;
         if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
           if (rule.optBoolean("recursive", true))
             scanTree(tree, childId, path + name + "/", rule, visitor, guard, visited, depth + 1);
