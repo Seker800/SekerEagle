@@ -1919,6 +1919,24 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it('does not offer photo date ordering inside the trash lifecycle view', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    listEagleTrashMock.mockResolvedValue({
+      items: [{ ...asset, deletedAt: '2026-11-20T01:00:00.000Z' }],
+      nextCursor: null,
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '回收站' }));
+    expect(await screen.findByRole('heading', { name: '回收站' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: '照片排序' })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(listEagleTrashMock).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: undefined }),
+        expect.anything(),
+      ),
+    );
+  });
+
   it('exposes single-item restore directly in the trash toolbar', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '回收站' }));

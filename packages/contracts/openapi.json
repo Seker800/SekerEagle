@@ -1275,7 +1275,7 @@
             "name": "sort",
             "required": false,
             "in": "query",
-            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead.",
             "schema": {
               "type": "string",
               "enum": ["CAPTURED_AT", "ADDED_AT"]
@@ -2292,7 +2292,7 @@
             "name": "sort",
             "required": false,
             "in": "query",
-            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead.",
             "schema": {
               "type": "string",
               "enum": ["CAPTURED_AT", "ADDED_AT"]
@@ -5847,7 +5847,7 @@
             "name": "sort",
             "required": false,
             "in": "query",
-            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead.",
             "schema": {
               "type": "string",
               "enum": ["CAPTURED_AT", "ADDED_AT"]
@@ -6864,7 +6864,7 @@
             "name": "sort",
             "required": false,
             "in": "query",
-            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead.",
             "schema": {
               "type": "string",
               "enum": ["CAPTURED_AT", "ADDED_AT"]

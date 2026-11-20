@@ -73,7 +73,7 @@ import type {
 } from './eagle.dto';
 import { buildColorMatchWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 import { readAssetTimeline } from './eagle-asset-timeline';
-import { assetDateField, type EagleAssetSort } from './eagle-asset-order';
+import { assetDateField, type EagleAssetOrder, type EagleAssetSort } from './eagle-asset-order';
 import { decodeEagleAssetCursor, encodeEagleAssetCursor } from './eagle-cursor';
 import {
   refreshUnclassifiedSuggestions,
@@ -300,15 +300,17 @@ export class EagleService {
           trash,
         )
       : null;
+    // Trash is a lifecycle view: newest deletions first, independent of library date sorting.
+    const orderSort: EagleAssetOrder | undefined = trash ? 'DELETED_AT' : query.sort;
     const cursor =
       query.cursor && !colorPage
         ? decodeEagleAssetCursor(
             query.cursor,
             { ownerId, libraryMode: this.libraryMode },
-            query.sort,
+            orderSort,
           )
         : null;
-    const dateField = assetDateField(this.libraryMode, query.sort);
+    const dateField = assetDateField(this.libraryMode, orderSort);
     const newer = cursor?.direction === 'NEWER';
     const comparison = newer ? 'gt' : 'lt';
     const where: AssetSearchWhere = cursor
@@ -383,9 +385,10 @@ export class EagleService {
         ? colorPage.previousCursor
         : page.length && (newer ? hasMore : Boolean(cursor))
           ? encodeEagleAssetCursor(
-              { id: page[0]!.id, libraryAddedAt: page[0]![dateField] },
+              // Trash filters deletedAt IS NOT NULL before paging.
+              { id: page[0]!.id, libraryAddedAt: page[0]![dateField]! },
               { ownerId, libraryMode: this.libraryMode },
-              query.sort,
+              orderSort,
               'NEWER',
             )
           : null,
@@ -393,9 +396,9 @@ export class EagleService {
         ? colorPage.nextCursor
         : (hasMore || newer) && page.length
           ? encodeEagleAssetCursor(
-              { id: page.at(-1)!.id, libraryAddedAt: page.at(-1)![dateField] },
+              { id: page.at(-1)!.id, libraryAddedAt: page.at(-1)![dateField]! },
               { ownerId, libraryMode: this.libraryMode },
-              query.sort,
+              orderSort,
             )
           : null,
       colorCoverage:

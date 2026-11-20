@@ -5901,7 +5901,7 @@ export interface operations {
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
         before?: string;
-        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
@@ -6430,7 +6430,7 @@ export interface operations {
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
         before?: string;
-        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
@@ -8737,7 +8737,7 @@ export interface operations {
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
         before?: string;
-        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
@@ -9266,7 +9266,7 @@ export interface operations {
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
         before?: string;
-        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;

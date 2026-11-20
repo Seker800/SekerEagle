@@ -51,6 +51,19 @@ test('explicit time ordering binds a cursor to owner, mode and effective date fi
   assert.throws(() => decodeEagleAssetCursor(legacy, scope, 'ADDED_AT'));
 });
 
+test('trash cursors bind to deletion time and cannot page library date order', () => {
+  const scope = { ownerId: 'owner-a', libraryMode: 'PHOTO' as const };
+  const value = { id: 'asset', libraryAddedAt: new Date('2026-10-01') };
+  const trash = encodeEagleAssetCursor(value, scope, 'DELETED_AT');
+  assert.deepEqual(decodeEagleAssetCursor(trash, scope, 'DELETED_AT'), value);
+  assert.throws(() => decodeEagleAssetCursor(trash, scope, 'CAPTURED_AT'));
+  assert.throws(() => decodeEagleAssetCursor(trash, scope));
+  const library = encodeEagleAssetCursor(value, scope, 'ADDED_AT');
+  assert.throws(() => decodeEagleAssetCursor(library, scope, 'DELETED_AT'));
+  const legacy = encodeEagleAssetCursor(value, scope);
+  assert.throws(() => decodeEagleAssetCursor(legacy, scope, 'DELETED_AT'));
+});
+
 test('newer navigation cursor preserves owner, mode and date-order fences', () => {
   const scope = { ownerId: 'owner-a', libraryMode: 'PHOTO' as const };
   const payload = {

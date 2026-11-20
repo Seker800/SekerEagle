@@ -176,6 +176,58 @@ test('indexed photo pages and real authenticated HTTP A/B retain identical resul
         }),
       );
     }
+    await db.$executeRaw(Prisma.sql`
+      INSERT INTO "EagleAsset" (id,"ownerId","libraryMode","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize","isPrivate","originalObjectKey","chronologicalAt","libraryAddedAt","deletedAt","purgeAfter","updatedAt")
+      SELECT ${ownerId}||'-trash-'||n,${ownerId},'PHOTO','TRASH_'||n,'TRASH_'||n,'trash_'||n,'image/jpeg','jpg',20000000,n%5=0,'synthetic/trash/'||${ownerId}||'/'||n,
+        timestamp '2020-01-01'+n*interval '1 hour',timestamp '2026-01-01'+n*interval '1 second',timestamp '2026-11-01'+n*interval '1 minute',NULL,now()
+      FROM generate_series(1,500) n`);
+    const trashIndices =
+      await db.$queryRaw`SELECT indexname FROM pg_indexes WHERE tablename='EagleAsset' AND indexname IN ('EagleAsset_trash_deleted_order_idx','EagleAsset_trash_public_deleted_order_idx')`;
+    assert.equal(
+      trashIndices.length,
+      2,
+      'both private-visible and public trash deletion order indices are required',
+    );
+    await db.$executeRawUnsafe('ANALYZE "EagleAsset"');
+    for (const privateVisible of [false, true]) {
+      const result = await db.$queryRaw(
+        Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"='PHOTO' AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL ${privateVisible ? Prisma.empty : Prisma.sql`AND NOT "isPrivate"`} ORDER BY "deletedAt" DESC,id DESC LIMIT 41`,
+      );
+      const explain = result[0]['QUERY PLAN'][0];
+      const scans = [];
+      function visitTrash(node) {
+        assert.ok(
+          !['Sort', 'Incremental Sort'].includes(node['Node Type']),
+          'trash page must read in deletion order without sorting',
+        );
+        if (node['Index Name'])
+          scans.push({
+            index: node['Index Name'],
+            rows: node['Actual Rows'],
+            loops: node['Actual Loops'],
+          });
+        node.Plans?.forEach(visitTrash);
+      }
+      visitTrash(explain.Plan);
+      const expectedIndex = privateVisible
+        ? 'EagleAsset_trash_deleted_order_idx'
+        : 'EagleAsset_trash_public_deleted_order_idx';
+      assert.ok(
+        scans.some((scan) => scan.index === expectedIndex && scan.rows * scan.loops <= 410),
+      );
+      log(
+        JSON.stringify({
+          fixture: 'trash deletion order index',
+          privateVisible,
+          selectionMs: explain['Execution Time'],
+          scans,
+        }),
+      );
+    }
+    await db.$executeRaw(
+      Prisma.sql`DELETE FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND id LIKE ${`${ownerId}-trash-%`}`,
+    );
+    await db.$executeRawUnsafe('ANALYZE "EagleAsset"');
     pool = createLibraryReadPool(process.env.DATABASE_URL);
     const store = new LibraryReadStore(pool, photoStatisticsFactFieldsSql());
     for (const libraryMode of ['PHOTO', 'MATERIAL'])

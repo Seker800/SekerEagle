@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { defaultAssetSort, type EagleAssetSort } from './eagle-asset-order';
+import { defaultAssetSort, type EagleAssetOrder } from './eagle-asset-order';
 import type { LibraryIdentity } from './library-mode';
 
 export interface EagleAssetCursor {
@@ -11,7 +11,7 @@ export interface EagleAssetCursor {
 export function encodeEagleAssetCursor(
   value: EagleAssetCursor,
   scope?: LibraryIdentity,
-  sort?: EagleAssetSort,
+  sort?: EagleAssetOrder,
   direction?: 'NEWER',
 ): string {
   if (direction && !scope) throw new BadRequestException('游标缺少图库作用域。');
@@ -30,7 +30,7 @@ export function encodeEagleAssetCursor(
 export function decodeEagleAssetCursor(
   value: string,
   scope?: LibraryIdentity,
-  sort?: EagleAssetSort,
+  sort?: EagleAssetOrder,
 ): EagleAssetCursor {
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<

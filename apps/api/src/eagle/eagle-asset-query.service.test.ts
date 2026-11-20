@@ -504,6 +504,51 @@ test('both libraries support independent explicit date ordering with matching ke
   }
 });
 
+test('trash lists newest deletions first regardless of library sort and binds its own cursors', async () => {
+  const { encodeEagleAssetCursor } = await import('./eagle-cursor');
+  for (const mode of ['PHOTO', 'MATERIAL'] as const) {
+    const queries: any[] = [];
+    const service = new EagleService(
+      {
+        eagleAsset: {
+          findMany: async (q: any) => {
+            queries.push(q);
+            return [];
+          },
+        },
+      } as never,
+      undefined,
+      mode,
+    );
+    const deletedAt = new Date('2026-10-01');
+    const scope = { ownerId: 'owner', libraryMode: mode };
+    const trashCursor = encodeEagleAssetCursor(
+      { id: 'last', libraryAddedAt: deletedAt },
+      scope,
+      'DELETED_AT',
+    );
+    await service.listAssets(
+      'owner',
+      { limit: 60, sort: 'ADDED_AT', cursor: trashCursor },
+      { trash: true },
+    );
+    assert.deepEqual(queries[0].orderBy, [{ deletedAt: 'desc' }, { id: 'desc' }]);
+    assert.deepEqual(queries[0].where.AND[1].OR, [
+      { deletedAt: { lt: deletedAt } },
+      { deletedAt, id: { lt: 'last' } },
+    ]);
+    assert.ok(JSON.stringify(queries[0].where).includes('"deletedAt"'));
+    const libraryCursor = encodeEagleAssetCursor(
+      { id: 'last', libraryAddedAt: deletedAt },
+      scope,
+      'ADDED_AT',
+    );
+    await assert.rejects(() =>
+      service.listAssets('owner', { limit: 60, cursor: libraryCursor }, { trash: true }),
+    );
+  }
+});
+
 test('timeline seek uses the selected field and cannot reuse a cursor or semantic search', async () => {
   for (const mode of ['PHOTO', 'MATERIAL'] as const) {
     for (const sort of ['CAPTURED_AT', 'ADDED_AT'] as const) {

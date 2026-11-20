@@ -451,7 +451,8 @@ export function SekerEaglePage({
   );
   const relevanceOrder = Boolean(activeSmartFolderId && smartFolderOrder === 'RELEVANCE');
   const assetFilters: EagleAssetFilters = {
-    sort: libraryMode === 'PHOTO' && !relevanceOrder ? photoSort : undefined,
+    sort:
+      libraryMode === 'PHOTO' && !relevanceOrder && libraryView !== 'TRASH' ? photoSort : undefined,
     cursor: browserCursor || undefined,
     limit: EAGLE_PAGE_SIZE,
     search: deferredSearch || undefined,
@@ -1488,7 +1489,11 @@ export function SekerEaglePage({
         aria-current={libraryView === 'TRASH' ? 'page' : undefined}
         type="button"
         aria-label={t('回收站')}
-        onClick={() => changeLibraryView('TRASH')}
+        onClick={() => {
+          // Trash pages by deletion time; a library location cursor cannot continue it.
+          assetLocator.clearLocation();
+          changeLibraryView('TRASH');
+        }}
       >
         <IconTrash size={17} />
         {' ' + t('回收站') + ' '}
@@ -1638,7 +1643,7 @@ export function SekerEaglePage({
           {' ' + t('清空') + ' '}
         </button>
       )}
-      {libraryMode === 'PHOTO' && photoView === 'timeline' && (
+      {libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH' && (
         <label className={styles.sortControl} title={t('照片排序')}>
           <IconArrowsSort size={17} aria-hidden="true" />
           <select

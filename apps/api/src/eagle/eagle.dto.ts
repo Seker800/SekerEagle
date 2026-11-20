@@ -89,7 +89,7 @@ export class ListEagleAssetsDto {
   @ApiPropertyOptional({
     enum: ['CAPTURED_AT', 'ADDED_AT'],
     description:
-      'Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.',
+      'Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. Trash always orders by deletion time instead.',
   })
   @IsOptional()
   @IsIn(['CAPTURED_AT', 'ADDED_AT'])
