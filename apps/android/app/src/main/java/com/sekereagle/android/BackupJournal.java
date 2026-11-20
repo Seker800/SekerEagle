@@ -324,6 +324,24 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
     }
   }
 
+  /** Drops failed records so they can be re-evaluated by a later scan; receipts stay. */
+  void clearFailures(String scope) {
+    SQLiteDatabase db = getWritableDatabase();
+    db.beginTransaction();
+    try {
+      db.delete("scan_progress", "scope=? AND result='FAILED'", new String[] {scope});
+      db.delete(
+          "files",
+          "key LIKE ? AND terminal_error <> ''",
+          new String[] {
+            scope + ":%",
+          });
+      db.setTransactionSuccessful();
+    } finally {
+      db.endTransaction();
+    }
+  }
+
   /** Drops this run's progress, counts and terminal failures; confirmed receipts stay. */
   void clearRun(String scope) {
     SQLiteDatabase db = getWritableDatabase();

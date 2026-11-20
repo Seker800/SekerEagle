@@ -48,6 +48,13 @@ public final class CleanupEngine {
     return new Candidate(file, mode, cp.hash);
   }
 
+  /** Whether this exact local identity already has a confirmed backup checkpoint. */
+  public boolean hasConfirmed(String scope, String mode, BackupEngine.File file) throws Exception {
+    if (scope.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL"))) return false;
+    BackupEngine.Checkpoint cp = store.load(BackupEngine.fileKey(scope, mode, file));
+    return cp != null && cp.confirmed && cp.hash.matches("[a-f0-9]{64}");
+  }
+
   public Candidate check(String scope, String mode, BackupEngine.File file) throws Exception {
     if (scope.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL")))
       throw new IllegalArgumentException("清理作用域无效");

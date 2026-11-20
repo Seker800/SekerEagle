@@ -1309,13 +1309,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             settings.setValue(identity.scope, "status", "等待完整的照片和视频访问权限")
             return
         }
-        runCatching {
-            getApplication<Application>()
-                .startForegroundService(
-                    Intent(getApplication(), BackupService::class.java)
-                        .putExtra("scope", identity.scope)
-                )
-        }
+        BackupLauncher.start(getApplication(), identity.scope, false)
     }
 
     private fun history(scope: String, mode: GalleryMode): List<String> =

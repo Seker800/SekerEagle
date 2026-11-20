@@ -477,14 +477,8 @@ public final class MainActivity extends Activity {
       toast("请先授予完整的照片和视频访问权限");
       return;
     }
-    try {
-      startForegroundService(
-          new Intent(this, BackupService.class)
-              .putExtra("scope", scope)
-              .putExtra("manual", manual));
-    } catch (RuntimeException e) {
-      toast("系统暂不允许启动备份，请重新打开后重试");
-    }
+    if (!BackupLauncher.start(this, scope, manual))
+      toast("系统暂缓后台传输，请稍后重试");
   }
 
   boolean hasMediaRules(String scope) {

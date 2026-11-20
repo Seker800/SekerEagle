@@ -23,6 +23,27 @@ import org.json.*;
 /** Visible, bounded foreground work. The next app opening resumes durable checkpoints. */
 public final class BackupService extends Service {
 
+  interface JobCallbacks {
+    void progress(Notification notification);
+
+    void finished();
+  }
+
+  static final class LocalBinder extends Binder {
+    private final BackupService service;
+
+    LocalBinder(BackupService service) {
+      this.service = service;
+    }
+
+    void start(String scope, JobCallbacks callbacks) {
+      service.startJobRun(scope, callbacks);
+    }
+  }
+
+  private volatile JobCallbacks jobCallbacks;
+  private LocalBinder binder;
+
   private static volatile BackupService current;
 
   static boolean isRunning(String scope) {
@@ -73,6 +94,27 @@ public final class BackupService extends Service {
     clearRunData(context, state, scope);
   }
 
+  /** Clears failed records only; uploaded content and confirmed receipts stay untouched. */
+  static void clearFailures(Context context, String scope) {
+    BackupSettings state = new BackupSettings(context);
+    try (BackupJournal journal = new BackupJournal(context)) {
+      journal.clearFailures(scope);
+      int[] counts = journal.scanCounts(scope);
+      state.snapshot(
+          scope,
+          state.value(scope, "status", "备份完成"),
+          "已记录 "
+              + counts[0]
+              + " · 已上传 "
+              + counts[1]
+              + " · 待补传 "
+              + counts[3]
+              + " · 本轮处理 0",
+          "[]",
+          state.value(scope, "transferRows", "[]"));
+    }
+  }
+
   private static void clearRunData(Context context, BackupSettings state, String scope) {
     try (BackupJournal journal = new BackupJournal(context)) {
       journal.clearRun(scope);
@@ -92,10 +134,7 @@ public final class BackupService extends Service {
     try (BackupJournal journal = new BackupJournal(context)) {
       journal.retryFailures(scope);
     }
-    context.startForegroundService(
-        new Intent(context, BackupService.class)
-            .putExtra("scope", scope)
-            .putExtra("manual", true));
+    BackupLauncher.start(context, scope, true);
   }
 
   /** Stop obsolete work without changing the user's durable pause preference. */
@@ -103,6 +142,17 @@ public final class BackupService extends Service {
     BackupSettings state = new BackupSettings(context);
     BackupService service = current;
     if (service != null && state.active().equals(service.scope)) service.cancelRun(false);
+  }
+
+  private boolean enterForeground(String text) {
+    try {
+      startForeground(
+          NOTICE, notification(text), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+      return true;
+    } catch (RuntimeException blocked) {
+      settings.setValue(scope, "status", "系统暂缓后台传输，请稍后重试");
+      return false;
+    }
   }
 
   private void cancelRun(boolean userPause) {
@@ -160,7 +210,10 @@ public final class BackupService extends Service {
       if (!working.get()) scope = requested;
       // A stale automatic start can race the durable pause write. Honour Android's
       // foreground-start contract even when declining to perform any work.
-      startForeground(NOTICE, notification("备份已暂停"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+      if (!enterForeground("备份已暂停")) {
+        stopSelf();
+        return START_NOT_STICKY;
+      }
       if (!working.get()) {
         stopForeground(STOP_FOREGROUND_DETACH);
         stopSelfResult(startId);
@@ -179,7 +232,10 @@ public final class BackupService extends Service {
     scope = requested;
     if (explicit) settings.setFlag(scope, "userPaused", false);
     lastConditions = lastUpdate = 0;
-    startForeground(NOTICE, notification("正在准备扫描"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+    if (!enterForeground("正在准备扫描")) {
+      stopSelf();
+      return START_NOT_STICKY;
+    }
     executor.execute(this::runBackup);
     return START_NOT_STICKY;
   }
@@ -377,6 +433,12 @@ public final class BackupService extends Service {
                   working.set(false);
                   if (settings.flag(scope, "clearAfterRun", false))
                     clearRunData(this, settings, scope);
+                  JobCallbacks callbacks = jobCallbacks;
+                  if (callbacks != null) {
+                    jobCallbacks = null;
+                    callbacks.finished();
+                    return;
+                  }
                   Intent restart = pendingRestart;
                   pendingRestart = null;
                   if (restart != null) {
@@ -672,7 +734,10 @@ public final class BackupService extends Service {
             + runSeen,
         errors.toString(),
         transferRows.toString());
-    getSystemService(NotificationManager.class).notify(NOTICE, notification(pendingMessage));
+    Notification notice = notification(pendingMessage);
+    JobCallbacks callbacks = jobCallbacks;
+    if (callbacks != null) callbacks.progress(notice);
+    else getSystemService(NotificationManager.class).notify(NOTICE, notice);
   }
 
   private Notification notification(String text) {
@@ -685,17 +750,21 @@ public final class BackupService extends Service {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     PendingIntent pause =
-        PendingIntent.getService(
+        PendingIntent.getBroadcast(
             this,
             1,
-            new Intent(this, BackupService.class).setAction("pause").putExtra("scope", scope),
+            new Intent(this, BackupActionReceiver.class)
+                .setAction(BackupActionReceiver.ACTION_PAUSE)
+                .putExtra("scope", scope),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     boolean paused = settings.flag(scope, "userPaused", false);
     PendingIntent resume =
-        PendingIntent.getForegroundService(
+        PendingIntent.getBroadcast(
             this,
             2,
-            new Intent(this, BackupService.class).putExtra("scope", scope).putExtra("manual", true),
+            new Intent(this, BackupActionReceiver.class)
+                .setAction(BackupActionReceiver.ACTION_RESUME)
+                .putExtra("scope", scope),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     return new Notification.Builder(this, CHANNEL)
         .setSmallIcon(R.drawable.ic_notification)
@@ -736,11 +805,35 @@ public final class BackupService extends Service {
     ApiClient api = activeApi;
     if (api != null) api.close();
     if (wake != null && wake.isHeld()) wake.release();
+    JobCallbacks callbacks = jobCallbacks;
+    jobCallbacks = null;
+    if (callbacks != null) callbacks.finished();
     super.onDestroy();
   }
 
   @Override
   public IBinder onBind(Intent intent) {
-    return null;
+    if (binder == null) binder = new LocalBinder(this);
+    return binder;
+  }
+
+  private void startJobRun(String requested, JobCallbacks callbacks) {
+    if (working.get()
+        || requested == null
+        || requested.isEmpty()
+        || !requested.equals(settings.active())
+        || !settings.flag(requested, "enabled", false)) {
+      callbacks.finished();
+      return;
+    }
+    jobCallbacks = callbacks;
+    working.set(true);
+    retiring = false;
+    cancelled = false;
+    manual = true;
+    timedOut = false;
+    scope = requested;
+    lastConditions = lastUpdate = 0;
+    executor.execute(this::runBackup);
   }
 }

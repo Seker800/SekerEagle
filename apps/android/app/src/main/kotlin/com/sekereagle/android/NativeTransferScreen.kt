@@ -157,16 +157,12 @@ fun NativeTransferScreen(
                 androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
     var permissionMessage by remember(identity.scope) { mutableStateOf<String?>(null) }
+    var confirmClearFailures by remember(identity.scope) { mutableStateOf(false) }
+    val clearScope = rememberCoroutineScope()
     fun startBackup() {
         permissionMessage = null
-        runCatching {
-                context.startForegroundService(
-                    Intent(context, BackupService::class.java)
-                        .putExtra("scope", identity.scope)
-                        .putExtra("manual", true)
-                )
-            }
-            .onFailure { permissionMessage = "系统暂不允许启动备份，请回到应用后重试" }
+        if (!BackupLauncher.start(context, identity.scope, true))
+            permissionMessage = "系统暂缓后台传输，请稍后重试"
     }
     val mediaPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -322,6 +318,11 @@ fun NativeTransferScreen(
                     onStart = ::scanAndBackup,
                     onPause = { BackupService.pause(context) },
                     onRetry = { BackupService.retryFailed(context, identity.scope) },
+                    onClearFailures = {
+                        if (live.running || backup.running)
+                            permissionMessage = "请先暂停当前备份"
+                        else confirmClearFailures = true
+                    },
                     onSettings = { openNative("backup") },
                     permissionMessage = permissionMessage,
                 )
@@ -386,6 +387,34 @@ fun NativeTransferScreen(
             }
         }
     }
+
+    if (confirmClearFailures) {
+        AlertDialog(
+            onDismissRequest = { confirmClearFailures = false },
+            title = { Text("清除失败记录？") },
+            text = {
+                Text("只清除待补传的失败记录；已上传内容和成功回执不受影响，下次备份会重新检查这些文件。")
+            },
+            confirmButton = {
+                TextButton({
+                        confirmClearFailures = false
+                        if (BackupService.isRunning(identity.scope)) {
+                            permissionMessage = "请先暂停当前备份"
+                        } else {
+                            clearScope.launch {
+                                withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        BackupService.clearFailures(context, identity.scope)
+                                    }
+                                }
+                                failures = emptyList()
+                            }
+                        }
+                    }) { Text("清除") }
+            },
+            dismissButton = { TextButton({ confirmClearFailures = false }) { Text("取消") } },
+        )
+    }
 }
 
 private fun LazyListScope.autoBackupContent(
@@ -399,6 +428,7 @@ private fun LazyListScope.autoBackupContent(
     onStart: () -> Unit,
     onPause: () -> Unit,
     onRetry: () -> Unit,
+    onClearFailures: () -> Unit,
     onSettings: () -> Unit,
     permissionMessage: String?,
 ) {
@@ -440,6 +470,7 @@ private fun LazyListScope.autoBackupContent(
                     if (liveRunning) TextButton(onPause) { Text("暂停") }
                     else if (backup.enabled) TextButton(onStart) { Text("立即备份") }
                     if (failed > 0) TextButton(onRetry) { Text("重试失败 $failed") }
+                    if (failed > 0) TextButton(onClearFailures) { Text("清除失败") }
                 }
                 if (backup.paused) Text("备份已暂停，点「立即备份」继续", color = NativeMuted)
                 permissionMessage?.let {

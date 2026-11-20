@@ -36,6 +36,7 @@ final class CleanupScreen extends ScrollView {
   private volatile int generation;
   private boolean busy;
   private boolean planConfirmed;
+  private boolean verificationNeeded;
   private boolean syncingFilter;
   private long lastProgressAt;
 
@@ -216,6 +217,14 @@ final class CleanupScreen extends ScrollView {
       return;
     }
     if (plan.isEmpty()) {
+      if (verificationNeeded) {
+        activity.startBackup();
+        verificationNeeded = false;
+        status.setText("正在备份核对");
+        detail.setText("已开始备份核对；完成后回来再检查可释放空间。已上传的文件不会重传。");
+        action.setText("重新检查");
+        return;
+      }
       session.clear();
       plan = new ArrayList<>();
       scan();
@@ -271,6 +280,7 @@ final class CleanupScreen extends ScrollView {
             CleanupEngine engine = engine(journal, token);
             List<Entry> found = new ArrayList<>();
             long[] scanned = {0};
+            long[] unverified = {0};
             catalog.scan(
                 settings.scanRules(scope),
                 (item, mode) -> {
@@ -286,9 +296,10 @@ final class CleanupScreen extends ScrollView {
                     guard(token);
                     return;
                   }
-                  CleanupEngine.Candidate candidate =
-                      engine.local(scope, mode, source(catalog, item, token));
+                  BackupEngine.File file = source(catalog, item, token);
+                  CleanupEngine.Candidate candidate = engine.local(scope, mode, file);
                   if (candidate != null) found.add(new Entry(item, mode, candidate.hash));
+                  else if (!engine.hasConfirmed(scope, mode, file)) unverified[0]++;
                   progress(token, "已扫描 " + scanned[0] + " 个，已确认 " + found.size() + " 个");
                 },
                 () -> guard(token));
@@ -301,16 +312,26 @@ final class CleanupScreen extends ScrollView {
                   cancel.setVisibility(GONE);
                   plan = new ArrayList<>(existing);
                   planConfirmed = false;
+                  verificationNeeded = unverified[0] > 0;
                   session.scope = scope;
                   session.filterDays = filterDays;
                   session.plan = new ArrayList<>(plan);
                   if (plan.isEmpty()) {
-                    status.setText("暂无可释放的空间");
-                    detail.setText(
-                        "没有找到同时满足“已确认服务器备份、文件未变化、可写、"
-                            + filterLabel()
-                            + "”的项目。可调整筛选后重新检查。");
-                    action.setText("重新检查");
+                    if (verificationNeeded) {
+                      status.setText("需要先完成一次备份核对");
+                      detail.setText(
+                          "当前备份方式还没有这些照片的备份记录（"
+                              + unverified[0]
+                              + " 张）；先运行一次备份（已上传的不会重传），完成后再释放空间。");
+                      action.setText("开始核对");
+                    } else {
+                      status.setText("暂无可释放的空间");
+                      detail.setText(
+                          "没有找到同时满足“已确认服务器备份、文件未变化、可写、"
+                              + filterLabel()
+                              + "”的项目。可调整筛选后重新检查。");
+                      action.setText("重新检查");
+                    }
                   } else {
                     status.setText("可释放 " + size(plan));
                     detail.setText(planDetail());

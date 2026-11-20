@@ -13,6 +13,40 @@ public final class BackupJournalClearTest {
   private static final String DB = "clear-run-test.db";
 
   @Test
+  public void clearFailuresKeepsSuccessfulProgressAndReceipts() throws Exception {
+    Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+    context.deleteDatabase(DB);
+    String scope = "scope";
+    try (BackupJournal journal = new BackupJournal(context, DB)) {
+      journal.scanResult(scope, "PHOTO:done", "1:1", "UPLOADED");
+      journal.scanResult(scope, "PHOTO:skip", "2:2", "SKIPPED");
+      journal.scanFailure(
+          scope, "PHOTO:fail", "3:3", "content://x", "x.jpg", "PHOTO", 10, 20, false, "oops");
+      BackupEngine.Checkpoint terminal = new BackupEngine.Checkpoint();
+      terminal.terminalError = "rejected";
+      journal.save(scope + ":PHOTO:terminal", terminal);
+      BackupEngine.Checkpoint confirmed = new BackupEngine.Checkpoint();
+      confirmed.hash = "b".repeat(64);
+      confirmed.confirmed = true;
+      journal.save(scope + ":PHOTO:confirmed", confirmed);
+
+      journal.clearFailures(scope);
+
+      assertTrue(journal.scanCompleted(scope, "PHOTO:done", "1:1"));
+      assertTrue(journal.scanCompleted(scope, "PHOTO:skip", "2:2"));
+      assertEquals(0, journal.failures(scope).size());
+      assertNull(journal.load(scope + ":PHOTO:terminal"));
+      assertNotNull(journal.load(scope + ":PHOTO:confirmed"));
+      int[] counts = journal.scanCounts(scope);
+      assertEquals(2, counts[0]);
+      assertEquals(1, counts[1]);
+      assertEquals(0, counts[3]);
+    } finally {
+      context.deleteDatabase(DB);
+    }
+  }
+
+  @Test
   public void clearRunKeepsReceiptsAndConfirmedFilesButDropsRunState() throws Exception {
     Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
     context.deleteDatabase(DB);
