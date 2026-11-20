@@ -6,6 +6,15 @@ import org.junit.Test;
 
 public class BackupFolderPolicyTest {
   @Test
+  public void firstLevelMediaFoldersAggregateTheirChildAlbums() {
+    assertEquals("/DCIM/", BackupPolicy.parentFolder("/DCIM/Camera/"));
+    assertEquals("/Pictures/", BackupPolicy.parentFolder("Pictures/WeiXin/"));
+    assertNull(BackupPolicy.parentFolder("/DCIM/"));
+    assertNull(BackupPolicy.parentFolder(""));
+    assertNull(BackupPolicy.parentFolder(null));
+  }
+
+  @Test
   public void documentIdsKeepTheRealPrefixEvenWhenDisplayNamesDoNot() {
     assertEquals(
         ".trashed-1797000000-plain.jpg",

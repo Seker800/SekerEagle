@@ -70,6 +70,15 @@ public final class BackupPolicy {
     return documentId.substring(split + 1);
   }
 
+  /** First-level media folder (for example /DCIM/) of a relative path, or null when it is already first level. */
+  public static String parentFolder(String path) {
+    if (path == null) return null;
+    String trimmed = path.startsWith("/") ? path.substring(1) : path;
+    int slash = trimmed.indexOf('/');
+    if (slash <= 0 || slash >= trimmed.length() - 1) return null;
+    return "/" + trimmed.substring(0, slash) + "/";
+  }
+
   public static boolean inFolder(String folder, String path, boolean recursive) {
     if (folder.isEmpty()) return path != null && !path.isEmpty();
     String prefix = folder.endsWith("/") ? folder : folder + "/";

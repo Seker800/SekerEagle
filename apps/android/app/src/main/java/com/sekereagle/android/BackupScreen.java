@@ -6,6 +6,7 @@ import android.os.Build;
 import android.provider.Settings;
 import android.view.WindowManager;
 import android.widget.*;
+import com.sekereagle.android.core.BackupPolicy;
 import java.util.*;
 import org.json.*;
 
@@ -326,8 +327,8 @@ final class BackupScreen extends ScrollView {
                 new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
                     .setTitle("选择备份目录")
                     .setMessage(
-                        "手机相册可多选后追加到列表；其他文件夹每次授权一个目录，可反复添加。备份全部会包含以后新增的手机相册及下载图片。系统未收录的 RAW"
-                            + " 仍需单独授权目录。关闭全部备份后恢复原来的自选列表。")
+                        "照片和视频优先用“添加手机相册”：可直接选整个 DCIM 或单个相册，系统会自动排除回收站、隐藏内容和未写完的文件。"
+                            + "“添加其他文件夹”使用系统目录授权，只用于相册未收录的文件（例如部分 RAW）；每次授权一个目录，可反复添加。关闭全部备份后恢复原来的自选列表。")
                     .setPositiveButton("知道了", null)
                     .show()));
     Ui.divider(content);
@@ -438,12 +439,21 @@ final class BackupScreen extends ScrollView {
     // Only new choices are shown. Unchecked items never remove an existing rule.
     JSONArray rules = settings.rules(scope);
     List<String> candidates = new ArrayList<>();
+    List<String> labels = new ArrayList<>();
+    Set<String> parents = new TreeSet<>();
     for (String path : folders) {
-      boolean exists = false;
-      for (int j = 0; j < rules.length(); j++)
-        if (rules.optJSONObject(j).optString("type").equals("media")
-            && rules.optJSONObject(j).optString("path").equals(path)) exists = true;
-      if (!exists) candidates.add(path);
+      String parent = BackupPolicy.parentFolder(path);
+      if (parent != null) parents.add(parent);
+    }
+    for (String parent : parents)
+      if (!coveredByRules(rules, parent)) {
+        candidates.add(parent);
+        labels.add("整个 " + parent.replaceAll("^/+|/+$", "") + "（含所有子相册）");
+      }
+    for (String path : folders) {
+      if (coveredByRules(rules, path) || candidates.contains(path)) continue;
+      candidates.add(path);
+      labels.add(path);
     }
     if (candidates.isEmpty()) {
       activity.toast("这些相册都已添加，可在列表中管理");
@@ -452,9 +462,9 @@ final class BackupScreen extends ScrollView {
     boolean[] selected = new boolean[candidates.size()];
     androidx.appcompat.app.AlertDialog dialog =
         new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
-            .setTitle("添加手机相册")
+            .setTitle("添加手机相册（自动排除回收站与隐藏内容）")
             .setMultiChoiceItems(
-                candidates.toArray(new String[0]),
+                labels.toArray(new String[0]),
                 selected,
                 (d, which, value) -> {
                   selected[which] = value;
@@ -478,6 +488,17 @@ final class BackupScreen extends ScrollView {
             .create();
     dialog.setOnShowListener(d -> dialog.getButton(-1).setEnabled(false));
     dialog.show();
+  }
+
+  private static boolean coveredByRules(JSONArray rules, String path) {
+    for (int i = 0; i < rules.length(); i++) {
+      JSONObject rule = rules.optJSONObject(i);
+      if (rule != null
+          && rule.optString("type").equals("media")
+          && BackupPolicy.inFolder(
+              rule.optString("path"), path, rule.optBoolean("recursive", true))) return true;
+    }
+    return false;
   }
 
   static void addRule(BackupSettings settings, String scope, String type, String path) {
