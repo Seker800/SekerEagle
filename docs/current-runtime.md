@@ -1,6 +1,6 @@
 # 现用运行状态与交接
 
-> 状态：现行 | 核验日期：2026-11-18 13:25（北京时间） | 对应提交：4d5ae6e9
+> 状态：现行 | 核验日期：2026-11-20 11:05（北京时间） | 对应提交：2405f5ed
 >
 > 本文只记录现用部署事实与接手顺序。完整发布快照、备份哈希和历史恢复过程见
 > [2026-10/11 归档](history/releases/2026-11.md)。设计边界见 [architecture](architecture.md)，
@@ -11,19 +11,18 @@
 | 项目                              | 当前值                                                                                                                     |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | 图库                              | 群晖 SekerDesign（DS1522+，AMD64，8GB），入口 https://yuntai.design:8181/                                                  |
-| 运行源码                          | API `e57b7ab7`；web `67e99d52`；desktop `13b1fbef`；operations／reader `93b5d583`（本轮未更新）                            |
-| API / operations / library-reader | API `sekereagle/api:share4k-e57b7ab7`；operations／reader `sekereagle/api:refactor-93b5d583`                               |
-| Web                               | `sekereagle/web:cacheopt-67e99d52`                                                                                         |
-| macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`67e99d52` 构建，app.asar `63fb8584…`）                                              |
+| 运行源码                          | API `2405f5ed`；web `2405f5ed`；desktop `2405f5ed`（源码未变）；operations／reader `2405f5ed`                              |
+| API / operations / library-reader | `sekereagle/api:main-2405f5ed`                                                                                             |
+| Web                               | `sekereagle/web:main-2405f5ed`                                                                                             |
+| macOS 桌面客户端                  | `/Applications/SekerEagle.app` 0.1.9（`2405f5ed` 源码，app.asar `ca3a6a38…`，与上一版相同）                                |
 | Windows 便携客户端（本机）        | `D:\SekerEagle\SekerEagle-0.1.9-windows-x64-portable.exe`，0.1.9（`13b1fbef` 源码；exe `597acca0…`、app.asar `e0fa70c0…`） |
-| 数据库                            | 100 项迁移，待应用 0；本轮无迁移、无 schema 变化                                                                           |
+| 数据库                            | 101 项迁移，待应用 0；本轮新增回收站排序两个部分索引                                                                       |
 | Mac 业务执行器                    | `.runtime/business-worker/releases/worker-93b5d583`（launchd；不是 Compose `worker`）                                      |
 | 未改动                            | 网关、Postgres、MinIO、计算协调器、中继；不要为排查重启或重建                                                              |
 | 计数                              | MATERIAL / PHOTO / 回收站 / 草稿从运行检查点读取，本文不维护动态百分比                                                     |
 
-Web 最近三次覆盖：`cacheopt-67e99d52`（11-18 11:18）→ `cacheopt-abb4c3e3`（11-18 11:08）
-→ `viewer5d4d0ce0`（11-18 10:27）。API 保持 `share4k-e57b7ab7`；
-operations／reader 保持 `refactor-93b5d583` 未变。
+Web 最近覆盖：`main-2405f5ed`（11-20 11:02）→ `cacheopt-67e99d52`（11-18 11:18）
+→ `cacheopt-abb4c3e3`（11-18 11:08）。API／operations／reader 本轮一并升到 `main-2405f5ed`。
 
 ## 进程入口
 
@@ -58,9 +57,9 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 
 ## 回退与证据
 
-- Web 回退：`sekereagle/web:cacheopt-abb4c3e3`（再上一版 `viewer5d4d0ce0`）。
-- macOS 客户端回退：`~/SekerEagle-client-backups/SekerEagle-0.1.9-20261118-before-cacheopt.app`（app.asar `ca6263bf…`）。
-- API 回退：`sekereagle/api:refactor-93b5d583`；operations／reader 本轮未变。
+- Web 回退：`sekereagle/web:cacheopt-67e99d52`（再上一版 `cacheopt-abb4c3e3`）。
+- macOS 客户端回退：`~/SekerEagle-client-backups/SekerEagle-0.1.9-20261118-before-cacheopt.app`（app.asar `ca6263bf…`）；本轮桌面端源码未变，应用包未替换。
+- API 回退：`sekereagle/api:share4k-e57b7ab7`；operations／reader 回退 `sekereagle/api:refactor-93b5d583`。
 - Mac worker 回退：`.runtime/business-worker/releases/worker-b852071b`；plist 备份在
   `.omx/artifacts/release-93b5d583/worker-before.plist`。
 - 2026-11-18 11:00 本地清理：删除了 18 个旧 worker release（保留现用 `worker-93b5d583` 与回退
@@ -68,9 +67,9 @@ operations／reader 保持 `refactor-93b5d583` 未变。
   `sekereagle/web:viewer5d4d0ce0`、`sekereagle/api:share4k-e57b7ab7` 镜像缓存已不存在；生产镜像在群晖
   独立保存不受影响，本地如需对应版本可从 git 提交 `e57b7ab7`／`5d4d0ce0` 经 `deploy/mac` 重新构建。
   `.omx/artifacts` 中未被文档引用的 7 天前产物已删除（1.4 GB），文档引用证据全部保留。
-- 最近一致性备份：936,861,410 字节，SHA-256 `da13a914c04e6e69a94699f85642a20ed0b14d446a5c3c080a05d66f9f968bc1`（本轮无数据写入，未新建备份）。
-- 证据目录：本次发布见 NAS 私有 `maintenance/cacheopt-67e99d52/`（首版
-  `maintenance/cacheopt-abb4c3e3/`）；上一轮见 `maintenance/viewer5d4d0ce0/`。
+- 最近一致性备份：944,962,937 字节，SHA-256 `43b78471db2e6606162600f94bcb13ddfa0a7eb03b3dc38df05c1417585e2acb`（2026-11-20 迁移前，`pg_restore --list` 完整解析）。
+- 证据目录：本次发布见 NAS 私有 `maintenance/main-2405f5ed/`；上一轮见 `maintenance/cacheopt-67e99d52/`。
+- 2026-11-20 11:02 群晖发布 `2405f5ed`：API／operations／reader／web 四个应用容器切到 `main-2405f5ed`，应用 1 项索引迁移；发布前后计数一致（MATERIAL 64,850／PHOTO 58,941、回收站 13,424、草稿 239），公网首页／readiness 200、匿名 401，线上首页哈希与本地一致；无关容器未变，网关复用并 reload。
 - 2026-11-18 11:30 桌面缓存身份改为 v3（不含连接地址）：当前账号在新命名空间重建，
   旧地址键文件成为一次性孤立缓存；网页与 API 未变。
 - 2026-11-18 13:00 本机旧版缓存已清理：删除 3459 个文件、5 个旧命名空间（约 89.8 MiB），
@@ -84,6 +83,7 @@ operations／reader 保持 `refactor-93b5d583` 未变。
 
 ## 最新发布摘要
 
+- [2026-11-20 11:02 照片排序与回收站排序发布（2405f5ed）](history/releases/main-production-release-2026-11-20-main-2405f5ed.md)
 - [2026-11-18 13:25 本机 Windows 客户端升级到 13b1fbef 原生构建](history/releases/main-production-release-2026-11-18-windows-native-install.md)
 - [2026-11-18 13:05 Windows 便携版与 Mac 桌面端对齐](history/releases/main-production-release-2026-11-18-desktop-parity.md)
 - [2026-11-18 13:00 清理旧版桌面缓存并锁定缓存键（本机客户端）](history/releases/main-production-release-2026-11-18-cache-legacy-cleanup.md)
