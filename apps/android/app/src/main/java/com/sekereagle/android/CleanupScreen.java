@@ -37,12 +37,14 @@ final class CleanupScreen extends ScrollView {
   private boolean busy;
   private boolean planConfirmed;
   private boolean verificationNeeded;
+  private boolean includeDeleted;
   private boolean syncingFilter;
   private long lastProgressAt;
 
   static final class Entry {
     final MediaCatalog.Item item;
     final String mode, hash;
+    boolean missingRemote;
 
     Entry(MediaCatalog.Item item, String mode, String hash) {
       this.item = item;
@@ -122,6 +124,31 @@ final class CleanupScreen extends ScrollView {
     cancel = Ui.button(activity, "取消本次操作", this::cancelWork);
     cancel.setVisibility(GONE);
     card.addView(cancel, new LinearLayout.LayoutParams(-1, Ui.dp(activity, 44)));
+    CheckBox includeDeletedBox = new CheckBox(activity);
+    includeDeletedBox.setText("也清理服务器已删除的原图");
+    includeDeletedBox.setChecked(includeDeleted);
+    includeDeletedBox.setOnCheckedChangeListener(
+        (button, checked) -> {
+          if (busy) {
+            button.setChecked(includeDeleted);
+            return;
+          }
+          includeDeleted = checked;
+          plan = new ArrayList<>();
+          session.plan = new ArrayList<>();
+          planConfirmed = false;
+          status.setText("筛选条件已更改");
+          detail.setText(
+              "请重新检查可释放空间。" + (checked ? "服务器已删除的原图删除后不可恢复。" : ""));
+          action.setText("检查可释放空间");
+          action.setEnabled(true);
+        });
+    card.addView(includeDeletedBox);
+    card.addView(
+        Ui.muted(
+            activity,
+            "服务器已删除的照片不会再备份；删除手机原图后，回收站过期将无法恢复。",
+            12));
     panel.addView(Ui.row(activity, R.drawable.ic_shield, "服务器备份会保留", "不会自动清理，不会删除服务器上的文件", null));
     panel.addView(
         Ui.row(
@@ -158,9 +185,21 @@ final class CleanupScreen extends ScrollView {
   }
 
   private String planDetail() {
-    return "筛选：" + filterLabel() + "；已确认 " + plan.size() + " 个原文件有服务器备份，共约 "
-        + size(plan) + "，分 " + batchCount(plan) + " 批释放（每批最多 "
-        + MAX_BATCH_ITEMS + " 个 / " + android.text.format.Formatter.formatShortFileSize(activity, MAX_BATCH_BYTES)
+    long deleted = plan.stream().filter(entry -> entry.missingRemote).count();
+    return "筛选："
+        + filterLabel()
+        + "；已确认 "
+        + (plan.size() - deleted)
+        + " 个原文件有服务器备份"
+        + (deleted == 0 ? "" : "，另有 " + deleted + " 个在服务器已删除")
+        + "，共约 "
+        + size(plan)
+        + "，分 "
+        + batchCount(plan)
+        + " 批释放（每批最多 "
+        + MAX_BATCH_ITEMS
+        + " 个 / "
+        + android.text.format.Formatter.formatShortFileSize(activity, MAX_BATCH_BYTES)
         + "）。";
   }
 
@@ -236,16 +275,23 @@ final class CleanupScreen extends ScrollView {
       prepareBatch();
       return;
     }
+    long serverDeleted = plan.stream().filter(entry -> entry.missingRemote).count();
+    String message =
+        "将从手机删除 "
+            + plan.size()
+            + " 个原文件，约 "
+            + size(plan)
+            + "，分 "
+            + batchCount(plan)
+            + " 批进行。服务器备份会保留。"
+            + (serverDeleted == 0
+                ? ""
+                : "\n\n其中 "
+                    + serverDeleted
+                    + " 张在服务器已删除；删除手机原图后，服务器回收站过期将无法恢复。");
     new MaterialAlertDialogBuilder(activity)
         .setTitle("释放手机空间？")
-        .setMessage(
-            "将从手机删除 "
-                + plan.size()
-                + " 个原文件，约 "
-                + size(plan)
-                + "，分 "
-                + batchCount(plan)
-                + " 批进行。服务器备份会保留。")
+        .setMessage(message)
         .setNegativeButton("取消", (d, w) -> activity.toast("已取消，手机文件保留"))
         .setPositiveButton(
             "继续",
@@ -303,14 +349,20 @@ final class CleanupScreen extends ScrollView {
                   progress(token, "已扫描 " + scanned[0] + " 个，已确认 " + found.size() + " 个");
                 },
                 () -> guard(token));
-            List<Entry> existing = existingOnly(api, found, token);
+            ServerCheck checked = serverCheck(api, found, token);
             guard(token);
             activity.runOnUiThread(
                 () -> {
                   if (token != generation || !isAttachedToWindow()) return;
                   busy = false;
                   cancel.setVisibility(GONE);
-                  plan = new ArrayList<>(existing);
+                  List<Entry> planned = new ArrayList<>(checked.existing);
+                  if (includeDeleted)
+                    for (Entry entry : checked.missing) {
+                      entry.missingRemote = true;
+                      planned.add(entry);
+                    }
+                  plan = new ArrayList<>(planned);
                   planConfirmed = false;
                   verificationNeeded = unverified[0] > 0;
                   session.scope = scope;
@@ -329,12 +381,23 @@ final class CleanupScreen extends ScrollView {
                       detail.setText(
                           "没有找到同时满足“已确认服务器备份、文件未变化、可写、"
                               + filterLabel()
-                              + "”的项目。可调整筛选后重新检查。");
+                              + "”的项目。可调整筛选后重新检查。"
+                              + (checked.missing.isEmpty()
+                                  ? ""
+                                  : " 另有 "
+                                      + checked.missing.size()
+                                      + " 张在服务器已删除，可勾选“也清理服务器已删除的原图”。"));
                       action.setText("重新检查");
                     }
                   } else {
                     status.setText("可释放 " + size(plan));
-                    detail.setText(planDetail());
+                    detail.setText(
+                        planDetail()
+                            + (includeDeleted && !checked.missing.isEmpty()
+                                ? " 其中 "
+                                    + checked.missing.size()
+                                    + " 张在服务器已删除，删除手机原图后不可恢复。"
+                                : ""));
                     action.setText("释放 " + size(plan));
                   }
                   action.setEnabled(true);
@@ -345,13 +408,19 @@ final class CleanupScreen extends ScrollView {
         });
   }
 
+  private static final class ServerCheck {
+    final List<Entry> existing = new ArrayList<>();
+    final List<Entry> missing = new ArrayList<>();
+  }
+
   /** One batch request per 500 items and mode; never per file. */
-  private List<Entry> existingOnly(SessionApi api, List<Entry> candidates, int token) throws Exception {
-    if (candidates.isEmpty()) return Collections.emptyList();
+  private ServerCheck serverCheck(SessionApi api, List<Entry> candidates, int token)
+      throws Exception {
+    ServerCheck result = new ServerCheck();
+    if (candidates.isEmpty()) return result;
     Map<String, List<Entry>> byMode = new LinkedHashMap<>();
     for (Entry entry : candidates)
       byMode.computeIfAbsent(entry.mode, key -> new ArrayList<>()).add(entry);
-    Set<String> existingUris = new HashSet<>();
     int checked = 0;
     for (Map.Entry<String, List<Entry>> group : byMode.entrySet()) {
       List<Entry> rows = group.getValue();
@@ -361,26 +430,26 @@ final class CleanupScreen extends ScrollView {
         JSONArray items = new JSONArray();
         for (Entry entry : chunk)
           items.put(new JSONObject().put("contentSha256", entry.hash).put("size", entry.item.size));
-        JSONObject result =
+        JSONObject response =
             api.request(
                 "POST",
                 "/api/"
                     + (group.getKey().equals("PHOTO") ? "photos" : "eagle")
                     + "/uploads/check-content-batch",
                 new JSONObject().put("items", items));
-        JSONArray exists = result.getJSONArray("exists");
+        JSONArray exists = response.getJSONArray("exists");
         if (exists == null || exists.length() != chunk.size())
           throw new IOException("服务器返回的核对结果不完整，请重试");
-        for (int index = 0; index < chunk.size(); index++)
-          if (exists.optBoolean(index)) existingUris.add(chunk.get(index).item.uri.toString());
+        for (int index = 0; index < chunk.size(); index++) {
+          Entry entry = chunk.get(index);
+          if (exists.optBoolean(index)) result.existing.add(entry);
+          else result.missing.add(entry);
+        }
         checked += chunk.size();
         progress(token, "正在确认服务器副本 " + checked + "/" + candidates.size());
       }
     }
     guard(token);
-    List<Entry> result = new ArrayList<>();
-    for (Entry entry : candidates)
-      if (existingUris.contains(entry.item.uri.toString())) result.add(entry);
     return result;
   }
 
@@ -414,11 +483,16 @@ final class CleanupScreen extends ScrollView {
                 // Read the current batch once and verify its content hash before asking
                 // the system to delete anything. The plan itself never reads whole files.
                 CleanupEngine.Candidate checked =
-                    engine.check(scope, entry.mode, source(catalog, entry.item, token));
+                    engine.check(
+                        scope,
+                        entry.mode,
+                        source(catalog, entry.item, token),
+                        entry.missingRemote);
                 if (checked != null
                     && checked.hash.equals(entry.hash)
                     && writableDocument(entry.item)
-                    && existing.contains(entry.item.uri.toString())) valid.add(entry);
+                    && (entry.missingRemote || existing.contains(entry.item.uri.toString())))
+                  valid.add(entry);
                 else skipped++;
               }
               List<Entry> invalid = new ArrayList<>(batch);
@@ -462,9 +536,9 @@ final class CleanupScreen extends ScrollView {
   }
 
   private Set<String> existingUris(SessionApi api, List<Entry> entries, int token) throws Exception {
-    List<Entry> existing = existingOnly(api, entries, token);
     Set<String> uris = new HashSet<>();
-    for (Entry entry : existing) uris.add(entry.item.uri.toString());
+    for (Entry entry : serverCheck(api, entries, token).existing)
+      uris.add(entry.item.uri.toString());
     return uris;
   }
 

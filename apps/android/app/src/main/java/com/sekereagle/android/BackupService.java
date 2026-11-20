@@ -172,7 +172,21 @@ public final class BackupService extends Service {
   private BackupSettings settings;
   private String scope = "";
   private int seen, uploaded, skipped, failed;
-  private int runSeen, runUploaded, runSkipped, runFailed;
+  private int runSeen, runUploaded, runSkipped, runFailed, runDeleted;
+
+  private static final class PendingSkip {
+    final MediaCatalog.Item item;
+    final String mode, fileKey, fingerprint, hash;
+
+    PendingSkip(
+        MediaCatalog.Item item, String mode, String fileKey, String fingerprint, String hash) {
+      this.item = item;
+      this.mode = mode;
+      this.fileKey = fileKey;
+      this.fingerprint = fingerprint;
+      this.hash = hash;
+    }
+  }
   private JSONArray errors = new JSONArray();
   private JSONArray transferRows = new JSONArray();
   private PowerManager.WakeLock wake;
@@ -326,6 +340,7 @@ public final class BackupService extends Service {
           rulesChanged
               || BackupScanPolicy.full(state[0], state[1], state[2], scanStarted, resume);
       final Set<String> submittedKeys = new HashSet<>();
+      final List<PendingSkip> pendingSkips = new ArrayList<>();
       MediaCatalog.Visitor visit =
           (item, mode) -> {
             guard();
@@ -348,8 +363,8 @@ public final class BackupService extends Service {
               if (checkpoint != null
                   && checkpoint.confirmed
                   && checkpoint.terminalError.isEmpty()) {
-                store.scanResult(scope, fileKey, fingerprint, "SKIPPED");
-                countRun("SKIPPED");
+                pendingSkips.add(
+                    new PendingSkip(item, mode, fileKey, fingerprint, checkpoint.hash));
                 return;
               }
             }
@@ -393,6 +408,8 @@ public final class BackupService extends Service {
           full ? 0 : BackupScanPolicy.changedAfter(state[1]),
           full ? -1 : state[0]);
       guard();
+      runDeleted = verifySkipped(api, store, pendingSkips);
+      guard();
       fileWorkers.drain();
       guard();
       long maxId = catalog.maxSeenId();
@@ -404,7 +421,12 @@ public final class BackupService extends Service {
           rulesHash);
       refreshCounts(journal);
       settings.setFlag(scope, "scanOpen", false);
-      update(runFailed == 0 ? "备份完成" : "备份结束，有失败项可重试");
+      update(
+          runFailed == 0
+              ? (runDeleted == 0
+                  ? "备份完成"
+                  : "备份完成，" + runDeleted + " 张在服务器已删除（未上传）")
+              : "备份结束，有失败项可重试");
       BackupLive.end(pendingMessage);
       settings.setValue(scope, "lastFinished", Long.toString(System.currentTimeMillis()));
     } catch (ApiClient.Failure e) {
@@ -457,6 +479,60 @@ public final class BackupService extends Service {
                 });
       } else working.set(false);
     }
+  }
+
+  /** Confirms locally recorded uploads still exist in the active server library. */
+  private int verifySkipped(
+      ApiClient api, BackupJournal journal, List<PendingSkip> skips) throws Exception {
+    int deleted = 0;
+    Map<String, List<PendingSkip>> byMode = new LinkedHashMap<>();
+    for (PendingSkip skip : skips)
+      byMode.computeIfAbsent(skip.mode, key -> new ArrayList<>()).add(skip);
+    for (Map.Entry<String, List<PendingSkip>> group : byMode.entrySet()) {
+      String path =
+          "/api/"
+              + (group.getKey().equals("PHOTO") ? "photos" : "eagle")
+              + "/uploads/check-content-batch";
+      List<PendingSkip> list = group.getValue();
+      for (int start = 0; start < list.size(); start += 500) {
+        List<PendingSkip> chunk = list.subList(start, Math.min(list.size(), start + 500));
+        guard();
+        try {
+          JSONArray items = new JSONArray();
+          for (PendingSkip skip : chunk)
+            items.put(
+                new JSONObject().put("contentSha256", skip.hash).put("size", skip.item.size));
+          JSONArray exists =
+              api.request("POST", path, new JSONObject().put("items", items))
+                  .getJSONArray("exists");
+          if (exists == null || exists.length() != chunk.size())
+            throw new IOException("服务器返回的核对结果不完整");
+          for (int index = 0; index < chunk.size(); index++) {
+            PendingSkip skip = chunk.get(index);
+            if (exists.optBoolean(index)) {
+              journal.scanResult(scope, skip.fileKey, skip.fingerprint, "SKIPPED");
+              countRun("SKIPPED");
+            } else {
+              journal.scanResult(scope, skip.fileKey, skip.fingerprint, "SERVER_DELETED");
+              countServerDeleted();
+              deleted++;
+            }
+          }
+        } catch (Exception checkFailed) {
+          guard();
+          // A transient server failure must not discard local backup evidence.
+          for (PendingSkip skip : chunk) {
+            journal.scanResult(scope, skip.fileKey, skip.fingerprint, "SKIPPED");
+            countRun("SKIPPED");
+          }
+          synchronized (this) {
+            if (errors.length() < 20)
+              errors.put("服务器核对失败，暂按已备份处理：" + safeMessage(checkFailed));
+          }
+        }
+      }
+    }
+    return deleted;
   }
 
   private static final class PendingRetry {
@@ -593,7 +669,12 @@ public final class BackupService extends Service {
   }
 
   private synchronized void resetRunCounts() {
-    runSeen = runUploaded = runSkipped = runFailed = 0;
+    runSeen = runUploaded = runSkipped = runFailed = runDeleted = 0;
+  }
+
+  private synchronized void countServerDeleted() {
+    runSeen++;
+    runDeleted++;
   }
 
   private synchronized void countRun(String result) {

@@ -56,6 +56,12 @@ public final class CleanupEngine {
   }
 
   public Candidate check(String scope, String mode, BackupEngine.File file) throws Exception {
+    return check(scope, mode, file, false);
+  }
+
+  public Candidate check(
+      String scope, String mode, BackupEngine.File file, boolean allowMissingRemote)
+      throws Exception {
     if (scope.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL")))
       throw new IllegalArgumentException("清理作用域无效");
     guard.check();
@@ -72,7 +78,7 @@ public final class CleanupEngine {
       return null;
     }
     guard.check();
-    if (!remote.exists(mode, hash, file.size)) return null;
+    if (!allowMissingRemote && !remote.exists(mode, hash, file.size)) return null;
     guard.check();
     try {
       return file.stable.check() ? new Candidate(file, mode, hash) : null;
