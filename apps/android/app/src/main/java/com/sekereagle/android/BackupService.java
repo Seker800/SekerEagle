@@ -61,6 +61,32 @@ public final class BackupService extends Service {
     if (service != null && scope.equals(service.scope)) service.cancelRun(true);
   }
 
+  /** Stops a run and drops this run's records; uploaded content is never touched. */
+  static void stopAndClear(Context context, String scope) {
+    BackupSettings state = new BackupSettings(context);
+    BackupService service = current;
+    state.setFlag(scope, "clearAfterRun", true);
+    if (service != null && scope.equals(service.scope) && service.working.get()) {
+      service.cancelRun(false);
+      return;
+    }
+    clearRunData(context, state, scope);
+  }
+
+  private static void clearRunData(Context context, BackupSettings state, String scope) {
+    try (BackupJournal journal = new BackupJournal(context)) {
+      journal.clearRun(scope);
+    }
+    state.setFlag(scope, "clearAfterRun", false);
+    state.setFlag(scope, "scanOpen", false);
+    state.snapshot(
+        scope,
+        "本次任务已清除，下次备份重新扫描",
+        "已记录 0 · 已上传 0 · 待补传 0 · 本轮处理 0",
+        "[]",
+        "[]");
+  }
+
   /** Restores the failed files to the front of the next run without clearing successful receipts. */
   static void retryFailed(Context context, String scope) {
     try (BackupJournal journal = new BackupJournal(context)) {
@@ -349,6 +375,8 @@ public final class BackupService extends Service {
                   if (current != this) return;
                   settings.setFlag(scope, "running", false);
                   working.set(false);
+                  if (settings.flag(scope, "clearAfterRun", false))
+                    clearRunData(this, settings, scope);
                   Intent restart = pendingRestart;
                   pendingRestart = null;
                   if (restart != null) {

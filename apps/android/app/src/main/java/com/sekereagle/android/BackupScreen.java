@@ -334,6 +334,28 @@ final class BackupScreen extends ScrollView {
     content.addView(
         Ui.row(
             activity,
+            R.drawable.ic_pause,
+            "停止并清除本次任务",
+            "清除传输记录与待补传失败项；已上传内容保留",
+            () -> {
+              sheet.dismiss();
+              new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                  .setTitle("停止并清除本次任务？")
+                  .setMessage(
+                      "将停止当前备份，清除本轮传输记录与待补传失败项；已上传到服务器的内容不会删除，下次备份会按当前目录重新扫描。")
+                  .setNegativeButton("取消", null)
+                  .setPositiveButton(
+                      "停止并清除",
+                      (d, w) -> {
+                        BackupService.stopAndClear(activity, scope);
+                        activity.show("backup");
+                      })
+                  .show();
+            }));
+    Ui.divider(content);
+    content.addView(
+        Ui.row(
+            activity,
             R.drawable.ic_cloud,
             "重试失败文件",
             "保留成功回执，仅重新检查失败项",
