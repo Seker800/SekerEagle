@@ -55,6 +55,11 @@ public final class BackupPolicy {
     }
   }
 
+  /** Directory scans match the media index: dot-prefixed entries are hidden, not photo content. */
+  public static boolean hidden(String name) {
+    return name != null && name.startsWith(".");
+  }
+
   public static boolean inFolder(String folder, String path, boolean recursive) {
     if (folder.isEmpty()) return path != null && !path.isEmpty();
     String prefix = folder.endsWith("/") ? folder : folder + "/";
