@@ -6,8 +6,8 @@ android {
         applicationId 'com.sekereagle.android'
         minSdk 30
         targetSdk 36
-        versionCode 42
-        versionName '0.9.25'
+        versionCode 43
+        versionName '0.9.26'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true; compose true }

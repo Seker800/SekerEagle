@@ -8,10 +8,19 @@ public class BackupFolderPolicyTest {
   @Test
   public void firstLevelMediaFoldersAggregateTheirChildAlbums() {
     assertEquals("/DCIM/", BackupPolicy.parentFolder("/DCIM/Camera/"));
-    assertEquals("/Pictures/", BackupPolicy.parentFolder("Pictures/WeiXin/"));
+    assertEquals("DCIM/", BackupPolicy.parentFolder("DCIM/Camera/"));
+    assertEquals("Pictures/", BackupPolicy.parentFolder("Pictures/WeiXin/"));
     assertNull(BackupPolicy.parentFolder("/DCIM/"));
     assertNull(BackupPolicy.parentFolder(""));
     assertNull(BackupPolicy.parentFolder(null));
+  }
+
+  @Test
+  public void folderMatchingNormalizesTheLeadingSlash() {
+    assertTrue(BackupPolicy.inFolder("/DCIM/", "DCIM/Camera/", true));
+    assertTrue(BackupPolicy.inFolder("DCIM/", "/DCIM/Camera/", true));
+    assertTrue(BackupPolicy.inFolder("DCIM/", "DCIM/", true));
+    assertFalse(BackupPolicy.inFolder("DCIM/", "DCIM-other/", true));
   }
 
   @Test

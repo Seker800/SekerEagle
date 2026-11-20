@@ -27,6 +27,8 @@ public final class BackupService extends Service {
     void progress(Notification notification);
 
     void finished();
+
+    boolean systemNotification();
   }
 
   static final class LocalBinder extends Binder {
@@ -36,8 +38,8 @@ public final class BackupService extends Service {
       this.service = service;
     }
 
-    void start(String scope, JobCallbacks callbacks) {
-      service.startJobRun(scope, callbacks);
+    boolean start(String scope, JobCallbacks callbacks, boolean manual) {
+      return service.startJobRun(scope, callbacks, manual);
     }
   }
 
@@ -211,6 +213,7 @@ public final class BackupService extends Service {
       // A stale automatic start can race the durable pause write. Honour Android's
       // foreground-start contract even when declining to perform any work.
       if (!enterForeground("备份已暂停")) {
+        working.set(false);
         stopSelf();
         return START_NOT_STICKY;
       }
@@ -233,6 +236,7 @@ public final class BackupService extends Service {
     if (explicit) settings.setFlag(scope, "userPaused", false);
     lastConditions = lastUpdate = 0;
     if (!enterForeground("正在准备扫描")) {
+      working.set(false);
       stopSelf();
       return START_NOT_STICKY;
     }
@@ -736,8 +740,11 @@ public final class BackupService extends Service {
         transferRows.toString());
     Notification notice = notification(pendingMessage);
     JobCallbacks callbacks = jobCallbacks;
-    if (callbacks != null) callbacks.progress(notice);
-    else getSystemService(NotificationManager.class).notify(NOTICE, notice);
+    if (callbacks != null) {
+      callbacks.progress(notice);
+      if (!callbacks.systemNotification())
+        getSystemService(NotificationManager.class).notify(NOTICE, notice);
+    } else getSystemService(NotificationManager.class).notify(NOTICE, notice);
   }
 
   private Notification notification(String text) {
@@ -792,6 +799,7 @@ public final class BackupService extends Service {
   @Override
   public void onDestroy() {
     cancelled = true;
+    working.set(false);
     if (current == this) {
       if (!scope.isEmpty()) {
         if (working.get() && !settings.flag(scope, "userPaused", false) && !timedOut) {
@@ -817,23 +825,24 @@ public final class BackupService extends Service {
     return binder;
   }
 
-  private void startJobRun(String requested, JobCallbacks callbacks) {
+  private boolean startJobRun(String requested, JobCallbacks callbacks, boolean manual) {
     if (working.get()
         || requested == null
         || requested.isEmpty()
         || !requested.equals(settings.active())
         || !settings.flag(requested, "enabled", false)) {
       callbacks.finished();
-      return;
+      return false;
     }
     jobCallbacks = callbacks;
     working.set(true);
     retiring = false;
     cancelled = false;
-    manual = true;
+    this.manual = manual;
     timedOut = false;
     scope = requested;
     lastConditions = lastUpdate = 0;
     executor.execute(this::runBackup);
+    return true;
   }
 }

@@ -26,6 +26,7 @@ public final class BackupTransferJobService extends JobService {
       new BackupService.JobCallbacks() {
         @Override
         public void progress(Notification notification) {
+          if (!manual) return;
           main.post(
               () -> {
                 if (params == null || stopped || finished || Build.VERSION.SDK_INT < 34) return;
@@ -44,13 +45,18 @@ public final class BackupTransferJobService extends JobService {
         public void finished() {
           main.post(() -> finish(false));
         }
+
+        @Override
+        public boolean systemNotification() {
+          return manual;
+        }
       };
   private final ServiceConnection connection =
       new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
           if (stopped || finished) return;
-          ((BackupService.LocalBinder) binder).start(scope, callbacks);
+          ownsRun = ((BackupService.LocalBinder) binder).start(scope, callbacks, manual);
         }
 
         @Override
@@ -60,6 +66,8 @@ public final class BackupTransferJobService extends JobService {
       };
   private JobParameters params;
   private String scope = "";
+  private boolean manual;
+  private boolean ownsRun;
   private boolean bound;
   private boolean stopped;
   private boolean finished;
@@ -73,21 +81,28 @@ public final class BackupTransferJobService extends JobService {
       finish(false);
       return false;
     }
-    NotificationManager manager = getSystemService(NotificationManager.class);
-    manager.createNotificationChannel(
-        new NotificationChannel(
-            BackupService.CHANNEL, "手机备份", NotificationManager.IMPORTANCE_LOW));
-    Notification notification =
-        new Notification.Builder(this, BackupService.CHANNEL)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("SekerEagle 手机备份")
-            .setContentText("正在准备扫描")
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build();
-    try {
-      setNotification(job, NOTICE, notification, JobService.JOB_END_NOTIFICATION_POLICY_REMOVE);
-    } catch (RuntimeException ignored) {
+    manual = job.getJobId() == BackupLauncher.JOB_ID;
+    if (BackupService.isRunning(scope)) {
+      finish(false);
+      return false;
+    }
+    if (manual) {
+      NotificationManager manager = getSystemService(NotificationManager.class);
+      manager.createNotificationChannel(
+          new NotificationChannel(
+              BackupService.CHANNEL, "手机备份", NotificationManager.IMPORTANCE_LOW));
+      Notification notification =
+          new Notification.Builder(this, BackupService.CHANNEL)
+              .setSmallIcon(R.drawable.ic_notification)
+              .setContentTitle("SekerEagle 手机备份")
+              .setContentText("正在准备扫描")
+              .setOngoing(true)
+              .setOnlyAlertOnce(true)
+              .build();
+      try {
+        setNotification(job, NOTICE, notification, JobService.JOB_END_NOTIFICATION_POLICY_REMOVE);
+      } catch (RuntimeException ignored) {
+      }
     }
     bound =
         bindService(
@@ -104,7 +119,7 @@ public final class BackupTransferJobService extends JobService {
   @Override
   public boolean onStopJob(JobParameters job) {
     stopped = true;
-    BackupService.cancel(this);
+    if (ownsRun) BackupService.cancel(this);
     if (bound) {
       try {
         unbindService(connection);
