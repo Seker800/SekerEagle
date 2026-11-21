@@ -92,7 +92,7 @@
   "dependencies": {
     "@sekereagle/library-core": "*",
     "@silvia-odwyer/photon": "0.3.3",
-    "@napi-rs/canvas": "1.1.0",
+    "@napi-rs/canvas": "1.1.1",
     "sharp": "^0.35.5"
   },
   "devDependencies": {

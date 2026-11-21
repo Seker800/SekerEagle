@@ -14,9 +14,9 @@
     "@prisma/config": {
       "deepmerge-ts": "8.0.0"
     },
-    "@nestjs/common": "12.3.2",
-    "@nestjs/core": "12.3.2",
-    "@nestjs/platform-express": "12.3.2",
+    "@nestjs/common": "12.5.0",
+    "@nestjs/core": "12.5.0",
+    "@nestjs/platform-express": "12.5.0",
     "body-parser": "2.4.0",
     "multer": "2.5.0",
     "zod": "^4.6.7",
@@ -92,21 +92,21 @@
     "test:desktop-cache:electron": "npm run build --workspace @sekereagle/desktop && node scripts/testing/client-cache-electron.mjs"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1164.0",
+    "@aws-sdk/client-s3": "^3.1169.0",
     "@eslint/js": "^10.0.1",
-    "@nestjs/common": "12.3.2",
-    "@nestjs/core": "12.3.2",
-    "@nestjs/platform-express": "12.3.2",
+    "@nestjs/common": "12.5.0",
+    "@nestjs/core": "12.5.0",
+    "@nestjs/platform-express": "12.5.0",
     "@prisma/client": "7.10.1",
     "@types/node": "^26.6.6",
-    "@vitest/coverage-v8": "^5.0.5",
+    "@vitest/coverage-v8": "^5.1.0",
     "deepmerge-ts": "^8.0.2",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "js-yaml": "^4.3.2",
-    "prettier": "^3.6.2",
+    "prettier": "^3.10.1",
     "prisma": "7.10.1",
     "typescript": "5.9.3",
-    "typescript-eslint": "^8.72.1",
+    "typescript-eslint": "^8.72.2",
     "typescript-native": "npm:typescript@7.0.2"
   }
 }
